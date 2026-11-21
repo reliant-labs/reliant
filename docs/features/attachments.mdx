@@ -302,6 +302,7 @@ None of this is a correctness issue, but it's worth knowing before you put a lar
 
 Setting `thread.memo: true` tells the runtime to create the child thread exactly once and reuse it across loop iterations. The inject (content, attachments, everything) is applied only on the first iteration — subsequent iterations see the thread that already exists.
 
+{/* docs-validate: skip — fragment, shows only the loop's thread block */}
 ```yaml
 - id: evaluator
   type: loop

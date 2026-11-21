@@ -249,7 +249,7 @@ An approval is a workflow node, so you can test every branch with scenarios befo
 
 Do not add a workflow step that calls `ApprovalService/Approve` or `Deny` to satisfy a human approval gate. If lint reports [`approval-decider`](/workflows/lint#approval-decider), remove the decision step and have a person decide in the app instead.
 
-Declaring `permissions: [approvals:decide]`, suppressing a lint finding, or requesting a token scope does not authorize automation to decide a human approval. The server refuses decisions made with software-held credentials ([who can decide an approval](/automations/overview#who-can-decide-an-approval)). That reference also explains the shared-key limitation of self-hosted `AUTH_MODE=apikey` deployments; a shared key is not proof of a human decision.
+Declaring `permissions: [approvals:decide]` or suppressing a lint finding does not authorize automation to decide a human approval. The server refuses a decision made with the credentials a run holds: the CLI login every agent shell inherits, a daemon's credential, a token bound to a machine, and an ordinary `reliant:api` token ([who can decide an approval](/automations/overview#who-can-decide-an-approval)). The only token that can decide is an API token you mint yourself with the `approvals:decide` scope, not bound to a machine ([SDK scopes](/sdk/overview)); whatever holds it can approve, so give it only to software you mean to decide. That reference also explains the shared-key limitation of self-hosted `AUTH_MODE=apikey` deployments; a shared key is not proof of a human decision.
 
 ## What this does not do
 

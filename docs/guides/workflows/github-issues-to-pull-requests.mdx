@@ -104,7 +104,7 @@ This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) buil
 - **It does not pick issues.** Only issues you or a trusted account opted in are worked. On-call files issues as `agent:triage`, and a person promotes them.
 - **It does not touch CI, secrets or deploy configuration.** It punts those issues, and changes over about 400 lines, back to you.
 - **It has no budget of its own.** One attempt runs up to 120 agent turns, plus a retry of up to 60 ([What it costs](/guides/autopilot#what-it-costs)).
-- **In an organization, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only` in `reliant trigger get`). The CLI cannot widen that. A person allows your own accounts on the automation in the app, or an admin adds an organization account.
+- **In an organization with two or more members, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only` in `reliant trigger get`). The CLI cannot widen that. A person allows your own accounts on the automation in the app, or an admin adds an organization account.
 
 ## Troubleshooting
 

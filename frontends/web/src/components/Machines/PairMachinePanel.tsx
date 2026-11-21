@@ -355,7 +355,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                 autoComplete="off"
                 spellCheck={false}
                 maxLength={9}
-                className="min-h-[44px] min-w-0 w-36 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-sm uppercase tracking-widest text-foreground"
+                className="min-h-[44px] min-w-0 w-36 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-sm text-foreground"
               />
               <Button type="submit" size="xl" className="min-h-[44px]" disabled={normalized.length !== 8} loading={approval.kind === "looking"}>
                 Continue

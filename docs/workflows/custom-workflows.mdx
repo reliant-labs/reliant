@@ -410,7 +410,20 @@ authenticate and returns at once: it never prompts.
   command: make test
 ```
 
-The parameter is bound in `tools_config` on a `call_llm` node. `builtin://agent` takes only a list of `tools`, not `tools_config`, so a workflow that binds a tool parameter runs its own agent loop; the guide linked below has a complete one.
+The parameter is bound in `tools_config` on a `call_llm` node. A workflow that runs `builtin://agent` binds it with the agent's `tool_params` input, which the agent passes to its own `call_llm` as `tools_config.tools`:
+
+```yaml
+- id: fix
+  type: workflow
+  ref: builtin://agent
+  args:
+    max_turns: 40                             # ends the agent after 40 turns (0, the default, is no limit)
+    spawn_presets: []                         # a spawned sub-agent's tools are not bound
+    tool_params:
+      shell: {credentials: none}
+```
+
+The binding covers that agent's own tools. A sub-agent it spawns gets its preset's tools, unbound, so pass `spawn_presets: []` when the binding must hold for everything the agent does.
 
 On Linux, which every Reliant cloud machine runs, the command also starts in a sandbox: its own user,
 mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemon.json`,
@@ -424,6 +437,7 @@ Publish a branch with a `git_publish` node, which never gives its credential to 
 
 **Loop nodes** repeat a sub-workflow while a condition is true:
 
+{/* docs-validate: skip — fragment, the inline workflow is left out */}
 ```yaml
 - id: retry_loop
   type: loop
@@ -598,8 +612,6 @@ Loops use **do-while** semantics: the sub-workflow runs at least once, then `ite
   inline:
     # The sub-workflow definition
     entry: [attempt_fix]
-    inputs:
-      # Sub-workflow inputs
     outputs:
       exit_code: "{{nodes.run_tests.exit_code}}"
     nodes:
@@ -617,12 +629,13 @@ Loops use **do-while** semantics: the sub-workflow runs at least once, then `ite
 | `while` | Yes | CEL expression that continues the loop when true (uses `outputs.*`, `iter.*`, `inputs.*`) |
 | `condition` | No | CEL expression to skip the loop entirely if false (evaluated before the loop starts) |
 | `inline` | Yes* | Inline sub-workflow definition |
-| `workflow` | Yes* | External workflow reference (alternative to `inline`) |
+| `ref` | Yes* | External workflow reference (alternative to `inline`) |
 
-*One of `inline` or `workflow` is required.
+*One of `inline` or `ref` is required.
 
 **Skipping the loop:** Use the `condition` field to conditionally skip the entire loop before it starts. This is evaluated once, before the first iteration:
 
+{/* docs-validate: skip — fragment, the inline workflow is left out */}
 ```yaml
 - id: retry_loop
   type: loop
@@ -1482,6 +1495,7 @@ Use the `condition` field to save messages only in certain cases:
 - The message logic is complex
 - You want the save as an explicit node in the flow
 
+{/* docs-validate: skip — two alternative versions of one node */}
 ```yaml
 # Inline: compact, output-focused
 - id: analyze
@@ -1576,6 +1590,7 @@ edges:
 
 Loops execute at least once, then check the condition:
 
+{/* docs-validate: skip — fragment, shows only the loop's while */}
 ```yaml
 - id: three_times
   type: loop

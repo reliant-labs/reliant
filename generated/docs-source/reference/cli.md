@@ -27,6 +27,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant auth token create`](#reliant-auth-token-create) | Create a new API token |
 | [`reliant auth token list`](#reliant-auth-token-list) | List API tokens (metadata only, never secrets) |
 | [`reliant auth token revoke`](#reliant-auth-token-revoke) | Revoke an API token by name or ID |
+| [`reliant chat`](#reliant-chat) | List your chats, and see or change the machine a chat runs on |
+| [`reliant chat list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
+| [`reliant chat set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`reliant chat show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 | [`reliant daemon`](#reliant-daemon) | Manage the local tools daemon |
 | [`reliant daemon logs`](#reliant-daemon-logs) | Tail daemon logs |
 | [`reliant daemon ls`](#reliant-daemon-ls) | List every daemon instance on this machine |
@@ -491,6 +495,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github records get`](#reliant-github-records-get) | Show one pull request's record, heads, review markers and checks (JSON) |
 | [`reliant github records list`](#reliant-github-records-list) | List a repository's pull request records |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
+| [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
+| [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
 | [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
@@ -502,6 +508,16 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
 | [`reliant machine stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
+| [`reliant mcp`](#reliant-mcp) | Show a project's MCP servers and their tools, and restart one |
+| [`reliant mcp list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`reliant mcp restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`reliant mcp tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+| [`reliant models`](#reliant-models) | List the models your chats and workflows can use, and your machines' local model servers |
+| [`reliant models endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`reliant models endpoint add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+| [`reliant models list`](#reliant-models-list) | List the models you can use |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -525,6 +541,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`reliant trigger get`](#reliant-trigger-get) | Show one trigger |
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
+| [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
@@ -777,6 +794,11 @@ its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--expires-in asks for a shorter-lived token (a CI job's, say): 1h, 12h, 7d.
+The server never grants more than 90 days. A control plane too old to honour it
+mints its 90-day default, and then the command does not print the token: it
+names it so you can revoke it.
+
 You approve it the way you approve 'reliant auth login': in a browser that
 calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
 you approve on any device. The browser is the default, except where its
@@ -800,6 +822,7 @@ reliant auth token create [flags]
 |------|------|---------|-------------|
 | `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
 | `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
+| `--expires-in` | `string` | - | How long the token lives, e.g. 1h, 12h, 7d (at least 1m, at most 90 days). An older control plane ignores it; the token is then not printed |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
 | `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
@@ -828,6 +851,95 @@ Revoke an API token by name or ID
 ```
 reliant auth token revoke <name-or-id>
 ```
+
+---
+
+## reliant chat
+
+List your chats, and see or change the machine a chat runs on
+
+List your chats, show one, and move a chat to another of your machines.
+
+A chat runs its tools on one machine: the one picked in the chat header, else
+your default machine. A chat in a branch workspace stays on the machine that
+holds the workspace's checkout; moving it elsewhere is refused.
+
+```
+reliant chat
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
+| [`set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant chat list
+
+List your chats (not archived ones) with the machine each runs on
+
+```
+reliant chat list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the chats as JSON |
+| `--limit` | `int32` | `100` | Most chats to list, most recently active first |
+| `--project` | `string` | - | List only this project's chats (a project id; default: every project) |
+
+---
+
+### reliant chat set-machine
+
+Run a chat's tools on another of your machines
+
+Pins a chat to one of your machines, named by id or by name, as the machine
+picker in the chat header does. Its next turn runs there. --clear removes the
+pin, so the chat follows your default machine again.
+
+The machine must be yours and, when the project tracks where it is installed,
+have the project. A chat in a branch workspace cannot leave the machine that
+holds its checkout.
+
+```
+reliant chat set-machine <chat-id> [machine] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--clear` | `bool` | - | Remove the chat's machine pin, so it follows your default machine |
+
+---
+
+### reliant chat show
+
+Show one chat: its project, workspace and machine
+
+```
+reliant chat show <chat-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the chat as JSON |
 
 ---
 
@@ -980,6 +1092,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--attach <dir> links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .
+
 ```
 reliant daemon start [flags]
 ```
@@ -989,6 +1109,7 @@ reliant daemon start [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool |
@@ -21463,6 +21584,62 @@ reliant github token [flags]
 
 ---
 
+## reliant integrations
+
+Show the integration connections your steps and automations act through
+
+Shows your integration connections: the accounts at GitHub, Slack, Gmail and
+the rest that integration steps and integration triggers act through.
+
+Connecting or removing an account is done in the Reliant app (web or desktop):
+Settings → Integrations. An automation names the connection it listens
+through with `reliant trigger activate --connection <integration>=<id>`, and
+`reliant trigger get` shows the one it uses.
+
+```
+reliant integrations
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-integrations-list) | List your integration connections |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant integrations list
+
+List your integration connections
+
+Lists your integration connections: the integration, the account each acts as,
+its status, whether it is that integration's default, and its id.
+
+The default connection is the one an integration trigger listens through when
+its activation names none. With --org it also lists that organization's own
+connections (its Slack bot, its API keys), which its members may use by id.
+
+```
+reliant integrations list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--integration` | `string` | - | Only this integration's connections (e.g. github) |
+| `--json` | `bool` | - | Print JSON |
+| `--org` | `string` | - | Also list this organization's own connections |
+
+---
+
 ## reliant machine
 
 List, start, stop, resize, rename and label your machines, and manage machine pools
@@ -21686,6 +21863,251 @@ Stop (suspend) a running machine
 ```
 reliant machine stop <name|id>
 ```
+
+---
+
+## reliant mcp
+
+Show a project's MCP servers and their tools, and restart one
+
+Shows the MCP servers a project's agents can use, as the machine holding the
+project runs them: each server's status, where it is configured, and the tools
+it offers. 'restart' restarts one.
+
+Servers are configured in mcp.json: ~/.reliant/mcp.json (every project),
+<project>/.reliant/mcp.json (the project, checked in) and
+<project>/.reliant.local/mcp.json (yours, not checked in). An edit is applied
+when an agent's next turn loads the project's servers, so a restart is needed
+only to recover a server that stopped working. Settings -> MCP servers in the app
+manages the same servers.
+
+--project names the project by id, name or path; the default is the current
+directory.
+
+```
+reliant mcp
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--project` | `string` | `.` | The project, by id, name or path |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant mcp list
+
+List the project's MCP servers and their status
+
+```
+reliant mcp list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+
+---
+
+### reliant mcp restart
+
+Restart an MCP server from its current config
+
+Restarts one MCP server on the machine holding the project, from the config
+that machine's mcp.json files declare now. Every chat in the project that uses
+the server gets the new process.
+
+```
+reliant mcp restart <server>
+```
+
+---
+
+### reliant mcp tools
+
+List the tools an MCP server offers the project's agents
+
+Lists the tools one MCP server offers the project's agents. An agent sees each
+as mcp__<server>__<tool>.
+
+```
+reliant mcp tools <server> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+
+---
+
+## reliant models
+
+List the models your chats and workflows can use, and your machines' local model servers
+
+Lists the models your chats and workflow steps can run on, and manages the
+local model servers (Ollama, LM Studio, llama.cpp, vLLM, any OpenAI-compatible
+server) your machines look for.
+
+A local model's id is its name on the server plus @local, e.g.
+"qwen3:latest@local": use it as a workflow step's model id. Reliant's servers
+reach it through the machine whose daemon found it, so that machine must be
+online when the step runs. 'models list --local' shows each local model with the
+machine serving it.
+
+A machine looks for servers on localhost's well-known ports (Ollama 11434,
+LM Studio 1234, llama.cpp 8080, vLLM 8000) by itself. 'models endpoint add'
+adds one it would not find. Endpoints with an API key, or served from the
+internet, are added in the app: Settings -> AI providers -> Local & custom -> Add custom endpoint.
+
+```
+reliant models
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`list`](#reliant-models-list) | List the models you can use |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant models endpoint
+
+List, add and remove the local model servers your machines look for
+
+A machine looks for local model servers on localhost's well-known ports by
+itself. An endpoint is a server it would not find (another port, or another host
+the machine reaches, e.g. http://gpu-box.lan:8000/v1). It is kept in that
+machine's ~/.reliant/config.yaml (models.providers.local) and probed with the
+detected ones.
+
+```
+reliant models endpoint
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+
+---
+
+#### reliant models endpoint add
+
+Add a local model server a machine should look for
+
+Adds the OpenAI-compatible base URL of a model server, as the machine sees it
+(e.g. http://localhost:9000/v1 or http://gpu-box.lan:8000/v1), to the servers the
+machine probes. The machine probes it at once; its chat models are then listed
+by 'reliant models list --local' as <name>@local.
+
+--machine names the machine by id or name; with one machine it may be left out.
+The machine must be online: its current servers are read from it before the
+list is changed, so nothing added elsewhere is lost.
+
+```
+reliant models endpoint add <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+#### reliant models endpoint list
+
+List each machine's local model servers, and your custom endpoints
+
+Lists each machine's local model servers: the ones it detected and the ones
+added to it, with the chat models each serves or why the machine could not reach
+it. Your custom endpoints (added in the app) are listed after them.
+
+```
+reliant models endpoint list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--machine` | `string` | - | Only this machine, by id or name |
+
+---
+
+#### reliant models endpoint remove
+
+Stop a machine looking for a local model server you added
+
+Removes a base URL added with 'models endpoint add' (or Add endpoint in the
+app) from the machine's servers. A detected server cannot be removed: it is found
+again on its well-known port. A server a custom endpoint reaches through this
+machine is removed by deleting that endpoint in the app.
+
+```
+reliant models endpoint remove <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+### reliant models list
+
+List the models you can use
+
+Lists the models your chats and workflow steps can run on: those of every
+provider you connected, and the local models your machines serve.
+
+--local lists only the local models, with the machine (or configured endpoint)
+serving each, whether it is online, and the provider pin that keeps a workflow
+step on it. A model whose machine is offline is listed and cannot run until the
+machine is back.
+
+```
+reliant models list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
+| `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
 
 ---
 
@@ -22073,6 +22495,7 @@ reliant trigger
 | [`fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
+| [`rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
 
 **Flags:**
@@ -22102,6 +22525,13 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+A webhook trigger's URL and token are printed when its activation is created,
+once: store the token in the sender then. `reliant trigger rotate` issues a new
+one. A webhook that declares hmac: needs the secret its sender signs with:
+--hmac-secret-file <trigger>=<file> reads it from a file ("-" for standard
+input), keeping it out of your shell history. It is stored sealed and never
+shown; pass it again to replace it.
+
 --notify is about successful runs only. With it, a run that completes
 successfully is marked unread, which raises a desktop notification, and stays
 out of the archive so the notification has a run to open. It never puts the
@@ -22122,8 +22552,9 @@ reliant trigger activate [flags]
 |------|------|---------|-------------|
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
+| `--hmac-secret-file` | `stringArray` | `[]` | Signing secret of a webhook trigger that declares hmac:, as trigger=path (path - reads standard input); repeatable |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
-| `--message` | `string` | - | Prompt for a declared trigger that has none |
+| `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "<prefix> · <trigger>" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
 | `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |
@@ -22174,6 +22605,10 @@ Pause every activation of a workflow
 
 Pause every activation of a workflow, as the app's Disable does.
 
+With no --project or --project-id it pauses the workflow's activations in
+EVERY project, so it says so first, and each paused line names its project.
+Pass --project (a path) or --project-id to pause one project's only.
+
 It is not all or nothing: a pause that fails is reported and the rest still
 pause. Resume with activate; remove one activation with delete.
 
@@ -22185,8 +22620,9 @@ reliant trigger deactivate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--project-id` | `string` | - | Pause only this project's activations (default: every project) |
-| `--workflow` | `string` | - | Workflow whose activations to pause (required) |
+| `--project` | `string` | - | Pause only the activations of the project at this path |
+| `--project-id` | `string` | - | Pause only this project's activations (default, with no --project either: every project) |
+| `--workflow` | `string` | - | Workflow whose activations to pause: a slug, or builtin://<name> (required) |
 
 ---
 
@@ -22299,6 +22735,22 @@ reliant trigger list [flags]
 |------|------|---------|-------------|
 | `--all` | `bool` | - | List triggers across every project |
 | `--project-id` | `string` | - | List one project's triggers |
+
+---
+
+### reliant trigger rotate
+
+Replace a webhook trigger's token
+
+Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.
+
+```
+reliant trigger rotate <id-or-name>
+```
 
 ---
 
@@ -22718,11 +23170,14 @@ that server. Either way it is an rlat_ access token.
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —
 reused if one already exists there, or created on the fly — so no manual
-project setup is needed. --project-id takes precedence when both are given.
+project setup is needed. A project new to the server has no workflows until
+its machine syncs them, so the run waits for that, up to --sync-wait.
+--project-id takes precedence when both are given.
 
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached
 or created on that machine, which is the one that holds it. With --project-id
 the project must already be checked out on that machine; otherwise the run
 is refused before it starts.
@@ -22749,12 +23204,13 @@ reliant workflow run <workflow-name> [flags]
 | `--exit-on-gate` | `bool` | - | Stop and exit 3 as soon as a question/approval gate opens (for scripted supervision) |
 | `--follow`, `-f` | `bool` | - | Follow the execution and stream NDJSON lifecycle events |
 | `--hook` | `stringArray` | `[]` | Exec hook 'on=<event> cmd=<shell>' (repeatable); event is one of node_started|node_completed|node_failed|workflow_completed|workflow_failed|question|approval|any |
-| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable) |
+| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable; read as the type the workflow declares for it) |
 | `--input-file` | `string` | - | JSON file containing workflow inputs |
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |
 | `--project-id` | `string` | - | Project ID (takes precedence over --project-path) |
 | `--project-path` | `string` | - | Project directory path; resolves (find-or-create) to a project ID when --project-id is absent |
+| `--sync-wait` | `duration` | `2m0s` | With --project-path, how long to wait for a machine to sync a new project's workflows before giving up (0: don't wait) |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
 | `--title` | `string` | - | Title for the run (default: "<workflow> · <first line of the message>") |
@@ -22828,15 +23284,17 @@ CLI and the app see the same scenarios. A sub-workflow ref (project://<name>)
 resolves by name: too, never by file name. Scenarios in the retired layouts
 (scenarios/<file>/, <file>_scenarios.yaml) are an error naming where they go.
 
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed <workflow>/<scenario> label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.
@@ -22851,7 +23309,7 @@ reliant workflow scenario run [workflow-path] [flags]
 |------|------|---------|-------------|
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first scenario failure |
-| `--filter` | `string` | - | Only run scenarios whose name contains this string |
+| `--filter` | `string` | - | Only run scenarios whose name, or <workflow>/<scenario> label, contains this string |
 | `--include-builtins` | `bool` | - | Also run builtin workflow scenarios |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each scenario |
@@ -22930,10 +23388,14 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
-With --trigger-payload, each declared trigger is also run against that sample
-event: its filter, its inputs mapping and its prompt are evaluated the way a
-real firing would, and anything that fails (or that the integration's declared
-payload rules out) is reported as an error. For an integration trigger the
+With --trigger-payload, each declared trigger the sample can belong to is also
+run against that sample event: its filter, its inputs mapping and its prompt
+are evaluated the way a real firing would, and anything that fails (or that the
+integration's declared payload rules out) is reported as an error. Each
+trigger's outcome is printed (matched, with the inputs it maps; filtered out;
+failed; or not run). An integration trigger that does not listen for the
+sample's "event" (or "integration") is not run against it; --trigger <name>
+runs the sample against that one trigger only. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
 --activation-params supplies trigger.activation.params, as an activation of the workflow
@@ -22952,6 +23414,10 @@ broke in its owner's Inbox.
 Each project workflow is also linted (reliant workflow lint --rules lists the
 rules): a lint error fails validation, a lint warning is reported.
 
+Each workflow's "No machine" line says whether it can run with No machine, by
+the rule the server applies when you start it in a chat with no machine or
+enable a trigger with none (--json: no_machine).
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
 ```
@@ -22969,6 +23435,7 @@ reliant workflow validate [path] [flags]
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--owner-github-id` | `string` | - | Sample trigger.activation.owner.github_id (a string), used with --trigger-payload |
+| `--trigger` | `string` | - | Run --trigger-payload against this declared trigger only |
 | `--trigger-payload` | `string` | - | Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it |
 | `--trigger-sender` | `string` | - | Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each workflow |
@@ -23133,11 +23600,19 @@ commits only its reflog reached) into a local ref of the repository,
 refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
 immediately before deleting them.
 
-A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
-One with work only it holds is never reclaimed: after about five days idle
-it is proposed in the report, for a person to free by hand.
+By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
+every worktree and records what it would reclaim, but captures and deletes
+nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
+after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
+holds is never reclaimed: after about five days idle it is proposed in the
+report, for a person to free by hand.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
+default) or on. Every mode rides the storage reaper's schedule, which runs on
+managed machines, and on your own computer only with
+RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
+older worktree reap, which removes unlocked, clean, pushed worktrees idle for
+a day without capturing them first.
 
 ```
 reliant worktree

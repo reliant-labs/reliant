@@ -132,3 +132,53 @@ func TestMCPErrorsOnTheWire(t *testing.T) {
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.Equal(t, "failed to read MCP configuration", svcerr.ToConnect(err).Message())
 }
+
+// prod a629f936: listing the tools of a user's MCP server that closed its
+// connection answered Internal and was an issue. The daemon's report of the
+// user's own server failing is FailedPrecondition, in the daemon's words; a
+// failure of ours stays Internal.
+func TestGetServerToolsOfABrokenUserServerIsFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	stored := `{"project":"{\"mcpServers\":{\"tickets\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
+	cases := map[string]struct {
+		list func() ([]byte, error)
+		code connect.Code
+		msg  string
+	}{
+		"the user's server failed": {
+			list: func() ([]byte, error) {
+				return []byte(`{"error":"failed to connect to MCP server: connection closed: calling \"initialize\": client is closing: EOF"}`), nil
+			},
+			code: connect.CodeFailedPrecondition,
+			msg:  `failed to list tools: failed to connect to MCP server: connection closed: calling "initialize": client is closing: EOF`,
+		},
+		"an unreadable answer": {
+			list: func() ([]byte, error) { return []byte(`not json`), nil },
+			code: connect.CodeInternal,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			router := daemonFunc(func(commandType string, _ []byte) ([]byte, error) {
+				switch commandType {
+				case "mcp.list_tools":
+					return tc.list()
+				case "mcp.server_status":
+					return []byte(`{"servers":[{"name":"tickets","connected":false}]}`), nil
+				}
+				return []byte(`{}`), nil
+			})
+			svc := newService(t, ownedProjectRepo(t, stored), router)
+			_, err := svc.GetServerTools(mcp.AuthedContext(t), connect.NewRequest(&reliantv1.GetServerToolsRequest{
+				ProjectId: "p-1", Name: "tickets",
+			}))
+			require.Error(t, err)
+			assert.Equal(t, tc.code, svcerr.Code(err), "%v", err)
+			if tc.msg != "" {
+				assert.Equal(t, tc.msg, svcerr.ToConnect(err).Message())
+			}
+		})
+	}
+}

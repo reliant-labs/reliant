@@ -93,7 +93,7 @@ const ADMIN_PERMISSION = "token:write";
 // a role change (Members tab), not a grant edit, so their rows are read-only.
 const PRESET_ROLES = new Set(["owner", "admin"]);
 
-// What `forge login` and the credential helper ask for (forge
+// What `forge cloud login` and the credential helper ask for (forge
 // internal/cloud LoginScopes). A token that resolves to nothing org-wide is
 // refused when it is minted (orggrants.CarriesNothingOrgWide), so someone
 // whose permissions are ALL environment-bound needs one of these org-wide to

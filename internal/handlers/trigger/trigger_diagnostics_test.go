@@ -20,7 +20,7 @@ func TestTriggerProjectsMachineAndHistoricalLaunchNodeFailure(t *testing.T) {
 	}}
 	svc := &Service{deps: Deps{Repo: repo}}
 	chatID := "launched-chat"
-	out := svc.renderFirings(context.Background(), &core.Trigger{ID: "trigger", Kind: core.TriggerKindSchedule, Config: json.RawMessage(`{"interval":"1h"}`), DaemonID: "d", DaemonName: "buildbox", MachineState: "suspended"}, []*core.TriggerEventWithRun{
+	out := svc.renderFirings(context.Background(), &core.Trigger{ID: "trigger", Kind: core.TriggerKindSchedule, Config: json.RawMessage(`{"interval":"1h"}`), DaemonID: "d", DaemonName: "buildbox", MachineState: "suspended"}, nil, []*core.TriggerEventWithRun{
 		{Event: &core.TriggerEvent{Outcome: core.TriggerEventLaunched, RunStatus: core.TriggerRunFailed, ChatID: &chatID}, Run: &core.TriggerEventRun{DisplayState: core.RunDisplayCompleted}},
 	}, nil)
 	require.Equal(t, "buildbox", out.DaemonName)

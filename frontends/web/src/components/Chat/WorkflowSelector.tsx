@@ -228,7 +228,7 @@ export function WorkflowSelector({
                 {/* Built-in Workflows Section */}
                 {builtinWorkflows.length > 0 && (
                   <>
-                    <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
+                    <div className="px-3 py-1.5 text-2xs font-semibold text-muted-foreground bg-muted/30 border-b border-border/30">
                       Built-in Workflows
                     </div>
                     {builtinWorkflows.map((workflow) => {
@@ -280,7 +280,7 @@ export function WorkflowSelector({
                     {builtinWorkflows.length > 0 && (
                       <div className="border-t border-border/30 my-1" />
                     )}
-                    <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
+                    <div className="px-3 py-1.5 text-2xs font-semibold text-muted-foreground bg-muted/30 border-b border-border/30">
                       Custom Workflows
                     </div>
                     {customWorkflows.map((workflow) => {

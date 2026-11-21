@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,4 +142,59 @@ func TestUsageMeter_RealStreamFailureKeepsUsageAcrossActivityRetry(t *testing.T)
 	assert.Equal(t, [2]int64{40, 7}, [2]int64{answered.In, answered.Out})
 	calls, errCalls, in := dailyCalls(t, h)
 	assert.Equal(t, [3]int64{2, 1, 540}, [3]int64{calls, errCalls, in})
+}
+
+// shortWaitDriver announces a long wait and then retries at once (a shortened
+// backoff), and its answer reports a usage split that does not add up.
+type shortWaitDriver struct{ pathDriver }
+
+func (d *shortWaitDriver) StreamResponse(context.Context, []string, []message.Message, []tools.Tool) <-chan llm.DriverEvent {
+	ch := make(chan llm.DriverEvent, 4)
+	ch <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Attempt: 1, StatusCode: 429, Reason: "http_429", Delay: time.Hour}}
+	ch <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Attempt: 2, StatusCode: 429, Reason: "http_429", Delay: time.Hour}}
+	ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{Content: "summary",
+		Usage: llm.TokenUsage{InputTokens: -3, OutputTokens: 7}, FinishReason: message.FinishReasonEndTurn}}
+	close(ch)
+	return ch
+}
+
+// prod 53e2370c: a retry that started before its announced wait had passed
+// measured a negative latency, the row failed llm_call_usage's
+// counts_nonnegative check, and the request was not counted at all. Every
+// request is still a row, its counts floored at zero.
+func TestUsageMeter_NegativeMeasurementsAreFlooredNotDropped(t *testing.T) {
+	t.Parallel()
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "proj-negative", "user-negative")
+	chat := h.CreateTestChat(ctx, "chat-negative", project.ID, project.UserID)
+
+	meterOnce(t, h, &shortWaitDriver{pathDriver{name: "anthropic"}}, project.UserID, chat.ID)
+
+	rows := ledgerRows(t, h, "compaction")
+	require.Len(t, rows, 3, "every request is a row: %+v", rows)
+	var latencies []int64
+	rowsLat, err := h.DB().Query(`SELECT latency_ms FROM llm_call_usage WHERE purpose = 'compaction'`)
+	require.NoError(t, err)
+	defer rowsLat.Close()
+	for rowsLat.Next() {
+		var l int64
+		require.NoError(t, rowsLat.Scan(&l))
+		latencies = append(latencies, l)
+	}
+	require.NoError(t, rowsLat.Err())
+	for _, l := range latencies {
+		assert.GreaterOrEqual(t, l, int64(0))
+	}
+	for _, r := range rows {
+		assert.GreaterOrEqual(t, r.In, int64(0), r.ID)
+	}
+}
+
+func TestNonNegative(t *testing.T) {
+	t.Parallel()
+	assert.EqualValues(t, 0, nonNegative(-5))
+	assert.EqualValues(t, 0, nonNegative(0))
+	assert.EqualValues(t, 12, nonNegative(12))
 }

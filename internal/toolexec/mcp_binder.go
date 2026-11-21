@@ -228,7 +228,12 @@ func (r *daemonMCPRuntime) listTools(projectPath string) (map[string][]mcp.Tool,
 		return nil, fmt.Errorf("unmarshal mcp.server_status response: %w", err)
 	}
 
+	// One server that cannot list its tools (it failed to start, or its
+	// command is gone) leaves out only its own tools, as mcp.Manager's
+	// listing does. It used to fail the whole listing, so every other
+	// server's tools went missing from the turn with it.
 	result := make(map[string][]mcp.Tool)
+	var failures []string
 	for _, server := range status.Servers {
 		listPayload, err := json.Marshal(map[string]string{
 			"project_path": projectPath,
@@ -249,11 +254,15 @@ func (r *daemonMCPRuntime) listTools(projectPath string) (map[string][]mcp.Tool,
 			return nil, fmt.Errorf("unmarshal mcp.list_tools response: %w", err)
 		}
 		if listResp.Error != "" {
-			return nil, fmt.Errorf("%s", listResp.Error)
+			failures = append(failures, server.Name+": "+listResp.Error)
+			continue
 		}
 		if len(listResp.Tools) > 0 {
 			result[server.Name] = listResp.Tools
 		}
+	}
+	if len(failures) > 0 && len(result) == 0 {
+		return nil, fmt.Errorf("failed to list tools from any MCP server: %s", strings.Join(failures, "; "))
 	}
 	return result, nil
 }

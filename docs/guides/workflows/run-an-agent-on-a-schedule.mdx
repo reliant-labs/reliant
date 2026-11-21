@@ -114,7 +114,7 @@ By the end of this guide an agent runs in your repository every weekday at 9am, 
 ## What this does not do
 
 - **Nobody answers the agent.** Scheduled runs are unattended, so the agent is told to decide and proceed. A run that waits for an approval, or one that fails, shows up in your **Inbox**.
-- **In an organization, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only`), never your own subscriptions. If no organization account can run the model, the firing fails. An admin fixes that in **Settings → Organization → AI accounts**. The CLI can only tighten funding, never widen it.
+- **In an organization with two or more members, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only`), never your own subscriptions. If no organization account can run the model, the firing fails. An admin fixes that in **Settings → Organization → AI accounts**. The CLI can only tighten funding, never widen it.
 - **A machine that is off cannot run it.** A suspended [cloud machine](/machines/cloud) is woken for the run. A laptop or server you run yourself must be online. Firings missed for longer than the catch-up window are dropped, not replayed.
 - **Turning a schedule on is yours to do.** An agent can write the `triggers:` block. When an agent asks to enable an automation, you get an approval card by default ([Automation approvals](/cli/workflows#put-it-on-a-schedule)).
 

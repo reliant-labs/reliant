@@ -28,6 +28,7 @@ import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
 import { inboxPath, runsPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 interface Command {
   id: string;
@@ -105,7 +106,8 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
 
     const goTo = (section: SettingsSection) => () =>
       navigate({ to: settingsPath(section) });
-    const isAt = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+    const here = orgFreePath(pathname);
+    const isAt = (path: string) => here === path || here.startsWith(`${path}/`);
 
     /** Open a workspace viewer for the current project, going there first if needed. */
     const openViewer = (open: (projectId: string) => void) => () =>
@@ -144,7 +146,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         icon: <Workflow className="w-4 h-4" />,
         category: "navigation",
         keywords: ["workflow", "automation", "flow"],
-        available: pathname !== "/workflows" && !isAt("/workflows/library"),
+        available: here !== "/workflows" && !isAt("/workflows/library"),
         action: () => navigate({ to: workflowsPath() }),
       },
       {

@@ -2,7 +2,7 @@
 title: "Call any API from a workflow without exposing the key"
 sidebarTitle: "Call an API with a key"
 description: "Call an API that needs a key from a Reliant workflow while no step, model or log ever holds the value: store it, declare it, allow the workflow, and run it."
-keywords: ["secrets ai agents never see", "api key in ai workflow", "http request with secret", "forge secret allow", "http/request@1", "secret access list"]
+keywords: ["secrets ai agents never see", "api key in ai workflow", "http request with secret", "forge env secret allow", "http/request@1", "secret access list"]
 ---
 
 By the end of this guide a workflow calls an API with a bearer key, and the key is in no step input, run state, log, message or model context. The worker fetches the value for one step attempt and writes it only into the outgoing request header. [HTTP: secrets](/integrations/http#secrets) is the full rule set; this guide walks through one call.
@@ -18,14 +18,14 @@ By the end of this guide a workflow calls an API with a bearer key, and the key 
     Run this in the forge project. `secret set` reads the value from stdin, so it stays out of your shell history:
 
     ```bash terminal
-    reliant forge secret set --env staging DEMO_API_KEY < key.txt
+    reliant forge env secret set --env staging DEMO_API_KEY < key.txt
     ```
 
     ```text
     DEMO_API_KEY: created v1 (36 bytes) in hosted env "staging" at https://admin.reliantapi.com
     ```
 
-    Nothing reads a hosted value back, this command included. `reliant forge secret list --env staging` calls the key "inert", because no workload declares it. A workflow-only secret is meant to look like that.
+    Nothing reads a hosted value back, this command included. `reliant forge env secret list --env staging` calls the key "inert", because no workload declares it. A workflow-only secret is meant to look like that.
   </Step>
   <Step title="Declare the secret and put it in a header">
     `secrets:` names the environment as `<forge project>/<env>`. The reference `{{ secrets.DEMO_API_KEY }}` is allowed only in a credential slot: an `http/request@1` header, or `credential: { secret: NAME }` on an integration action.
@@ -91,9 +91,9 @@ By the end of this guide a workflow calls an API with a bearer key, and the key 
     A secret's access list names the workflows that may use it, by Reliant project and workflow name:
 
     ```bash terminal
-    reliant forge secret allow --env staging --workflow check-api-key \
+    reliant forge env secret allow --env staging --workflow check-api-key \
       --project 4c42479e-ef9d-44c3-a4d8-a37a6465d1fb DEMO_API_KEY
-    reliant forge secret access --env staging DEMO_API_KEY
+    reliant forge env secret access --env staging DEMO_API_KEY
     ```
 
     ```text
@@ -123,9 +123,9 @@ By the end of this guide a workflow calls an API with a bearer key, and the key 
   </Step>
   <Step title="Revoke and clean up">
     ```bash terminal
-    reliant forge secret deny --env staging --workflow check-api-key \
+    reliant forge env secret deny --env staging --workflow check-api-key \
       --project 4c42479e-ef9d-44c3-a4d8-a37a6465d1fb DEMO_API_KEY
-    reliant forge secret unset --env staging DEMO_API_KEY
+    reliant forge env secret unset --env staging DEMO_API_KEY
     ```
 
     `deny` takes effect on the next step that asks for the value: the next run of `check-api-key` failed with the access-list refusal below. `unset` soft-deletes the value and keeps its version history.
@@ -143,7 +143,7 @@ By the end of this guide a workflow calls an API with a bearer key, and the key 
 
 <AccordionGroup>
   <Accordion title={'workflow "check-api-key" may not use secret DEMO_API_KEY in guides-sandbox-webhook/staging'}>
-    The workflow is not on the secret's access list. The message suggests `forge secret allow DEMO_API_KEY --env staging --workflow check-api-key`. Add `--project <Reliant project id>`, which the command requires. The step reports the refusal as `is_error`, so the run above ended at `failed`.
+    The workflow is not on the secret's access list. The message suggests `forge env secret allow DEMO_API_KEY --env staging --workflow check-api-key`. Add `--project <Reliant project id>`, which the command requires. The step reports the refusal as `is_error`, so the run above ended at `failed`.
   </Accordion>
   <Accordion title="CEL compilation error: undefined field 'status'">
     An action's result is under `data`: write `nodes.call.data.status`, not `nodes.call.status`.

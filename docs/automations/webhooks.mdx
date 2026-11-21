@@ -34,11 +34,16 @@ triggers:
 
 The signature is an HMAC of the raw body under a shared secret that is kept out of the definition, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
 
-<Warning>
-The server needs the shared secret when the automation is enabled, and neither the app's Enable dialog nor `reliant trigger` takes one today. Enabling a webhook that declares `hmac` is refused with `webhook_hmac_secret is required to verify signatures`. Use the token instead.
-</Warning>
+The server needs the shared secret when the automation is enabled. Give it to `reliant trigger activate` from a file, keyed by the trigger's name (`-` reads it from standard input):
 
-The token is stored hashed and shown once. If it leaks, **rotate** it from the automation's page: the old token stops working immediately.
+```bash
+reliant trigger activate --workflow deploy-hooks --machine build-box \
+  --hmac-secret-file signed=./signing-secret.txt
+```
+
+The secret is stored sealed and is never shown again; run `activate` again with a new file to replace it. Without one, enabling a webhook that declares `hmac` is refused with `webhook_hmac_secret is required to verify signatures`. The app's Enable dialog does not take a secret yet; until it does, enable a signed webhook from the CLI, or use the token.
+
+The token is stored hashed and shown once: `reliant trigger activate` prints it with the URL when it creates the activation. If it leaks, **rotate** it with `reliant trigger rotate <name>`, or from the automation's page: the old token stops working immediately, and the new one is printed once.
 
 ## Your organization's alerts
 
@@ -66,7 +71,13 @@ On Reliant's hosted platform, enabling it connects the automation to your organi
 | `413` | Body larger than 1 MiB |
 | `503` | The delivery could not be recorded; retry |
 
-Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry.
+By default the `202` body contains `event_id`, `outcome`, and `duplicate`. The event has been recorded and evaluated, but a run may not have started.
+
+Send `Prefer: respond-async` if you only need to know the delivery was stored and want filtering and dispatch to happen in the background. A `202` with `Preference-Applied: respond-async` returns `{"delivery_id":"…","status":"pending"}`. The delivery ID is a receipt, not a trigger event ID; check the automation's history for the eventual result.
+
+For either mode, the first non-empty header among `Idempotency-Key`, `X-Idempotency-Key`, and `X-Delivery-Id` identifies the delivery. `X-Request-Id` is ignored for deduplication: it identifies a request, not an event, and proxies can assign a new value on each retry.
+
+Without an idempotency header, the default mode treats an identical body within the same minute as a retry. Async mode stores each POST as a separate delivery, even when the bodies match. To deduplicate retries in either mode even when the body changes, send the same `Idempotency-Key` on each attempt or declare a workflow `dedupe_key` (below).
 
 ### Deduplicating by what the event is about
 
