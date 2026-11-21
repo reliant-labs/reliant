@@ -367,6 +367,12 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText('Machine usage and allowance').first(),
   },
+  {
+    name: 'hosting',
+    path: '/settings/billing?tab=hosting',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('billing-hosting-tab'),
+  },
 ]
 
 /**

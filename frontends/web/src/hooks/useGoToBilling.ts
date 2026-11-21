@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { settingsPath } from "@/lib/paths";
+import type { BillingTab } from "@/routeSchemas";
 
 /**
  * Where a trip to billing started. Required at every call site: billing
@@ -20,9 +21,27 @@ export type BillingOrigin =
   | "upgrade"
   | "claim";
 
+/** Where on billing the trip lands, and for which org. Every field is optional. */
+export interface GoToBillingOptions {
+  /**
+   * The org the trip is about (the org a queued environment was read in).
+   * Carried as `?org=`: billing acts in the ACTIVE org, and BillingOrgGate
+   * asks before switching when this names another one, so a link opened
+   * later, or in another tab, never authorizes spend in the wrong org.
+   */
+  orgId?: string | null;
+  /** The tab to open; by default the origin's (hosting for forge, plans otherwise). */
+  tab?: BillingTab;
+  /** An anchor on that tab; by default `app-hosting` (the agreement card) on the hosting tab. */
+  hash?: string;
+}
+
+/** The hosting tab's agreement card (UsageBillingPanel's anchor). */
+const APP_HOSTING_ANCHOR = "app-hosting";
+
 /**
  * Send the user to billing, carrying where they came from. Hosted apps go to
- * independent usage consent; machine origins go to Plans.
+ * the hosting tab's agreement card; machine origins go to Plans.
  *
  * WHY THERE IS NO LONGER A DETOUR: this hook used to fork on anonymity and
  * route anonymous sessions through /upgrade first, because a subscription
@@ -48,9 +67,11 @@ export type BillingOrigin =
  *   whose deploy is queued on billing: the way back is that environment's
  *   page, where the deploy can be watched going out. Every other origin gets
  *   a generic "Back to where you were".
+ * @param options The org the trip is for, and the tab and anchor to open.
  */
-export function useGoToBilling(from: BillingOrigin): () => void {
+export function useGoToBilling(from: BillingOrigin, options: GoToBillingOptions = {}): () => void {
   const navigate = useNavigate();
+  const { orgId, tab: askedTab, hash: askedHash } = options;
 
   return () => {
     // Capture the FULL current URL, not just the route name. The onboarding
@@ -63,9 +84,13 @@ export function useGoToBilling(from: BillingOrigin): () => void {
     // An environment page needs its search too: it names the project.
     const returnTo = `${window.location.pathname}${window.location.search}`;
 
+    const tab: BillingTab = askedTab ?? (from === "forge" ? "hosting" : "plans");
+    const hash = askedHash ?? (tab === "hosting" ? APP_HOSTING_ANCHOR : undefined);
+
     void navigate({
       to: settingsPath("billing"),
-      search: { tab: from === "forge" ? "usage" : "plans", from, returnTo },
+      search: { tab, from, returnTo, ...(orgId ? { org: orgId } : {}) },
+      ...(hash ? { hash } : {}),
     });
   };
 }

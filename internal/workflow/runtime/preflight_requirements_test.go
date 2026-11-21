@@ -31,7 +31,7 @@ func requirementsWorkflow(ctx workflow.Context, wf *reliantv1.Workflow, child bo
 		execCtx.Parent = &ParentContext{}
 	}
 	input := WorkflowInput{ChatID: "c1", WorkflowName: wf.GetName(), Inputs: map[string]interface{}{InputKeyActingIdentity: "app", InputKeyAutomation: "merged"}}
-	if err := checkRequirements(ctx, input, execCtx, wf, "wf1", "wf1"); err != nil {
+	if err := checkRequirements(ctx, input, execCtx, wf, "wf1", "wf1", true); err != nil {
 		return err
 	}
 	return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 10e9}), "FirstNode").Get(ctx, nil)

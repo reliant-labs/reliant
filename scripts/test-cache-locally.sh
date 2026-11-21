@@ -52,7 +52,7 @@ echo ""
 
 # Package lock files (must exist)
 check_path "frontends/web/pnpm-lock.yaml" "Web pnpm-lock.yaml exists" true
-check_path "electron/package-lock.json" "Electron package-lock.json exists" true
+check_path "electron/pnpm-lock.yaml" "Electron pnpm-lock.yaml exists" true
 check_path "go.sum" "Go.sum exists" true
 
 echo ""
@@ -95,7 +95,7 @@ else
     echo -e "${RED}❌ Some checks failed${NC}"
     echo ""
     echo "Missing required files. Please ensure:"
-    echo "  1. You've run 'npm install' in frontends/web/ and electron/"
+    echo "  1. You've run 'pnpm install' in frontends/web/ and electron/"
     echo "  2. Go dependencies are downloaded: 'go mod download'"
     echo "  3. You're in the project root directory"
 fi
