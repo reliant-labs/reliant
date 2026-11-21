@@ -41483,6 +41483,11 @@
               "name": "upgrade",
               "kind": "message",
               "type_name": "reliant.v1.DaemonUpgradeStatus"
+            },
+            {
+              "name": "machine_stats",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineStats"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -42186,6 +42191,39 @@
             },
             {
               "name": "since_ms",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.MachineStats": [
+            {
+              "name": "load1",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load5",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load15",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpus",
+              "kind": "double"
+            },
+            {
+              "name": "mem_total_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "mem_available_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "sampled_at_ms",
               "kind": "int64"
             }
           ],
@@ -42996,6 +43034,7 @@
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelRefresh": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",

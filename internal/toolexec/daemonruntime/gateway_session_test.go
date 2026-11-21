@@ -4,6 +4,8 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/machinehealth"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -271,6 +274,47 @@ func TestHeartbeatCarriesToolCallsInFlight(t *testing.T) {
 		require.EqualValues(t, 2, msg.GetHeartbeat().GetToolCallsInFlight())
 	case <-time.After(5 * time.Second):
 		t.Fatal("no heartbeat")
+	}
+}
+
+// The heartbeat carries the host's load and memory, which the gateway logs
+// for the self-hosted machines it watches; a daemon without a reader (or
+// without /proc) leaves them unset.
+func TestHeartbeatCarriesMachineStats(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "loadavg"), []byte("12.00 6.00 3.00 1/100 42\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "meminfo"), []byte("MemTotal: 1000 kB\nMemAvailable: 250 kB\n"), 0o644))
+
+	for name, tc := range map[string]struct {
+		reader *machinehealth.HostStats
+		want   bool
+	}{
+		"reader":    {machinehealth.NewHostStats(root, 4), true},
+		"no reader": {nil, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := &daemonClient{timing: sessionTiming{heartbeatInterval: 10 * time.Millisecond}, hostStats: tc.reader}
+			s := newTestSession(8)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go d.runHeartbeats(ctx, s, nil)
+			select {
+			case msg := <-s.sendCh:
+				st := msg.GetHeartbeat().GetMachineStats()
+				if !tc.want {
+					require.Nil(t, st)
+					return
+				}
+				require.NotNil(t, st)
+				assert.Equal(t, 12.0, st.GetLoad1())
+				assert.Equal(t, 4.0, st.GetCpus())
+				assert.Equal(t, uint64(1000*1024), st.GetMemTotalBytes())
+				assert.Equal(t, uint64(250*1024), st.GetMemAvailableBytes())
+				assert.Positive(t, st.GetSampledAtMs())
+			case <-time.After(5 * time.Second):
+				t.Fatal("no heartbeat")
+			}
+		})
 	}
 }
 

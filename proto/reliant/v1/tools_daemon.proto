@@ -349,6 +349,32 @@ message DaemonHeartbeat {
   // (RestartRequested). Unset means CURRENT: no restart in progress, or a
   // daemon that predates the drain protocol.
   DaemonUpgradeStatus upgrade = 11;
+  // The host's load and memory as the daemon read them from /proc
+  // (internal/machinehealth). The gateway logs them, with the disk report,
+  // as `machine health` / `machine volume` lines for the self-hosted
+  // machines it is told to watch (MACHINE_STATS_ORGS). Unset for a daemon
+  // that cannot read /proc (macOS, Windows) and for one that predates it.
+  MachineStats machine_stats = 12;
+}
+
+// MachineStats is the whole host's load and memory at one moment: what the
+// kernel reports for the machine, not for a cgroup. A reading the daemon could
+// not take is left out, never sent as zero.
+message MachineStats {
+  // The 1-, 5- and 15-minute load averages (/proc/loadavg). Unset when it
+  // could not be read.
+  optional double load1 = 1;
+  optional double load5 = 2;
+  optional double load15 = 3;
+  // The CPU count load is divided by: the cgroup CPU quota, or nproc. 0 when
+  // unknown.
+  double cpus = 4;
+  // MemTotal and MemAvailable from /proc/meminfo, in bytes. Both 0 when it
+  // could not be read.
+  uint64 mem_total_bytes = 5;
+  uint64 mem_available_bytes = 6;
+  // When the daemon read these (unix ms, its own clock).
+  int64 sampled_at_ms = 7;
 }
 
 // DaemonUpgradeStatus is the daemon's side of the drain protocol: what it is

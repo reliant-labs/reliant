@@ -1036,7 +1036,7 @@ databaseConfigEnvMap = lambda c: DatabaseConfig, config_secrets: [str] -> {str: 
 }
 
 # forge:section schema GatewayConfig
-# forge:hash=35c51b96a6cd71c695dd3abf34a9229020ac446ae5ab848bc54c5f7a124d70ad
+# forge:hash=ec0b55452fbe13b9fb1f54eda11e7c3d4b97c7992c1ab98537926ec7e890733b
 schema GatewayConfig:
     # Daemon bidi-streaming gRPC listen port
     daemon_port: int = 9190
@@ -1054,6 +1054,10 @@ schema GatewayConfig:
     liveness_paths: str = "/health,/healthz"
     # Readiness probe paths on the health port (comma-separated)
     readiness_paths: str = "/ready,/readyz"
+    # Comma-separated org ids whose labelled self-hosted machines' heartbeat stats the gateway logs as machine health/machine volume lines (empty: off)
+    machine_stats_orgs: str = ""
+    # Durable machine label (key=value) that opts a self-hosted machine in MACHINE_STATS_ORGS into heartbeat machine stats
+    machine_stats_label: str = "monitor=platform"
 
     check:
         bind_address != "", "bind_address = \"\" cannot reach the process: an empty BIND_ADDRESS counts as unset, so it would load the default \"0.0.0.0\" — set a value, or pass --bind-address= in the workload's args to make it empty"
@@ -1061,6 +1065,7 @@ schema GatewayConfig:
         shutdown_timeout != "", "shutdown_timeout = \"\" cannot reach the process: an empty SHUTDOWN_TIMEOUT counts as unset, so it would load the default \"30s\" — set a value"
         liveness_paths != "", "liveness_paths = \"\" cannot reach the process: an empty LIVENESS_PATHS counts as unset, so it would load the default \"/health,/healthz\" — set a value, or change its default in the proto"
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
+        machine_stats_label != "", "machine_stats_label = \"\" cannot reach the process: an empty MACHINE_STATS_LABEL counts as unset, so it would load the default \"monitor=platform\" — set a value, or change its default in the proto"
 
 # forge:section env-map gatewayConfigEnvMap
 # forge:hash=75338f8396ade46e7bb1b1e73e8d3602328b23801bc177205a4e6967b731288c
@@ -1107,7 +1112,7 @@ gatewayConfigEnvMap = lambda c: GatewayConfig, config_secrets: [str] -> {str: st
         "gatewayConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of GatewayConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section gatewayConfigEnvMap values (root)
-        # forge:hash=f91d502c3382f9de4e17ad2a038e9c9e4ca6286b85d3aa33e700347a50a90868
+        # forge:hash=988996283a5d12316eb58bb27b4086d9e4ffeaf6d05d0babc97aca3202b66263
         "TOOLS_DAEMON_PORT" = str(c.daemon_port)
         "HEALTH_PORT" = str(c.health_port)
         "BIND_ADDRESS" = c.bind_address
@@ -1116,6 +1121,8 @@ gatewayConfigEnvMap = lambda c: GatewayConfig, config_secrets: [str] -> {str: st
         "SHUTDOWN_TIMEOUT" = c.shutdown_timeout
         "LIVENESS_PATHS" = c.liveness_paths
         "READINESS_PATHS" = c.readiness_paths
+        "MACHINE_STATS_ORGS" = c.machine_stats_orgs
+        "MACHINE_STATS_LABEL" = c.machine_stats_label
 
         # forge:section gatewayConfigEnvMap values (end)
         # forge:hash=2b8f6204f2c68402c876fd8d54a8c388e760c33f13a08e1ad2b5ed8fa2dc72af
@@ -1832,7 +1839,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=597b6ad1d17a68c179aea7c8795a428e155a1d6a0399ab3f5a708dc26d438189
+# forge:hash=bec9244361c01475d0babfa55d89392be81f0d02175fe2f6a13f8ee7c19165a3
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1958,7 +1965,7 @@ ROOTS: {str: Root} = {
     }
     "gateway" = Root {
         args = ["server", "gateway"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "MACHINE_STATS_ORGS", "MACHINE_STATS_LABEL", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
     }

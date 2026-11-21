@@ -15,6 +15,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -52,6 +53,10 @@ type Deps struct {
 	// left unacknowledged, so the daemon keeps it for the next stream.
 	// forge:optional-dep
 	ResultPublisher ToolResultPublisher
+	// MachineStats selects the self-hosted machines whose heartbeat stats
+	// the gateway logs as machine health lines (tools_daemon_machine_stats.go).
+	// The zero value selects none.
+	MachineStats MachineStatsSelection
 	// ClientVersions is the client version policy
 	// (ServerProcessConfig.client_versions); the gateway holds registering
 	// daemons to its daemon floor (version_floor.go). nil is no floor.
@@ -130,6 +135,10 @@ type Service struct {
 	// replica is shutting down and refuses new daemon streams, so a daemon moving off it (or one
 	// the load balancer has not yet stopped sending) goes to a live replica.
 	draining atomic.Bool
+
+	// logMachineStats writes one machine health or machine volume line;
+	// logging.InfoContext, which tests replace to capture the lines.
+	logMachineStats func(ctx context.Context, msg string, args ...any)
 }
 
 // New creates a new tools_daemon service instance with the supplied Deps.
@@ -155,6 +164,8 @@ func newService(deps Deps) *Service {
 		connections: make(map[string]*daemonConnection),
 		userDaemons: make(map[string][]string),
 		now:         func() time.Time { return time.Now().UTC() },
+
+		logMachineStats: logging.InfoContext,
 	}
 }
 
