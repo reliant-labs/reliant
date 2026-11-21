@@ -156,7 +156,9 @@ export function ErrorsLead({ scope, env, hrefOf, subtitle, aside, explainIssue }
  * window, and one chart of their events by hour (each issue's own hourly
  * trend, summed). Events, people affected and resolved issues are a quiet
  * row beside it. There is no previous-window read here, so it names the
- * window and makes no comparison.
+ * window and makes no comparison. The inbox pages, so while more pages remain
+ * every figure is of the issues loaded: the count, events and affected say
+ * "N+", and the chart says whose events it sums.
  */
 function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more: boolean; resolved: number }) {
   const { timestamps, values } = useMemo(() => {
@@ -183,8 +185,9 @@ function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more
         <dl className="flex flex-wrap gap-x-10 gap-y-5">
           {(
             [
-              ["Events", formatCount(events)],
-              ["Affected", formatCount(affected)],
+              // Of the loaded issues only, so "+" while more remain, as the count.
+              ["Events", `${formatCount(events)}${more ? "+" : ""}`],
+              ["Affected", `${formatCount(affected)}${more ? "+" : ""}`],
               ["Resolved", formatCount(resolved)],
             ] as const
           ).map(([label, value]) => (
@@ -196,7 +199,14 @@ function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more
         </dl>
       </div>
       {timestamps.length > 1 ? (
-        <HeadlineBars values={values} timestamps={timestamps} label="Error events by hour" testId="lead-errors-chart" />
+        <>
+          <HeadlineBars values={values} timestamps={timestamps} label={more ? `Error events by hour, of the ${formatCount(open.length)} issues loaded` : "Error events by hour"} testId="lead-errors-chart" />
+          {more && (
+            <p className="text-meta text-ink-muted" data-testid="lead-errors-partial">
+              Events of the {formatCount(open.length)} issues loaded. More issues are open; the full list has them all.
+            </p>
+          )}
+        </>
       ) : (
         <div className="flex h-28 flex-col justify-end" aria-hidden="true">
           <div className="border-b border-border" />

@@ -56,10 +56,14 @@ export function runsHeadlineFigures(runs: readonly RunSummary[]): RunsHeadlineFi
 /** Runs started per bucket over the window: hours for a day, days beyond. */
 export function runsSeries(runs: readonly RunSummary[], range: RunRangeKey, now: number): { timestamps: number[]; values: number[] } {
   if (runs.length === 0) return { timestamps: [], values: [] };
-  const span = range === "all" ? Math.max(DAY, now - Math.min(...runs.map((run) => run.createdAt))) : RANGE_MS[range];
+  const oldest = runs.reduce((min, run) => Math.min(min, run.createdAt), Infinity);
+  const span = range === "all" ? Math.max(DAY, now - oldest) : RANGE_MS[range];
   const step = span <= DAY ? HOUR : DAY;
   const end = Math.ceil(now / step) * step;
-  const buckets = Math.max(2, Math.ceil(span / step));
+  // "All" starts at the oldest run's own bucket. Counting buckets from the
+  // span instead would let rounding `end` up push that run before the start,
+  // off the chart while the headline still counts it.
+  const buckets = Math.max(2, range === "all" ? (end - Math.floor(oldest / step) * step) / step : Math.ceil(span / step));
   const start = end - buckets * step;
   const values = new Array<number>(buckets).fill(0);
   for (const run of runs) {

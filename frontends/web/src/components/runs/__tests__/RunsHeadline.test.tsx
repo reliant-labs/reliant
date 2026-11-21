@@ -52,4 +52,15 @@ describe("runsSeries", () => {
     expect(series.values).toHaveLength(7);
     expect(series.values.reduce((a, b) => a + b, 0)).toBe(1);
   });
+
+  it("keeps the oldest run on the chart for all time, however the window's end rounds", () => {
+    // NOW is 12:30, so the day buckets end at the next midnight; a span-sized
+    // window would start ~11.5h after the oldest run and drop it.
+    for (const ageDays of [1.5, 3.2, 10.9, 40]) {
+      const runs = [run(RunDisplayState.COMPLETED, NOW - ageDays * 24 * HOUR), run(RunDisplayState.COMPLETED, NOW - HOUR)];
+      const series = runsSeries(runs, "all", NOW);
+      expect(series.values.reduce((a, b) => a + b, 0)).toBe(2);
+      expect(series.values[0]).toBe(1);
+    }
+  });
 });
