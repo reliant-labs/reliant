@@ -120,6 +120,7 @@ Reliant server components.`,
 	root.AddCommand(integrationsCmd)
 	root.AddCommand(modelsCmd)
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newUpdateCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
 	root.AddCommand(previewCmd)

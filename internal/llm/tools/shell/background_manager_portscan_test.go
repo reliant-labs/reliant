@@ -24,6 +24,9 @@ import (
 // which is how the daemon once logged `exec.bg_list completed slowly
 // elapsed=15.7s`. The parsing was never the problem; the fan-out was.
 //
+// On Linux it is now zero: the same facts come from procfs
+// (background_ports_linux.go). Elsewhere it is one `ps` and one `lsof`.
+//
 // The test counts real subprocess invocations by putting counting shims for
 // `ps` and `lsof` ahead of the real ones on PATH, so it measures what the
 // process actually spends rather than an internal call count that could drift
@@ -40,11 +43,11 @@ func TestGetProcessPortsForRoots_ScansTheOSAFixedNumberOfTimes(t *testing.T) {
 		t.Fatalf("getProcessPortsForRoots: %v", err)
 	}
 
-	if got := counts.read(t, "ps"); got != 1 {
-		t.Errorf("ps invocations = %d, want exactly 1 process-table snapshot for all %d trees", got, len(roots))
+	if got := counts.read(t, "ps"); got != wantPortScanForks {
+		t.Errorf("ps invocations = %d, want exactly %d process-table snapshots for all %d trees", got, wantPortScanForks, len(roots))
 	}
-	if got := counts.read(t, "lsof"); got != 1 {
-		t.Errorf("lsof invocations = %d, want exactly 1 port scan for all %d trees", got, len(roots))
+	if got := counts.read(t, "lsof"); got != wantPortScanForks {
+		t.Errorf("lsof invocations = %d, want exactly %d port scans for all %d trees", got, wantPortScanForks, len(roots))
 	}
 }
 
@@ -78,11 +81,11 @@ func TestGetAllProcesses_RefreshesPortsWithOneBatchedScan(t *testing.T) {
 		t.Fatalf("GetAllProcesses returned %d processes, want 3", len(processes))
 	}
 
-	if got := counts.read(t, "ps"); got != 1 {
-		t.Errorf("ps invocations = %d, want 1 for a list of 3 processes", got)
+	if got := counts.read(t, "ps"); got != wantPortScanForks {
+		t.Errorf("ps invocations = %d, want %d for a list of 3 processes", got, wantPortScanForks)
 	}
-	if got := counts.read(t, "lsof"); got != 1 {
-		t.Errorf("lsof invocations = %d, want 1 for a list of 3 processes", got)
+	if got := counts.read(t, "lsof"); got != wantPortScanForks {
+		t.Errorf("lsof invocations = %d, want %d for a list of 3 processes", got, wantPortScanForks)
 	}
 }
 

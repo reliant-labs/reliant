@@ -98,6 +98,8 @@ The desktop app checks for updates when it starts and every hour while it runs. 
 brew upgrade --cask reliant
 ```
 
+A `reliant` CLI installed from a release archive updates itself: `reliant update --check` says whether a newer release is out, and `reliant update` downloads it, checks its signature and replaces the binary. Install it into a directory you can write, such as `~/.local/bin`, for that to work without `sudo`. See [Run a machine from the terminal](/cli/run-a-machine#7-keep-it-up-to-date). The CLI that the desktop app or a package manager installed is updated with them, and `reliant update` says so.
+
 The web app is always current. 
 
 ## Uninstalling
