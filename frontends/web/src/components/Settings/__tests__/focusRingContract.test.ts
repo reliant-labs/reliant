@@ -54,9 +54,12 @@ describe('focus ring', () => {
 describe('brand type', () => {
   it('leads the UI and mono stacks with the bundled Geist faces', () => {
     const css = read('index.css')
-    expect(css).toMatch(/--font-sans: 'Geist Variable', 'Geist Fallback',/)
+    // One switch names the UI face (--font-ui-face); --font-sans and the
+    // "default" preset both lead with it.
+    expect(css).toMatch(/--font-ui-face: 'Geist Variable', 'Geist Fallback';/)
+    expect(css).toMatch(/--font-sans: var\(--font-ui-face\),/)
     expect(css).toMatch(/--font-mono: 'Geist Mono Variable',/)
-    expect(css).toMatch(/:root\[data-font="default"\] \{\s*--font-sans: 'Geist Variable'/)
+    expect(css).toMatch(/:root\[data-font="default"\] \{\s*--font-sans: var\(--font-ui-face\)/)
     // The faces themselves: @fontsource's @font-face rules, from every entry
     // point that loads index.css.
     for (const entry of ['main.tsx', 'findBar/main.tsx']) {

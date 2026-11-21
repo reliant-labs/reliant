@@ -7,6 +7,9 @@
  * no rpc returns an org key, to an admin or anyone else (org-provider-accounts
  * §3.5). The server checks it with the provider before it stores anything, so
  * a refused key comes back as the provider's own sentence.
+ *
+ * A Vertex AI key is a Google Cloud service-account key file, pasted whole into
+ * a multi-line field and checked for shape here before it is sent.
  */
 
 import { useEffect, useId, useState } from "react";
@@ -28,6 +31,9 @@ import {
   type OrgAccountAccess,
 } from "@/types/orgProviderAccount";
 import type { MyOrg } from "@/services/controlPlane/orgs";
+import { serviceAccountKeyError } from "@/lib/serviceAccountKey";
+import { ServiceAccountKeyField } from "../../providers/ServiceAccountKeyField";
+import { usesServiceAccountKey } from "../../providers/providerCatalog";
 
 const fieldClass =
   "block w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -68,7 +74,9 @@ export function AddOrgKeyDialog({ open, onClose, org }: { open: boolean; onClose
   const [key, setKey] = useState("");
   const [access, setAccess] = useState<OrgAccountAccess>("members");
   const [error, setError] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const ids = { provider: useId(), label: useId(), key: useId(), access: useId() };
+  const serviceAccount = usesServiceAccountKey(provider);
 
   useEffect(() => {
     if (!open) return;
@@ -77,12 +85,18 @@ export function AddOrgKeyDialog({ open, onClose, org }: { open: boolean; onClose
     setKey("");
     setAccess("members");
     setError(null);
+    setKeyError(null);
   }, [open]);
 
   const valid = label.trim() !== "" && key.trim() !== "";
   const submit = async () => {
     if (!valid || add.isPending) return;
     setError(null);
+    if (serviceAccount) {
+      const shape = serviceAccountKeyError(key);
+      setKeyError(shape);
+      if (shape) return;
+    }
     try {
       await add.mutateAsync({ orgId: org.id, provider, apiKey: key.trim(), label: label.trim(), access: ACCESS_TO_PROTO[access] });
       setKey("");
@@ -122,7 +136,16 @@ export function AddOrgKeyDialog({ open, onClose, org }: { open: boolean; onClose
           <label htmlFor={ids.provider} className="block text-sm font-medium text-foreground">
             Provider
           </label>
-          <select id={ids.provider} value={provider} onChange={(e) => setProvider(e.target.value)} className={fieldClass} data-testid="org-key-provider">
+          <select
+            id={ids.provider}
+            value={provider}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setKeyError(null);
+            }}
+            className={fieldClass}
+            data-testid="org-key-provider"
+          >
             {ORG_KEY_PROVIDERS.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -137,21 +160,34 @@ export function AddOrgKeyDialog({ open, onClose, org }: { open: boolean; onClose
           <Input id={ids.label} value={label} onChange={(e) => setLabel(e.target.value)} placeholder={`${org.name} prod`} maxLength={80} data-testid="org-key-label" />
           <p className="text-xs text-muted-foreground">What members see when a chat runs on it.</p>
         </div>
-        <div className="space-y-1.5">
-          <label htmlFor={ids.key} className="block text-sm font-medium text-foreground">
-            API key
-          </label>
-          <Input
+        {serviceAccount ? (
+          <ServiceAccountKeyField
             id={ids.key}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
             value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder={placeholder}
+            onChange={(value) => {
+              setKey(value);
+              setKeyError(null);
+            }}
+            error={keyError}
             data-testid="org-key-secret"
           />
-        </div>
+        ) : (
+          <div className="space-y-1.5">
+            <label htmlFor={ids.key} className="block text-sm font-medium text-foreground">
+              API key
+            </label>
+            <Input
+              id={ids.key}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder={placeholder}
+              data-testid="org-key-secret"
+            />
+          </div>
+        )}
         <div className="space-y-1.5">
           <label htmlFor={ids.access} className="block text-sm font-medium text-foreground">
             Who may use it
@@ -173,16 +209,24 @@ export function RotateOrgKeyDialog({ account, onClose, org }: { account: OrgAcco
   const rotate = useRotateOrgProviderAPIKey();
   const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const keyId = useId();
+  const serviceAccount = account ? usesServiceAccountKey(account.account.provider) : false;
 
   useEffect(() => {
     setKey("");
     setError(null);
+    setKeyError(null);
   }, [account?.account.id]);
 
   const submit = async () => {
     if (!account || !key.trim() || rotate.isPending) return;
     setError(null);
+    if (serviceAccount) {
+      const shape = serviceAccountKeyError(key);
+      setKeyError(shape);
+      if (shape) return;
+    }
     try {
       await rotate.mutateAsync({ orgId: org.id, accountId: account.account.id, apiKey: key.trim() });
       setKey("");
@@ -217,12 +261,26 @@ export function RotateOrgKeyDialog({ account, onClose, org }: { account: OrgAcco
           void submit();
         }}
       >
-        <div className="space-y-1.5">
-          <label htmlFor={keyId} className="block text-sm font-medium text-foreground">
-            New {account?.account.providerDisplayName ?? ""} API key
-          </label>
-          <Input id={keyId} type="password" autoComplete="off" spellCheck={false} value={key} onChange={(e) => setKey(e.target.value)} data-testid="org-key-rotate-secret" />
-        </div>
+        {serviceAccount ? (
+          <ServiceAccountKeyField
+            id={keyId}
+            label="New service-account key (JSON)"
+            value={key}
+            onChange={(value) => {
+              setKey(value);
+              setKeyError(null);
+            }}
+            error={keyError}
+            data-testid="org-key-rotate-secret"
+          />
+        ) : (
+          <div className="space-y-1.5">
+            <label htmlFor={keyId} className="block text-sm font-medium text-foreground">
+              New {account?.account.providerDisplayName ?? ""} API key
+            </label>
+            <Input id={keyId} type="password" autoComplete="off" spellCheck={false} value={key} onChange={(e) => setKey(e.target.value)} data-testid="org-key-rotate-secret" />
+          </div>
+        )}
         <ErrorLine error={error} testId="org-key-rotate-error" />
         <button type="submit" hidden />
       </form>

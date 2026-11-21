@@ -245,7 +245,7 @@ function OnboardingCheckoutBody(props: OnboardingCheckoutProps & { omitCoupon?: 
       )}
     >
       <section className="space-y-3 p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           What you&apos;re getting
         </h3>
         <OrderSummary
@@ -260,7 +260,7 @@ function OnboardingCheckoutBody(props: OnboardingCheckoutProps & { omitCoupon?: 
 
       {owed.length > 0 && (
         <section className="space-y-3 border-t border-border p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-xs font-semibold text-muted-foreground">
             Pay with card
           </h3>
           {cannotPriceCredit ? (
@@ -290,7 +290,7 @@ function OnboardingCheckoutBody(props: OnboardingCheckoutProps & { omitCoupon?: 
           the compute checkout's coupon section gets. See the elevation note in
           forge-ui/card.tsx for why `bg-muted` is not it. */}
       {!props.omitCoupon && <section className="space-y-2 border-t border-border bg-background p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">

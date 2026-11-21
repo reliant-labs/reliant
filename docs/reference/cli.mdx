@@ -1088,6 +1088,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--attach `<dir>` links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .
+
 ```
 reliant daemon start [flags]
 ```
@@ -1097,6 +1105,7 @@ reliant daemon start [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=`<name>` joins that machine pool |
@@ -23026,11 +23035,14 @@ that server. Either way it is an rlat_ access token.
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —
 reused if one already exists there, or created on the fly — so no manual
-project setup is needed. --project-id takes precedence when both are given.
+project setup is needed. A project new to the server has no workflows until
+its machine syncs them, so the run waits for that, up to --sync-wait.
+--project-id takes precedence when both are given.
 
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached
 or created on that machine, which is the one that holds it. With --project-id
 the project must already be checked out on that machine; otherwise the run
 is refused before it starts.
@@ -23063,6 +23075,7 @@ reliant workflow run <workflow-name> [flags]
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |
 | `--project-id` | `string` | - | Project ID (takes precedence over --project-path) |
 | `--project-path` | `string` | - | Project directory path; resolves (find-or-create) to a project ID when --project-id is absent |
+| `--sync-wait` | `duration` | `2m0s` | With --project-path, how long to wait for a machine to sync a new project's workflows before giving up (0: don't wait) |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
 | `--title` | `string` | - | Title for the run (default: "`<workflow>` · \<first line of the message>") |

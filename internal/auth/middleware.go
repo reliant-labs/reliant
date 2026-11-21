@@ -41,6 +41,10 @@ type Settings struct {
 	JWKSURL      string
 	// RequireEmailVerifiedClaim: see the RequireEmailVerifiedClaim option.
 	RequireEmailVerifiedClaim bool
+	// DevJWTSecret (AUTH_DEV_JWT_SECRET) is the dev tier's HS256 signer,
+	// accepted beside the session key in ModeSupabase; empty is none. See
+	// WithDevSigner, which refuses it outside the dev tier.
+	DevJWTSecret string
 }
 
 // ModeName is s's effective mode: ModeAPIKey or ModeSupabase.
@@ -100,9 +104,13 @@ func NewMiddleware(settings Settings) (*Middleware, error) {
 		default:
 			return nil, ErrInvalidPublicKey
 		}
+		withDev, err := WithDevSigner(validator, settings)
+		if err != nil {
+			return nil, err
+		}
 		logging.Info("[HTTP Auth] Supabase JWT auth mode enabled")
 		return &Middleware{
-			validator: validator,
+			validator: withDev,
 		}, nil
 	}
 }

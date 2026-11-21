@@ -105,7 +105,8 @@ type Config struct {
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
 	// this worker retries until one that has it picks it up.
-	TriggerPollers triggers.Pollers
+	TriggerPollers   triggers.Pollers
+	TriggerPollInbox triggers.PollDeliverySink
 
 	// TriggerCredentials resolves a polled trigger's credential from the
 	// trigger row (owner and connection), for the poll activity. Normally the
@@ -352,7 +353,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 				cfg.TriggerPollers,
 				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
 				cfg.TriggerCredentials,
-			).WithAutoPause(triggerAutoPause(cfg))
+			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}

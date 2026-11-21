@@ -422,7 +422,7 @@ function RedStrip({ red }: { red: TraceRed }) {
     >
       {facts.map(([label, value, alert]) => (
         <div key={label}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+          <dt className="text-xs font-medium text-ink-muted">{label}</dt>
           <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-danger-ink" : "text-ink")}>{value}</dd>
         </div>
       ))}
@@ -786,12 +786,12 @@ function TraceTable({
                       key={header.id}
                       scope="col"
                       aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-muted"
+                      className="px-3 py-2 text-left text-xs font-medium text-ink-muted"
                     >
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex items-center gap-1 rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <table.FlexRender header={header} />
                         {sorted === "asc" && <ArrowUp className="h-3 w-3" aria-hidden="true" />}

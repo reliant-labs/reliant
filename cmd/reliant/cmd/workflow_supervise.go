@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/execfollow"
@@ -371,6 +372,10 @@ type statusNode struct {
 	DurationMs int64        `json:"duration_ms,omitempty"`
 	Iteration  *int32       `json:"iteration,omitempty"`
 	Children   []statusNode `json:"children,omitempty"`
+	// Origin is how the thread came to exist ("node", "spawn", "fork");
+	// Title its human title, which tells spawned sub-agents apart.
+	Origin string `json:"origin,omitempty"`
+	Title  string `json:"title,omitempty"`
 }
 
 type statusStep struct {
@@ -423,6 +428,19 @@ type statusReport struct {
 	OpenApprovals int               `json:"open_approvals"`
 	Nodes         []statusNode      `json:"nodes"`
 	Steps         []statusStepGroup `json:"steps,omitempty"`
+	// Failures say WHY each failed step failed: its most recent failed
+	// attempt per node, with the error it recorded. The step table says only
+	// FAIL, and the reason was otherwise in `workflow follow` alone.
+	Failures []statusFailure `json:"failures,omitempty"`
+}
+
+// statusFailure is the most recent failed attempt of one step at one node.
+type statusFailure struct {
+	NodePath   string `json:"node_path,omitempty"`
+	StepID     string `json:"step_id"`
+	WorkflowID string `json:"workflow_id,omitempty"`
+	Error      string `json:"error"`
+	At         string `json:"at,omitempty"`
 }
 
 // statusExitCode is the process exit code `workflow status` ends with.
@@ -524,6 +542,11 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	for _, n := range st.Nodes {
 		report.Nodes = append(report.Nodes, toStatusNode(n))
 	}
+	if hasFailedStep(report.Steps) {
+		// Best effort, like the gates: a snapshot without the reasons is still
+		// worth printing.
+		report.Failures, _ = listStepFailures(cmd.Context(), clients.conn, executionID)
+	}
 
 	if jsonOut {
 		if err := printJSONIndent(cmd.OutOrStdout(), report); err != nil {
@@ -542,6 +565,7 @@ func toStatusNode(n reliant.StatusNode) statusNode {
 	out := statusNode{
 		NodeID: n.NodeID, Record: n.Record, Thread: n.Thread, Status: n.Status, Gate: n.Gate,
 		Started: n.Started, Completed: n.Completed, DurationMs: n.DurationMs, Iteration: n.Iteration,
+		Origin: n.Origin, Title: n.Title,
 	}
 	for _, c := range n.Children {
 		out.Children = append(out.Children, toStatusNode(c))
@@ -621,6 +645,63 @@ func printStatusReport(w io.Writer, r statusReport) {
 			}
 		}
 	}
+
+	if len(r.Failures) > 0 {
+		fmt.Fprintln(w, "\nFAILED STEPS  (most recent failure per node)")
+		for _, f := range r.Failures {
+			where := f.NodePath
+			if where == "" {
+				where = f.StepID
+			}
+			fmt.Fprintf(w, "  %s: %s\n", where, f.Error)
+		}
+	}
+}
+
+// hasFailedStep reports whether any step's runs include a failure.
+func hasFailedStep(groups []statusStepGroup) bool {
+	for _, g := range groups {
+		for _, st := range g.Steps {
+			if st.Failed > 0 || st.Result == "FAIL" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// listStepFailures reads the run's step history with its errors
+// (ListStepExecutions; GetWorkflowExecutions, which the snapshot reads, never
+// carries them) and keeps the most recent failed attempt per node and step.
+func listStepFailures(ctx context.Context, conn *connection, chatID string) ([]statusFailure, error) {
+	client := reliantv1connect.NewChatServiceClient(conn.httpClient(), conn.ServerURL)
+	resp, err := client.ListStepExecutions(ctx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: chatID}))
+	if err != nil {
+		return nil, err
+	}
+	return stepFailures(resp.Msg.GetStepExecutions()), nil
+}
+
+// stepFailures keeps, per node path and step, the newest execution that failed
+// with an error; execs arrive newest first.
+func stepFailures(execs []*reliantv1.StepExecution) []statusFailure {
+	seen := map[string]bool{}
+	var out []statusFailure
+	for _, e := range execs {
+		if e.GetSuccess() || e.Success == nil || strings.TrimSpace(e.GetErrorMessage()) == "" {
+			continue
+		}
+		key := e.GetWorkflowId() + "\x00" + e.GetNodePath() + "\x00" + e.GetStepId()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, statusFailure{
+			NodePath: e.GetNodePath(), StepID: e.GetStepId(), WorkflowID: e.GetWorkflowId(),
+			Error: strings.TrimSpace(e.GetErrorMessage()), At: e.GetCreatedAt(),
+		})
+	}
+	return out
 }
 
 // outcomeLine renders the run's verdict, or "" when there is nothing to say
@@ -651,6 +732,12 @@ func printStatusNode(w io.Writer, n statusNode, depth int) {
 	line := fmt.Sprintf("%s%s  [%s]", indent, n.NodeID, state)
 	if n.Gate != "" {
 		line += fmt.Sprintf("  ⏸ %s", n.Gate)
+	}
+	if n.Title != "" && n.Title != n.NodeID {
+		line += fmt.Sprintf("  %q", n.Title)
+	}
+	if n.Origin == "spawn" {
+		line += "  (spawned)"
 	}
 	if n.Iteration != nil {
 		line += fmt.Sprintf("  iter=%d", *n.Iteration)

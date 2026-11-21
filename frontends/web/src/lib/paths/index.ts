@@ -222,7 +222,7 @@ export function acceptInvitePath(): string {
   return "/accept-invite";
 }
 
-/** CLI login consent (`forge login`, `reliant auth login`). */
+/** CLI login consent (`forge cloud login`, `reliant auth login`). */
 export function oauthCliPath(): string {
   return "/oauth/cli";
 }

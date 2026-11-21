@@ -58,6 +58,7 @@ var toolHints = map[string]string{
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
+	"attention": "Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.",
 	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} " +
 		"(K per machine of the trigger's pool), {max_running_per_key: N, key: ...} (N per key, e.g. one run per pull " +
 		"request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older " +
@@ -173,18 +174,23 @@ func extractTypesFromProto() []TypeInfo {
 				"pull request, main-red fixes first: `concurrency: {max_running: 6, max_running_per_key: 1, key: "+
 				"'{{ trigger.payload.attributes.repository }}#{{ trigger.payload.pull_request.number }}', priority: "+
 				"\"'main-red' in trigger.payload.labels ? 10 : 0\"}`.", 4),
+		extractTypeFromMessage("WorkflowAttention",
+			(&reliantv1.WorkflowAttention{}).ProtoReflect().Descriptor(),
+			"Correlates incidents within one owner and project, never across them. Failures remain failed and emit failure events. "+
+				"Only explicit on_success: resolved closes an incident; a key-only observer's success does not. "+
+				"Example: `attention: {key: 'repo:{{ inputs.repo }}:pr:{{ inputs.pr }}', on_start: recovering, recovery_timeout: 30m, on_success: resolved}`.", 5),
 		extractTypeFromMessage("WorkflowCheck",
 			(&reliantv1.WorkflowCheck{}).ProtoReflect().Descriptor(),
 			"A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, posted as the Reliant "+
 				"App on the event's head commit, details_url the run's page. Example: `check: {name: reliant/ci, "+
-				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 5),
+				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 6),
 		extractTypeFromMessage("DaemonSelector",
 			(&reliantv1.DaemonSelectorProto{}).ProtoReflect().Descriptor(),
 			"Where tools run (`daemon:` on the workflow or a node; node > workflow > the chat's or automation's "+
 				"machine > the default machine). A string is shorthand: `local`, `cloud` or `any` is a kind, anything "+
 				"else a machine name. `{pool: <name>}` places the run (workflow level) or "+
 				"the node (node level, reused by every loop iteration) ONCE on one machine and holds a slot on it while "+
-				"the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.", 6),
+				"the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.", 7),
 	}
 }
 
@@ -213,12 +219,23 @@ func extractTypeFromMessage(name string, md protoreflect.MessageDescriptor, desc
 		if !ok {
 			toolHint = toolHints[fieldName]
 		}
+		// Hints are message-specific: attention.key/on_failure deliberately
+		// have different semantics from concurrency.key/Workflow.on_failure.
+		if name == "WorkflowAttention" {
+			toolHint = map[string]string{
+				"key":              "Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.",
+				"on_start":         "Absent, recovering, or action_required. Recovering requires recovery_timeout. Only an actually started recovery run suppresses attention.",
+				"recovery_timeout": "Go duration in [1s, 24h], allowed only with on_start: recovering. Fixed from run start; retries never extend it. Expiry escalates through the durable inbox read, without a push notification.",
+				"on_success":       "Absent, resolved, or action_required. No implicit resolution on success. A recovery finishing without explicit successful resolution escalates.",
+				"on_failure":       "Absent (defaults to action_required), or action_required. Crashes, cancellation, and unsuccessful outcomes never resolve an incident.",
+			}[fieldName]
+		}
 
 		info.Fields = append(info.Fields, FieldInfo{
 			Name:        fieldName,
 			Type:        fieldType,
 			JSONName:    fieldName,
-			Required:    (fieldName == "name" && name != "DaemonSelector") || fieldName == "from",
+			Required:    (fieldName == "name" && name != "DaemonSelector") || fieldName == "from" || (name == "WorkflowAttention" && fieldName == "key"),
 			Description: fieldDesc,
 			ToolHint:    toolHint,
 		})

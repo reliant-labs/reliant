@@ -25,7 +25,7 @@ import (
 // (client `host-app`), and forge presented it to the control plane's deploy
 // API. That token was permanent and multi-purpose (it could also connect as
 // the daemon), it mostly did not hold deploy authority at all — so deploys
-// 403'd and users ran `forge login` anyway — and it sat in a second file.
+// 403'd and users ran `forge cloud login` anyway — and it sat in a second file.
 // RemoveLegacyForgeDeposits cleans up what those releases wrote.
 
 // ForgeScopes is the control-plane capability ceiling requested by an

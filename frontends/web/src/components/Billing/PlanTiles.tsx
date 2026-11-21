@@ -194,7 +194,7 @@ export function PlanTileRow({
       </span>
       <span className="flex-shrink-0 text-sm font-medium tabular-nums text-foreground">
         {current ? (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary-ink">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary-ink">
             Current plan
           </span>
         ) : covered ? (
