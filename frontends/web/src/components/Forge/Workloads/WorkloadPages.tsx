@@ -34,6 +34,7 @@ import { rollbackTargets, type RollbackTarget } from "../Promote/rollback";
 import { usePromoteFlow } from "../Promote/usePromoteFlow";
 import { usePromoterNames } from "../Releases/useReleaseData";
 import { promoterOf } from "../Releases/releaseModel";
+import { AppCodeCard } from "../Console/AppCodeCard";
 import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
@@ -241,9 +242,13 @@ function ProjectOverviewPage() {
                 service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}),
                 // The database's home is Data (U6e: "data and storage got mixed up").
                 data: (envName) => href({ kind: "data" }, envName ? { env: envName } : {}),
+                analytics: href({ kind: "analytics" }),
+                events: href({ kind: "analytics", tab: "events" }),
               }
             : undefined
         }
+        // The app's code (U13); the chats about it are the project's Chats card above.
+        about={<AppCodeCard app={forgeProject} />}
       />
       {dialog}
     </div>

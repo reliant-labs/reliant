@@ -156,7 +156,7 @@ const SURFACES: Record<string, { title: string; fixtures?: Fixtures; render: () 
     render: () => <LocalModelsSection />,
   },
   tokens: { title: "Settings → Access tokens", render: () => <TokenSettings /> },
-  "pair-machine": { title: "Settings → Machines: pair a machine", width: 560, render: () => <PairMachinePanel mode="reference" /> },
+  "pair-machine": { title: "Settings → Agent sandboxes: pair a computer", width: 560, render: () => <PairMachinePanel mode="reference" /> },
   "provider-helper": { title: "Provider sign-in helper", width: 560, render: () => <OAuthHelperPanel providerName="Claude" available={false} loading={false} connecting={false} onRetry={() => {}} onConnect={() => {}} /> },
   // Provider accounts list only for a session; the token is never sent anywhere.
   "mobile-providers": { title: "Mobile: AI providers", width: 390, signedIn: true, render: () => <MobileAIProvidersPanel /> },

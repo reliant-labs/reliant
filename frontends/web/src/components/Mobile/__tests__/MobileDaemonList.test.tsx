@@ -67,8 +67,8 @@ describe("MobileDaemonList", () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     renderList();
-    expect(screen.getByText("No machines yet")).toBeInTheDocument();
-    const actions = screen.getAllByRole("button", { name: /add machine/i });
+    expect(screen.getByText("No agent sandboxes yet")).toBeInTheDocument();
+    const actions = screen.getAllByRole("button", { name: /add sandbox/i });
     expect(actions).toHaveLength(2);
     await user.click(actions[0]!);
     expect(screen.getByRole("dialog", { name: "Add a machine" })).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe("MobileDaemonList", () => {
     renderList();
 
     expect(await screen.findByText("work-box")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /add machine/i }));
+    await user.click(screen.getByRole("button", { name: /add sandbox/i }));
     expect(screen.getByRole("dialog", { name: "Add a machine" })).toBeInTheDocument();
   });
 });

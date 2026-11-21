@@ -4,6 +4,7 @@
  *   Storage          prod declares two buckets (uploads, private; assets,
  *                    public read, on Reliant hosting), staging one; uploads
  *                    lists a few folders and files.
+ *   Speed insights   moved to speedInsights.ts (U6e).
  *   Usage & billing  the org's daily usage by category over the requested
  *                    window (hosted apps, databases, static hosting,
  *                    observability at list price; managed AI as settled

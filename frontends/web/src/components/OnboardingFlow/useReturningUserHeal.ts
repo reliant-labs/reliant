@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
-import { hasUsableDaemonForOnboarding } from "./steps/ComputeStep";
+import { hasUsableDaemonForOnboarding } from "./usableDaemon";
 
 /**
  * Repairs the onboarding flag for a user who already finished setting up but

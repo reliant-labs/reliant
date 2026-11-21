@@ -5,7 +5,7 @@
  * view). `?view=charts` on
  * /forge/p/:app/services: one section per workload with its charts —
  * instances, requests, latency, errors, CPU, memory — then the jobs, sites
- * and databases as rows.
+ * and databases as rows (a database row opens Data, the database's home).
  *
  * Read from useAppLiveState, the hook the table view and the Overview's strip read, so
  * the figures agree everywhere.
@@ -34,7 +34,8 @@ export function ServiceCharts({ live, loading, range }: { live: ChartsLiveState;
   const workloads = live.rows.filter((row): row is WorkloadRow => row.type === "workload");
   const others = live.rows.filter((row) => row.type !== "workload");
   const showEnv = live.scopedEnv === null;
-  const rowHref = (row: LiveStateRow) => href({ kind: "service", name: row.name }, showEnv ? { env: row.envName } : {});
+  const rowHref = (row: LiveStateRow) =>
+    row.type === "database" ? href({ kind: "data" }, { env: row.envName }) : href({ kind: "service", name: row.name }, showEnv ? { env: row.envName } : {});
 
   if (loading) {
     return <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading charts" />;

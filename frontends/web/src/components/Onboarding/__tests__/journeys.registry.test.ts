@@ -21,7 +21,6 @@ import { workflowsJourney } from "../journeys/workflows";
 import "../journeys/catalog";
 import { parseTourParam } from "../tourParam";
 import { setTourShell } from "../tourShell";
-import { clearForgeUIPreference, setForgeUIEnabled } from "../../../lib/forgeFeature";
 import type { Journey } from "../types";
 
 const resolve = (raw: string) => resolveTour(parseTourParam(raw));
@@ -38,11 +37,9 @@ function journeys(over: Partial<Record<"workflows" | "forge", Partial<Journey>>>
 
 describe("journey registry", () => {
   beforeEach(() => {
-    clearForgeUIPreference();
     setTourShell("reliant");
   });
   afterEach(() => {
-    clearForgeUIPreference();
     setTourShell(null);
   });
 
@@ -103,9 +100,6 @@ describe("journey registry", () => {
       expect(resolve("zz-nothing")).toBeNull();
       setTourShell("forge");
       expect(resolve("workflows:wf-new")).toBeNull();
-      setTourShell("reliant");
-      setForgeUIEnabled(false);
-      expect(resolve("forge")).toBeNull();
     });
   });
 
@@ -157,7 +151,9 @@ describe("the workflows placeholder (the forge demo bundle, where the content is
       shells: workflowsJourney.shells,
     });
     expect(WORKFLOWS_ELSEWHERE.elsewhere?.label).toBe(workflowsJourney.elsewhere?.label);
-    expect(WORKFLOWS_ELSEWHERE.elsewhere?.href()).toBe(workflowsJourney.elsewhere?.href());
+    // The demo leaves for the app, holding the journey through sign-in; in the app it opens Workflows in place.
+    expect(WORKFLOWS_ELSEWHERE.elsewhere?.href()).toBe("https://forge.reliantlabs.io/?journey=workflows");
+    expect(workflowsJourney.elsewhere?.href()).toBe("/workflows/library");
   });
 
   it("is replaced by the content once the catalog registers it", () => {

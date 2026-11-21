@@ -66,13 +66,13 @@ describe("usage dashboards", () => {
     api.listDashboards = vi.fn().mockResolvedValue({ canWrite: false, dashboards: [USAGE, BILLING] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
     // Each is a card, the client's LLM usage after the server's built-ins.
-    const listed = await screen.findByTestId("dashboards-hubs");
+    const listed = await screen.findByTestId("dashboards-gallery");
     expect(within(listed).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual([
       "/d/builtin/org-usage",
       "/d/builtin/org-billing",
       "/d/builtin/org-llm",
     ]);
-    const row = (name: string) => within(listed).getByRole("link", { name }).closest("li")!;
+    const row = (name: string) => within(listed).getByRole("link", { name }).closest("li[data-badge]")!;
     expect(row("Spend and usage")).toHaveTextContent("Requires cost-read permission");
     expect(row("Billing and infrastructure")).toHaveTextContent("Requires cost-read permission");
     expect(row("LLM usage")).not.toHaveTextContent("Requires cost-read permission");
