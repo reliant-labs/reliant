@@ -36,13 +36,18 @@ describe("watchClientMinimum", () => {
 
   it("compares the desktop app with the desktop minimum, not the web one", async () => {
     const onBelowMinimum = vi.fn();
+    const fetchMinimums = vi.fn(async () => minimums("1.9.0", ""));
     stop = watchClientMinimum({
       identity: { kind: "desktop", version: "1.8.3" },
-      fetchMinimums: async () => minimums("1.9.0", ""),
+      fetchMinimums,
       onBelowMinimum,
       minGapMs: 0,
     });
-    await new Promise((r) => setTimeout(r, 0));
+    // A second check starts only once the first has finished judging its answer.
+    await vi.waitFor(() => {
+      window.dispatchEvent(new Event("focus"));
+      expect(fetchMinimums).toHaveBeenCalledTimes(2);
+    });
     expect(onBelowMinimum).not.toHaveBeenCalled();
   });
 
@@ -61,11 +66,14 @@ describe("watchClientMinimum", () => {
       onBelowMinimum,
       minGapMs: 0,
     });
-    for (let i = 1; i <= 3; i++) {
-      await vi.waitFor(() => expect(fetchMinimums).toHaveBeenCalledTimes(i));
-      await new Promise((r) => setTimeout(r, 0));
+    // Check i starts only once check i-1 has finished judging its answer
+    // (one check at a time), so each answer before the last was no news.
+    for (let i = 2; i <= 4; i++) {
+      await vi.waitFor(() => {
+        window.dispatchEvent(new Event("focus"));
+        expect(fetchMinimums).toHaveBeenCalledTimes(i);
+      });
       expect(onBelowMinimum).not.toHaveBeenCalled();
-      window.dispatchEvent(new Event("focus"));
     }
     await vi.waitFor(() => expect(onBelowMinimum).toHaveBeenCalledTimes(1));
   });

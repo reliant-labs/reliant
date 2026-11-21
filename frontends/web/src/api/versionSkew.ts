@@ -54,6 +54,14 @@ export function noteVersionSkew(serviceTypeName: string, methodName: string): vo
 export type UpgradeRequiredSource = "refused" | "served-minimum";
 
 let _forcedShown = false;
+let _forcedRetry: ReturnType<typeof setTimeout> | undefined;
+
+/** First and longest wait before trying again to open a forced prompt that failed to open. */
+const FORCED_RETRY_FIRST_MS = 1_000;
+const FORCED_RETRY_MAX_MS = 30_000;
+
+// Lazy: modalStore → components → transport → here would be a cycle.
+let loadModalStore = () => import("../store/modalStore");
 
 /**
  * The server requires a newer build of this app. Unlike a skew this is not a
@@ -61,6 +69,12 @@ let _forcedShown = false;
  * the minimum it publishes), so the prompt is forced. It cannot be dismissed,
  * it replaces whatever modal is up (that modal's actions would be refused
  * too), and nothing replaces it (store/modalStore.ts).
+ *
+ * It is reported once, and opened until it opens: a refusal and the minimum
+ * watch can both signal at once, and they coalesce into one prompt. If the
+ * modal's lazy chunk fails to load (a deploy replaced the bundle, a network
+ * blip), it tries again on a backoff rather than wait for another signal that
+ * may never come while every call is refused.
  */
 export function noteUpgradeRequired(
   source: UpgradeRequiredSource,
@@ -72,25 +86,40 @@ export function noteUpgradeRequired(
     upgrade_source: source,
     min_version: info.minVersion ?? "",
   });
-  void (async () => {
-    try {
-      // Lazy, for the same import cycle as noteVersionSkew.
-      const { useModalStore } = await import("../store/modalStore");
-      useModalStore.getState().openModal("app-out-of-date", {
-        forced: true,
-        minVersion: info.minVersion,
-        upgradeUrl: info.upgradeUrl,
-      });
-    } catch (err) {
-      logger.error("[versionSkew] failed to open the forced upgrade prompt", err);
-      _forcedShown = false;
-    }
-  })();
+  void openForcedPrompt(info, FORCED_RETRY_FIRST_MS);
+}
+
+async function openForcedPrompt(
+  info: { minVersion?: string; upgradeUrl?: string },
+  retryMs: number,
+): Promise<void> {
+  try {
+    const { useModalStore } = await loadModalStore();
+    useModalStore.getState().openModal("app-out-of-date", {
+      forced: true,
+      minVersion: info.minVersion,
+      upgradeUrl: info.upgradeUrl,
+    });
+  } catch (err) {
+    logger.error("[versionSkew] failed to open the forced upgrade prompt; trying again", err);
+    _forcedRetry = setTimeout(() => {
+      _forcedRetry = undefined;
+      void openForcedPrompt(info, Math.min(retryMs * 2, FORCED_RETRY_MAX_MS));
+    }, retryMs);
+  }
 }
 
 /** Test seam. */
 export function resetVersionSkewForTests(): void {
   _modalShown = false;
   _forcedShown = false;
+  clearTimeout(_forcedRetry);
+  _forcedRetry = undefined;
+  loadModalStore = () => import("../store/modalStore");
   _reported.clear();
+}
+
+/** Test seam: how the forced prompt reaches the modal store. */
+export function setModalStoreLoaderForTests(loader: typeof loadModalStore): void {
+  loadModalStore = loader;
 }
