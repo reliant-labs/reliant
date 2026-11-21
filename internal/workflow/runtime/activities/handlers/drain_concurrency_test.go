@@ -5,16 +5,53 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
+
+// coordinatedDrainStore pauses only the first two claims, after their SQL has
+// established transaction snapshots. Retries bypass the barrier. The embedded
+// store and the thread service share the real Repo, including its transaction.
+type coordinatedDrainStore struct {
+	DrainAgentMessagesStore
+	serializable bool
+	claims       atomic.Int32
+	arrived      chan struct{}
+	release      chan struct{}
+}
+
+func (s *coordinatedDrainStore) RunTx(ctx context.Context, policy orm.TxPolicy, f func(context.Context) error) error {
+	if s.serializable {
+		policy = orm.Serializable.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	}
+	return s.DrainAgentMessagesStore.RunTx(ctx, policy, f)
+}
+
+func (s *coordinatedDrainStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, at time.Time, messageID string) ([]string, error) {
+	claimed, err := s.DrainAgentMessagesStore.MarkAgentMessagesDelivered(ctx, ids, at, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if s.claims.Add(1) <= 2 {
+		s.arrived <- struct{}{}
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return claimed, nil
+}
 
 // An orchestrator with several sub-agents in one chat drains a mailbox on
 // every thread at each turn, so drains on different threads of one chat run at
@@ -31,8 +68,16 @@ import (
 // no attempt conflicts: counting retries, not timing them, keeps this exact on
 // a loaded host.
 func TestDrainAgentMessages_ConcurrentDrainsInOneChatDoNotConflict(t *testing.T) {
-	t.Parallel()
-	const threadsInChat = 8
+	for _, serializable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("serializable=%t", serializable), func(t *testing.T) {
+			t.Parallel()
+			testCoordinatedDrains(t, serializable)
+		})
+	}
+}
+
+func testCoordinatedDrains(t *testing.T, serializable bool) {
+	const threadsInChat = 2
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -55,11 +100,17 @@ func TestDrainAgentMessages_ConcurrentDrainsInOneChatDoNotConflict(t *testing.T)
 			Sequence: 0,
 		})
 		require.NoError(t, err)
-		enqueueDrainTestMessage(t, h.Repo(), chatID, chatID, threadIDs[i], fmt.Sprintf("message for agent %d", i), time.Now().UTC())
+		enqueueDrainTestMessage(t, h.Repo(), chatID, chatID, threadIDs[i], fmt.Sprintf("message for agent %d", i), time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC))
 	}
 
 	retries := db.RecordRetryBackoffs(h.Repo())
-	act := newDrainTestActivity(h)
+	store := &coordinatedDrainStore{
+		DrainAgentMessagesStore: h.Repo(),
+		serializable:            serializable,
+		arrived:                 make(chan struct{}, threadsInChat),
+		release:                 make(chan struct{}),
+	}
+	act := NewDrainAgentMessagesActivity(store, threads.NewService(h.Repo()))
 	start := make(chan struct{})
 	outputs := make([]DrainAgentMessagesOutput, threadsInChat)
 	errs := make([]error, threadsInChat)
@@ -81,13 +132,27 @@ func TestDrainAgentMessages_ConcurrentDrainsInOneChatDoNotConflict(t *testing.T)
 		}()
 	}
 	close(start)
+	// MarkAgentMessagesDelivered has executed a statement in each transaction,
+	// establishing its snapshot, but neither may write the shared chat yet.
+	for range threadsInChat {
+		select {
+		case <-store.arrived:
+		case <-time.After(30 * time.Second):
+			t.Error("drains did not both reach the transaction barrier")
+		}
+	}
+	close(store.release)
 	wg.Wait()
 
 	for i, err := range errs {
 		require.NoError(t, err, "drain of thread %d of %d", i+1, threadsInChat)
 		assert.Equal(t, 1, outputs[i].Count, "drain of thread %d delivered its message", i+1)
 	}
-	assert.Zero(t, retries.Len(), "no drain transaction conflicted and had to be retried")
+	if serializable {
+		assert.Positive(t, retries.Len(), "the old isolation must conflict on the overlapping snapshots")
+	} else {
+		assert.Zero(t, retries.Len(), "no drain transaction conflicted and had to be retried")
+	}
 	for _, thread := range threadIDs {
 		queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, thread)
 		require.NoError(t, err)
