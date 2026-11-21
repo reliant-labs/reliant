@@ -9,6 +9,7 @@ package controlplane.v1;
 import "buf/validate/validate.proto";
 import "controlplane/v1/deploy.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -163,7 +164,10 @@ service DeployService {
           id: "environment_id"
         }
         env: "environment_id"
-        detail: ["keep_data"]
+        detail: [
+          "keep_data",
+          "keep_data_retention"
+        ]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
@@ -176,10 +180,36 @@ service DeployService {
   }
   // DeleteRetainedDatabase destroys one retained database's cluster, volumes
   // and (when it was the last in its namespace) the namespace. ADMIN.
-  // IRREVERSIBLE; nothing else ever deletes retained data.
+  // IRREVERSIBLE. A retained database kept with a grace window
+  // (KEEP_DATA_RETENTION_GRACE_WINDOW) is also purged automatically once its
+  // purge_after has passed; one kept without (every keep_data delete before
+  // the field existed, and any that does not name a retention) only by this.
   rpc DeleteRetainedDatabase(DeleteRetainedDatabaseRequest) returns (DeleteRetainedDatabaseResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // SetRetainedDatabaseRetention keeps a retained database LONGER: it moves
+  // its automatic purge later, or cancels it so the database is kept until it
+  // is purged by hand. It never brings a purge closer (DeleteRetainedDatabase
+  // is the way to purge now) and never schedules one for a database kept
+  // until purged. Refused once a purge has been requested. ADMIN.
+  rpc SetRetainedDatabaseRetention(SetRetainedDatabaseRetentionRequest) returns (SetRetainedDatabaseRetentionResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "retained_database"
+          id: "id"
+          label: "response.retained_database.database_name"
+        }
+        detail: [
+          "purge_after.seconds",
+          "keep_until_purged"
+        ]
+      }
+    };
+  }
+
   // GetManagedDatabase reports one managed database of an environment: its
   // lifecycle phase, size, engine version, and its backups (the newest, the
   // next scheduled run, the retention window and the recent history). MEMBER
@@ -1237,16 +1267,41 @@ message DeleteDeployEnvironmentRequest {
   // managed databases' Postgres clusters, volumes and credentials
   // (IRREVERSIBLE). keep_data=true RETAINS the databases instead: they keep
   // running in their workload namespace, keep billing as storage, and are
-  // listed by ListRetainedDatabases until purged with DeleteRetainedDatabase.
+  // listed by ListRetainedDatabases until purged: by DeleteRetainedDatabase,
+  // or automatically once their purge_after has passed (7 days by default).
   // A re-deploy creates a NEW environment and does not reattach them.
   bool keep_data = 5;
+  // How long kept databases are kept (only with keep_data; ignored
+  // otherwise). UNSPECIFIED, what every client before this field sends,
+  // keeps them until purged by hand, exactly as keep_data always has.
+  KeepDataRetention keep_data_retention = 6;
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 4;
 }
 
-message DeleteDeployEnvironmentResponse {}
+// KeepDataRetention is how long DeleteEnvironment's keep_data keeps the
+// environment's databases.
+enum KeepDataRetention {
+  // Not stated: kept until purged by hand (DeleteRetainedDatabase). The
+  // meaning keep_data had before retention existed, so an older client's
+  // keep_data never acquires a deadline.
+  KEEP_DATA_RETENTION_UNSPECIFIED = 0;
+  // Kept until purged by hand, stated explicitly.
+  KEEP_DATA_RETENTION_UNTIL_PURGED = 1;
+  // Kept for the deployment's grace window (7 days by default) from the
+  // teardown, then purged automatically and irreversibly. What a client
+  // that has told the person about the window sends. The window can be
+  // extended, or the purge cancelled, with SetRetainedDatabaseRetention.
+  KEEP_DATA_RETENTION_GRACE_WINDOW = 2;
+}
+
+message DeleteDeployEnvironmentResponse {
+  // With keep_data and KEEP_DATA_RETENTION_GRACE_WINDOW: how long after the
+  // teardown the kept databases are purged. Unset otherwise.
+  google.protobuf.Duration keep_data_retained_for = 1;
+}
 
 // RetainedDatabase is a managed database whose environment was deleted with
 // keep_data. Its data still exists and still costs storage.
@@ -1264,6 +1319,16 @@ message RetainedDatabase {
   // Provisioned storage across all instances, in GiB.
   int64 storage_gib = 8;
   google.protobuf.Timestamp retained_at = 9;
+  // When the database is purged automatically: its Postgres cluster and
+  // volumes are destroyed, irreversibly, and it stops billing. Set only for a
+  // database kept with KEEP_DATA_RETENTION_GRACE_WINDOW, to the teardown time
+  // plus the window (7 days by default), or moved later by
+  // SetRetainedDatabaseRetention. UNSET MEANS KEPT UNTIL PURGED BY HAND:
+  // every database kept before this field existed, and every keep_data that
+  // did not ask for a window. A time in the past means the purge is due or
+  // under way (automatic purging may also be switched off in this
+  // deployment, in which case nothing is purged automatically).
+  google.protobuf.Timestamp purge_after = 10;
 }
 
 message ListRetainedDatabasesRequest {
@@ -1286,6 +1351,26 @@ message DeleteRetainedDatabaseRequest {
 }
 
 message DeleteRetainedDatabaseResponse {}
+
+message SetRetainedDatabaseRetentionRequest {
+  string id = 1;
+  oneof retention {
+    // Purge automatically at this time instead. Must be in the future and
+    // no earlier than the current purge_after; the database must already
+    // have one.
+    google.protobuf.Timestamp purge_after = 2;
+    // Cancel the automatic purge: kept until purged by hand. Must be true.
+    bool keep_until_purged = 3;
+  }
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
+}
+
+message SetRetainedDatabaseRetentionResponse {
+  RetainedDatabase retained_database = 1;
+}
 
 message GetManagedDatabaseRequest {
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
