@@ -12,14 +12,14 @@ option go_package = "github.com/reliant-labs/forge/pkg/forgepb;forgepb";
 // Extension numbers are preserved from the original split proto files.
 // =============================================================================
 
-// Message-level annotations.
+// Entity-level annotations on protobuf messages that represent database tables.
 //
-// Extension 50200 was `EntityOptions entity`, and 50300 (on FieldOptions)
-// `FieldOptions field`: the retired entity/column annotations. SQL is the
-// schema — db/migrations drive entity projections — so both were removed.
-// Extensions cannot be `reserved`: never reuse 50200 or 50300, nor the names
-// `entity` / `field`, for another forge.v1 extension.
+// Retired: ignored by forge. SQL is the schema — db/migrations drive entity
+// projections. The extension is kept only so legacy projects' protos keep
+// compiling; `forge generate` prints a notice when it sees the annotation.
 extend google.protobuf.MessageOptions {
+  EntityOptions entity = 50200;
+
   // Binds a config message to the binary that loads it. See BinaryConfigOptions.
   BinaryConfigOptions binary_config = 50201;
 
@@ -28,9 +28,13 @@ extend google.protobuf.MessageOptions {
   FrontendConfigOptions frontend_config = 50202;
 }
 
-// Field-level annotations for configuration binding and List filters.
-// (50300, the retired `field` column annotation, is not to be reused.)
+// Field-level annotations for database column mapping and configuration binding.
 extend google.protobuf.FieldOptions {
+  // Database column mapping and constraints.
+  //
+  // Retired: ignored by forge. SQL is the schema — db/migrations drive entity
+  // projections. Kept only so legacy protos keep compiling.
+  FieldOptions field = 50300;
   // Configuration binding to environment variables and CLI flags.
   ConfigFieldOptions config = 50400;
   // A List request field's filter facet: the column it compares and how.
@@ -91,6 +95,140 @@ extend google.protobuf.ServiceOptions {
 // Method-level annotations for Connect RPC method definitions.
 extend google.protobuf.MethodOptions {
   MethodOptions method = 50100;
+}
+
+// =============================================================================
+// Entity & ORM Messages
+// =============================================================================
+
+// EntityOptions defines how a protobuf message maps to a database table.
+//
+// DEPRECATED — Retired: ignored by forge. SQL is the schema — db/migrations
+// drive entity projections. Kept for one release so legacy projects' protos
+// keep compiling; remove the annotations from your protos.
+message EntityOptions {
+  // Database table name. Inferred from the message name (snake_case, pluralized)
+  // when left empty.
+  string table = 1;
+
+  // Enable soft-delete semantics (adds a deleted_at column).
+  bool soft_delete = 2;
+
+  // Automatically manage created_at and updated_at timestamp columns.
+  bool timestamps = 3;
+
+  // Composite or single-column indexes to create on this table.
+  repeated IndexDef indexes = 4;
+
+  // Contract middleware to wire around generated repository methods.
+  // Supported values: "tracing", "metrics", "logging".
+  repeated string middleware = 5;
+}
+
+// IndexDef defines a database index on one or more columns.
+//
+// DEPRECATED — Retired: ignored by forge. SQL is the schema — db/migrations
+// drive entity projections. Declare indexes in migration SQL instead.
+message IndexDef {
+  // Index name. Auto-generated from field names when left empty.
+  string name = 1;
+
+  // Column names included in this index, in order.
+  repeated string fields = 2;
+
+  // Whether this index enforces a uniqueness constraint.
+  bool unique = 3;
+}
+
+// =============================================================================
+// Field Options
+// =============================================================================
+
+// FieldOptions defines how a protobuf field maps to a database column.
+//
+// DEPRECATED — Retired: ignored by forge. SQL is the schema — db/migrations
+// drive entity projections. Kept for one release so legacy projects' protos
+// keep compiling; remove the annotations from your protos.
+message FieldOptions {
+  // Mark this field as the primary key.
+  bool pk = 1;
+
+  // How to store complex or non-scalar types in the database.
+  StoreAs store = 3;
+
+  // Foreign key reference in "table.column" format (e.g., "users.id").
+  string ref = 4;
+
+  // Column has a UNIQUE constraint.
+  bool unique = 5;
+
+  // Create a single-column index on this field.
+  bool index = 6;
+
+  // SQL default expression (e.g., "0", "'active'", "NOW()").
+  string default_value = 7;
+
+  // Skip this field in code generation entirely.
+  bool skip = 8;
+
+  // Application-layer validation rules for this field.
+  ValidationRules validate = 9;
+
+  // Field cannot be updated after initial creation.
+  bool immutable = 10;
+}
+
+// StoreAs controls how complex or non-scalar protobuf types are persisted
+// in the database.
+//
+// DEPRECATED — Retired: ignored by forge. SQL is the schema — db/migrations
+// drive entity projections. Column storage types live in migration SQL.
+enum StoreAs {
+  // Inferred from the protobuf type (default behavior).
+  STORE_AS_UNSPECIFIED = 0;
+
+  // Store as a JSONB column.
+  STORE_AS_JSONB = 1;
+
+  // Store as a TEXT column.
+  STORE_AS_TEXT = 2;
+
+  // Store as a BLOB / BYTEA column.
+  STORE_AS_BLOB = 3;
+
+  // Store in a separate table with a foreign key relationship.
+  STORE_AS_TABLE = 4;
+}
+
+// ValidationRules defines application-layer constraints enforced during
+// code generation. These do not affect the database schema directly.
+message ValidationRules {
+  // Field value is required (must be non-zero-value).
+  bool required = 1;
+
+  // Minimum length for string fields.
+  int32 min_length = 2;
+
+  // Maximum length for string fields.
+  int32 max_length = 3;
+
+  // Regex pattern the value must match.
+  string pattern = 4;
+
+  // Semantic format constraint (e.g., "email", "url", "uuid", "ip").
+  string format = 5;
+
+  // Minimum value for numeric fields.
+  double min = 6;
+
+  // Maximum value for numeric fields.
+  double max = 7;
+
+  // Allowed values (for enum-like string fields).
+  repeated string allowed_values = 8;
+
+  // Custom validation function name to call during validation.
+  string custom = 9;
 }
 
 // =============================================================================
