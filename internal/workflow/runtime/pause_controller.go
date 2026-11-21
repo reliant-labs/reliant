@@ -97,6 +97,12 @@ type PauseController struct {
 	// machine, and in tests.
 	MachineWake *machineResumeWaker
 
+	// PlacedRequirements checks the run's `requires:` tools and repos on each
+	// pool member a step is placed on (placed_requirements.go). One per run,
+	// shared by every thread. nil when the run requires nothing of a machine,
+	// for a child run, and in tests.
+	PlacedRequirements *placedRequirements
+
 	// CapacitySlot is the run's workflow-capacity slot (capacity_slot.go): a
 	// provider wait gives it back, and the next step takes it again first.
 	// One per run, shared by every thread. nil for a run that was not
@@ -230,19 +236,32 @@ func (pc *PauseController) ObserveDaemonOfflineStep(callerCtx workflow.Context, 
 	}
 }
 
-// WakeMachineBeforeStep wakes the run's machine, if a hold may have let it
-// sleep, before a machine step dispatches. callerCtx MUST be the calling
-// goroutine's own workflow.Context. Nil-safe on both the receiver and the
-// waker.
-func (pc *PauseController) WakeMachineBeforeStep(callerCtx, actCtx workflow.Context, toolNames []string, toolsKnown bool) {
+// WakeMachineBeforeStep wakes the machine a step routed by sel uses, if a
+// hold may have let it sleep, before the step dispatches. callerCtx MUST be
+// the calling goroutine's own workflow.Context. Nil-safe on both the receiver
+// and the waker.
+func (pc *PauseController) WakeMachineBeforeStep(callerCtx, actCtx workflow.Context, sel *DaemonSelectorValue, toolNames []string, toolsKnown bool) {
 	if pc != nil {
-		pc.MachineWake.beforeMachineStep(callerCtx, actCtx, toolNames, toolsKnown)
+		pc.MachineWake.beforeMachineStep(callerCtx, actCtx, sel, toolNames, toolsKnown)
 	}
 }
 
-// MachineStepDone records that a machine step just completed. Nil-safe.
-func (pc *PauseController) MachineStepDone(ctx workflow.Context) {
+// MachineStepDone records that a machine step routed by sel just completed.
+// Nil-safe.
+func (pc *PauseController) MachineStepDone(ctx workflow.Context, sel *DaemonSelectorValue) {
 	if pc != nil {
-		pc.MachineWake.machineStepDone(ctx)
+		pc.MachineWake.machineStepDone(ctx, sel)
 	}
+}
+
+// CheckPlacedRequirements checks the run's machine requirements on the pool
+// member a step routed by sel was placed on, once per member per run, before
+// the step dispatches (placed_requirements.go). callerCtx MUST be the calling
+// goroutine's own workflow.Context. Nil-safe on both the receiver and the
+// checker.
+func (pc *PauseController) CheckPlacedRequirements(callerCtx workflow.Context, sel *DaemonSelectorValue) error {
+	if pc == nil {
+		return nil
+	}
+	return pc.PlacedRequirements.check(callerCtx, sel)
 }

@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -43,6 +44,11 @@ type Deps struct {
 	// not configured.
 	// forge:optional-dep
 	OAuthProvider auth.Provider
+	// ClientVersions is the client version policy Version and Info serve as
+	// ClientMinimums (ServerProcessConfig.client_versions); nil serves no
+	// floors.
+	// forge:optional-dep
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // Pinger is the database health check Ready runs.
