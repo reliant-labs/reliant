@@ -16,49 +16,50 @@ afterEach(() => {
   unregister = undefined;
 });
 
+// "Funnels" stands for any module that registers a row (Experiments is a built-in page now).
 describe("the console nav's registered rows", () => {
-  it("has no Experiments row, and no Experiments page, until one is registered", () => {
-    expect(labels()).not.toContain("Experiments");
+  it("has no Funnels row, and no Funnels page, until one is registered", () => {
+    expect(labels()).not.toContain("Funnels");
     expect(analytics().children!.map((child) => child.label)).toEqual(["Insights", "Events & metrics"]);
-    expect(consolePageOf("/forge/p/shop/experiments")).toBeNull();
+    expect(consolePageOf("/forge/p/shop/funnels")).toBeNull();
   });
 
   it("puts a row registered into the Product analytics group inside it, last, linking to its page, current there", () => {
-    unregister = registerConsoleNavEntry({ id: "experiments", label: "Experiments", segment: "experiments", after: "product-analytics", group: "product-analytics" });
-    expect(labels()).not.toContain("Experiments");
+    unregister = registerConsoleNavEntry({ id: "funnels", label: "Funnels", segment: "funnels", after: "product-analytics", group: "product-analytics" });
+    expect(labels()).not.toContain("Funnels");
     const children = analytics().children!;
-    expect(children.map((child) => child.label)).toEqual(["Insights", "Events & metrics", "Experiments"]);
-    expect(children[2]!.href).toBe("/forge/p/shop/experiments?env=prod");
+    expect(children.map((child) => child.label)).toEqual(["Insights", "Events & metrics", "Funnels"]);
+    expect(children[2]!.href).toBe("/forge/p/shop/funnels?env=prod");
     expect(children[2]!.active).toBe(false);
 
-    const page = consolePageOf("/forge/p/shop/experiments");
-    expect(page).toEqual({ project: "shop", page: { kind: "extension", id: "experiments", segment: "experiments" } });
-    expect(consolePath("shop", page!.page)).toBe("/forge/p/shop/experiments");
+    const page = consolePageOf("/forge/p/shop/funnels");
+    expect(page).toEqual({ project: "shop", page: { kind: "extension", id: "funnels", segment: "funnels" } });
+    expect(consolePath("shop", page!.page)).toBe("/forge/p/shop/funnels");
     expect(analytics({ page: page!.page }).children![2]!.active).toBe(true);
     expect(nav({ page: page!.page }).items.find((item) => item.label === "Overview")!.active).toBe(false);
   });
 
   it("keeps the group for an app without the Insights hub", () => {
-    unregister = registerConsoleNavEntry({ id: "experiments", label: "Experiments", segment: "experiments", after: "product-analytics", group: "product-analytics" });
-    expect(analytics({ productAnalytics: undefined }).children!.map((child) => child.label)).toEqual(["Events & metrics", "Experiments"]);
+    unregister = registerConsoleNavEntry({ id: "funnels", label: "Funnels", segment: "funnels", after: "product-analytics", group: "product-analytics" });
+    expect(analytics({ productAnalytics: undefined }).children!.map((child) => child.label)).toEqual(["Events & metrics", "Funnels"]);
   });
 
   it("puts a row with no group after its anchor, or the nearest row the app draws, and hides it when not available", () => {
     unregister = registerConsoleNavEntry({
-      id: "experiments",
-      label: "Experiments",
-      segment: "experiments",
+      id: "funnels",
+      label: "Funnels",
+      segment: "funnels",
       after: "product-analytics",
       available: (input) => input.project !== "ledger",
     });
     let items = labels();
-    expect(items.indexOf("Experiments")).toBe(items.indexOf("Product analytics") + 1);
-    expect(labels({ project: "ledger" })).not.toContain("Experiments");
+    expect(items.indexOf("Funnels")).toBe(items.indexOf("Product analytics") + 1);
+    expect(labels({ project: "ledger" })).not.toContain("Funnels");
     unregister();
     // Dashboards is a top-level row for every app (U6c): the row follows it.
-    unregister = registerConsoleNavEntry({ id: "experiments", label: "Experiments", segment: "experiments", after: "dashboards" });
+    unregister = registerConsoleNavEntry({ id: "funnels", label: "Funnels", segment: "funnels", after: "dashboards" });
     items = labels();
-    expect(items.indexOf("Experiments")).toBe(items.indexOf("Dashboards") + 1);
+    expect(items.indexOf("Funnels")).toBe(items.indexOf("Dashboards") + 1);
   });
 
   it("opens a page with routes of its own (`target`), lit on its `kinds`, and leaves that page's path alone", () => {

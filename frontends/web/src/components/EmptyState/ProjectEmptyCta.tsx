@@ -18,7 +18,7 @@
  * what the page is (GettingStarted renders it under its agent action).
  */
 
-import { lazy, Suspense, useContext, useState, type ReactNode } from "react";
+import { Suspense, useContext, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Rocket } from "lucide-react";
 
 import Button, { buttonClasses } from "@/components/forge-ui/button";
@@ -30,12 +30,10 @@ import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 
 import { START_APP, START_REPO } from "../Apps/appStart";
+import { MigrateRunDialog } from "./migrateRunDialog";
 import { ForgeConsoleContext } from "../Forge/Console/consoleContextValue";
 import { learnSectionOf } from "../Forge/Console/consoleLearn";
 
-// The Run dialog loads when it opens: every console empty state renders this
-// row, and the dialog brings the run form and the chat actions with it.
-const RunNowDialog = lazy(() => import("@/components/workflow/run/RunNowDialog").then((m) => ({ default: m.RunNowDialog })));
 
 /** The Move to Forge workflow (internal/workflow/builtin/forge-migrate.yaml). */
 export const MIGRATE_WORKFLOW_REF = "builtin://forge-migrate";
@@ -91,7 +89,7 @@ export function MigrateToForgeButton({ projectId, variant = "secondary" }: { pro
       </Button>
       {open && (
         <Suspense fallback={null}>
-          <RunNowDialog open onClose={() => setOpen(false)} projectId={project} workflowRef={MIGRATE_WORKFLOW_REF} />
+          <MigrateRunDialog open onClose={() => setOpen(false)} projectId={project} workflowRef={MIGRATE_WORKFLOW_REF} />
         </Suspense>
       )}
     </>
