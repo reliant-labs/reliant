@@ -29,7 +29,7 @@ import { TriggerCard } from "./TriggerCard";
 import { useRerun } from "./useRerun";
 import { useRunLaunch } from "./useRunLaunch";
 import { RunMachineBanner } from "./MachineStatus";
-import { projectPath, runsPath } from "@/lib/paths";
+import { projectChatsPath, runsPath } from "@/lib/paths";
 
 export function RunDetailPage() {
   const { runId } = useParams({ strict: false }) as { runId?: string };
@@ -76,7 +76,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
     );
 
   const openInProject = () =>
-    void navigate({ to: projectPath(chat.projectId), search: {} });
+    void navigate({ to: projectChatsPath(chat.projectId), search: {} });
 
   const onOpenAsChat = () => {
     const isChat = !chat.launchKind || chat.launchKind === "chat.start" || chat.adoptedAt;
