@@ -24,6 +24,7 @@ const DRIVER_DISPLAY_NAMES: Record<string, string> = {
   openai: "OpenAI",
   codex: "Codex",
   gemini: "Google AI",
+  vertexai: "Vertex AI",
   reliant: "Reliant",
   openrouter: "OpenRouter",
   copilot: "GitHub Copilot",

@@ -105,7 +105,9 @@ const ChunkedDownloader = require("./chunked-downloader");
 const {
   canCheckForUpdates,
   classifyCheckResult,
+  cleanMinVersion,
   createDownloadRunner,
+  createForcedUpdate,
   createMenuUpdateCheck,
   nextUpdateState,
 } = require("./update-check");
@@ -3053,7 +3055,35 @@ const downloadRunner = createDownloadRunner({
 
 ipcMain.handle("download-update", () => downloadRunner.run());
 
-ipcMain.handle("install-update", async () => {
+ipcMain.handle("install-update", () => installDownloadedUpdate());
+
+// The forced update (update-check.js createForcedUpdate): the server requires
+// a newer version than this one, so the app checks, downloads and installs
+// without waiting for the user. The renderer asks for it (preload's
+// forceUpdate) and keeps its update dialog up, undismissable, while it runs;
+// every window hears the forced state through update-status.
+const forceUpdate = createForcedUpdate({
+  getStatus: () => lastUpdateStatus,
+  isDownloading: () => downloadRunner.isInFlight(),
+  check: () => autoUpdater.checkForUpdates(),
+  download: () => downloadRunner.run(),
+  install: () => installDownloadedUpdate(),
+  announce: (minVersion) => broadcastUpdateStatus({ type: "forced", minVersion }),
+});
+
+ipcMain.handle("force-update", async (_event, minVersion) => {
+  if (!app.isPackaged) {
+    log.info("[AutoUpdater] Skipping forced update in development");
+    return { outcome: "inactive" };
+  }
+  const min = cleanMinVersion(minVersion);
+  log.warn(`[AutoUpdater] Forced update: the server requires ${min || "a newer version"} (running ${app.getVersion()})`);
+  const result = await forceUpdate(min);
+  log.info(`[AutoUpdater] Forced update outcome: ${result.outcome}${result.error ? ` (${result.error})` : ""}`);
+  return result;
+});
+
+async function installDownloadedUpdate() {
   if (!app.isPackaged) {
     return { error: "Updates not available in development" };
   }
@@ -3131,7 +3161,7 @@ ipcMain.handle("install-update", async () => {
     isInstallingUpdate = false;
     return { error: error.message };
   }
-});
+}
 
 /**
  * Perform manual macOS update when chunked download was used.

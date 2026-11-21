@@ -950,7 +950,7 @@ func triggerStateLabel(t *reliantv1.Trigger) string {
 }
 
 // actingIdentityLabel says whose name a trigger's GitHub writes carry, in the
-// words --acting-as takes; "-" when the server sent none (an older server).
+// words --acting-as takes; "-" when it is unset.
 func actingIdentityLabel(a reliantv1.ActingIdentity) string {
 	switch a {
 	case reliantv1.ActingIdentity_ACTING_IDENTITY_APP:
@@ -1054,7 +1054,16 @@ func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrH
 	}
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no daemon with id or hostname %q", idOrHostname)
+		// Name the machines there are: no other command lists daemon ids
+		// with a plain login (TL-59).
+		var known []string
+		for _, d := range daemons {
+			known = append(known, fmt.Sprintf("%s  %s (%s)", d.GetDaemonId(), d.GetHostname(), d.GetDaemonType()))
+		}
+		if len(known) == 0 {
+			return "", fmt.Errorf("no daemon with id or hostname %q: you have no machines", idOrHostname)
+		}
+		return "", fmt.Errorf("no daemon with id or hostname %q; your machines:\n  %s", idOrHostname, strings.Join(known, "\n  "))
 	case 1:
 		return matches[0].GetDaemonId(), nil
 	default:

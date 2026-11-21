@@ -176,10 +176,10 @@ GOWORK=off go build "${build_packages[@]}"
 # module@version` builds exactly the version go.mod now records. GOFLAGS is
 # reset to just -trimpath because -mod is not allowed with module@version
 # (and an empty one would drop -trimpath under a switched toolchain);
-# FORGE_NO_HOOKS keeps it from touching git hook activation. Then the docs
+# FORGE_NO_GIT_HOOKS keeps it from touching git hook activation. Then the docs
 # generators, through the same pinned task CI runs.
 echo "==> forge generate (${after_forge})"
-GOFLAGS=-trimpath FORGE_NO_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
+GOFLAGS=-trimpath FORGE_NO_GIT_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
 
 echo "==> task generate:docs"
 read -r -a task <<<"${TASK:-task}"

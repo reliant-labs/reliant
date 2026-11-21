@@ -160,11 +160,61 @@ const liveRootSQL = `EXISTS (
     ) r
     WHERE r.state IN (1, 2) OR (r.state = 3 AND r.stop_reason = 3))`
 
-// CountMachinePoolMemberLiveRuns counts the live runs pool placed on daemonID.
+// livePlacementSQL is true for a run placement (alias p) whose workflow is
+// live, by the same states as liveRootSQL.
+const livePlacementSQL = `EXISTS (
+    SELECT 1 FROM workflows pw WHERE pw.id = p.workflow_id
+    AND (pw.state IN (1, 2) OR (pw.state = 3 AND pw.stop_reason = 3)))`
+
+// memberLiveRunsSQL counts the live runs on the machine daemonExpr names, as
+// distinct chats: the chats a pool placed there (a trigger's launch) whose
+// root run is live, and the chats with a live run placement there (a
+// workflow's `daemon: {pool: …}` or labels-only selector). A chat counted by
+// both (a trigger-placed chat whose run recorded its member) counts once.
+//
+// poolExpr (a placeholder) scopes both to one pool; "" counts every pool's,
+// and every labels placement: a machine's whole load.
+func memberLiveRunsSQL(daemonExpr, poolExpr string) string {
+	chatPool, placementPool := "ch.machine_pool_id IS NOT NULL", "TRUE"
+	if poolExpr != "" {
+		chatPool = "ch.machine_pool_id = " + poolExpr
+		placementPool = "p.machine_pool_id = " + poolExpr
+	}
+	return `(SELECT count(DISTINCT live.chat_id) FROM (
+    SELECT ch.id AS chat_id FROM chats ch
+    WHERE ` + chatPool + ` AND ch.active_daemon_id = ` + daemonExpr + ` AND ` + liveRootSQL + `
+    UNION ALL
+    SELECT p.chat_id FROM run_machine_placements p
+    WHERE ` + placementPool + ` AND p.daemon_id = ` + daemonExpr + ` AND ` + livePlacementSQL + `
+) live)`
+}
+
+// ListChatHeldPoolMembers is the members of poolID on which chatID already
+// holds a live run, by the same predicates memberLiveRunsSQL counts: the
+// member a pool-bound trigger placed the chat on while its root run is live,
+// and the members its live run placements are on. A chat counts once among a
+// member's live runs, so placing it there again takes no extra slot.
+func ListChatHeldPoolMembers(ctx context.Context, db orm.Context, poolID, chatID string) ([]string, error) {
+	var ids []string
+	err := db.Bun().NewRaw(`
+SELECT DISTINCT held.daemon_id FROM (
+    SELECT ch.active_daemon_id AS daemon_id FROM chats ch
+    WHERE ch.id = ?1 AND ch.machine_pool_id = ?0 AND ch.active_daemon_id IS NOT NULL AND `+liveRootSQL+`
+    UNION ALL
+    SELECT p.daemon_id FROM run_machine_placements p
+    WHERE p.chat_id = ?1 AND p.machine_pool_id = ?0 AND `+livePlacementSQL+`
+) held ORDER BY held.daemon_id`, poolID, chatID).Scan(ctx, &ids)
+	if err != nil {
+		return nil, fmt.Errorf("list the members of pool %s chat %s holds: %w", poolID, chatID, err)
+	}
+	return ids, nil
+}
+
+// CountMachinePoolMemberLiveRuns counts the live runs pool placed on daemonID
+// (memberLiveRunsSQL): its pool-placed chats and its run placements.
 func CountMachinePoolMemberLiveRuns(ctx context.Context, db orm.Context, poolID, daemonID string) (int, error) {
 	var n int
-	err := db.Bun().NewRaw(`SELECT count(*) FROM chats ch WHERE ch.machine_pool_id = ?0 AND ch.active_daemon_id = ?1 AND `+liveRootSQL,
-		poolID, daemonID).Scan(ctx, &n)
+	err := db.Bun().NewRaw(`SELECT `+memberLiveRunsSQL("?1", "?0"), poolID, daemonID).Scan(ctx, &n)
 	if err != nil {
 		return 0, fmt.Errorf("count live runs of pool %s on %s: %w", poolID, daemonID, err)
 	}
@@ -203,11 +253,36 @@ GROUP BY ch.active_daemon_id`, poolID, userID, projectID, workflowRef).Scan(ctx,
 // them for projectID ("" for no project: Installed false, no catalog).
 //
 // Phase is derived exactly as a trigger's machine_state (namedTriggerSQL), so
-// a pool and a trigger never disagree about a machine.
+// a pool and a trigger never disagree about a machine. LiveRuns counts the
+// pool's runs on each member.
 func ListMachinePoolMembers(ctx context.Context, db orm.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
-	selector, err := json.Marshal(pool.Selector)
+	rows, err := ListLabelledMachines(ctx, db, pool.UserID, pool.Selector, projectID, pool.ID)
 	if err != nil {
-		return nil, fmt.Errorf("encode machine pool selector: %w", err)
+		return nil, fmt.Errorf("list members of machine pool %s: %w", pool.Name, err)
+	}
+	return rows, nil
+}
+
+// ListLabelledMachines reads userID's machines whose durable labels contain
+// every selector entry, with what placement needs about them for projectID
+// ("" for no project: Installed false, no catalog). It is the one read of
+// durable labels placement makes: a pool's members, and the machines a
+// labels-only `daemon: {labels: …}` places on. An empty selector selects
+// nothing (machinepool.Matches).
+//
+// poolID scopes LiveRuns to that pool's runs on each machine; "" counts every
+// live run placed on it, any pool's or a labels placement's.
+func ListLabelledMachines(ctx context.Context, db orm.Context, userID string, labels map[string]string, projectID, poolID string) ([]core.MachinePoolMemberRow, error) {
+	if len(labels) == 0 {
+		return nil, nil
+	}
+	selector, err := json.Marshal(labels)
+	if err != nil {
+		return nil, fmt.Errorf("encode machine label selector: %w", err)
+	}
+	liveRuns := memberLiveRunsSQL("d.id", "")
+	if poolID != "" {
+		liveRuns = memberLiveRunsSQL("d.id", "?3")
 	}
 	var rows []struct {
 		DaemonID        string     `bun:"daemon_id"`
@@ -241,13 +316,13 @@ SELECT d.id AS daemon_id,
            WHERE pd.project_id = ?2 AND pd.daemon_id = d.id AND pd.install_state = 'installed'
            AND pd.verified_at >= a.attached_at) AS verified,
     c.workflows_json, c.presets_json, c.pushed_at,
-    (SELECT count(*) FROM chats ch WHERE ch.machine_pool_id = ?3 AND ch.active_daemon_id = d.id AND `+liveRootSQL+`) AS live_runs
+    `+liveRuns+` AS live_runs
 FROM daemons d
 LEFT JOIN project_machine_catalogs c ON c.project_id = ?2 AND c.daemon_id = d.id
 WHERE d.user_id = ?0 AND d.labels @> ?1::jsonb
-ORDER BY name, d.id`, pool.UserID, string(selector), projectID, pool.ID).Scan(ctx, &rows)
+ORDER BY name, d.id`, userID, string(selector), projectID, poolID).Scan(ctx, &rows)
 	if err != nil {
-		return nil, fmt.Errorf("list members of machine pool %s: %w", pool.Name, err)
+		return nil, fmt.Errorf("list machines labelled %s: %w", selector, err)
 	}
 	out := make([]core.MachinePoolMemberRow, len(rows))
 	for i, r := range rows {

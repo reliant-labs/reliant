@@ -296,6 +296,9 @@ func TestResolveTriggerDaemon(t *testing.T) {
 
 	_, err = resolveTriggerDaemon(ctx, lister, "nope")
 	assert.ErrorContains(t, err, "no daemon with id or hostname")
+	// TL-59: a value that names no machine lists the ones there are.
+	assert.ErrorContains(t, err, "your machines:")
+	assert.ErrorContains(t, err, "daemon-1  laptop")
 }
 
 // An agent's shell runs as the user with the user's CLI login, so the commands

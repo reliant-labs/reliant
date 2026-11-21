@@ -103,6 +103,11 @@ function renderShell(path: string, extra: ComponentType = () => null, { landing 
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/auth", component: () => <div data-testid="auth-screen" /> }),
+      ...["/reset-password", "/verify-email", "/upgrade"].map((path) => createRoute({
+        getParentRoute: () => root,
+        path,
+        component: () => <AuthGuard requireAuth><div data-testid="protected-page" /></AuthGuard>,
+      })),
       createForgeDemoRoute(() => root),
       createForgeDemoRedirectRoute(() => root),
       app.addChildren([createRoute({ getParentRoute: () => app, path: "/", component: () => <Navigate to="/apps" replace /> })]),
@@ -135,6 +140,14 @@ afterEach(() => {
   setTourShell(null);
   setTourStorage(settingsTourStorage);
   window.localStorage.clear();
+});
+
+it.each(["/reset-password", "/verify-email", "/upgrade"])("does not hold sign-in outside the journey layouts: %s", async (path) => {
+  arriveWith("?journey=forge");
+  const router = renderShell(path);
+  await waitFor(() => expect(router.state.location.pathname).toBe("/auth"));
+  expect(await screen.findByTestId("auth-screen")).toBeInTheDocument();
+  expect(screen.queryByTestId("protected-page")).not.toBeInTheDocument();
 });
 
 describe("landingAuthDecision", () => {

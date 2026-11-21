@@ -320,6 +320,7 @@ func newWorkflowRunCmd() *cobra.Command {
 		projectID   string
 		projectPath string
 		daemon      string
+		syncWait    time.Duration
 		followFlags followFlags
 	)
 
@@ -343,11 +344,14 @@ that server. Either way it is an rlat_ access token.
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —
 reused if one already exists there, or created on the fly — so no manual
-project setup is needed. --project-id takes precedence when both are given.
+project setup is needed. A project new to the server has no workflows until
+its machine syncs them, so the run waits for that, up to --sync-wait.
+--project-id takes precedence when both are given.
 
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached
 or created on that machine, which is the one that holds it. With --project-id
 the project must already be checked out on that machine; otherwise the run
 is refused before it starts.
@@ -462,6 +466,15 @@ format, exit codes, and --hook).`,
 			chatClient := reliantv1connect.NewChatServiceClient(conn.httpClient(), conn.ServerURL)
 
 			resp, err := chatClient.StartChat(cmd.Context(), connect.NewRequest(createReq))
+			// A project --project-path just found or created has no workflows
+			// until its machine syncs them, a few seconds to a minute later,
+			// so the first run in a new folder was refused (TL-11). Wait for
+			// the sync rather than make every caller sleep and retry.
+			if err != nil && projectID == "" && projectPath != "" && syncWait > 0 && awaitingWorkflowSync(err) {
+				resp, err = retryUntilWorkflowsSync(cmd, syncWait, resp, err, func() (*connect.Response[reliantv1.StartChatResponse], error) {
+					return chatClient.StartChat(cmd.Context(), connect.NewRequest(createReq))
+				})
+			}
 			if err != nil {
 				return conn.annotate(fmt.Errorf("starting workflow: %w", err))
 			}
@@ -469,6 +482,11 @@ format, exit codes, and --hook).`,
 			// chat_id == execution_id: the follow surface is chat-scoped.
 			chatID := resp.Msg.GetChat().GetId()
 			out := cmd.OutOrStdout()
+			if follow {
+				// stdout is the NDJSON stream with --follow, so a script can
+				// pipe it to jq; the summary is a diagnostic (TL-80).
+				out = cmd.ErrOrStderr()
+			}
 			fmt.Fprintf(out, "Workflow %q triggered\n", workflowName)
 			if chatID != "" {
 				fmt.Fprintf(out, "  Chat/Execution ID: %s\n", chatID)
@@ -500,6 +518,7 @@ format, exit codes, and --hook).`,
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow the execution and stream NDJSON lifecycle events")
 	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (takes precedence over --project-path)")
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "Project directory path; resolves (find-or-create) to a project ID when --project-id is absent")
+	cmd.Flags().DurationVar(&syncWait, "sync-wait", 2*time.Minute, "With --project-path, how long to wait for a machine to sync a new project's workflows before giving up (0: don't wait)")
 	cmd.Flags().StringVar(&daemon, "daemon", "", "Machine the run executes on, by daemon id or hostname (default: the project's machine); with --project-path, the machine that holds the folder")
 	followFlags.register(cmd)
 
@@ -1812,7 +1831,19 @@ func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) (
 	if source == "builtin" {
 		where = "the builtin workflows"
 	}
-	if problems := layout.ScenarioProblems(); len(problems) > 0 {
+	problems := layout.ScenarioProblems()
+	if onlyFile != "" {
+		// One named workflow: a scenario directory that belongs to no
+		// workflow is not this one's (a retired workflow left its
+		// scenarios behind), so it is reported, not a reason to run
+		// nothing. A misplaced file may be this workflow's, and still
+		// refuses: running without it would pass without testing it.
+		problems = append([]error(nil), layout.Misplaced...)
+		for _, orphan := range layout.OrphanScenarioDirs() {
+			fmt.Fprintf(os.Stderr, "Warning: %s (in %s; not run)\n", orphan, where)
+		}
+	}
+	if len(problems) > 0 {
 		msgs := make([]string, len(problems))
 		for i, p := range problems {
 			msgs[i] = "  - " + p.Error()
@@ -1961,4 +1992,48 @@ func printScenarioSummary(results []scenarioRunResult) {
 	} else {
 		fmt.Println("\n\u2705 All scenarios passed")
 	}
+}
+
+// workflowSyncPending is the server's word for a project no machine has synced
+// workflows for yet (db.WorkflowSourceDiagnostic).
+const workflowSyncPending = "no machine has synced this project's workflows yet"
+
+// workflowSyncPoll is how often a run waiting for the sync tries again; a var
+// so a test can shrink it.
+var workflowSyncPoll = 5 * time.Second
+
+// awaitingWorkflowSync reports whether a StartChat refusal is only that the
+// project's workflows have not been synced yet.
+func awaitingWorkflowSync(err error) bool {
+	return err != nil && strings.Contains(err.Error(), workflowSyncPending)
+}
+
+// retryUntilWorkflowsSync retries start until it no longer fails for want of a
+// sync, or wait has passed, and returns its last result: (resp, err), the
+// refusal that sent the caller here, when it never tries again. It never calls
+// start at or after the deadline, so --sync-wait bounds when a workflow can be
+// started, not only how long the command waits: an attempt whose poll would
+// land past it is not made, and one whose sleep overran it is dropped.
+func retryUntilWorkflowsSync[T any](cmd *cobra.Command, wait time.Duration, resp T, err error, start func() (T, error)) (T, error) {
+	fmt.Fprintf(cmd.ErrOrStderr(), "Waiting up to %s for a machine to sync this project's workflows (--sync-wait)...\n", wait)
+	deadline := time.Now().Add(wait)
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for awaitingWorkflowSync(err) {
+		if time.Now().Add(workflowSyncPoll).After(deadline) {
+			return resp, err
+		}
+		select {
+		case <-ctx.Done():
+			return resp, ctx.Err()
+		case <-time.After(workflowSyncPoll):
+		}
+		if !time.Now().Before(deadline) {
+			return resp, err
+		}
+		resp, err = start()
+	}
+	return resp, err
 }

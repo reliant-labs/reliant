@@ -13,6 +13,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -62,6 +65,32 @@ type Launcher struct {
 	// sources reads an org-accounts-only launch's sources
 	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
 	sources orgSources
+	// reads is what one Launch resolves workflows and presets through
+	// (forOneLaunch); nil, outside a Launch, is repo itself.
+	reads WorkflowResolver
+}
+
+// forOneLaunch is l for the life of one Launch: every workflow, child and
+// preset resolution it makes reads each catalog, draft and preset once
+// (NewRequestResolver). A launch resolves its workflow again and again — the
+// tree it admits, the no-machine check, the inputs it builds and validates,
+// the selection it records — and each resolution read the same rows: a
+// trigger's pinned catalog snapshot (an UPDATE … RETURNING of hundreds of
+// KB) and the owner's presets, every time. None of those rows is written by
+// a launch, so one answer per read is the consistent view it admits against.
+func (l *Launcher) forOneLaunch() *Launcher {
+	one := *l
+	one.reads = NewRequestResolver(l.repo)
+	return &one
+}
+
+// workflowReads is the store workflows and presets resolve through: the
+// launch's memo during a Launch, else the store.
+func (l *Launcher) workflowReads() WorkflowResolver {
+	if l.reads != nil {
+		return l.reads
+	}
+	return l.repo
 }
 
 // ChatPinner decides which machine a chat that names none runs on, so the
@@ -132,6 +161,10 @@ type seedContent struct {
 // when the event and chat are committed but the run never started, calling
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
+	ctx, span := otel.Tracer("reliant.launch").Start(ctx, "launch.Launch",
+		trace.WithAttributes(attribute.String("launch.kind", string(ev.Kind)), attribute.Bool("launch.pinned", spec.CatalogPin != "")))
+	defer span.End()
+	l = l.forOneLaunch()
 	result, err := l.launch(ctx, ev, spec)
 	if errors.Is(err, errAdmissionSuperseded) {
 		return nil, &AlreadyLaunchedError{ChatID: spec.NewChatID}
@@ -1218,6 +1251,8 @@ func (l *Launcher) buildInputs(
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
+	ctx, span := otel.Tracer("reliant.launch").Start(ctx, "launch.buildInputs")
+	defer span.End()
 	initialData, err := l.buildChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, presets, paramValues(params))
 	if err != nil {
 		return nil, err

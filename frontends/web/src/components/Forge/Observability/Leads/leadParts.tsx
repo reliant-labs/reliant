@@ -26,7 +26,7 @@ export function ToneDot({ tone }: { tone: Tone }) {
 /** One summary sentence, led by its tone. */
 export function SummaryLine({ tone, children }: { tone?: Tone; children: ReactNode }) {
   return (
-    <p className="flex max-w-4xl items-start gap-2 text-sm leading-relaxed text-ink" data-testid="lead-summary">
+    <p className="flex max-w-4xl items-start gap-2 text-ui leading-relaxed text-ink-muted" data-testid="lead-summary">
       {tone && <ToneDot tone={tone} />}
       <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </p>
@@ -36,11 +36,11 @@ export function SummaryLine({ tone, children }: { tone?: Tone; children: ReactNo
 /** A list page's header: its title and plain subtitle on one line, an action on the right, then its sentence. */
 export function ListLeadHeader({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <header className="space-y-1">
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <div className="flex min-w-0 items-baseline gap-x-2.5">
-          <h1 className="shrink-0 text-base font-semibold tracking-tight text-ink">{title}</h1>
-          {subtitle && <p className="min-w-0 truncate text-sm text-ink-muted max-sm:hidden">{subtitle}</p>}
+    <header className="space-y-2">
+      <div className="flex min-h-9 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-baseline gap-x-3">
+          <h1 className="shrink-0 text-title text-ink">{title}</h1>
+          {subtitle && <p className="min-w-0 truncate text-ui text-ink-muted max-sm:hidden">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -54,7 +54,7 @@ export function FullListLink({ href, children }: { href: string; children: React
   return (
     <Link
       href={href}
-      className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="no-color inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-ui text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-testid="lead-full-list"
     >
       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
@@ -68,7 +68,7 @@ export function LeadCard({ label, testId, className, attrs, children }: { label:
   return (
     <section
       {...attrs}
-      className={cn("group relative rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/50 focus-within:ring-2 focus-within:ring-ring", className)}
+      className={cn("group relative rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-strong focus-within:ring-2 focus-within:ring-ring", className)}
       aria-label={label}
       data-testid={testId}
     >
@@ -82,7 +82,7 @@ export function CardOpen({ href, label, testId }: { href: string; label: string;
   return (
     <Link
       href={href}
-      className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary-ink after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none"
+      className="no-color inline-flex shrink-0 items-center gap-1 text-ui font-medium text-ink after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none"
       data-testid={testId}
     >
       {label}
@@ -94,9 +94,9 @@ export function CardOpen({ href, label, testId }: { href: string; label: string;
 /** A list's heading: a small label, and the count beside it. */
 export function ListHeading({ id, count, children }: { id: string; count?: number; children: ReactNode }) {
   return (
-    <h2 id={id} className="text-sm font-medium text-ink">
+    <h2 id={id} className="text-section text-ink">
       {children}
-      {count !== undefined && <span className="ml-1.5 text-xs font-normal tabular-nums text-ink-muted">{count}</span>}
+      {count !== undefined && <span className="ml-2 text-ui font-normal tabular-nums text-ink-muted">{count}</span>}
     </h2>
   );
 }
@@ -134,21 +134,22 @@ export function TopRows<T>({
   const [all, setAll] = useState(false);
   const shown = all ? rows : rows.slice(0, top);
   return (
-    <div className="space-y-2">
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
-        <table className="w-full table-fixed text-sm" aria-label={label}>
+    <div className="space-y-3">
+      {/* On the page, not in a card: a header rule, then quiet rules between rows. */}
+      <div>
+        <table className="w-full table-fixed text-ui" aria-label={label}>
           <thead>
-            <tr className="border-b border-border text-left text-xs text-ink-muted">
-              <th scope="col" className="w-auto px-3 py-2 font-medium">
+            <tr className="h-10 border-y border-border text-left text-meta text-ink-muted">
+              <th scope="col" className="w-auto px-3 font-normal">
                 {columns[0]}
               </th>
-              <th scope="col" className="w-24 px-3 py-2 text-right font-medium max-sm:hidden">
+              <th scope="col" className="w-24 px-3 text-right font-normal max-sm:hidden">
                 {columns[1]}
               </th>
-              <th scope="col" className="w-24 px-3 py-2 text-right font-medium max-sm:hidden">
+              <th scope="col" className="w-24 px-3 text-right font-normal max-sm:hidden">
                 {columns[2]}
               </th>
-              <th scope="col" className="w-24 px-3 py-2 text-right font-medium">
+              <th scope="col" className="w-24 px-3 text-right font-normal">
                 {columns[3]}
               </th>
               <th scope="col" className="w-8 px-1">
@@ -156,11 +157,11 @@ export function TopRows<T>({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-border-subtle">
             {shown.map((row) => {
               const [first, second, third, fourth] = cells(row);
               return (
-                <tr key={rowKey(row)} {...rowAttrs?.(row)} className="group relative cursor-pointer transition-colors hover:bg-ink/[0.03] focus-within:bg-ink/[0.03]">
+                <tr key={rowKey(row)} {...rowAttrs?.(row)} className="group relative h-[41px] cursor-pointer transition-colors hover:bg-ink/[0.03] focus-within:bg-ink/[0.03]">
                   <td className="px-3 py-2">
                     <Link href={rowHref(row)} className="flex min-w-0 items-center gap-2 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">
                       {first}
@@ -182,7 +183,7 @@ export function TopRows<T>({
         <button
           type="button"
           onClick={() => setAll((was) => !was)}
-          className="inline-flex min-h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-8 items-center rounded-lg px-2.5 text-ui font-medium text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {all ? `Show the top ${top}` : `Show all ${rows.length} ${noun}`}
         </button>
@@ -200,7 +201,7 @@ export function RowName({ marker, name, note, strong = true }: { marker?: ReactN
         {name}
       </span>
       {note && (
-        <span className="min-w-0 shrink truncate text-xs text-ink-muted max-sm:hidden" title={note}>
+        <span className="min-w-0 shrink truncate text-meta text-ink-muted max-sm:hidden" title={note}>
           {note}
         </span>
       )}
@@ -212,7 +213,9 @@ export const RedDot = ({ label }: { label: string }) => <span className="h-1.5 w
 
 export function ErrorBadge({ errors }: { errors: number }) {
   return (
-    <span className="shrink-0 rounded-full border border-danger-border bg-danger-surface px-1.5 text-2xs font-semibold leading-4 text-danger-ink">
+    // A dot and a count, never a filled pill.
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-meta font-medium text-danger-ink">
+      <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden="true" />
       {errors === 1 ? "1 error" : `${errors} errors`}
     </span>
   );
@@ -228,16 +231,16 @@ export interface Fact {
 export function DetailLead({ story, facts, children }: { story: string | null; facts: readonly Fact[]; children?: ReactNode }) {
   if (!story && !facts.length) return null;
   return (
-    <section className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2" aria-label="What happened" data-testid="lead-what-happened">
+    <section className="rounded-xl border border-border px-4 py-3" aria-label="What happened" data-testid="lead-what-happened">
       {story && (
-        <p className="text-sm text-ink [overflow-wrap:anywhere]">
+        <p className="text-ui text-ink [overflow-wrap:anywhere]">
           <span className="font-semibold">What happened: </span>
           {story}
         </p>
       )}
       {children}
       {facts.length > 0 && (
-        <ul className={cn("flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-muted", story && "mt-1")} aria-label="Key facts" data-testid="lead-key-facts">
+        <ul className={cn("flex flex-wrap gap-x-4 gap-y-0.5 text-meta text-ink-muted", story && "mt-1.5")} aria-label="Key facts" data-testid="lead-key-facts">
           {facts.map((fact, index) => (
             <li key={index} className="min-w-0 max-w-full truncate">
               <span className={cn("font-medium tabular-nums", fact.tone === "bad" ? "text-danger-ink" : "text-ink")}>{fact.value}</span>

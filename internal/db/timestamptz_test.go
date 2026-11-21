@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
 )
@@ -92,7 +93,7 @@ func TestLocalTimeRoundTripsAsTheSameInstant(t *testing.T) {
 		t.Fatalf("CreateStepExecution: %v", err)
 	}
 
-	got, err := repo.GetStepExecution(ctx, exec.ID)
+	got, err := store.LoadStepExecution(ctx, repo.ORM(), exec.ID)
 	if err != nil {
 		t.Fatalf("GetStepExecution: %v", err)
 	}

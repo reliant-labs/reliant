@@ -64,7 +64,7 @@ A service is compared only when it has `min_requests` in both windows, and `requ
 If you want the verdict recorded on the promotion rather than only read by your script, write it as evidence and attach it:
 
 ```bash
-forge obs check prod --wait --gate-json check.json && forge gate record prod --from check.json
+forge obs check prod --wait --gate-json check.json && forge release gate record prod --from check.json
 ```
 
 ## The gate: prod waits for staging
@@ -121,7 +121,7 @@ There are two kinds:
 | `order` | was not cut before the floor's release | `forge env floor set`, or `forge env deploy --floor` |
 | `declared` | carries every declaration the floor requires | Automatically, when the environment is promoted to a release that declares something it cannot be rolled back past |
 
-Order floors are about time: "never go back past v1.9.0". Declared floors are about what the environment's schema, API or data now is. A migration whose header says `-- forge:breaks-rollback <why>` raises one when the environment is promoted to that release, and so does a checked-in `deploy/rollback-floors/<id>.yaml` file of kind `api`, `feature` or `data`. A release cut later from a branch without the declaration is still refused, which a plain "older than" comparison would miss. Agents can run `forge skill load db/deploy-migrations` for how a migration declares whether the previous release survives it.
+Order floors are about time: "never go back past v1.9.0". Declared floors are about what the environment's schema, API or data now is. A migration whose header says `-- forge:breaks-rollback <why>` raises one when the environment is promoted to that release, and so does a checked-in `deploy/rollback-floors/<id>.yaml` file of kind `api`, `feature` or `data`. A release cut later from a branch without the declaration is still refused, which a plain "older than" comparison would miss. Agents can run `forge agent skill load db/deploy-migrations` for how a migration declares whether the previous release survives it.
 
 ```bash
 forge env floor show prod                              # active floors; --all adds lifted ones

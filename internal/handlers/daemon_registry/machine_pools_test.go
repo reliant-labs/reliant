@@ -34,13 +34,13 @@ func TestSetMachineLabels(t *testing.T) {
 	}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetMachineLabelsRequest, pb.SetMachineLabelsResponse]{
 		{Name: "unauthenticated", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "d-1"}), Ctx: context.Background(), WantErr: connect.CodeUnauthenticated},
-		{Name: "no daemon id", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
-		{Name: "a label that is not a slug", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "d-1", Labels: map[string]string{"Pool": "CI CD"}}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
-		{Name: "not the caller's machine", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "other", Labels: map[string]string{"pool": "cicd"}}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeNotFound},
+		{Name: "no daemon id", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "a label that is not a slug", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "d-1", Labels: map[string]string{"Pool": "CI CD"}}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "not the caller's machine", Req: connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "other", Labels: map[string]string{"pool": "cicd"}}), Ctx: personContext(t), WantErr: connect.CodeNotFound},
 		{
 			Name: "labels are stored and returned",
 			Req:  connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "d-1", Labels: map[string]string{"pool": "cicd"}}),
-			Ctx:  daemon_registry.AuthedContext(t),
+			Ctx:  personContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.SetMachineLabelsResponse]) {
 				if got := resp.Msg.GetDaemon().GetLabels()["pool"]; got != "cicd" {
 					t.Fatalf("labels = %v", resp.Msg.GetDaemon().GetLabels())
@@ -69,13 +69,13 @@ func TestPutAndListMachinePools(t *testing.T) {
 	}
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PutMachinePoolRequest, pb.PutMachinePoolResponse]{
-		{Name: "no pool", Req: connect.NewRequest(&pb.PutMachinePoolRequest{}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
-		{Name: "bad name", Req: connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "CI CD"}}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
-		{Name: "min above max", Req: connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "cicd", MinMembers: 3, MaxMembers: 2}}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "no pool", Req: connect.NewRequest(&pb.PutMachinePoolRequest{}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "bad name", Req: connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "CI CD"}}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "min above max", Req: connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "cicd", MinMembers: 3, MaxMembers: 2}}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
 		{
 			Name: "a pool with no selector selects pool=<name>, and shows its members",
 			Req:  connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "cicd", MinMembers: 2, MaxRunsPerMember: 6}}),
-			Ctx:  daemon_registry.AuthedContext(t),
+			Ctx:  personContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.PutMachinePoolResponse]) {
 				p := resp.Msg.GetPool()
 				if p.GetSpec().GetSelector()["pool"] != "cicd" || put.UserID != "test-user" || put.MaxRunsPerMember != 6 {
@@ -95,7 +95,7 @@ func TestPutAndListMachinePools(t *testing.T) {
 		{
 			Name: "lists the caller's pools",
 			Req:  connect.NewRequest(&pb.ListMachinePoolsRequest{}),
-			Ctx:  daemon_registry.AuthedContext(t),
+			Ctx:  personContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.ListMachinePoolsResponse]) {
 				if len(resp.Msg.GetPools()) != 1 || resp.Msg.GetPools()[0].GetId() != "pool-1" {
 					t.Fatalf("pools = %+v", resp.Msg.GetPools())
@@ -121,10 +121,10 @@ func TestDeleteMachinePool(t *testing.T) {
 		},
 	}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteMachinePoolRequest, pb.DeleteMachinePoolResponse]{
-		{Name: "no name", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
-		{Name: "a trigger runs on it", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "used"}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeFailedPrecondition},
-		{Name: "missing", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "gone"}), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeNotFound},
-		{Name: "deleted", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "cicd"}), Ctx: daemon_registry.AuthedContext(t), Check: func(*testing.T, *connect.Response[pb.DeleteMachinePoolResponse]) {}},
+		{Name: "no name", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
+		{Name: "a trigger runs on it", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "used"}), Ctx: personContext(t), WantErr: connect.CodeFailedPrecondition},
+		{Name: "missing", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "gone"}), Ctx: personContext(t), WantErr: connect.CodeNotFound},
+		{Name: "deleted", Req: connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: "cicd"}), Ctx: personContext(t), Check: func(*testing.T, *connect.Response[pb.DeleteMachinePoolResponse]) {}},
 	}, svc.DeleteMachinePool)
 }
 
@@ -168,7 +168,7 @@ func TestPoolMembersTakeTheMemberIdleTimeout(t *testing.T) {
 	set := &recordingIdleTimeouts{set: map[string]string{}}
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, IdleTimeouts: set}))
 
-	if _, err := svc.PutMachinePool(daemon_registry.AuthedContext(t), connect.NewRequest(&pb.PutMachinePoolRequest{
+	if _, err := svc.PutMachinePool(personContext(t), connect.NewRequest(&pb.PutMachinePoolRequest{
 		Pool: &pb.MachinePoolSpec{Name: "cicd", MemberIdleTimeout: "10m"},
 	})); err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestPoolMembersTakeTheMemberIdleTimeout(t *testing.T) {
 	}
 
 	set.set = map[string]string{}
-	if _, err := svc.SetMachineLabels(daemon_registry.AuthedContext(t), connect.NewRequest(&pb.SetMachineLabelsRequest{
+	if _, err := svc.SetMachineLabels(personContext(t), connect.NewRequest(&pb.SetMachineLabelsRequest{
 		DaemonId: "d-ci", Labels: map[string]string{"pool": "cicd"},
 	})); err != nil {
 		t.Fatal(err)

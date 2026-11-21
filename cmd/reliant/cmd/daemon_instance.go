@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/daemoninstance"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -202,7 +204,7 @@ func accountForPastedToken(ctx context.Context, cmd *cobra.Command, conn *connec
 	case err == nil:
 		return owner, true, nil
 	case connect.CodeOf(err) == connect.CodeUnauthenticated && !nonInteractive:
-		return "", false, tokenRejectedError(conn, connect.CodeOf(err))
+		return "", false, tokenRejectedError(conn, err)
 	default:
 		fmt.Fprintf(cmd.ErrOrStderr(),
 			"  ! Could not confirm which account this token belongs to (%v).\n"+
@@ -238,9 +240,28 @@ func whoAmI(ctx context.Context, gateway daemonGateway, token string) (string, e
 // tokenRejectedError is what a user who pasted a token hears when the gateway
 // refuses the token itself — and only then. A refused daemon id is a different
 // failure with a different remedy (see daemonStartFailure).
-func tokenRejectedError(conn *connection, code connect.Code) error {
+//
+// The gateway's own reason is kept: "token does not grant daemon:connect"
+// is a token that is valid but is not a machine credential, whose remedy is
+// different from a mistyped or revoked one (TL-32).
+func tokenRejectedError(conn *connection, err error) error {
+	code := connect.CodeOf(err)
+	var reason string
+	var connectErr *connect.Error
+	if errors.As(err, &connectErr) {
+		reason = strings.TrimSpace(connectErr.Message())
+	}
+	if strings.Contains(reason, cliauth.ScopeDaemon) {
+		return fmt.Errorf("token rejected by gateway %s (%s: %s) — this token is not a machine token: it lacks the %s scope. "+
+			"Run `reliant daemon start` without --token to pair this machine in the browser, or paste a token minted for a machine",
+			conn.describeGateway(), code.String(), reason, cliauth.ScopeDaemon)
+	}
+	detail := code.String()
+	if reason != "" {
+		detail += ": " + reason
+	}
 	return fmt.Errorf("token rejected by gateway %s (%s) — verify the PAT is correct, not revoked, and was minted by %s",
-		conn.describeGateway(), code.String(), conn.describeServer())
+		conn.describeGateway(), detail, conn.describeServer())
 }
 
 // daemonDataDir derives `daemon start`'s data directory from f exactly as

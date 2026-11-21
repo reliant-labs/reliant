@@ -13,6 +13,7 @@ import (
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
 	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
+	deployv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1/controlplanev1connect"
 	gitcredentialv1 "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1"
 	gitcredentialv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1/controlplanev1connect"
 	organizationv1 "github.com/reliant-labs/reliant/gen/controlplane/services/organization/v1"
@@ -73,8 +74,7 @@ const ReliantProviderKeyName = "reliant-provider"
 // (the per-(person, org) key, org-provider-accounts P10). control-plane rotates
 // a person's tokens per (org, name), so one name serves every org; it differs
 // from ReliantProviderKeyName so that minting in the person's default org never
-// revokes the org-less key, which a chat of no org (and an older release) still
-// spends.
+// revokes the org-less key, which a chat of no org still spends.
 const ReliantOrgProviderKeyName = "reliant-provider-org"
 
 // LLMKey is a freshly minted LLM gateway key: an `rlat_` access token with
@@ -135,6 +135,7 @@ type client struct {
 	gitCredentials gitcredentialv1connect.GitCredentialServiceClient
 	daemons        daemonv1connect.DaemonServiceClient
 	organizations  organizationv1connect.OrganizationServiceClient
+	deploy         deployv1connect.DeployServiceClient
 }
 
 // New returns the adapter for the control plane deps.ControlPlane names.
@@ -167,6 +168,7 @@ func New(deps Deps) Service {
 		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(rpcClient, baseURL, rpcOpts...),
 		daemons:        daemonv1connect.NewDaemonServiceClient(rpcClient, baseURL, rpcOpts...),
 		organizations:  organizationv1connect.NewOrganizationServiceClient(rpcClient, baseURL, rpcOpts...),
+		deploy:         deployv1connect.NewDeployServiceClient(rpcClient, baseURL, rpcOpts...),
 	}
 }
 

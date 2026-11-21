@@ -32,10 +32,12 @@ import (
 //   - The gateway sends a ServerHeartbeat every 15s. Nothing at all for
 //     gatewaySilenceTimeout means the other direction is dead.
 //
-// A gateway that predates acknowledgements always sends 0. The ack check
-// arms only once a non-zero acknowledgement has been seen on the session, so
-// a new daemon behind an old gateway is never cut off for silence it cannot
-// help.
+// A gateway that predates acknowledgements (before v1.8.2, #718) always
+// sends 0. The ack check arms only once a non-zero acknowledgement has been
+// seen on the session, so a new daemon behind an old gateway — a self-hosted
+// one included — is never cut off and sent into a redial loop for silence it
+// cannot help. This can go only once gateways older than v1.8.2 are no
+// longer supported anywhere, self-hosted included (a major release).
 
 const (
 	// gatewaySilenceTimeout: the gateway heartbeats every 15s, so 90s is six

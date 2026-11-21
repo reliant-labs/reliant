@@ -62,7 +62,7 @@ func TestMergeGateSkipLint(t *testing.T) {
 		`set -uo pipefail`,
 		`phase() { printf '%s|%s\n' "$1" "${*:2}" >>"$L/phases"; }`,
 		`build_check() { :; }`,
-		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false} webbuild=false`,
+		`fail=0 typecheck=false gofull=false half=2 quarter=2 test_lanes=go webdemo=${WEBDEMO:-false} webbuild=false gen_alone=${GEN_ALONE:-0}`,
 		`forge=(forge) notes=() pids=() run_plan=$PLAN MG_IN_SLOT=${TEST_IN_SLOT:-}`,
 		extract(`lint_lanes=(`, "\n# The whole vitest suite"),
 		extract(`base="" amend=0`, "\nexport GOFLAGS"),
@@ -87,18 +87,20 @@ func TestMergeGateSkipLint(t *testing.T) {
 		webDemo    bool   // the plan selected the forge demo build
 		noGo       bool   // the branch changes no .go file
 		inSlot     bool   // the gate took the heavy slot itself (MG_IN_SLOT)
+		smallHost  bool   // under MG_GEN_ALONE_GIB: the vite builds run after the wait (run_bundles)
 	}{
-		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false, false, false},
-		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true},
-		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"golangci"}, "0", false, true, false},
-		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false, false, false},
-		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false},
-		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false, false, false},
-		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false},
-		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto", "golangci"}, "1", false, false, false},
-		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false},
-		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false},
-		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false},
+		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false, false, false, false},
+		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true, false},
+		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"golangci"}, "0", false, true, false, false},
+		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false, false, false, false},
+		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false, false},
+		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false, false, false, false},
+		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false, false},
+		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto", "golangci"}, "1", false, false, false, false},
+		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false, false},
+		{"queue on a small host defers the demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint"}, []string{"demo", "vet", "golangci"}, "1", true, false, false, true},
+		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false, false},
+		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, mergeBase := branchWithMergeOfMain(t, tc.proto, !tc.noGo)
@@ -112,6 +114,9 @@ func TestMergeGateSkipLint(t *testing.T) {
 			cmd.Env = append(os.Environ(), "LOGDIR="+logs, "PLAN="+plan, fmt.Sprintf("WEBDEMO=%v", tc.webDemo), "TEST_IN_SLOT=")
 			if tc.inSlot {
 				cmd.Env = append(cmd.Env, "TEST_IN_SLOT=1")
+			}
+			if tc.smallHost {
+				cmd.Env = append(cmd.Env, "GEN_ALONE=1")
 			}
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("harness: %v\n%s", err, out)

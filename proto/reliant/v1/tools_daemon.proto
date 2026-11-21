@@ -22,7 +22,9 @@ service ToolsDaemonService {
   // - Client sends ToolResponse messages with execution results
   // - On connect, server streams any pending requests from the database
   rpc ConnectDaemon(stream DaemonMessage) returns (stream ServerMessage) {
-    option (forge.v1.method) = {activity: {none: "the daemon's tool-execution transport stream: each tool call records its own outcome"}};
+    option (forge.v1.method) = {
+      activity: {none: "the daemon's tool-execution transport stream: each tool call records its own outcome"}
+    };
   }
 
   // ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
@@ -30,14 +32,18 @@ service ToolsDaemonService {
   // receives DaemonMessages — same message types, but the connection direction
   // is flipped.
   rpc ConnectGateway(stream ServerMessage) returns (stream DaemonMessage) {
-    option (forge.v1.method) = {activity: {none: "the gateway-dialed twin of ConnectDaemon: daemon transport, each tool call records its own outcome"}};
+    option (forge.v1.method) = {
+      activity: {none: "the gateway-dialed twin of ConnectDaemon: daemon transport, each tool call records its own outcome"}
+    };
   }
 
   // ReportToolResult is a unary fallback for reporting tool execution results
   // when the bidirectional stream is unavailable. The daemon calls this when
   // a tool completes but the bidi stream send fails (e.g. temporary disconnect).
   rpc ReportToolResult(ReportToolResultRequest) returns (ReportToolResultResponse) {
-    option (forge.v1.method) = {activity: {none: "unary fallback delivery of one tool result: daemon transport, the tool call records its own outcome"}};
+    option (forge.v1.method) = {
+      activity: {none: "unary fallback delivery of one tool result: daemon transport, the tool call records its own outcome"}
+    };
   }
 
   // WhoAmI names the account the presented daemon credential acts as, and
@@ -349,6 +355,32 @@ message DaemonHeartbeat {
   // (RestartRequested). Unset means CURRENT: no restart in progress, or a
   // daemon that predates the drain protocol.
   DaemonUpgradeStatus upgrade = 11;
+  // The host's load and memory as the daemon read them from /proc
+  // (internal/machinehealth). The gateway logs them, with the disk report,
+  // as `machine health` / `machine volume` lines for the self-hosted
+  // machines it is told to watch (MACHINE_STATS_ORGS). Unset for a daemon
+  // that cannot read /proc (macOS, Windows) and for one that predates it.
+  MachineStats machine_stats = 12;
+}
+
+// MachineStats is the whole host's load and memory at one moment: what the
+// kernel reports for the machine, not for a cgroup. A reading the daemon could
+// not take is left out, never sent as zero.
+message MachineStats {
+  // The 1-, 5- and 15-minute load averages (/proc/loadavg). Unset when it
+  // could not be read.
+  optional double load1 = 1;
+  optional double load5 = 2;
+  optional double load15 = 3;
+  // The CPU count load is divided by: the cgroup CPU quota, or nproc. 0 when
+  // unknown.
+  double cpus = 4;
+  // MemTotal and MemAvailable from /proc/meminfo, in bytes. Both 0 when it
+  // could not be read.
+  uint64 mem_total_bytes = 5;
+  uint64 mem_available_bytes = 6;
+  // When the daemon read these (unix ms, its own clock).
+  int64 sampled_at_ms = 7;
 }
 
 // DaemonUpgradeStatus is the daemon's side of the drain protocol: what it is
@@ -736,6 +768,13 @@ message RestartRequested {
   string rollout_id = 6;
   // Why, in words an operator can read.
   string reason = 7;
+  // What the owner of a person's machine runs to upgrade, and where they are
+  // sent to, when the request comes from a version floor
+  // (ClientVersionPolicy daemon_upgrade_command / daemon_upgrade_url). Empty when
+  // the server names none; the daemon then prints its own advice. A daemon
+  // that predates them ignores them.
+  string upgrade_command = 8;
+  string upgrade_url = 9;
 }
 
 // RestartUrgency is how urgent a requested restart is.

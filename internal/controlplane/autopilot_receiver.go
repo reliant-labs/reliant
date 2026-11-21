@@ -25,8 +25,8 @@ const (
 // who belongs to no organization yet: there are no alerts to receive.
 const ReasonAutopilotNoOrg = "autopilot_no_org"
 
-// ErrAutopilotUnsupported: the control plane has no autopilot receivers (an
-// older one, or one without an alerting database), or this adapter has no
+// ErrAutopilotUnsupported: the control plane has no autopilot receivers (one
+// without an alerting database answers Unimplemented), or this adapter has no
 // internal-service identity to call it with.
 var ErrAutopilotUnsupported = errors.New("controlplane: autopilot alert receivers are not available")
 

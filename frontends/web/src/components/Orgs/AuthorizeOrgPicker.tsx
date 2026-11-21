@@ -84,7 +84,7 @@ export function AuthorizeOrgPicker({
 
   return (
     <fieldset className="space-y-2" disabled={disabled} data-testid="authorize-org">
-      <legend className="text-xs uppercase tracking-wide text-muted-foreground">Organization</legend>
+      <legend className="text-xs text-muted-foreground">Organization</legend>
       <div role="radiogroup" aria-label="Organization" className="overflow-hidden rounded-md border border-border">
         {orgs.map((o) => (
           <OrgRow key={o.id} org={o} selected={o.id === orgId} onSelect={() => onChoose(o.id)} />

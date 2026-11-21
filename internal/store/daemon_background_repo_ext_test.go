@@ -211,7 +211,7 @@ func TestDaemonAttachmentQueries(t *testing.T) {
 	if wrote, err := store.UpsertDaemonAttachment(ctx, env.ORM, &core.DaemonAttachment{DaemonID: "a1", UserID: "u2", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now}); err != nil || wrote {
 		t.Fatalf("UpsertDaemonAttachment(other user) = %v, %v; want refused", wrote, err)
 	}
-	out, err := env.Repo.ListOutboundAttachments(ctx)
+	out, err := store.ListOutboundAttachments(ctx, env.Repo.ORM())
 	if err != nil || len(out) != 1 || *out[0].PodIP != "10.0.0.1" || *out[0].PodPort != 9000 || out[0].Source != core.DaemonAttachmentSourceOutbound {
 		t.Fatalf("Repo.ListOutboundAttachments = %+v, %v", out, err)
 	}
@@ -335,8 +335,8 @@ func TestBackgroundProcessQueries(t *testing.T) {
 	}
 	p2 := &core.BackgroundProcess{ID: "p2", Command: "make", WorkingDir: "/srv", ChatID: strp("chat-1"), UserID: "u1", Status: running,
 		StartedAt: base.Add(time.Minute), SourceType: core.BgProcessSourceLLM, CreatedAt: base, UpdatedAt: base}
-	if err := env.Repo.CreateBackgroundProcess(ctx, p2); err != nil {
-		t.Fatalf("Repo.CreateBackgroundProcess: %v", err)
+	if err := store.InsertBackgroundProcess(ctx, env.ORM, p2); err != nil {
+		t.Fatalf("InsertBackgroundProcess(p2): %v", err)
 	}
 	got, err := store.GetBackgroundProcess(ctx, env.ORM, "p2")
 	if err != nil || got.PID != nil || got.PackageType != nil || *got.ChatID != "chat-1" || got.SourceType != core.BgProcessSourceLLM {
@@ -367,7 +367,7 @@ func TestBackgroundProcessQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListBackgroundProcesses(%s): %v", name, err)
 		}
-		want, err := env.Repo.ListBackgroundProcesses(ctx, f)
+		want, err := store.ListBackgroundProcesses(ctx, env.Repo.ORM(), f)
 		if err != nil {
 			t.Fatalf("Repo.ListBackgroundProcesses(%s): %v", name, err)
 		}
@@ -411,7 +411,7 @@ func TestBackgroundProcessQueries(t *testing.T) {
 	if n, err := store.DeleteEndedBackgroundProcesses(ctx, env.ORM, base.Add(3*time.Minute)); err != nil || n != 1 {
 		t.Fatalf("DeleteEndedBackgroundProcesses = %d, %v; want p1", n, err)
 	}
-	if n, err := env.Repo.CleanupOldBackgroundProcesses(ctx, time.Now().Add(time.Hour)); err != nil || n != 1 {
+	if n, err := store.DeleteEndedBackgroundProcesses(ctx, env.Repo.ORM(), time.Now().Add(time.Hour)); err != nil || n != 1 {
 		t.Fatalf("Repo.CleanupOldBackgroundProcesses = %d, %v; want p2", n, err)
 	}
 
@@ -427,15 +427,15 @@ func TestBackgroundProcessQueries(t *testing.T) {
 	if err := store.InsertBackgroundProcessOutput(ctx, env.ORM, nil); err != nil {
 		t.Fatalf("InsertBackgroundProcessOutput(empty): %v", err)
 	}
-	if err := env.Repo.CreateBackgroundProcessOutputBatch(ctx, []core.BackgroundProcessOutputLine{{ProcessID: "p3", Seq: 4, Stream: "stdout", Line: "four"}}); err != nil {
+	if err := store.InsertBackgroundProcessOutput(ctx, env.Repo.ORM(), []core.BackgroundProcessOutputLine{{ProcessID: "p3", Seq: 4, Stream: "stdout", Line: "four"}}); err != nil {
 		t.Fatalf("Repo.CreateBackgroundProcessOutputBatch: %v", err)
 	}
 	read, err := store.ReadBackgroundProcessOutput(ctx, env.ORM, "p3", 1, 2)
 	if err != nil || len(read) != 2 || read[0].Seq != 2 || read[0].Line != "two ? 'quoted'" || read[0].Stream != "stderr" || read[1].Line != "" || read[0].CreatedAt.IsZero() {
 		t.Fatalf("ReadBackgroundProcessOutput = %+v, %v", read, err)
 	}
-	twinRead, err := env.Repo.GetBackgroundProcessOutput(ctx, "p3", 0, 0)
+	twinRead, err := store.ReadBackgroundProcessOutput(ctx, env.ORM, "p3", 0, 10000)
 	if err != nil || len(twinRead) != 4 || twinRead[3].Line != "four" {
-		t.Fatalf("Repo.GetBackgroundProcessOutput = %+v, %v", twinRead, err)
+		t.Fatalf("ReadBackgroundProcessOutput = %+v, %v", twinRead, err)
 	}
 }

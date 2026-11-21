@@ -425,7 +425,7 @@ func (t *machineTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachineParams)
 		callID = call.CurrentToolCallID
 	}
 	if action == "label" {
-		return o.label(ctx, caller.userID, id, p, exec.Approvals[callID]), nil
+		return o.label(ctx, caller.userID, id, p, callID, exec.Approvals[callID]), nil
 	}
 	if exec.Approvals[callID] != machineApprovalHash(action, id, size) {
 		return NewTextErrorResponse(fmt.Sprintf("Machine %s requires the user's approval card in an interactive chat. It was not run.", action)), nil

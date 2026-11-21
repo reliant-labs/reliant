@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useUsageBillingCheckout } from "@/hooks/useCloudBillingQueries";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { openCheckout } from "@/lib/stripeCheckout";
+import { isDesktopUpdateRequired } from "@/lib/desktopUpdate";
 import { UsageBillingCard } from "./UsageBillingCard";
 import { usageBillingReturnUrls } from "./usageBillingCheckout";
 import { hostedRateLines, hostingMinimumLine, type HostedRateLike } from "@/components/Billing/priceFormat";
+import { HostingBudgetEditor } from "./HostingBudgetEditor";
+import { clearHostingCheckout, hostingCheckoutStarted, HostingActivatedNotice, markHostingCheckoutStarted } from "./HostingActivatedNotice";
+import { useOrgHostingUsageSummary } from "./hostingBillingQueries";
 
 /** The hosting terms this panel discloses, as GetCurrentUserUsageBilling carries them. */
 type HostedTerms = { rates: HostedRateLike[]; minimumMonthlyCents?: bigint };
+
+const CHECKOUT_FAILED = "Checkout could not be completed. Check billing status and review the policy before retrying.";
 
 export function UsageBillingPanel() {
   const org = useActiveOrg();
@@ -27,12 +32,9 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     enabled: !!orgId,
     staleTime: 10_000,
     refetchOnWindowFocus: true,
-    // An older server cannot serve this RPC. Avoid automatic retries, but keep
-    // focus/manual refresh so a later backend rollout recovers without a reload.
-    retry: (failures, error) => !(error instanceof ConnectError && error.code === Code.Unimplemented) && failures < 3,
   });
   const checkout = useUsageBillingCheckout();
-  const [handoffError, setHandoffError] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const refetch = state.refetch;
@@ -44,11 +46,23 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     const stop = setTimeout(() => clearInterval(interval), 60_000);
     return () => { clearInterval(interval); clearTimeout(stop); };
   }, [pending, refetch]);
-  const undeployed = state.error instanceof ConnectError && state.error.code === Code.Unimplemented;
-  return <div id="app-hosting"><UsageBillingCard
-    unavailableReason={undeployed ? "App hosting billing is not available on this server yet. Buying a machine plan does not enable it." : undefined}
+  const active = state.data?.agreement?.status === "active";
+  // A checkout this browser started for this org, now verified by the server.
+  const [activatedNotice, setActivatedNotice] = useState(() => hostingCheckoutStarted(orgId));
+  // Spend so far: lowering the budget below it pauses deploys at once, so the editor warns.
+  const summary = useOrgHostingUsageSummary(active && canManage ? orgId : null);
+  return <div id="app-hosting" className="flex flex-col gap-4">
+    {active && activatedNotice && <HostingActivatedNotice orgId={orgId} onDismiss={() => { clearHostingCheckout(orgId); setActivatedNotice(false); }} />}
+    <UsageBillingCard
+    budgetControl={active ? <HostingBudgetEditor
+      orgId={orgId}
+      budgetCents={state.data!.agreement!.infraBudgetCents}
+      policyVersion={state.data?.policyVersion ?? ""}
+      canManage={canManage}
+      spentCents={summary.data ? Number(summary.data.spentCents) : null}
+    /> : undefined}
     key={`${state.data?.policyVersion ?? "loading"}:${state.data?.agreement?.id ?? "new"}`}
-    enabled={!undeployed && (state.data?.enabled ?? false)}
+    enabled={state.data?.enabled ?? false}
     policyVersion={state.data?.policyVersion ?? ""}
     agreement={state.data?.agreement}
     // Dollars in the units the price list sells in. The free egress allowance
@@ -61,9 +75,9 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     minimumLine={hostingMinimumLine((state.data as HostedTerms | undefined)?.minimumMonthlyCents)}
     canManage={canManage}
     isLoading={state.isLoading}
-    error={state.error && !undeployed ? "Could not verify app hosting billing. Try again before authorizing usage." : checkout.error || handoffError ? "Checkout could not be completed. Check billing status and review the policy before retrying." : undefined}
+    error={state.error ? "Could not verify app hosting billing. Try again before authorizing usage." : handoffError ?? (checkout.error ? CHECKOUT_FAILED : undefined)}
     isSubmitting={checkout.isPending}
-    onRetry={() => { checkout.reset(); setHandoffError(false); void refetch(); }}
+    onRetry={() => { checkout.reset(); setHandoffError(null); void refetch(); }}
     onCheckout={async consent => {
       // Capture the org the user authorized; never resolve a different one after await.
       const urls = usageBillingReturnUrls();
@@ -71,9 +85,14 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
         const response = await checkout.mutateAsync({ ...consent, orgId, ...urls });
         if (!mounted.current) return; // An org switch must not open the old org's checkout.
         if (!response.checkoutUrl) throw new Error("Checkout URL unavailable");
+        markHostingCheckoutStarted(orgId);
+        setActivatedNotice(true);
         await openCheckout(response.checkoutUrl, urls.successUrl);
         if (mounted.current) void refetch(); // An outcome is never proof of funding.
-      } catch { if (mounted.current) setHandoffError(true); }
+      } catch (err) {
+        // An outdated desktop app cannot host checkout; say so instead of the generic failure.
+        if (mounted.current) setHandoffError(isDesktopUpdateRequired(err) ? err.message : CHECKOUT_FAILED);
+      }
     }}
   /></div>;
 }

@@ -25,10 +25,7 @@ import (
 // other account's business.
 const ForeignDaemonIDReason = "daemon_id_owned_by_another_user"
 
-// foreignDaemonIDMessage is the refusal's text. IsForeignDaemonIDError also
-// matches it alone: the gateway and the daemon ship separately, and a daemon
-// talking to a gateway that predates ForeignDaemonIDReason must still recover
-// rather than wedge until that gateway is redeployed.
+// foreignDaemonIDMessage is the refusal's text.
 const foreignDaemonIDMessage = "daemon id is owned by another user"
 
 // NewForeignDaemonIDError is the gateway's refusal of a daemon id owned by
@@ -45,11 +42,7 @@ func IsForeignDaemonIDError(err error) bool {
 	if err == nil || svcerr.Code(err) != connect.CodePermissionDenied {
 		return false
 	}
-	connectErr := svcerr.ToConnect(err)
-	if connectErr.Meta().Get(svcerr.ReasonHeader) == ForeignDaemonIDReason {
-		return true
-	}
-	return connectErr.Message() == foreignDaemonIDMessage
+	return svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == ForeignDaemonIDReason
 }
 
 // SetAsideDaemonID moves this instance's daemon-id file out of the way and

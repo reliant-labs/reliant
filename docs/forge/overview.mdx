@@ -4,7 +4,7 @@ sidebarTitle: "Forge overview"
 description: "Forge is an open-source Go and React framework and deploy platform for AI coding agents, with tests, environments, hosting and monitoring from the first commit."
 ---
 
-Forge is Reliant's framework for building, running and deploying software. Where Reliant is the harness, the agents, workflows and machines that do the work, Forge is the foundation they build on: the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
+Forge is an open-source framework and CLI that puts guardrails on any app and deploys it with no account: `npx -y @reliantlabs/forge@latest env deploy prod --claimable`. It is one of four Reliant products, beside [Reliant Cloud](/hosting/overview), [Reliant Workflows](/workflows/overview) and Reliant Engine (coming soon). It scaffolds the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
 
 A forge project holds Go services (Connect RPC, callable from a browser as plain HTTP+JSON), background workers, jobs, Kubernetes operators and CLIs, plus Next.js, Vite or Expo frontends and plain static sites. From the first commit it has a local dev stack that comes up with one command, a Postgres schema with generated data access, structured logs, traces and metrics on every boundary, secrets handling, linters, tests, CI, and `dev`, `staging` and `prod` environments, with the last two already set up to deploy to Reliant hosting.
 
@@ -16,7 +16,7 @@ An agent that writes an app from scratch has to invent everything around the cod
 
 It keeps that structure by regenerating the plumbing (API stubs, data access, typed config, frontend hooks, dashboards) from two inputs you own, your protobuf API and your SQL migrations. It never touches the files where your logic lives, so regenerating is always safe. [Project anatomy](/forge/project-anatomy) explains which files are which.
 
-Forge is built to be driven by an agent. Ask Reliant to "build me an app that…" or start the **Build an App** workflow, and the agent uses the same commands a person would. The binary describes itself, so an agent asks it rather than guessing: `forge project capabilities` lists every command, and `forge skill list` the playbooks that ship with it.
+Forge is built to be driven by an agent. Ask Reliant to "build me an app that…" or start the **Build an App** workflow, and the agent uses the same commands a person would. The binary describes itself, so an agent asks it rather than guessing: `forge project capabilities` lists every command, and `forge agent skill list` the playbooks that ship with it.
 
 ## What you get
 
@@ -42,7 +42,7 @@ A landing page, docs site, SPA or PWA with no backend is a complete forge projec
 
 ### An app you already have, in any language
 
-A server written in another language keeps its code and its Dockerfile. `forge project new --in-place --kind app` reads them and writes `forge.yaml` and the environments declaring the app, without changing a file of yours ([Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language)). From there your agent follows `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
+A server written in another language keeps its code and its Dockerfile. `forge project new --in-place --kind app` reads them and writes `forge.yaml` and the environments declaring the app, without changing a file of yours ([Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language)). From there your agent follows `forge agent skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
 
 ## How Forge and Reliant fit together
 

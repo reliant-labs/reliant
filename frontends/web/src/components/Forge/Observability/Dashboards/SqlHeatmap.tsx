@@ -119,7 +119,7 @@ export function SqlHeatmap({ panel, data, unit, keys, height, compact }: { panel
   }
   return (
     <div className="overflow-auto" style={{ maxHeight: Math.max(height, 160) }} data-testid="obs-panel-sql-heatmap">
-      <table className="w-full border-separate border-spacing-px text-2xs tabular-nums">
+      <table className="w-full border-separate border-spacing-px text-meta tabular-nums">
         <caption className="sr-only">{panel.title}</caption>
         <thead>
           <tr>
@@ -154,7 +154,7 @@ export function SqlHeatmap({ panel, data, unit, keys, height, compact }: { panel
           ))}
         </tbody>
       </table>
-      <p className="mt-2 inline-flex items-center gap-1.5 text-2xs text-ink-muted" aria-hidden="true">
+      <p className="mt-2 inline-flex items-center gap-1.5 text-meta text-ink-muted" aria-hidden="true">
         {formatValue(grid.min, unit)}
         <span className="inline-block h-2 w-16 rounded-sm" style={{ background: `linear-gradient(to right, ${tokenColor(token, 0.08)}, ${tokenColor(token, 0.72)})` }} />
         {formatValue(grid.max, unit)}

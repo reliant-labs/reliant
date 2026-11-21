@@ -9,7 +9,7 @@
  *
  *   panel title   text-sm font-medium text-ink          (the card header)
  *   legend        text-xs: series names ink, values ink, start-aligned
- *   axis labels   text-2xs text-ink-muted, the app's font (drawn on the canvas)
+ *   axis labels   text-meta text-ink-muted, the app's font (drawn on the canvas)
  *
  * Scoped to `.obs-uplot` (UPlotChart's figure): this is uPlot's generated DOM,
  * the one place a selector into a third party's markup is the only seam.

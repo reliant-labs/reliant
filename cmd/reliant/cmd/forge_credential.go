@@ -25,7 +25,7 @@ import (
 // ── forge's credentials come from the Reliant session ─────────────────
 //
 // forge resolves a control-plane credential from --token, its declared token
-// variable, then `forge login` — and then the credential helper named by
+// variable, then `forge cloud login` — and then the credential helper named by
 // $FORGE_CREDENTIAL_HELPER (forge/pkg/cloudcred). reliant IS that helper:
 // `reliant auth forge-credential` exchanges this machine's Reliant session for
 // a short-lived token (internal/forgecred). Two places point forge at it:
@@ -210,7 +210,7 @@ func newAuthForgeCredentialCmd() *cobra.Command {
 		Short:  "Credential helper for forge: a short-lived control-plane token from your Reliant session",
 		Hidden: true,
 		Long: `Answers forge's credential-helper protocol ($FORGE_CREDENTIAL_HELPER) on
-stdin/stdout. forge runs it when no --token, token variable or 'forge login'
+stdin/stdout. forge runs it when no --token, token variable or 'forge cloud login'
 applies; you do not run it yourself. 'reliant forge' and the daemon set it.
 
 It exchanges this machine's Reliant session (a daemon's credential, or a

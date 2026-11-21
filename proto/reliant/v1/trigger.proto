@@ -213,7 +213,9 @@ service TriggerService {
   // tool's schema as the structured output, and normalized by the same code
   // that tool runs.
   rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {
-    option (forge.v1.method) = {activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}};
+    option (forge.v1.method) = {
+      activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}
+    };
   }
 }
 

@@ -18,7 +18,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { ListProjectsWithAppsResponse } from "@/gen/reliant/v1/project_pb";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
-import { isForgeShell } from "@/lib/shell";
 import { catalogFromResponse, type ProjectCatalog } from "@/services/projects/catalog";
 import { useAuthStore } from "@/store/authStore";
 
@@ -63,8 +62,10 @@ export function useProjectCatalog(orgId?: string | null): ProjectCatalogView {
   const scope = useOrgScope();
   const explicit = orgId !== undefined;
   const org = explicit ? orgId : scope.orgId;
-  // The forge shell has no Reliant projects (lib/shell.ts), like useProjects.
-  const wanted = hasSession && !isForgeShell();
+  // On both brands, like useProjects: the forge host mounts the one route
+  // tree (U6), projects included. The public demo is signed out, so it never
+  // asks.
+  const wanted = hasSession;
   const enabled = wanted && (explicit || orgQueryEnabled(scope));
   const options = projectServiceQueries.listProjectsWithApps(projectCatalogRequest(org), {
     enabled,

@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
@@ -41,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghblobs"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -153,6 +155,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			PublicKeyPEM:              jwtPublicKey,
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
+			DevJWTSecret:              api.GetAuthDevJwtSecret(),
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -162,6 +165,11 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
 		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
+	}
+	// A dev signer outside the dev tier stops the process here, before it
+	// binds a port (auth.WithDevSigner refuses it again at every validator).
+	if err := auth.CheckDevSigner(s.Auth); err != nil {
+		return nil, err
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -197,6 +205,9 @@ type UserChainDeps struct {
 	Auth                *grpcserver.UserAuth
 	AllowedEmailDomains []string
 	Logger              *slog.Logger
+	// ClientVersions is the client version policy the chain judges callers
+	// by (ServerProcessConfig.client_versions).
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewUserChain is the API listener's interceptor chain (grpcserver.NewUserChain).
@@ -207,6 +218,7 @@ func NewUserChain(d UserChainDeps) (*grpcserver.UserChain, error) {
 		Auth:                d.Auth,
 		AllowedEmailDomains: d.AllowedEmailDomains,
 		Logger:              d.Logger,
+		ClientVersions:      d.ClientVersions,
 	})
 }
 
@@ -224,6 +236,9 @@ type HTTPRoutesDeps struct {
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// Membership checks the user control-plane names on an internal
+	// ensure-for-app call; nil on a deployment with no orgs.
+	Membership *orgs.Resolver
 }
 
 // NewHTTPRoutes is the API's plain-HTTP routes (grpcserver.APIHTTPRoutes):
@@ -250,7 +265,17 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
+}
+
+// httpRoutesMembership keeps a nil resolver a nil interface (a nil
+// *orgs.Resolver would be a non-nil one), so the handler fails closed.
+func httpRoutesMembership(r *orgs.Resolver) grpcserver.OrgMembership {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // APIListenerDeps is where the API listens and what it serves there.
@@ -265,6 +290,9 @@ type APIListenerDeps struct {
 	Membership *orgs.Resolver
 	// Policies is the org policy resolver every request carries (orgpolicy).
 	Policies *orgpolicy.Resolver
+	// ClientVersions is the client version policy, whose legacy switches
+	// the listener's edge applies (ServerProcessConfig.client_versions).
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -284,6 +312,7 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		Chain:              d.Chain,
 		Membership:         d.Membership,
 		Policies:           d.Policies,
+		ClientVersions:     d.ClientVersions,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
@@ -815,6 +844,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
+		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
@@ -1419,6 +1449,16 @@ func hostedControlPlane(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
+// projectHostedApps is where ListProjectsWithApps reads an org's hosted apps:
+// the control plane, with the caller's own bearer. nil — never a typed nil in
+// the handler's interface — when the control plane is not hosted.
+func projectHostedApps(cfg *configv1.ControlPlaneConfig) project.HostedApps {
+	if cp := hostedControlPlane(cfg); cp != nil {
+		return cp
+	}
+	return nil
+}
+
 // controlPlaneClient is the control-plane client SettingsService mints LLM
 // keys through, authenticated as the signed-in user.
 func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {
@@ -1502,6 +1542,41 @@ func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
+}
+
+// CoverageSourceReports is where the coverage-source handler asks whether a
+// retained coverage report names a blob: control-plane's TestsService, with
+// the viewer's own bearer (so no internal-service secret is needed). nil —
+// every read NOT_YET_AVAILABLE — when self-hosted; never a typed nil.
+func CoverageSourceReports(cfg *configv1.ControlPlaneConfig) coverage_source.Reports {
+	if !ControlPlaneEndpoint(cfg).Hosted() {
+		return nil
+	}
+	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
+}
+
+// CoverageSourceBlobs is how the coverage-source handler reads a blob from
+// GitHub: as the viewer, through the same token source GitHub triggers use
+// (control-plane's delegated token when hosted, the user's saved GitHub
+// connection when self-hosted). Never a project-wide credential: an App
+// installation token would let anyone with tests:read read the code.
+//
+// nil (and no error) on a hosted deployment without INTERNAL_SERVICE_SECRET,
+// which cannot fetch delegated tokens: every read is then NOT_YET_AVAILABLE,
+// as the org usage view shows no estimates (OrgUsageListPrices).
+func CoverageSourceBlobs(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, integrations *IntegrationSettings) (coverage_source.Blobs, error) {
+	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() && cp.InternalServiceSecret == "" {
+		return nil, nil
+	}
+	var clients connections.OAuthClients
+	if integrations != nil {
+		clients = integrations.Webhooks.OAuthClients
+	}
+	tokens, err := gitHubTokenSource(repo, keys, cfg, clients)
+	if err != nil {
+		return nil, fmt.Errorf("coverage source: %w", err)
+	}
+	return ghblobs.NewInstrumented(ghblobs.Deps{Tokens: tokens}), nil
 }
 
 // projectOrgMoveStarter starts a project move's saga on the shared task

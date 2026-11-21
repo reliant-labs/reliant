@@ -130,7 +130,7 @@ type DaemonBootstrapConfig struct {
 // be handed onto the two schemes the daemon's HTTP/2 transport can actually
 // dial.
 //
-// `forge cluster urls` prints the daemon gateway as grpc://host:port, which is
+// `forge dev cluster urls` prints the daemon gateway as grpc://host:port, which is
 // the natural thing to paste into --grpc-url. golang.org/x/net/http2 rejects
 // any scheme other than http/https ("http2: unsupported scheme"), and
 // connect-go surfaces that on a bidi stream as `write envelope: EOF` — so the

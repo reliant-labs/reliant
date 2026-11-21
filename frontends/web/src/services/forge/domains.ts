@@ -113,12 +113,10 @@ export interface DomainDnsRecord {
  * conclusion and the string is only its explanation.
  *
  * BOTH ARGUMENTS ARE OPTIONAL ON THE WIRE, and that is not defensive
- * padding. proto3 omits a false bool and an empty string, and a control
- * plane predating these fields sends neither — so `undefined` is the
- * ordinary shape for every record read from an older server, not a
- * malformed one. It means exactly `unchecked`, which is already the safe
- * reading, so the fallbacks converge on the right answer rather than
- * masking a problem.
+ * padding: proto3 omits a false bool and an empty string, so `undefined` is
+ * an ordinary shape, not a malformed one. It means exactly `unchecked`, which
+ * is already the safe reading, so the fallbacks converge on the right answer
+ * rather than masking a problem.
  */
 export function dnsRecordCheckOf(
   resolved: boolean | undefined,

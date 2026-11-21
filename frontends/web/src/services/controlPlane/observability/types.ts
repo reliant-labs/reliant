@@ -897,7 +897,7 @@ export interface DeclaredPort {
  *   pending           the control plane has not read the bundle's manifests yet (it does, in the background)
  *   unreadable        the manifests are in a registry it cannot read, are gone, or were never in the bundle
  *   not-in-manifests  the manifests were read and hold no object for this workload
- *   unknown           a control plane that predates the reason
+ *   unknown           no reason given
  */
 export type DeclaredSpecGap = "pending" | "unreadable" | "not-in-manifests" | "unknown";
 

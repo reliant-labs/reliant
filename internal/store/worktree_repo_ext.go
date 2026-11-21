@@ -239,16 +239,21 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 }
 
 // ListMainWorktreesForUser returns the live main workspace of each project
-// userID owns, or of the one project when projectID is set. Ownership is part
-// of the query: a project id that is not the caller's yields nothing.
-func ListMainWorktreesForUser(ctx context.Context, db orm.Context, userID string, projectID *string) ([]*core.Worktree, error) {
+// userID owns, or of the projects named when projects is non-empty.
+// Ownership is part of the query: a project id that is not the caller's
+// yields nothing.
+func ListMainWorktreesForUser(ctx context.Context, db orm.Context, userID string, projects []string) ([]*core.Worktree, error) {
 	var rows []*Worktree
 	q := db.Bun().NewSelect().Model(&rows).
 		Where("is_main").
 		Where("deleted_at IS NULL").
 		Where("project_id IN (SELECT id FROM projects WHERE user_id = ?)", userID)
-	if projectID != nil {
-		q = q.Where("project_id = ?", *projectID)
+	switch len(projects) {
+	case 0:
+	case 1:
+		q = q.Where("project_id = ?", projects[0])
+	default:
+		q = q.Where("project_id IN (?)", bun.List(projects))
 	}
 	if err := q.OrderExpr("project_id, id").Scan(ctx); err != nil {
 		return nil, fmt.Errorf("failed to list main worktrees: %w", err)

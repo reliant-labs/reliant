@@ -241,6 +241,13 @@ message DeleteDomainBindingRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 3;
+  // When set, unbind only while the domain is bound to this environment.
+  // A domain rebound to another environment since the caller read it is
+  // refused with FailedPrecondition, reason "binding_changed", and keeps its
+  // binding; a domain bound to nothing succeeds. Compare the environment,
+  // not binding_id: a rebind keeps the binding's id. Unset: unbind whatever
+  // the domain is bound to.
+  optional string expected_environment_id = 4;
 }
 
 message DeleteDomainBindingResponse {}

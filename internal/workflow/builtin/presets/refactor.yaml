@@ -11,6 +11,7 @@ params:
   - view
   - edit
   - write
+  - save_attachment  # copy an image or file the user attached into the workspace, byte for byte
   - find_replace
   - move_code
   - tag:shell
