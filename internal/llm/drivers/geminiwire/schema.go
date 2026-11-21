@@ -73,13 +73,15 @@ var (
 // structuralKeys are the keys that belong to one type. When a type array
 // (["array","null"] or ["string","object"]) becomes an anyOf, they move onto
 // the branch of their type: Gemini requires items/properties on the typed
-// node itself, not a typeless parent.
+// node itself, not a typeless parent, and a bound or pattern left on that
+// parent would constrain nothing. A key several types share (minimum on
+// integer and number, format, enum) is copied onto each of their branches.
 var structuralKeys = map[string][]string{
 	"array":   {"items", "minItems", "maxItems"},
 	"object":  {"properties", "required", "minProperties", "maxProperties"},
 	"string":  {"minLength", "maxLength", "pattern", "format", "enum"},
-	"integer": {"minimum", "maximum", "format", "enum"},
-	"number":  {"minimum", "maximum", "format", "enum"},
+	"integer": {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "format", "enum"},
+	"number":  {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "format", "enum"},
 }
 
 var geminiTypes = map[string]genai.Type{
@@ -238,16 +240,15 @@ func (n *normalizer) node(raw any, refs []string, depth int) map[string]any {
 	if all, ok := s["allOf"].([]any); ok {
 		delete(s, "allOf")
 		for _, branch := range all {
-			b, ok := branch.(map[string]any)
-			if !ok {
+			if _, ok := branch.(map[string]any); !ok {
 				continue
 			}
-			if ref, ok := b["$ref"].(string); ok {
-				if expanded, _, ok := n.resolveRef(ref, refs); ok {
-					b = expanded
-				}
-			}
-			mergeAllOfBranch(s, b)
+			// Each branch goes through the whole node path first, so a $ref
+			// in it is expanded with its own reference chain (cycles cut),
+			// and its nested $refs, allOfs and type arrays are normalized
+			// like any other node's. A normalized node normalizes to itself,
+			// so merging it and normalizing the parent changes nothing more.
+			mergeAllOfBranch(s, n.node(branch, refs, depth+1))
 		}
 	}
 

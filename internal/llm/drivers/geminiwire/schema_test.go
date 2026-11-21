@@ -165,6 +165,57 @@ func TestNormalizeJSONSchema(t *testing.T) {
 
 // A model graph that references itself through many paths must not expand
 // exponentially: the budget cuts it and the conversion still terminates.
+// A type union's shared constraints land on the branches of the types they
+// constrain, so none is silently dropped (pr-review on #3079).
+func TestNormalizeJSONSchema_TypeUnionKeepsItsConstraints(t *testing.T) {
+	in := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(`{"type":["string","number","null"],"minimum":5,"exclusiveMaximum":10,"pattern":"^a","minLength":2,"format":"date-time"}`), &in))
+	got := NormalizeJSONSchema(in)
+	want := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(`{"nullable":true,"anyOf":[
+		{"type":"string","pattern":"^a","minLength":2,"format":"date-time"},
+		{"type":"number","minimum":5,"maximum":10}]}`), &want))
+	assert.Equal(t, want, roundTrip(t, got))
+}
+
+// An allOf branch that is a $ref to a $ref, whose target holds its own allOf,
+// further $refs (one circular), a type array and a nullable union, is
+// normalized like any node: every reference expanded, nothing left as an
+// empty or unsupported node (pr-review on #3079).
+func TestNormalizeJSONSchema_AllOfRefIsNormalized(t *testing.T) {
+	in := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"$defs":{
+			"Base":{"$ref":"#/$defs/Record"},
+			"Record":{"type":"object","allOf":[{"properties":{"kind":{"const":"record"}}}],"properties":{"owner":{"$ref":"#/$defs/User"},"tags":{"type":["array","null"],"items":{"type":"string"}},"note":{"anyOf":[{"type":"string"},{"type":"null"}]}},"required":["owner"]},
+			"User":{"type":"object","properties":{"name":{"type":"string"},"manager":{"$ref":"#/$defs/User"}},"required":["name"]}
+		},
+		"allOf":[{"$ref":"#/$defs/Base"},{"properties":{"id":{"type":"integer"}},"required":["id"]}]
+	}`), &in))
+	got := roundTrip(t, NormalizeJSONSchema(in))
+	want := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"object",
+		"properties":{
+			"owner":{"type":"object","properties":{"name":{"type":"string"},"manager":{"type":"object"}},"required":["name"]},
+			"tags":{"type":"array","items":{"type":"string"},"nullable":true},
+			"note":{"type":"string","nullable":true},
+			"kind":{"type":"string","enum":["record"]},
+			"id":{"type":"integer"}},
+		"required":["owner","id"]}`), &want))
+	assert.Equal(t, want, got)
+}
+
+// roundTrip passes a normalized schema through JSON, so it compares equal to
+// one unmarshalled from a literal (numbers as float64, slices as []any).
+func roundTrip(t *testing.T, m map[string]any) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(m)
+	require.NoError(t, err)
+	out := map[string]any{}
+	require.NoError(t, json.Unmarshal(data, &out))
+	return out
+}
+
 func TestNormalizeJSONSchema_RefBudget(t *testing.T) {
 	t.Parallel()
 	defs := map[string]any{}
