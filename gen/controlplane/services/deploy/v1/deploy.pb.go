@@ -592,8 +592,25 @@ type GetDeployCapabilitiesResponse struct {
 	//   transaction (refusals vuln_gate_blocked, vuln_gate_unscanned), so forge
 	//   does not evaluate it itself for this environment.
 	VulnerabilityFeatures []string `protobuf:"bytes,7,rep,name=vulnerability_features,json=vulnerabilityFeatures,proto3" json:"vulnerability_features,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The test-record semantics this server implements (TestsService), named
+	// only once the behaviour behind each is live, never merely because the
+	// rpc exists:
+	//   "test-results": RecordTestRun stores an uploaded run and ingests its
+	//   results, and the TestsService run and test reads answer from them.
+	//   "test-coverage": uploaded coverage is merged into commit reports, and
+	//   GetCoverage / GetFileCoverage answer from them.
+	//   "flake-scores": flake events are detected and flake states scored
+	//   (ListFlakyTests, GetTest).
+	//   "release-test-evidence": a release is bound to its commit's report at
+	//   the cut and as later lanes arrive (GetReleaseTests), so forge reads a
+	//   release's tests from here rather than from its machine ledger.
+	//   "refuses-cover-variant": Promote refuses a release's coverage-
+	//   instrumented ("cover") digest on a persistent environment, so forge's
+	//   own refusal is not the only one.
+	// A forge that sees none of them keeps its local test record.
+	TestFeatures  []string `protobuf:"bytes,8,rep,name=test_features,json=testFeatures,proto3" json:"test_features,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetDeployCapabilitiesResponse) Reset() {
@@ -671,6 +688,13 @@ func (x *GetDeployCapabilitiesResponse) GetRollbackFloors() bool {
 func (x *GetDeployCapabilitiesResponse) GetVulnerabilityFeatures() []string {
 	if x != nil {
 		return x.VulnerabilityFeatures
+	}
+	return nil
+}
+
+func (x *GetDeployCapabilitiesResponse) GetTestFeatures() []string {
+	if x != nil {
+		return x.TestFeatures
 	}
 	return nil
 }
@@ -3426,8 +3450,18 @@ type PromoteReleaseRequest struct {
 	// re-promote of the bound release the floor is still set if none is active
 	// at it. Empty: no floor (declared floors are raised regardless).
 	RaiseFloorReason string `protobuf:"bytes,17,opt,name=raise_floor_reason,json=raiseFloorReason,proto3" json:"raise_floor_reason,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Promote even though the environment's vulnerability gate refuses
+	// (`forge env deploy <env> <v> --override-vuln-gate "<why>"`): a blocking
+	// advisory or an artifact nobody could scan (delivery_policy.vuln_gate,
+	// reasons vuln_gate_blocked / vuln_gate_unscanned), or an artifact with no
+	// SBOM (delivery_policy.provenance_sbom, reason sbom_missing). The reason
+	// is recorded on the promotion's vuln_gate / provenance_sbom gate with who
+	// overrode it and which findings. It relaxes exactly those refusals, for
+	// this one promotion; the durable answer is an exemption in the env's KCL.
+	// Empty: no override. A value that is only whitespace is refused.
+	VulnGateOverrideReason string `protobuf:"bytes,18,opt,name=vuln_gate_override_reason,json=vulnGateOverrideReason,proto3" json:"vuln_gate_override_reason,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PromoteReleaseRequest) Reset() {
@@ -3579,6 +3613,13 @@ func (x *PromoteReleaseRequest) GetOrgId() string {
 func (x *PromoteReleaseRequest) GetRaiseFloorReason() string {
 	if x != nil {
 		return x.RaiseFloorReason
+	}
+	return ""
+}
+
+func (x *PromoteReleaseRequest) GetVulnGateOverrideReason() string {
+	if x != nil {
+		return x.VulnGateOverrideReason
 	}
 	return ""
 }
@@ -10706,7 +10747,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"E\n" +
 	"\x1cGetDeployCapabilitiesRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\x94\x03\n" +
+	"\a_org_id\"\xb9\x03\n" +
 	"\x1dGetDeployCapabilitiesResponse\x128\n" +
 	"\x18snapshot_schema_versions\x18\x01 \x03(\tR\x16snapshotSchemaVersions\x128\n" +
 	"\x18immutable_snapshot_seals\x18\x02 \x01(\bR\x16immutableSnapshotSeals\x128\n" +
@@ -10714,7 +10755,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\x12+\n" +
 	"\x11snapshot_features\x18\x05 \x03(\tR\x10snapshotFeatures\x12'\n" +
 	"\x0frollback_floors\x18\x06 \x01(\bR\x0erollbackFloors\x125\n" +
-	"\x16vulnerability_features\x18\a \x03(\tR\x15vulnerabilityFeatures\"\x8f\x01\n" +
+	"\x16vulnerability_features\x18\a \x03(\tR\x15vulnerabilityFeatures\x12#\n" +
+	"\rtest_features\x18\b \x03(\tR\ftestFeatures\"\x8f\x01\n" +
 	"\x1bResolveHostedProjectRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -10914,7 +10956,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x1a\n" +
 	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"\x1a\n" +
-	"\x18DeleteDeploymentResponse\"\xd2\x05\n" +
+	"\x18DeleteDeploymentResponse\"\x8d\x06\n" +
 	"\x15PromoteReleaseRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12.\n" +
@@ -10933,7 +10975,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x15acknowledged_findings\x18\x0e \x03(\tR\x14acknowledgedFindings\x12\x18\n" +
 	"\atargets\x18\x0f \x03(\tR\atargets\x12\x1a\n" +
 	"\x06org_id\x18\x10 \x01(\tH\x01R\x05orgId\x88\x01\x01\x12,\n" +
-	"\x12raise_floor_reason\x18\x11 \x01(\tR\x10raiseFloorReasonB\x12\n" +
+	"\x12raise_floor_reason\x18\x11 \x01(\tR\x10raiseFloorReason\x129\n" +
+	"\x19vuln_gate_override_reason\x18\x12 \x01(\tR\x16vulnGateOverrideReasonB\x12\n" +
 	"\x10expected_currentB\t\n" +
 	"\a_org_idJ\x04\b\f\x10\r\"\xd6\x01\n" +
 	"\x16PromoteReleaseResponse\x12>\n" +

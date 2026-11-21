@@ -1251,7 +1251,7 @@ export const OrganizationService: GenService<{
   /**
    * ListMyOrganizations lists every org the caller belongs to, with their role
    * in each, oldest org first, and which one is their default. An org switcher
-   * and `forge login`'s org choice are built on it.
+   * and `forge cloud login`'s org choice are built on it.
    *
    * @generated from rpc controlplane.v1.OrganizationService.ListMyOrganizations
    */

@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/pull_request_record"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -88,6 +89,7 @@ var userServices = []string{
 	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName, reliantv1connect.UsageServiceName,
 	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName, reliantv1connect.AutomationTakeoverServiceName,
 	reliantv1connect.OrgProviderAccountServiceName, reliantv1connect.OrgUsageServiceName, reliantv1connect.OrgPolicyImpactServiceName,
+	reliantv1connect.PullRequestRecordServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -109,8 +111,9 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{}, WorktreeReclaim: &worktree_reclaim.Service{},
 		AutomationTakeover: &automation_takeover.Service{}, OrgProviderAccount: &org_provider_account.Service{},
 		OrgUsage: &org_usage.Service{}, OrgPolicyImpact: &org_policy_impact.Service{},
-		Logger:  slog.Default(),
-		Options: opts,
+		PullRequestRecord: &pull_request_record.Service{},
+		Logger:            slog.Default(),
+		Options:           opts,
 	})
 	require.NoError(t, err)
 	return routes

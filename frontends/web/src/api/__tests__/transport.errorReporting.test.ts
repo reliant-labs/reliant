@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import type { Interceptor } from "@connectrpc/connect";
+import * as wire from "@bufbuild/protobuf/wire";
 
 const reporting = vi.hoisted(() => ({
   reportError: vi.fn(),
@@ -152,6 +153,60 @@ describe("an app older than the server (ELECTRON-B3)", () => {
       expect.stringContaining("version-skew"),
       expect.anything(),
     );
+  });
+});
+
+describe("the server requires a newer build (upgrade_required)", () => {
+  afterEach(async () => {
+    const { useModalStore } = await import("../../store/modalStore");
+    // The forced prompt refuses closeModal by design; tests reset it directly.
+    useModalStore.setState({ activeModal: null, data: undefined });
+  });
+
+  function refusal(): ConnectError {
+    const { BinaryWriter } = wire;
+    const entry = (k: string, v: string) => new BinaryWriter().uint32(10).string(k).uint32(18).string(v).finish();
+    const info = new BinaryWriter()
+      .uint32(10).string("UPGRADE_REQUIRED")
+      .uint32(18).string("reliantlabs.io")
+      .uint32(26).bytes(entry("min_version", "1.9.0"))
+      .uint32(26).bytes(entry("upgrade_url", "https://reliantlabs.io/download"))
+      .finish();
+    const err = new ConnectError(
+      "this web (1.8.0) is older than the minimum this server supports (1.9.0); upgrade: reload",
+      Code.FailedPrecondition,
+      new Headers({ "x-forge-error-reason": "upgrade_required" }),
+    );
+    err.details.push({ type: "google.rpc.ErrorInfo", value: info });
+    return err;
+  }
+
+  it("opens the forced prompt with the minimum the refusal names, and reports no crash", async () => {
+    const call = await chainFailingWith(() => refusal());
+    await expect(call("reliant.v1.ChatService", "ListChats")).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+
+    expect(reporting.reportError).not.toHaveBeenCalled();
+    const { useModalStore } = await import("../../store/modalStore");
+    await vi.waitFor(() => expect(useModalStore.getState().activeModal).toBe("app-out-of-date"));
+    expect(useModalStore.getState().data).toMatchObject({
+      forced: true,
+      minVersion: "1.9.0",
+      upgradeUrl: "https://reliantlabs.io/download",
+    });
+  });
+
+  it("replaces a modal that was already up, and nothing then closes or replaces it", async () => {
+    const { useModalStore } = await import("../../store/modalStore");
+    useModalStore.getState().openModal("api-key-setup", undefined);
+    const call = await chainFailingWith(() => refusal());
+    await call("reliant.v1.ChatService", "ListChats").catch(() => {});
+    await vi.waitFor(() => expect(useModalStore.getState().activeModal).toBe("app-out-of-date"));
+
+    useModalStore.getState().closeModal();
+    useModalStore.getState().openModal("upgrade-required", { reason: "compute_budget_exhausted", message: "x" });
+    expect(useModalStore.getState().activeModal).toBe("app-out-of-date");
   });
 });
 

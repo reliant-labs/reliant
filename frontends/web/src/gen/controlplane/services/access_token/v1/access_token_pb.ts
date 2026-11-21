@@ -1139,7 +1139,7 @@ export const AccessTokenService: GenService<{
     output: typeof ResetDaemonScopePolicyResponseSchema;
   },
   /**
-   * ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+   * ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
    * device, when each was issued and last used, and when it ends. Browser
    * session only: a CLI login is refused, like every rpc of this service.
    *

@@ -24,11 +24,11 @@ export function ReadyMadeStrip({ rows, projectId }: { rows: WorkflowListRow[]; p
   if (rows.length === 0) return null;
   return (
     <details open className="group space-y-2" data-testid="ready-made">
-      <summary className="cursor-pointer select-none px-1 text-xs font-semibold text-muted-foreground">
+      <summary className="cursor-pointer select-none px-1 text-ui font-medium text-muted-foreground">
         Ready-made automations
         <span className="ml-1.5 font-medium text-muted-foreground/70">{rows.length}</span>
       </summary>
-      <p className="px-1 text-xs text-muted-foreground">
+      <p className="px-1 text-meta text-muted-foreground">
         Built in and ready to run by themselves. Turning one on asks what it should watch first.
         {!projectId && " Pick a project to turn one on."}
       </p>
@@ -53,11 +53,11 @@ function ReadyMadeCard({ row, projectId }: { row: WorkflowListRow; projectId?: s
         <Link
           to={workflowDetailPath(workflow.name)}
           search={projectId ? { project: projectId } : {}}
-          className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="no-color truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {name}
         </Link>
-        {summary && <p className="line-clamp-2 text-xs text-muted-foreground">{summary}</p>}
+        {summary && <p className="line-clamp-2 text-meta text-muted-foreground">{summary}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
           {needs.map((integration) => (
             <WorkflowBadge key={integration} label={`Needs ${integration}`} variant="neutral" />

@@ -21,7 +21,7 @@ Packages the web app + Go backend into a native desktop application.
 ### Setup
 
 ```bash
-task deps:web deps:electron   # from the repo root: npm ci in frontends/web and electron
+task deps:web deps:electron   # from the repo root: pnpm install --frozen-lockfile in frontends/web and electron
 ```
 
 ### Running it against a dev stack
@@ -35,7 +35,7 @@ repo; it needs k3d):
 cd ../control-plane && forge env up dev -D electron=1
 ```
 
-That builds `../reliant/dist/reliant`, serves the renderer, and runs `npm run
+That builds `../reliant/dist/reliant`, serves the renderer, and runs `pnpm run
 dev:electron` (`scripts/wait-and-start.js`) here. The main process logs to
 `../control-plane/.forge/logs/dev/reliant-electron-main.log`, the renderer's
 console to `frontend_reliant-web.log` beside it (`RELIANT_LOG_DIR`; the
@@ -45,9 +45,9 @@ web app to a browser and runs no Electron.
 ## Building
 
 ```bash
-npm run build          # production package for macOS (with-release-config -> pack)
-npm run dist:mac       # or dist:win, dist:linux: one platform
-npm run dist:pr        # unsigned --dir package, no publish: what CI builds (`task build:electron:smoke`)
+pnpm run build         # production package for macOS (with-release-config -> pack)
+pnpm run dist:mac      # or dist:win, dist:linux: one platform
+pnpm run dist:pr       # unsigned --dir package, no publish: what CI builds (`task build:electron:smoke`)
 ```
 
 Every build target goes through `scripts/with-release-config.mjs`, so a local
@@ -112,7 +112,7 @@ Each tier's `(onPath, writable)` status is logged at install time for debugging.
 
 ### Verifying after a build
 
-After `npm run dist:mac` / `dist:win` / `dist:linux`, install the artifact and run:
+After `pnpm run dist:mac` / `dist:win` / `dist:linux`, install the artifact and run:
 
 ```sh
 # macOS

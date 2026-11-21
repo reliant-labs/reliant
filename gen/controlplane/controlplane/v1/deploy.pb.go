@@ -3029,7 +3029,24 @@ type DeployArtifact struct {
 	// artifacts. There is exactly one DeployArtifact per (name, variant).
 	Variant string `protobuf:"bytes,9,opt,name=variant,proto3" json:"variant,omitempty"`
 	// The pinned source. Set iff mode = "source", empty otherwise.
-	Source        *DeploySource `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`
+	Source *DeploySource `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`
+	// BUILD EVIDENCE (forge#2326, forge#2377), mirroring forge's
+	// pkg/release.Artifact.InputsDigest / CarriedFrom. OCI only; empty for
+	// every other kind, from a forge that does not send them, and on a release
+	// cut before the ledger stored them — each of which forge reads as
+	// "rebuild". A variant image repeats its artifact's values on every row.
+	//
+	// EVIDENCE, NOT IDENTITY: neither takes part in whether a re-cut is the
+	// same release, so a retry carrying different values is still a retry and
+	// the release keeps the values first recorded.
+	//
+	// The fingerprint of the declared inputs of the build step that produced
+	// this image, a canonical sha256 digest. forge's next release compares its
+	// own fingerprint with it and reuses this image when they are equal.
+	InputsDigest string `protobuf:"bytes,11,opt,name=inputs_digest,json=inputsDigest,proto3" json:"inputs_digest,omitempty"`
+	// The release whose image this artifact reuses because its declared inputs
+	// were unchanged. Empty when this release's build produced the image.
+	CarriedFrom   string `protobuf:"bytes,12,opt,name=carried_from,json=carriedFrom,proto3" json:"carried_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3132,6 +3149,20 @@ func (x *DeployArtifact) GetSource() *DeploySource {
 		return x.Source
 	}
 	return nil
+}
+
+func (x *DeployArtifact) GetInputsDigest() string {
+	if x != nil {
+		return x.InputsDigest
+	}
+	return ""
+}
+
+func (x *DeployArtifact) GetCarriedFrom() string {
+	if x != nil {
+		return x.CarriedFrom
+	}
+	return ""
 }
 
 // DeploySource pins an artifact to source rather than to built bytes: a
@@ -4992,7 +5023,7 @@ type DeployPromotion struct {
 	// what CODE was running — and resolving that per row is what makes a
 	// sixteen-row page sixteen extra round trips.
 	ReleaseProvenance *DeploySourceProvenance `protobuf:"bytes,19,opt,name=release_provenance,json=releaseProvenance,proto3" json:"release_provenance,omitempty"`
-	// Set when this row came from `forge ledger import` rather than from a
+	// Set when this row came from `forge release ledger import` rather than from a
 	// promote: the source it was read out of, e.g.
 	// "git:.forge/promotions/prod.jsonl@<blob sha>".
 	//
@@ -6200,7 +6231,15 @@ type DeclaredWorkload struct {
 	TelemetryOff []string `protobuf:"bytes,16,rep,name=telemetry_off,json=telemetryOff,proto3" json:"telemetry_off,omitempty"`
 	// Why spec_recorded is false. UNSPECIFIED when it is true, and from a
 	// control plane that predates this field.
-	SpecGap       DeclaredSpecGap `protobuf:"varint,17,opt,name=spec_gap,json=specGap,proto3,enum=controlplane.v1.DeclaredSpecGap" json:"spec_gap,omitempty"`
+	SpecGap DeclaredSpecGap `protobuf:"varint,17,opt,name=spec_gap,json=specGap,proto3,enum=controlplane.v1.DeclaredSpecGap" json:"spec_gap,omitempty"`
+	// forge's role for the workload: "service", "worker", "operator", "job" or
+	// "cron". kind is the Kubernetes kind, which cannot tell a service, a worker
+	// and an operator apart (all Deployments). Read from a forge.dev Workload
+	// record's spec.kind, else the forge.dev/kind label forge stamps on the
+	// objects it renders (the pod template's, else the object's). Empty when the
+	// declaration carries neither: a bundle rendered by an older forge, a
+	// hand-written manifest, or a workload only the shape names.
+	ForgeKind     string `protobuf:"bytes,18,opt,name=forge_kind,json=forgeKind,proto3" json:"forge_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6352,6 +6391,13 @@ func (x *DeclaredWorkload) GetSpecGap() DeclaredSpecGap {
 		return x.SpecGap
 	}
 	return DeclaredSpecGap_DECLARED_SPEC_GAP_UNSPECIFIED
+}
+
+func (x *DeclaredWorkload) GetForgeKind() string {
+	if x != nil {
+		return x.ForgeKind
+	}
+	return ""
 }
 
 type DeclaredPort struct {
@@ -8452,7 +8498,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\x12\x1a\n" +
 	"\bartifact\x18\f \x01(\tR\bartifact\x120\n" +
 	"\x14applied_promotion_id\x18\r \x01(\tR\x12appliedPromotionId\x12*\n" +
-	"\x11applied_bundle_id\x18\x0e \x01(\tR\x0fappliedBundleId\"\x9d\x02\n" +
+	"\x11applied_bundle_id\x18\x0e \x01(\tR\x0fappliedBundleId\"\xe5\x02\n" +
 	"\x0eDeployArtifact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1c\n" +
@@ -8464,7 +8510,9 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x04mode\x18\b \x01(\tR\x04mode\x12\x18\n" +
 	"\avariant\x18\t \x01(\tR\avariant\x125\n" +
 	"\x06source\x18\n" +
-	" \x01(\v2\x1d.controlplane.v1.DeploySourceR\x06source\"d\n" +
+	" \x01(\v2\x1d.controlplane.v1.DeploySourceR\x06source\x12#\n" +
+	"\rinputs_digest\x18\v \x01(\tR\finputsDigest\x12!\n" +
+	"\fcarried_from\x18\f \x01(\tR\vcarriedFrom\"d\n" +
 	"\fDeploySource\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x16\n" +
@@ -8736,7 +8784,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12'\n" +
 	"\x0fsnapshot_digest\x18\r \x01(\tR\x0esnapshotDigest\x123\n" +
 	"\bsnapshot\x18\x0e \x01(\v2\x17.google.protobuf.StructR\bsnapshotJ\x04\b\t\x10\n" +
-	"\"\xc2\x05\n" +
+	"\"\xe1\x05\n" +
 	"\x10DeclaredWorkload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.controlplane.v1.WorkloadKindR\x04kind\x12#\n" +
@@ -8757,7 +8805,9 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\rsource_commit\x18\x0e \x01(\tR\fsourceCommit\x12\x1b\n" +
 	"\tbundle_id\x18\x0f \x01(\tR\bbundleId\x12#\n" +
 	"\rtelemetry_off\x18\x10 \x03(\tR\ftelemetryOff\x12;\n" +
-	"\bspec_gap\x18\x11 \x01(\x0e2 .controlplane.v1.DeclaredSpecGapR\aspecGapB\v\n" +
+	"\bspec_gap\x18\x11 \x01(\x0e2 .controlplane.v1.DeclaredSpecGapR\aspecGap\x12\x1d\n" +
+	"\n" +
+	"forge_kind\x18\x12 \x01(\tR\tforgeKindB\v\n" +
 	"\t_replicas\"R\n" +
 	"\fDeclaredPort\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +

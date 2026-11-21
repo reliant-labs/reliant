@@ -44,6 +44,7 @@ import { AutomationDialogHost } from './components/Automations/dialog/Automation
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
+import { ClientMinimumWatch } from './components/ClientMinimumWatch'
 import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -216,6 +217,12 @@ const ForgeConsoleDataPage = lazyRoute(
   () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleUsersPage = lazyRoute(
   () => import('./components/Forge/Users/UsersPage'), 'UsersPage')
+const ForgeConsoleVulnerabilitiesPage = lazyRoute(
+  () => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage')
+const ForgeConsoleVulnerabilityPage = lazyRoute(
+  () => import('./components/Forge/Security/VulnerabilityPage'), 'VulnerabilityPage')
+const ForgeConsoleSbomsPage = lazyRoute(
+  () => import('./components/Forge/Security/SbomsPage'), 'SbomsPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/SecretsPage'), 'SecretsPage')
 const ForgeConsoleActivityPage = lazyRoute(
@@ -329,6 +336,9 @@ function RootShell() {
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
+      {/* The forced upgrade when this build is below the reliant API's
+          published minimum (lib/clientMinimum.ts). */}
+      <ClientMinimumWatch />
       {/* The desktop app's update dialog: the sidebar button, Settings and
           the app menu's "Check for Updates…" open it from any route. */}
       <GlobalUpdateHandler />
@@ -782,6 +792,9 @@ const forgeConsolePageComponents = {
   storage: gated(ForgeConsoleStoragePage),
   data: gated(ForgeConsoleDataPage),
   users: gated(ForgeConsoleUsersPage),
+  vulnerabilities: gated(ForgeConsoleVulnerabilitiesPage),
+  vulnerability: gated(ForgeConsoleVulnerabilityPage),
+  sboms: gated(ForgeConsoleSbomsPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),

@@ -1097,6 +1097,24 @@ message GetDeployCapabilitiesResponse {
   //   transaction (refusals vuln_gate_blocked, vuln_gate_unscanned), so forge
   //   does not evaluate it itself for this environment.
   repeated string vulnerability_features = 7;
+
+  // The test-record semantics this server implements (TestsService), named
+  // only once the behaviour behind each is live, never merely because the
+  // rpc exists:
+  //   "test-results": RecordTestRun stores an uploaded run and ingests its
+  //   results, and the TestsService run and test reads answer from them.
+  //   "test-coverage": uploaded coverage is merged into commit reports, and
+  //   GetCoverage / GetFileCoverage answer from them.
+  //   "flake-scores": flake events are detected and flake states scored
+  //   (ListFlakyTests, GetTest).
+  //   "release-test-evidence": a release is bound to its commit's report at
+  //   the cut and as later lanes arrive (GetReleaseTests), so forge reads a
+  //   release's tests from here rather than from its machine ledger.
+  //   "refuses-cover-variant": Promote refuses a release's coverage-
+  //   instrumented ("cover") digest on a persistent environment, so forge's
+  //   own refusal is not the only one.
+  // A forge that sees none of them keeps its local test record.
+  repeated string test_features = 8;
 }
 
 message ResolveHostedProjectRequest {
@@ -1729,6 +1747,17 @@ message PromoteReleaseRequest {
   // re-promote of the bound release the floor is still set if none is active
   // at it. Empty: no floor (declared floors are raised regardless).
   string raise_floor_reason = 17;
+
+  // Promote even though the environment's vulnerability gate refuses
+  // (`forge env deploy <env> <v> --override-vuln-gate "<why>"`): a blocking
+  // advisory or an artifact nobody could scan (delivery_policy.vuln_gate,
+  // reasons vuln_gate_blocked / vuln_gate_unscanned), or an artifact with no
+  // SBOM (delivery_policy.provenance_sbom, reason sbom_missing). The reason
+  // is recorded on the promotion's vuln_gate / provenance_sbom gate with who
+  // overrode it and which findings. It relaxes exactly those refusals, for
+  // this one promotion; the durable answer is an exemption in the env's KCL.
+  // Empty: no override. A value that is only whitespace is refused.
+  string vuln_gate_override_reason = 18;
 }
 
 message PromoteReleaseResponse {

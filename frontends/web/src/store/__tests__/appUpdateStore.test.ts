@@ -168,3 +168,22 @@ describe("appUpdateStore", () => {
     expect(useAppUpdateStore.getState().dialogOpen).toBe(false);
   });
 });
+
+describe("forceUpdate", () => {
+  it("falls back to the ordinary check on a desktop build without the forced IPC, and stays open", async () => {
+    const { api } = fakeElectron({
+      checkForUpdates: vi.fn(async () => ({ success: true, status: { type: "not-available" } })),
+    });
+    await useAppUpdateStore.getState().forceUpdate("1.9.0");
+
+    expect(api.checkForUpdates).toHaveBeenCalledTimes(1);
+    useAppUpdateStore.getState().closeDialog();
+    expect(useAppUpdateStore.getState().dialogOpen).toBe(true);
+    expect(useAppUpdateStore.getState().status).toMatchObject({ type: "not-available", forced: true, minVersion: "1.9.0" });
+  });
+
+  it("is not a pending update by itself", () => {
+    expect(nextPendingUpdate(null, { type: "forced", minVersion: "1.9.0" })).toBeNull();
+  });
+});
+

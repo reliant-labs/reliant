@@ -103,7 +103,7 @@ const (
 type OrganizationServiceClient interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
-	// and `forge login`'s org choice are built on it.
+	// and `forge cloud login`'s org choice are built on it.
 	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so
@@ -444,7 +444,7 @@ func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Cont
 type OrganizationServiceHandler interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
-	// and `forge login`'s org choice are built on it.
+	// and `forge cloud login`'s org choice are built on it.
 	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so

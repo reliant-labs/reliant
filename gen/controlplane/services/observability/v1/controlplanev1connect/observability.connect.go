@@ -66,6 +66,9 @@ const (
 	// ObservabilityServiceGetFlamegraphProcedure is the fully-qualified name of the
 	// ObservabilityService's GetFlamegraph RPC.
 	ObservabilityServiceGetFlamegraphProcedure = "/controlplane.v1.ObservabilityService/GetFlamegraph"
+	// ObservabilityServiceExportPGOProfileProcedure is the fully-qualified name of the
+	// ObservabilityService's ExportPGOProfile RPC.
+	ObservabilityServiceExportPGOProfileProcedure = "/controlplane.v1.ObservabilityService/ExportPGOProfile"
 	// ObservabilityServiceQueryPanelProcedure is the fully-qualified name of the ObservabilityService's
 	// QueryPanel RPC.
 	ObservabilityServiceQueryPanelProcedure = "/controlplane.v1.ObservabilityService/QueryPanel"
@@ -153,6 +156,18 @@ type ObservabilityServiceClient interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// ExportPGOProfile returns the merged CPU call-edge profile of one or more
+	// services as a gzipped pprof that `go build -pgo=` accepts: what
+	// `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+	// from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+	// forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+	// local ClickStack would give. Max range 30 days. No data in the range is
+	// not an error: edge_count is 0 and pprof is a valid empty profile. A
+	// credential bound to one environment is refused (PermissionDenied): the
+	// aggregate is keyed by the environment name a workload reports, so the
+	// binding cannot be enforced. A profile larger than one response may carry
+	// is refused (ResourceExhausted), never truncated.
+	ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error)
 	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
 	// returns, forge's obsdash panel spec) and returns its data: a time series
 	// per series x group for line panels, a value per series for number panels,
@@ -345,6 +360,13 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
 			connect.WithClientOptions(opts...),
 		),
+		exportPGOProfile: connect.NewClient[v1.ExportPGOProfileRequest, v1.ExportPGOProfileResponse](
+			httpClient,
+			baseURL+ObservabilityServiceExportPGOProfileProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ExportPGOProfile")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		queryPanel: connect.NewClient[v1.QueryPanelRequest, v1.QueryPanelResponse](
 			httpClient,
 			baseURL+ObservabilityServiceQueryPanelProcedure,
@@ -427,6 +449,7 @@ type observabilityServiceClient struct {
 	getServiceGraphCatalog    *connect.Client[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse]
 	getServiceOverview        *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
 	getFlamegraph             *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	exportPGOProfile          *connect.Client[v1.ExportPGOProfileRequest, v1.ExportPGOProfileResponse]
 	queryPanel                *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
 	listAttributeValues       *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
 	getServiceSignals         *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
@@ -495,6 +518,11 @@ func (c *observabilityServiceClient) GetServiceOverview(ctx context.Context, req
 // GetFlamegraph calls controlplane.v1.ObservabilityService.GetFlamegraph.
 func (c *observabilityServiceClient) GetFlamegraph(ctx context.Context, req *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error) {
 	return c.getFlamegraph.CallUnary(ctx, req)
+}
+
+// ExportPGOProfile calls controlplane.v1.ObservabilityService.ExportPGOProfile.
+func (c *observabilityServiceClient) ExportPGOProfile(ctx context.Context, req *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error) {
+	return c.exportPGOProfile.CallUnary(ctx, req)
 }
 
 // QueryPanel calls controlplane.v1.ObservabilityService.QueryPanel.
@@ -607,6 +635,18 @@ type ObservabilityServiceHandler interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// ExportPGOProfile returns the merged CPU call-edge profile of one or more
+	// services as a gzipped pprof that `go build -pgo=` accepts: what
+	// `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+	// from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+	// forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+	// local ClickStack would give. Max range 30 days. No data in the range is
+	// not an error: edge_count is 0 and pprof is a valid empty profile. A
+	// credential bound to one environment is refused (PermissionDenied): the
+	// aggregate is keyed by the environment name a workload reports, so the
+	// binding cannot be enforced. A profile larger than one response may carry
+	// is refused (ResourceExhausted), never truncated.
+	ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error)
 	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
 	// returns, forge's obsdash panel spec) and returns its data: a time series
 	// per series x group for line panels, a value per series for number panels,
@@ -795,6 +835,13 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceExportPGOProfileHandler := connect.NewUnaryHandler(
+		ObservabilityServiceExportPGOProfileProcedure,
+		svc.ExportPGOProfile,
+		connect.WithSchema(observabilityServiceMethods.ByName("ExportPGOProfile")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceQueryPanelHandler := connect.NewUnaryHandler(
 		ObservabilityServiceQueryPanelProcedure,
 		svc.QueryPanel,
@@ -885,6 +932,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetServiceOverviewHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetFlamegraphProcedure:
 			observabilityServiceGetFlamegraphHandler.ServeHTTP(w, r)
+		case ObservabilityServiceExportPGOProfileProcedure:
+			observabilityServiceExportPGOProfileHandler.ServeHTTP(w, r)
 		case ObservabilityServiceQueryPanelProcedure:
 			observabilityServiceQueryPanelHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListAttributeValuesProcedure:
@@ -958,6 +1007,10 @@ func (UnimplementedObservabilityServiceHandler) GetServiceOverview(context.Conte
 
 func (UnimplementedObservabilityServiceHandler) GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetFlamegraph is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ExportPGOProfile is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {

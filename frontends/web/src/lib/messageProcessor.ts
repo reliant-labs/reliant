@@ -97,7 +97,14 @@ import { resolvedToolResultFromBlock, type ToolResultsByCallId } from "@reliantl
  */
 export type MessageSegment =
   | { kind: "text"; text: string }
-  | { kind: "tools"; executions: ToolExecution[] };
+  | { kind: "tools"; executions: ToolExecution[] }
+  /**
+   * The model's readable reasoning (a THINKING block), rendered as a
+   * collapsed "Thought" row. Never REDACTED_THINKING: that block is an
+   * encrypted payload kept only to replay to the provider, and produces no
+   * segment at all.
+   */
+  | { kind: "thinking"; text: string };
 
 export interface ProcessedMessage {
   id: string;
@@ -144,7 +151,10 @@ export function processMessage(
   // Text entries carry their run of characters; call entries carry a tool-call
   // id (resolved to a ToolExecution after the walk). Tool results attach to
   // their call and never produce a timeline entry.
-  type TimelineEntry = { type: "text"; content: string } | { type: "call"; id: string };
+  type TimelineEntry =
+    | { type: "text"; content: string }
+    | { type: "thinking"; content: string }
+    | { type: "call"; id: string };
   const timeline: TimelineEntry[] = [];
 
   // Sort blocks by index for consistent ordering
@@ -254,6 +264,12 @@ export function processMessage(
       if (block.content === undefined || block.content === "") {
         isStreaming = true;
       }
+    } else if (block.type === ContentBlockType.THINKING) {
+      // Readable reasoning: kept for the "Thought" row, never folded into
+      // `text` (copy and search read that). REDACTED_THINKING falls through
+      // to nothing: its content is ciphertext and must never render.
+      const thought = block.content?.trim() ? block.content : "";
+      if (thought) timeline.push({ type: "thinking", content: thought });
     }
   }
 
@@ -295,6 +311,13 @@ export function processMessage(
         last.text += entry.content;
       } else {
         segments.push({ kind: "text", text: entry.content });
+      }
+    } else if (entry.type === "thinking") {
+      const last = segments[segments.length - 1];
+      if (last?.kind === "thinking") {
+        last.text += `\n\n${entry.content}`;
+      } else {
+        segments.push({ kind: "thinking", text: entry.content });
       }
     } else {
       const execution = executionById.get(entry.id);

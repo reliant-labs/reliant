@@ -24,7 +24,7 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/organiza
 service OrganizationService {
   // ListMyOrganizations lists every org the caller belongs to, with their role
   // in each, oldest org first, and which one is their default. An org switcher
-  // and `forge login`'s org choice are built on it.
+  // and `forge cloud login`'s org choice are built on it.
   rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
     option (forge.v1.method) = {auth_required: true};
   }

@@ -244,7 +244,7 @@ func TestApplyShareChange(t *testing.T) {
 	}
 	events := func() []*core.ShareEvent {
 		t.Helper()
-		ev, err := env.Repo.ListShareEvents(ctx, core.ShareKindChat, "c1")
+		ev, err := store.ListShareEvents(ctx, env.Repo.ORM(), core.ShareKindChat, "c1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -434,7 +434,7 @@ func TestConcurrentShareChangesApplyOnce(t *testing.T) {
 			applied++
 		}
 	}
-	ev, err := env.Repo.ListShareEvents(ctx, core.ShareKindChat, "c1")
+	ev, err := store.ListShareEvents(ctx, env.Repo.ORM(), core.ShareKindChat, "c1")
 	if err != nil {
 		t.Fatal(err)
 	}

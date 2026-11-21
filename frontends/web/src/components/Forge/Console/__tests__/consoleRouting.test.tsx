@@ -228,6 +228,9 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
     storage: probe("storage"),
     data: probe("data"),
     users: probe("users"),
+    vulnerabilities: probe("vulnerabilities"),
+    vulnerability: probe("vulnerability"),
+    sboms: probe("sboms"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -517,6 +520,27 @@ describe("the environment scope", () => {
     );
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("routes Security › Vulnerabilities with its filters in the URL", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities?env=e2e&severity=high&fixable=yes&kev=1&exempt=1&release=v1.4.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerabilities");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities", { env: "e2e", severity: "high", fixable: "yes", kev: "1", exempt: "1", release: "v1.4.0" });
+  });
+
+  it("routes one advisory, and lands /security on Vulnerabilities", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities/CVE-2026-4101?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerability");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities/CVE-2026-4101", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/security?env=e2e");
+    await landsOn(redirected, "/forge/p/alpha/security/vulnerabilities", { env: "e2e" });
+  });
+
+  it("routes Security › SBOMs", async () => {
+    const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
+    await landsOn(router, "/forge/p/alpha/security/sboms", { env: "e2e", release: "v1.5.0" });
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {
