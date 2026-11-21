@@ -678,9 +678,16 @@ type DeleteDomainBindingRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OrgId *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// When set, unbind only while the domain is bound to this environment.
+	// A domain rebound to another environment since the caller read it is
+	// refused with FailedPrecondition, reason "binding_changed", and keeps its
+	// binding; a domain bound to nothing succeeds. Compare the environment,
+	// not binding_id: a rebind keeps the binding's id. Unset: unbind whatever
+	// the domain is bound to.
+	ExpectedEnvironmentId *string `protobuf:"bytes,4,opt,name=expected_environment_id,json=expectedEnvironmentId,proto3,oneof" json:"expected_environment_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DeleteDomainBindingRequest) Reset() {
@@ -730,6 +737,13 @@ func (x *DeleteDomainBindingRequest) GetDomainId() string {
 func (x *DeleteDomainBindingRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *DeleteDomainBindingRequest) GetExpectedEnvironmentId() string {
+	if x != nil && x.ExpectedEnvironmentId != nil {
+		return *x.ExpectedEnvironmentId
 	}
 	return ""
 }
@@ -913,13 +927,15 @@ const file_services_domain_v1_domain_proto_rawDesc = "" +
 	"\x17hsts_include_subdomains\x18\x06 \x01(\bR\x15hstsIncludeSubdomainsB\t\n" +
 	"\a_org_id\"W\n" +
 	"\x1bCreateDomainBindingResponse\x128\n" +
-	"\abinding\x18\x01 \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\"\x7f\n" +
+	"\abinding\x18\x01 \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\"\xd8\x01\n" +
 	"\x1aDeleteDomainBindingRequest\x12\x1d\n" +
 	"\n" +
 	"binding_id\x18\x01 \x01(\tR\tbindingId\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\x12\x1a\n" +
-	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\x1d\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12;\n" +
+	"\x17expected_environment_id\x18\x04 \x01(\tH\x01R\x15expectedEnvironmentId\x88\x01\x01B\t\n" +
+	"\a_org_idB\x1a\n" +
+	"\x18_expected_environment_id\"\x1d\n" +
 	"\x1bDeleteDomainBindingResponse\"\x81\x01\n" +
 	"\x19ListDomainBindingsRequest\x12*\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tH\x00R\renvironmentId\x88\x01\x01\x12\x1a\n" +

@@ -4,10 +4,9 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
@@ -43,55 +42,16 @@ func (o contextOverflow) keepFraction() float64 {
 	return overflowFallbackKeep
 }
 
-// overflowCounts match the refusals that state both counts. Each pattern's
-// groups are named so the order a provider prints them in does not matter.
-var overflowCounts = []*regexp.Regexp{
-	// Anthropic: "prompt is too long: 1114231 tokens > 1000000 maximum"
-	regexp.MustCompile(`prompt is too long: (?P<actual>\d+) tokens > (?P<limit>\d+) maximum`),
-	// OpenAI chat completions: "This model's maximum context length is 128000
-	// tokens. However, your messages resulted in 130000 tokens."
-	regexp.MustCompile(`maximum context length is (?P<limit>\d+) tokens.*?resulted in (?P<actual>\d+) tokens`),
-	// Gemini: "The input token count (1200000) exceeds the maximum number of
-	// tokens allowed (1048576)."
-	regexp.MustCompile(`input token count \((?P<actual>\d+)\) exceeds the maximum number of tokens allowed \((?P<limit>\d+)\)`),
-}
-
-// overflowMarkers identify a context-window refusal that states no counts
-// (OpenAI Responses / codex: "Your input exceeds the context window of this
-// model", code context_length_exceeded).
-var overflowMarkers = []string{
-	"prompt is too long",
-	"context_length_exceeded",
-	"exceeds the context window",
-	"maximum context length",
-	"input is too long",
-}
-
 // parseContextOverflow reports whether err is a provider refusing the prompt as
-// larger than the model's context window, with the token counts it gave.
+// larger than the model's context window, with the token counts it gave. The
+// recognition is drivererrors' (by identity when a driver marked the error,
+// else by the provider's code and wording), shared with call_llm's recovery.
 func parseContextOverflow(err error) (contextOverflow, bool) {
-	if err == nil {
+	if !drivererrors.IsContextOverflow(err) {
 		return contextOverflow{}, false
 	}
-	text := err.Error()
-	for _, re := range overflowCounts {
-		m := re.FindStringSubmatch(text)
-		if m == nil {
-			continue
-		}
-		actual, aerr := strconv.Atoi(m[re.SubexpIndex("actual")])
-		limit, lerr := strconv.Atoi(m[re.SubexpIndex("limit")])
-		if aerr == nil && lerr == nil {
-			return contextOverflow{Actual: actual, Limit: limit}, true
-		}
-	}
-	lower := strings.ToLower(text)
-	for _, marker := range overflowMarkers {
-		if strings.Contains(lower, marker) {
-			return contextOverflow{}, true
-		}
-	}
-	return contextOverflow{}, false
+	actual, limit := refusalCounts(err)
+	return contextOverflow{Actual: actual, Limit: limit}, true
 }
 
 // compactionTranscript is lossless for the text/tool content the summarizer

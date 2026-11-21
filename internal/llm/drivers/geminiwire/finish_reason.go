@@ -19,6 +19,8 @@
 // for registration side effects, so anything a driver imports from it would
 // be an import cycle. A leaf next to the drivers is the nearest home all
 // three can reach.
+//
+//forge:exclude-contract: Gemini wire translation shared by the gemini, vertexai and antigravity drivers; its exported methods are error and value methods (StopError, Usage), not a service
 package geminiwire
 
 import (
@@ -57,10 +59,17 @@ const (
 // The vocabulary is the closed set google.golang.org/genai's FinishReason
 // declares. STOP and MAX_TOKENS are unambiguous ends of turn.
 // MALFORMED_FUNCTION_CALL and UNEXPECTED_TOOL_CALL mean the model tried to
-// call a tool and failed — retryable as a tool error, not a clean end of
-// turn. SAFETY, RECITATION, BLOCKLIST, PROHIBITED_CONTENT and SPII are the
-// provider refusing to continue, reported as an error so a blocked response
-// is not read as an ordinary empty turn.
+// call a tool and failed — not a clean end of turn. The drivers do not let
+// these (or MALFORMED_RESPONSE / MISSING_THOUGHT_SIGNATURE) reach a finish
+// reason at all: StopFailure turns them into an error the turn retries; the
+// mapping here is what a caller that skipped StopFailure would see. The
+// content filters (SAFETY, RECITATION, BLOCKLIST, PROHIBITED_CONTENT, SPII,
+// LANGUAGE, MODEL_ARMOR and the IMAGE_* variants) are the provider refusing
+// to continue, and TOO_MANY_TOOL_CALLS / NO_IMAGE / MALFORMED_RESPONSE /
+// MISSING_THOUGHT_SIGNATURE are the provider failing to produce a usable
+// candidate; both are reported as an error so a blocked response is not read
+// as an ordinary empty turn. This is opencode's table
+// (packages/ai/src/protocols/gemini.ts: "Gemini stopped with X").
 //
 // An unrecognised value (including the empty string a provider sends when it
 // has not actually finished, or omits the field) is reported and treated as
@@ -77,7 +86,9 @@ func FinishReason(src Source, reason string) message.FinishReason {
 	case "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL":
 		return message.FinishReasonToolUseError
 
-	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
+	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+		"LANGUAGE", "MODEL_ARMOR", "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+		"TOO_MANY_TOOL_CALLS", "NO_IMAGE", "MALFORMED_RESPONSE", "MISSING_THOUGHT_SIGNATURE":
 		return message.FinishReasonError
 
 	default:
@@ -99,7 +110,9 @@ func FinishReason(src Source, reason string) message.FinishReason {
 func IsErrorFinishReason(reason string) bool {
 	switch reason {
 	case "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL",
-		"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
+		"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+		"LANGUAGE", "MODEL_ARMOR", "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+		"TOO_MANY_TOOL_CALLS", "NO_IMAGE", "MALFORMED_RESPONSE", "MISSING_THOUGHT_SIGNATURE":
 		return true
 	default:
 		return false

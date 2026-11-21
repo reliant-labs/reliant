@@ -25,6 +25,13 @@
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
+ *   /forge/p/:project/security/vulnerabilities
+ *                                             Security › Vulnerabilities: the findings of the
+ *                                             scope's releases (`release`, `severity`, `fixable`,
+ *                                             `kev`, `exempt`: Security/vulnModel.ts)
+ *   /forge/p/:project/security/vulnerabilities/:advisory
+ *                                             one advisory, across the project's releases
+ *   /forge/p/:project/security/sboms          Security › SBOMs: each artifact's SBOM and scan (`release`)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -152,7 +159,23 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
+  | { kind: "vulnerabilities" }
+  /** One advisory in the project (Security/VulnerabilityPage.tsx). */
+  | { kind: "vulnerability"; advisory: string }
+  /** Security › SBOMs: each release artifact's SBOM and its scan (Security/SbomsPage.tsx). */
+  | { kind: "sboms" };
+
+/**
+ * The Security section's path segments: `/forge/p/<app>/security/<page>`. The
+ * nav's Security group points its rows at these pages through consolePath;
+ * the segments are exported for a reader of a pathname.
+ */
+export const SECURITY_SEGMENT = "security";
+export const SECURITY_PAGES = { vulnerabilities: "vulnerabilities", sboms: "sboms" } as const;
+/** The Security pages, in nav order. */
+export const SECURITY_PAGE_KINDS = ["vulnerabilities", "sboms"] as const satisfies readonly ConsolePage["kind"][];
 
 /**
  * One app's console. Its org form (flag `web.org_routes` on) is
@@ -195,6 +218,12 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "vulnerabilities":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}`;
+    case "vulnerability":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}/${encodeURIComponent(page.advisory)}`;
+    case "sboms":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.sboms}`;
   }
 }
 
@@ -239,6 +268,11 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "domains":
       case "activity":
         return sub ? null : { kind: section };
+      case SECURITY_SEGMENT:
+        if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
+          return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };
+        }
+        return sub === SECURITY_PAGES.sboms && !dashKind ? { kind: "sboms" } : null;
       default:
         return null;
     }

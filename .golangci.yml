@@ -115,6 +115,27 @@ linters:
           msg: *typed-config
         - pattern: 'os\.Environ'
           msg: *typed-config
+        # Ambient-credential guardrail. The api, worker and gateway roles
+        # serve every tenant, so a credential the PROCESS holds — a cloud
+        # default chain (Google ADC and the metadata server included), an
+        # SDK's own environment defaults — must never be used for a tenant's
+        # call (that runs it on the operator's account). Every credential comes
+        # from the user's or org's connected account. There is no exception,
+        # Vertex AI included (owner decision 2026-11-20). The LLM drivers are
+        # also held to this by internal/llm/drivers/process_credentials_guard_test.go.
+        - pattern: 'google\.(FindDefaultCredentials|DefaultTokenSource|DefaultClient|CredentialsFromJSON)\b'
+          msg: &ambient-credential >-
+            This reads a credential of the server process (a default
+            credential chain or an SDK's environment defaults). Server roles
+            serve every tenant: take the credential from the user's or org's
+            connected account. Code that runs only on the user's own machine
+            (the daemon, the CLI) takes //nolint:forbidigo naming that.
+        - pattern: '\b(config\.LoadDefaultConfig|bedrock\.WithLoadDefaultConfig|credentials\.DetectDefault|azidentity\.NewDefaultAzureCredential)\b'
+          msg: *ambient-credential
+        - pattern: '\.UseDefaultCredentials\('
+          msg: *ambient-credential
+        - pattern: '\b(openai|anthropic|openaisdk|anthropicsdk)\.DefaultClientOptions\b'
+          msg: *ambient-credential
         # The same reads by other spellings: os.ExpandEnv substitutes
         # $VAR from the process environment, and syscall's are what os's
         # wrap.

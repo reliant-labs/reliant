@@ -490,6 +490,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`reliant github records`](#reliant-github-records) | Read the pull request records Reliant keeps from GitHub's webhooks |
+| [`reliant github records diff`](#reliant-github-records-diff) | Compare each open pull request's labels and verdict check with its head's verdict |
+| [`reliant github records get`](#reliant-github-records-get) | Show one pull request's record, heads, review markers and checks (JSON) |
+| [`reliant github records list`](#reliant-github-records-list) | List a repository's pull request records |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 | [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
 | [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
@@ -21432,6 +21436,7 @@ reliant github
 | Command | Description |
 |---------|-------------|
 | [`gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`records`](#reliant-github-records) | Read the pull request records Reliant keeps from GitHub's webhooks |
 | [`token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 
 **Flags:**
@@ -21468,6 +21473,104 @@ reliant github gh [flags] -- <gh arguments>
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
 | `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions, checks and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
+
+---
+
+### reliant github records
+
+Read the pull request records Reliant keeps from GitHub's webhooks
+
+Read PR records: the pull requests of the repositories Reliant keeps records
+for, mirrored from GitHub's webhook deliveries (state, head, labels, the
+pipeline markers of reviews, the check runs on each head). A head's verdict is
+computed under --trusted-author when it is read.
+
+Records read Reliant, never GitHub: no GitHub quota is spent. You see a
+repository's records when your own GitHub access reaches it.
+
+```
+reliant github records
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`diff`](#reliant-github-records-diff) | Compare each open pull request's labels and verdict check with its head's verdict |
+| [`get`](#reliant-github-records-get) | Show one pull request's record, heads, review markers and checks (JSON) |
+| [`list`](#reliant-github-records-list) | List a repository's pull request records |
+
+---
+
+#### reliant github records diff
+
+Compare each open pull request's labels and verdict check with its head's verdict
+
+Compare each open pull request's review labels, and its verdict check, with
+the verdict its head's review markers carry: the shadow report of PR records.
+
+Each open pull request is one of: agree, label_missing (the head has a verdict
+its label does not show), label_stale (a verdict label the head's verdict does
+not support), check_disagrees, settling (a disagreement younger than --settle),
+held or draft. It exits 0 even when they disagree: it reports.
+
+```
+reliant github records diff [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | List every pull request, not only those that disagree |
+| `--changes-label` | `string` | `review:changes` | The label that shows a head that got changes |
+| `--check` | `string` | `Reliant review` | The check run that reports a head's verdict |
+| `--held-label` | `stringSlice` | `[hold]` | A label that takes a pull request out of the pipeline (repeatable) |
+| `--json` | `bool` | - | Print the report as JSON |
+| `--passed-label` | `string` | `review:passed` | The label that shows a passed head |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--settle` | `duration` | `10m0s` | How long after a record changed a disagreement is still expected |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
+
+---
+
+#### reliant github records get
+
+Show one pull request's record, heads, review markers and checks (JSON)
+
+```
+reliant github records get [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--pr` | `int32` | `0` | The pull request number |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
+
+---
+
+#### reliant github records list
+
+List a repository's pull request records
+
+```
+reliant github records list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the records as JSON |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--state` | `string` | `open` | open, closed, merged, or empty for all |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
 
 ---
 
