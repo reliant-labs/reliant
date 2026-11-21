@@ -17,6 +17,7 @@ import { FlaskConical } from "lucide-react";
 import { withSearch } from "@/lib/paths";
 
 import { testsPath, TESTS_VIEW_KINDS, TESTS_VIEW_LABELS, TESTS_VIEWS, type TestsView } from "../../../Forge/Console/paths";
+import { countBadge } from "./model";
 import type { NavCtx, NavGroup, NavRow } from "./types";
 
 const hasApp = (ctx: NavCtx) => !!ctx.app;
@@ -40,5 +41,10 @@ export const testsGroup: NavGroup = {
   label: "Tests",
   icon: <FlaskConical className="size-4" aria-hidden="true" />,
   available: hasApp,
+  // The console's `tests` count (Tests/surfaces/useTestsNavCount.ts): flaky
+  // tests, plus suspected ones when the project acts at `suspected`. Worded
+  // for either policy. Not the danger tone: a flaky test is work, not an
+  // outage like a firing alert.
+  badge: countBadge("tests", "test needing attention", "tests needing attention"),
   children: TESTS_VIEWS.map(testsRow),
 };

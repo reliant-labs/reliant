@@ -26,6 +26,7 @@ import { ENV_ALL, rememberedEnv, resolveEnvScope, scopeOptions } from "./envScop
 import type { GroupedNavInput, ProductAnalyticsHub } from "./groupedNav";
 import { consolePageOf, type ConsolePage } from "./paths";
 import { useOptionalViews } from "./useOptionalViews";
+import { useTestsNavCount } from "../Tests/surfaces/useTestsNavCount";
 
 export interface ConsoleNavModel extends GroupedNavInput {
   /** The Reliant project list has answered (consoleHost.ts). */
@@ -160,10 +161,11 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
  * The nav's live badge counts for `project` (GroupedNavInput.navCounts),
  * keyed by source. A source adds one entry here, read through a hook over
  * the query its own page already makes, so the count is cached data, never
- * another request; it answers 0 while loading or on failure. No source yet.
+ * another request; it answers 0 while loading or on failure.
+ *
+ *   tests   flaky (+ suspected, by the project's flake policy) tests on the
+ *           default branch (Tests/surfaces/useTestsNavCount.ts)
  */
-function useConsoleNavCounts(_project: string): Readonly<Partial<Record<string, number>>> {
-  return NO_NAV_COUNTS;
+function useConsoleNavCounts(project: string): Readonly<Partial<Record<string, number>>> {
+  return { tests: useTestsNavCount(project) };
 }
-
-const NO_NAV_COUNTS: Readonly<Partial<Record<string, number>>> = {};
