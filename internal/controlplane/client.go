@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -37,6 +38,16 @@ type RefundDestination struct {
 	CardBrand   string
 	CardLast4   string
 	AmountCents int64
+}
+
+// Account is the caller's control-plane account, as GetCurrentAccount reads
+// it.
+type Account struct {
+	ID                  string
+	Email               string
+	Name                string
+	CreatedAt           time.Time
+	OnboardingCompleted bool
 }
 
 // AccountDeletionWalletQuote is what deleting the account would do to the
@@ -232,6 +243,24 @@ func (c *client) ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrgan
 		out = append(out, MyOrganization{ID: o.GetId(), Role: o.GetRole()})
 	}
 	return out, nil
+}
+
+func (c *client) GetCurrentAccount(ctx context.Context, jwt string) (*Account, error) {
+	req := connect.NewRequest(&userv1.GetCurrentUserRequest{})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.users.GetCurrentUser(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	u := resp.Msg.GetUser()
+	if u == nil {
+		return nil, errors.New("controlplane: GetCurrentUser returned no user")
+	}
+	a := &Account{ID: u.GetId(), Email: u.GetEmail(), Name: u.GetName(), OnboardingCompleted: u.GetOnboardingCompleted()}
+	if ts := u.GetCreatedAt(); ts != nil {
+		a.CreatedAt = ts.AsTime()
+	}
+	return a, nil
 }
 
 func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {
