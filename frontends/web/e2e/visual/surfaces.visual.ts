@@ -225,6 +225,10 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
     act: async (page) => {
+      // The home focuses its composer once it has rendered. Opening the filter
+      // before then lets that late focus land after the click, and the panel
+      // closes on losing focus. So wait for the composer to have it.
+      await expect(page.getByTestId('chat-input')).toBeFocused()
       await page.getByTestId('chat-project-filter-trigger').click()
       // One at a time: each pick moves the URL (one project is `/project/<id>`,
       // two or more `?projects=`), so wait for it to land before the next.
