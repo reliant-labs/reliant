@@ -11,6 +11,7 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
 import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
@@ -307,6 +308,19 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('worker', { exact: true }).first(),
+  },
+  {
+    // The merged project landing: /projects/<id> lands on the app's Overview (U6 5/16).
+    name: 'shell-overview',
+    path: `/projects/${IDS.project}`,
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('overview-attention'),
+  },
+  {
+    name: 'shell-obs-overview',
+    path: '/forge/p/shopfront/observability',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('obs-overview-slowest').getByText('PlaceOrder').first(),
   },
   {
     name: 'shell-app-observability',

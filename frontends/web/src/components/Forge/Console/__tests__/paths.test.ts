@@ -78,13 +78,17 @@ describe("console paths", () => {
     expect(consolePageOf(consolePath("my shop", page))).toEqual({ project: "my shop", page });
   });
 
+  it("reads /observability as Observability's own Overview (U6e), and builds it back", () => {
+    expect(consolePageOf("/forge/p/x/observability")).toEqual({ project: "x", page: { kind: "obs-overview" } });
+    expect(consolePath("x", { kind: "obs-overview" })).toBe("/forge/p/x/observability");
+  });
+
   it("knows a path outside the console, or a page that does not exist, is not one", () => {
     expect(consolePageOf("/forge")).toBeNull();
     expect(consolePageOf("/forge/env/prod")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/workloads")).toBeNull();
     expect(consolePageOf("/forge/p/x/nope")).toBeNull();
     // The retired pages are redirects, not pages.
-    expect(consolePageOf("/forge/p/x/observability")).toBeNull();
     expect(consolePageOf("/forge/p/x/monitoring")).toBeNull();
     expect(consolePageOf("/forge/p/x/settings")).toBeNull();
     // A dashboard is addressed by its kind: a template is no page, and nothing nests below a dashboard.

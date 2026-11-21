@@ -54,6 +54,7 @@ import { ServicePage, ServicesPage } from "../Services/ServicesPages";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
+import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
 import { UsersPage } from "../Users/UsersPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
@@ -438,6 +439,7 @@ function buildRouter(path: string) {
     releases: ReleasesPage,
     release: ReleasePage,
     observabilityView: ObservabilityViewPage,
+    obsOverview: ObsOverviewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
     storage: StoragePage,

@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { inboxPath, mobileChatPath, mobileChatsPath, mobileInboxPath, mobileRunsPath, mobileSettingsPath, chatPath, homePath, runsPath, settingsPath } from "@/lib/paths";
 
-import { consolePath } from "../../../Forge/Console/paths";
+import { consolePath, obsOverviewPath } from "../../../Forge/Console/paths";
 
 vi.mock("../shellProject", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../shellProject")>()),
@@ -69,10 +69,10 @@ describe("the phone's nav", () => {
     expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "overview" }), { drill: true });
   });
 
-  it("drills into Observability, landing on its first view, with the divider's rows showing", () => {
+  it("drills into Observability, landing on its Overview, with the divider's rows showing", () => {
     const onNavigate = renderAt(inboxPath());
     fireEvent.click(screen.getByTestId("nav-observability"));
-    expect(onNavigate).toHaveBeenLastCalledWith(expect.stringContaining(consolePath("shopfront", { kind: "obs-view", view: "graph" })), { drill: true });
+    expect(onNavigate).toHaveBeenLastCalledWith(expect.stringContaining(obsOverviewPath("shopfront")), { drill: true });
   });
 
   it("shows Observability's rows on one of its pages, and a destination is not a drill", () => {
