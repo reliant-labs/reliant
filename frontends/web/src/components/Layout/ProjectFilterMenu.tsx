@@ -9,9 +9,12 @@
  *
  * Its items are a section of the Chats heading's one menu (ChatListMenu,
  * restyle §11.5), with the same test ids they had as a menu of their own.
+ * The menu lists All projects and the filtered project; every other project
+ * is one "Choose a project…" away, in the project selector
+ * (Projects/ProjectSelector), which searches, pins and scales to hundreds.
  */
 
-import { FolderPlus, Layers, Settings2 } from "lucide-react";
+import { FolderPlus, Layers, Search, Settings2 } from "lucide-react";
 
 import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import type { Project } from "../../hooks/project-queries";
@@ -23,17 +26,12 @@ export interface ProjectFilterOptions {
   filterId: string | null;
   projects: readonly Project[];
   onChange: (projectId: string | null) => void;
+  /** Open the project selector to pick any project. */
+  onChooseProject: () => void;
   onAddProject: () => void;
   onManageProjects: () => void;
   /** Chats waiting on the user, per project id, shown beside each project. */
   needsYouByProject?: ReadonlyMap<string, number>;
-}
-
-/** Projects, most recently used first. */
-function byRecent(projects: readonly Project[]): Project[] {
-  return [...projects].sort(
-    (a, b) => (b.last_active ?? "").localeCompare(a.last_active ?? "") || a.name.localeCompare(b.name),
-  );
 }
 
 /** The filter's name for what the list shows: a project's name, or All projects. */
@@ -42,11 +40,12 @@ export function projectFilterLabel(filterId: string | null, projects: readonly P
   return filtered?.name ?? ALL_PROJECTS_LABEL;
 }
 
-/** The filter's menu sections: All projects and every project, then Add and Manage. */
+/** The filter's menu sections: All projects, the filtered project and Choose a project…, then Add and Manage. */
 export function projectFilterGroups({
   filterId,
   projects,
   onChange,
+  onChooseProject,
   onAddProject,
   onManageProjects,
   needsYouByProject,
@@ -72,17 +71,25 @@ export function projectFilterGroups({
           onClick: () => onChange(null),
           testId: "project-filter-all",
         },
-        ...byRecent(projects).map((project) => ({
-          label: project.name,
-          checked: project.id === filterId,
-          hint: needsYouHint(needsYouByProject?.get(project.id)),
-          onClick: () => onChange(project.id),
-          testId: `project-filter-${project.id}`,
-        })),
+        ...projects
+          .filter((project) => project.id === filterId)
+          .map((project) => ({
+            label: project.name,
+            checked: true,
+            hint: needsYouHint(needsYouByProject?.get(project.id)),
+            onClick: () => onChange(project.id),
+            testId: `project-filter-${project.id}`,
+          })),
       ],
     },
     {
       items: [
+        {
+          label: "Choose a project…",
+          icon: <Search className="h-3.5 w-3.5" />,
+          onClick: onChooseProject,
+          testId: "project-filter-choose",
+        },
         {
           label: "Add project…",
           icon: <FolderPlus className="h-3.5 w-3.5" />,
