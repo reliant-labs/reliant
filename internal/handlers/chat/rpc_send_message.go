@@ -218,6 +218,17 @@ func (s *Service) queueIncomingMessage(
 	return queued, nil
 }
 
+// reviveQueuedThread revives the thread a send's message was queued to, so
+// the reconciler's orphaned-mailbox sweep cannot mark the row undelivered
+// before the run that drains it starts. A no-op for a thread still running; a
+// failure is logged and the run started anyway.
+func (s *Service) reviveQueuedThread(ctx context.Context, chatID, threadID string) {
+	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {
+		logging.WarnContext(ctx, "Could not revive the thread a message was queued to; starting its run anyway",
+			"error", err, "chatID", chatID, "threadID", threadID)
+	}
+}
+
 // saveOrQueueBehindMailbox writes a send's messages for a run that is taking
 // no turn now — a paused run about to be resumed, or a failed one about to be
 // recovered — and reports the message's id and whether it was queued.
@@ -972,8 +983,15 @@ func (s *Service) SendMessage(
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
 					if queued {
-						// The coarse restart below, if it comes to that,
-						// drains it at its first call_llm.
+						// The interrupted run may have left the thread
+						// terminal, the shape the reconciler's
+						// orphaned-mailbox sweep marks undelivered. Revive it
+						// BEFORE the reset, so the sweep cannot take the row
+						// before the reset run's first call_llm drains it (a
+						// resumed run returns below without reaching the
+						// new-run path's revive). The coarse restart below,
+						// if it comes to that, drains it the same way.
+						s.reviveQueuedThread(ctx, req.Msg.ChatId, targetThread)
 						queuedThread = targetThread
 					}
 
@@ -1187,10 +1205,7 @@ func (s *Service) SendMessage(
 	// BEFORE the run starts, so the sweep can never take the row first; the
 	// run's first call_llm delivers it. (A no-op for a thread still running.)
 	if queuedThread != "" {
-		if _, err := s.deps.Repo.ReviveThread(ctx, queuedThread); err != nil {
-			logging.WarnContext(ctx, "Could not revive the thread a message was queued to; starting its run anyway",
-				"error", err, "chatID", req.Msg.ChatId, "threadID", queuedThread)
-		}
+		s.reviveQueuedThread(ctx, req.Msg.ChatId, queuedThread)
 	}
 
 	workflowInput := v2.WorkflowInput{

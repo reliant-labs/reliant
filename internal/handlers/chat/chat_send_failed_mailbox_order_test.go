@@ -65,6 +65,35 @@ func TestSendMessage_FailedRunSendIsDeliveredAfterTheQueuedMailbox(t *testing.T)
 		"the inbox is swept first, then the new message")
 }
 
+// The interrupted run left its thread terminal. A message queued for the
+// reset run must not sit behind a terminal thread, which the reconciler's
+// orphaned-mailbox sweep marks undelivered: the reset path returns without
+// the new-run path's revive, so it revives the thread itself, before the reset.
+func TestSendMessage_FailedRunResetRevivesTheThreadItQueuedTo(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Failed())
+	service, _, pause := newFailedSendService(repo, true)
+
+	failedAt := time.Now().UTC()
+	_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, db.ThreadStatusFailed, &failedAt)
+	require.NoError(t, err)
+	queueHumanMessage(t, repo, fx.chatID, fx.rootThreadID, fx.rootThreadID, "queued first", failedAt.Add(-time.Minute))
+
+	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "typed after the failure"))
+	require.NoError(t, err)
+	require.Equal(t, 1, pause.interruptResumes, "the run is recovered by reset-and-replay")
+	require.True(t, resp.Msg.Queued)
+
+	thread, err := repo.GetThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
+		"the thread the message was queued to is revived, so the orphaned-mailbox sweep cannot take it")
+}
+
 // No replayable history (Temporal has no such execution): the new run started
 // at the checkpoint drains the mailbox at its first call_llm, the new message
 // last.
