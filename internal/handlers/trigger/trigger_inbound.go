@@ -217,7 +217,13 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	if access == nil {
 		return nil
 	}
-	if err := access.Refresh(ctx, trigger.UserID); err != nil {
+	refresh := func() error { return access.Refresh(ctx, trigger.UserID) }
+	if memo := accessRefreshMemoFrom(ctx); memo != nil {
+		err = memo.refresh(accessRefreshKey{integration: cfg.Integration, userID: trigger.UserID}, refresh)
+	} else {
+		err = refresh()
+	}
+	if err != nil {
 		if access.IsPermanent(err) {
 			// The reason is the access check's own sentence (not connected,
 			// needs reconnecting): what the owner has to fix.

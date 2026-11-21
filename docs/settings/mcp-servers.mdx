@@ -273,7 +273,7 @@ MCP servers run on the machine a chat runs on, not on Reliant's servers. A serve
 
 After adding an MCP server:
 
-1. Open **Settings → MCP Servers** and verify status or last error
+1. Open **Settings → MCP Servers** and verify status or last error, or run `reliant mcp list` in the project (`reliant mcp tools <server>` lists the tools an agent sees, as `mcp__<server>__<tool>`). An edit to `mcp.json` takes effect at an agent's next turn; `reliant mcp restart <server>` restarts a server from what the files say now.
 2. **Check logs** for connection errors. MCP servers are started by the daemon on the [machine](/machines/overview) the chat runs on, so read that machine's log: run `reliant daemon logs` there. On a cloud machine, run it from a terminal on the machine.
 3. **Test in a chat** by asking the agent to use the new tools
 

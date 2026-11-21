@@ -281,6 +281,9 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 	if m.Agent != nil {
 		proto.Agent = m.Agent
 	}
+	if m.ThinkingLevel != nil && *m.ThinkingLevel != "" {
+		proto.ThinkingLevel = m.ThinkingLevel
+	}
 	if m.TokenCount != nil {
 		proto.InputTokens = ptr.Of(int32(*m.TokenCount))
 	}

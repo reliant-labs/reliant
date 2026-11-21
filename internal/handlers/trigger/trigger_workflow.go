@@ -56,6 +56,9 @@ func (s *Service) EnableWorkflow(
 	req *connect.Request[reliantv1.EnableWorkflowRequest],
 ) (*connect.Response[reliantv1.EnableWorkflowResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Every declared trigger refreshes its owner's access in phase 1 and
+	// again in phase 2; one refresh per owner and integration serves them all.
+	ctx = withAccessRefreshMemo(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.Workflow) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
