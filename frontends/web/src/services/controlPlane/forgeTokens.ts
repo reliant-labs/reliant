@@ -43,8 +43,9 @@ export interface ForgeTokenScopeGroup {
  * connector grant) and daemon:resume (one daemon). The server refuses those
  * unbound, so offering them would only offer an error.
  *
- * The org permissions (deploy, secret, domain, data access, identity,
- * billing, administration, obs:write) are granted per person in Settings ›
+ * The org permissions (deploy, secret, domain, vuln:read, tests, changes,
+ * data access, identity, billing, administration, obs:write) are granted per
+ * person in Settings ›
  * Members; the server refuses a scope the caller does not hold, and clips a
  * token to its person's grants at every use. obs:read and obs:triage are every
  * member's. The Reliant and machine scopes are the person's own authority.
@@ -94,6 +95,36 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
       },
       { scope: "obs:triage", label: "Resolve, ignore and reopen issues" },
       { scope: "obs:write", label: "Save, restore and archive the organization's dashboards" },
+    ],
+  },
+  {
+    id: "security",
+    title: "Security",
+    // forge pkg/accesstoken/scope.go ScopeVulnRead: an attack map, so neither
+    // deploy:read nor deploy:write implies it.
+    description: "Not included in deploy:read: what is exploitable in a running release is granted on its own.",
+    scopes: [{ scope: "vuln:read", label: "Read vulnerability findings of releases and environments" }],
+  },
+  {
+    id: "tests",
+    title: "Tests",
+    description:
+      "tests:write is an organization token for CI, not yours: it acts as no one, carries no other scope, and needs the admin role. It can only upload test runs.",
+    scopes: [
+      { scope: "tests:read", label: "Read test runs and their failures, coverage and flaky tests" },
+      { scope: "tests:write", label: "Upload a test run, and nothing else (it cannot read runs back)" },
+    ],
+  },
+  {
+    id: "changes",
+    title: "Changes",
+    description: "Remote config, gradual rollouts and A/B tests. Launching one shifts production traffic.",
+    scopes: [
+      { scope: "changes:write", label: "Draft, edit and stop changes (stopping is the kill switch)" },
+      {
+        scope: "changes:launch",
+        label: "Launch a change to real users: start an experiment, ramp a rollout, roll a variant out (includes changes:write)",
+      },
     ],
   },
   {
@@ -170,11 +201,16 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
 export const FORGE_TOKEN_SCOPES: readonly ForgeTokenScope[] = FORGE_TOKEN_SCOPE_GROUPS.flatMap((g) => g.scopes);
 
 /**
- * Scopes that make the whole token a registry-only ORG automation credential
- * (forge pkg/accesstoken RegistryOnly): it carries nothing else and acts as no
- * person, so it is minted with CreateToken, never CreateMyToken.
+ * Upload-only scopes minted as an ORG automation credential that acts as no
+ * person and carries nothing else, so with CreateToken, never CreateMyToken.
+ *
+ * sourcemaps:write makes its whole token registry-only (forge
+ * pkg/accesstoken RegistryOnly): the server refuses it beside any other scope.
+ * tests:write is not registry-only, but it is what a pull request's CI job
+ * uploads its test runs with (control-plane RecordTestRun), so it is minted
+ * the same way: a credential that can upload and do nothing else.
  */
-export const ORG_TOKEN_ONLY_SCOPES: readonly string[] = ["sourcemaps:write"];
+export const ORG_TOKEN_ONLY_SCOPES: readonly string[] = ["sourcemaps:write", "tests:write"];
 
 export function isOrgTokenOnlyScope(scope: string): boolean {
   return ORG_TOKEN_ONLY_SCOPES.includes(scope);
@@ -218,10 +254,11 @@ export async function listForgeTokens(orgId: string): Promise<ForgeToken[]> {
 /**
  * Create a token. The secret is returned once and never again.
  *
- * A token naming an org-token-only scope (sourcemaps:write) is minted as an
- * organization automation token (CreateToken: admin role, no acting user);
- * every other is the caller's own (CreateMyToken). Mixing the two is refused
- * here because the server refuses it too, and the request would only fail.
+ * A token naming an org-token-only scope (sourcemaps:write, tests:write) is
+ * minted as an organization automation token (CreateToken: admin role, no
+ * acting user); every other is the caller's own (CreateMyToken). Such a scope
+ * stands alone: combining it with any other scope, another org-token-only one
+ * included, is refused here (the server refuses it for sourcemaps:write).
  */
 export async function createForgeToken(input: {
   orgId: string;
@@ -234,8 +271,7 @@ export async function createForgeToken(input: {
   const expiresAt = input.expiresInDays ? timestampFromMs(now + input.expiresInDays * 86_400_000) : undefined;
   const client = getControlPlaneClient(AccessTokenService);
   if (input.scopes.some(isOrgTokenOnlyScope)) {
-    const others = input.scopes.filter((s) => !isOrgTokenOnlyScope(s));
-    if (others.length > 0) {
+    if (input.scopes.length > 1) {
       throw new Error(`${input.scopes.filter(isOrgTokenOnlyScope).join(", ")} cannot be combined with other scopes`);
     }
     const res = await client.createToken({ orgId: input.orgId, name: input.name, scopes: input.scopes, expiresAt });

@@ -7,11 +7,15 @@
  * the wire as chosen, revoked and ephemeral credentials are never listed, a
  * refused mutation stays an error, the scope labels disclose what each
  * scope really authorizes, every scope the server accepts unbound is offered,
- * and a registry-only scope (sourcemaps:write) is minted as an org token.
+ * and an upload-only scope (sourcemaps:write, tests:write) is minted alone as
+ * an org token.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "https://admin.example.test",
@@ -25,6 +29,7 @@ import {
   FORGE_TOKEN_ENV,
   FORGE_TOKEN_SCOPE_GROUPS,
   FORGE_TOKEN_SCOPES,
+  isOrgTokenOnlyScope,
   listForgeTokens,
   listOrgForgeTokens,
   revokeForgeToken,
@@ -32,6 +37,25 @@ import {
 } from "../forgeTokens";
 
 const ORG = "org_acme";
+
+const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../db/migrations");
+
+/**
+ * forge's scope catalog (pkg/accesstoken AllScopes) as reliant vendors it:
+ * the scope list of the newest migration that redefines the access_tokens
+ * CHECK. Migrations apply in filename order, so the last one is the live set.
+ */
+function forgeScopeCatalog(): string[] {
+  const newest = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith(".up.sql"))
+    .sort()
+    .map((f) => readFileSync(resolve(MIGRATIONS, f), "utf8"))
+    .filter((sql) => /ADD CONSTRAINT access_tokens_scopes CHECK/.test(sql))
+    .at(-1);
+  if (!newest) throw new Error(`no access_tokens_scopes CHECK under ${MIGRATIONS}`);
+  const list = /scopes <@ ARRAY\[([\s\S]*?)\]/.exec(newest)?.[1] ?? "";
+  return [...list.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
 const CREATED = new Date("2026-10-01T00:00:00Z");
 
 afterEach(() => setTransport(null));
@@ -158,6 +182,32 @@ describe("createForgeToken with sourcemaps:write", () => {
   });
 });
 
+describe("createForgeToken with tests:write", () => {
+  it("mints an upload-only org token through CreateToken, never CreateMyToken", async () => {
+    const org = vi.fn(() => ({ secret: "rlat_tests" }));
+    const mine = vi.fn(() => ({ secret: "rlat_mine" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+
+    const res = await createForgeToken({ orgId: ORG, name: "pr-tests", scopes: ["tests:write"], expiresInDays: 90 });
+
+    expect(res).toEqual({ secret: "rlat_tests", kind: "org" });
+    expect(org).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "pr-tests", scopes: ["tests:write"] }));
+    expect(mine).not.toHaveBeenCalled();
+  });
+
+  it("refuses to combine it with another scope, another org-token-only one included", async () => {
+    const org = vi.fn(() => ({ secret: "x" }));
+    const mine = vi.fn(() => ({ secret: "x" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+
+    for (const scopes of [["tests:write", "tests:read"], ["tests:write", "sourcemaps:write"]]) {
+      await expect(createForgeToken({ orgId: ORG, name: "ci", scopes, expiresInDays: null })).rejects.toThrow(/cannot be combined/);
+    }
+    expect(org).not.toHaveBeenCalled();
+    expect(mine).not.toHaveBeenCalled();
+  });
+});
+
 describe("listOrgForgeTokens", () => {
   it("lists the org's live automation tokens only: no person's token, revoked or ephemeral one", async () => {
     const seen = vi.fn(() => ({
@@ -228,21 +278,33 @@ describe("what the token UI tells a person", () => {
   });
 
   it("offers every scope of forge's catalog except the three that must be bound to a resource", () => {
-    // forge pkg/accesstoken/scope.go AllScopes. A scope forge adds fails this
-    // test until it is offered here or listed as binding-only.
-    const catalog = [
-      "deploy:read", "deploy:write", "deploy:config:read", "billing:read", "cluster:manage", "token:read",
-      "token:write", "reliant:api", "daemon:connect", "llm:invoke", "proxy:port", "mcp:connector",
-      "daemon:resume", "daemon:manage", "secret:read", "secret:write", "domain:read", "domain:write",
-      "identity:read", "identity:manage", "obs:read", "obs:triage", "obs:write", "db:query", "storage:read",
-      "runs:start", "runs:read", "runs:control", "triggers:fire", "triggers:manage", "inbox:read",
-      "inbox:manage", "approvals:decide", "questions:answer", "sourcemaps:write",
-    ];
+    // forge pkg/accesstoken/scope.go AllScopes, as this repo vendors it: the
+    // access_tokens CHECK, which internal/db/access_tokens_scopes_forge_test.go
+    // and `forge lint --closed-sets` hold equal to AllScopes. A scope forge
+    // adds fails this test until it is offered here or listed as binding-only.
+    const catalog = forgeScopeCatalog();
     const bindingOnly = ["proxy:port", "mcp:connector", "daemon:resume"];
     const offered = FORGE_TOKEN_SCOPES.map((s) => s.scope);
 
+    expect(catalog).toEqual(expect.arrayContaining(["vuln:read", "tests:read", "tests:write", "changes:write", "changes:launch"]));
     expect(new Set(offered).size).toBe(offered.length);
     expect([...offered].sort()).toEqual(catalog.filter((s) => !bindingOnly.includes(s)).sort());
+  });
+
+  it("mints tests:write and sourcemaps:write as org tokens only, and never vuln:read or tests:read", () => {
+    expect(isOrgTokenOnlyScope("tests:write")).toBe(true);
+    expect(isOrgTokenOnlyScope("sourcemaps:write")).toBe(true);
+    for (const scope of ["vuln:read", "tests:read", "changes:write", "changes:launch", "deploy:read"]) {
+      expect(isOrgTokenOnlyScope(scope), scope).toBe(false);
+    }
+  });
+
+  it("says vuln:read is not part of deploy:read, and that changes:launch includes changes:write", () => {
+    const security = FORGE_TOKEN_SCOPE_GROUPS.find((g) => g.id === "security");
+    expect(security?.scopes.map((s) => s.scope)).toEqual(["vuln:read"]);
+    expect(security?.description).toMatch(/not included in deploy:read/i);
+    const launch = FORGE_TOKEN_SCOPES.find((s) => s.scope === "changes:launch")?.label ?? "";
+    expect(launch).toMatch(/includes changes:write/);
   });
 
   it("describes every scope and titles every group", () => {
