@@ -73,7 +73,7 @@ func resolveDaemonID(patBoundID, assertedID string, resolveUnbound func() string
 // the frontend's status==ACTIVE filter would never lock onto a stable row.
 //
 // Falls back to a freshly-minted UUID only when there's no prior row for
-// this hostname or when hostname is empty (older daemons that don't send it).
+// this hostname or when hostname is empty (a machine that reported none).
 // Lookup failures degrade to a new UUID so a transient DB error never blocks
 // registration — the alternative is to fail the connection, which is worse
 // than mis-attributing one row that the next reconnect will reuse.
@@ -147,8 +147,8 @@ func (s *Service) rejectForeignDaemon(ctx context.Context, userID, daemonID stri
 
 // MachineOrg is what the control plane said about a machine's org when the
 // gateway dials it in (the DAEMON_STATE snapshot's orgId / orgUnresolved): ID
-// "" with Unresolved false is a control plane that named none (or predates
-// the field); Unresolved is one that could not read it.
+// "" with Unresolved false is a control plane that named none; Unresolved is
+// one that could not read it.
 type MachineOrg struct {
 	ID         string
 	Unresolved bool

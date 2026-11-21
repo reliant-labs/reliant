@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // The storage reaper routine: the daemon runs forge's own reaper on a schedule.
@@ -190,9 +191,6 @@ type reaperState struct {
 	goCache reaperRunner
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
-	// forgeVersion overrides the embedded forge's version (tests); nil reads
-	// the build info (reaper_floor.go).
-	forgeVersion func() string
 
 	// guarded by Watcher.mu
 	cfg     ReaperConfig
@@ -483,15 +481,6 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 	defer cancel()
 
 	start := w.now()
-	// auto-gc trims the Go caches first, so the floor guard covers it.
-	floor := w.checkFloor(ctx, policyPath, "full", trigger)
-	if !floor.proceed() {
-		w.mu.Lock()
-		w.reaper.lastRun = w.now()
-		w.mu.Unlock()
-		w.auditPass(ctx, policyPath, "full", trigger, start, floor, false, 0, autoGCRecord{}, false)
-		return res
-	}
 	freeBefore := w.reclaimableFree()
 	run, err := w.reaper.run(ctx, policyPath)
 	freeAfter := w.reclaimableFree()
@@ -534,9 +523,9 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 		logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 	}
 	if fresh {
-		logGoCacheTrims(ctx, trigger, start, floor.forge, rec.GoCaches)
+		logGoCacheTrims(ctx, trigger, start, version.Forge(), rec.GoCaches)
 	}
-	w.auditPass(ctx, policyPath, "full", trigger, start, floor, true, run.ExitCode, rec, fresh)
+	w.auditPass(ctx, policyPath, "full", trigger, start, run.ExitCode, rec, fresh)
 	fields := []any{
 		"trigger", trigger, "after", elapsed, "freed", FormatBytes(res.Freed),
 		"free_before", FormatBytes(freeBefore), "free_after", FormatBytes(freeAfter),
@@ -611,14 +600,6 @@ func (w *Watcher) goCachePass(ctx context.Context, policyPath, trigger string) {
 	defer cancel()
 
 	start := w.now()
-	floor := w.checkFloor(ctx, policyPath, "gocache", trigger)
-	if !floor.proceed() {
-		w.mu.Lock()
-		w.reaper.lastGoCache = w.now()
-		w.mu.Unlock()
-		w.auditPass(ctx, policyPath, "gocache", trigger, start, floor, false, 0, autoGCRecord{}, false)
-		return
-	}
 	freeBefore := w.reclaimableFree()
 	run, err := w.reaper.goCache(ctx, policyPath)
 	freeAfter := w.reclaimableFree()
@@ -648,9 +629,9 @@ func (w *Watcher) goCachePass(ctx context.Context, policyPath, trigger string) {
 		for _, finding := range rec.OverBudget {
 			logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 		}
-		logGoCacheTrims(ctx, trigger, start, floor.forge, rec.GoCaches)
+		logGoCacheTrims(ctx, trigger, start, version.Forge(), rec.GoCaches)
 	}
-	w.auditPass(ctx, policyPath, "gocache", trigger, start, floor, true, run.ExitCode, rec, fresh)
+	w.auditPass(ctx, policyPath, "gocache", trigger, start, run.ExitCode, rec, fresh)
 	fields := []any{"trigger", trigger, "after", elapsed, "freed", FormatBytes(freed), "free_after", FormatBytes(freeAfter)}
 	switch {
 	case run.ExitCode != 0:

@@ -34,12 +34,9 @@ func (m *statusMachine) Send(_ context.Context, commandType string, payload, res
 	return json.Unmarshal([]byte(m.answer), resp)
 }
 
-// teardownNow is the fixed clock these tests judge the legacy grace by.
-var teardownNow = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-
-func pendingTeardown(created time.Time) *db.CheckoutTeardown {
+func pendingTeardown() *db.CheckoutTeardown {
 	return &db.CheckoutTeardown{ID: "op-1", ProjectID: "p1", DaemonID: "d1", Kind: db.CheckoutTeardownReclone,
-		Path: "/proj", State: db.CheckoutTeardownPending, CreatedAt: created}
+		Path: "/proj", State: db.CheckoutTeardownPending, CreatedAt: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)}
 }
 
 // A workspace of a checkout an unconfirmed reclone may still be deleting:
@@ -50,7 +47,6 @@ func TestInsertSettlesAnUnconfirmedTeardownFirst(t *testing.T) {
 		name      string
 		answer    string
 		err       error
-		created   time.Time
 		wantState string
 		wantErr   string // "" = the workspace is created
 	}{
@@ -66,21 +62,17 @@ func TestInsertSettlesAnUnconfirmedTeardownFirst(t *testing.T) {
 			wantState: db.CheckoutTeardownPending, wantErr: "could not say how it ended",
 		},
 		{
-			name: "an old machine, inside the grace", err: errors.New(`this machine is running an older version of Reliant (v1.0.0) that doesn't support "git.teardown_status"`),
-			created: teardownNow.Add(-time.Minute), wantState: db.CheckoutTeardownPending, wantErr: "too old to confirm",
-		},
-		{
-			name: "an old machine, past the grace", err: errors.New(`this machine is running an older version of Reliant (v1.0.0) that doesn't support "git.teardown_status"`),
-			created: teardownNow.Add(-checkoutteardown.LegacyGrace - time.Minute), wantState: db.CheckoutTeardownExpired,
+			// Held until the machine is updated: the updated daemon then
+			// fences the op ("it never arrived", above).
+			name: "an old machine", err: errors.New(`this machine is running an older version of Reliant (v1.0.0) that doesn't support "git.teardown_status"`),
+			wantState: db.CheckoutTeardownPending, wantErr: "update Reliant on that machine",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			st := &fakeStore{teardown: pendingTeardown(tc.created)}
+			st := &fakeStore{teardown: pendingTeardown()}
 			m := &statusMachine{answer: tc.answer, err: tc.err}
-			req := twoRepoReq()
-			req.Now = func() time.Time { return teardownNow }
-			wt, err := Insert(context.Background(), st, m, req)
+			wt, err := Insert(context.Background(), st, m, twoRepoReq())
 			assert.Equal(t, []string{"op-1"}, m.asked, "the machine is asked about the op it was sent")
 			assert.Equal(t, tc.wantState, st.teardown.State)
 			if tc.wantErr == "" {
@@ -100,7 +92,7 @@ func TestInsertSettlesAnUnconfirmedTeardownFirst(t *testing.T) {
 // With no machine to ask, the refusal stands.
 func TestInsertWithoutAMachineRefusesWhileATeardownIsPending(t *testing.T) {
 	t.Parallel()
-	st := &fakeStore{teardown: pendingTeardown(teardownNow)}
+	st := &fakeStore{teardown: pendingTeardown()}
 	_, err := Insert(context.Background(), st, nil, twoRepoReq())
 	var held *TeardownPendingError
 	require.ErrorAs(t, err, &held)

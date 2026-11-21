@@ -14,8 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
-// A handler hands a router failure to MachineState / Error (or the deprecated
-// DispatchConnectError), which make it the CAUSE of the handler's own error —
+// A handler hands a router failure to MachineState / Error, which make it the CAUSE of the handler's own error —
 // and a cause's reason is not the client's. So the machine state's reason is
 // re-stamped on the result. This pins that it reaches a real client for every
 // spelling, beside a message that is unchanged.
@@ -39,9 +38,8 @@ func TestMachineStateKeepsTheReasonOnTheWire(t *testing.T) {
 			state, ok := MachineState("list files", wrapped)
 			assert.True(t, ok)
 			for spelling, got := range map[string]error{
-				"MachineState":         state,
-				"Error":                Error("daemon command fs.list", wrapped),
-				"DispatchConnectError": DispatchConnectError("fs.list", wrapped),
+				"MachineState": state,
+				"Error":        Error("daemon command fs.list", wrapped),
 			} {
 				ce := wirecheck.RoundTrip(t, got)
 				assert.Equal(t, tc.reason, ce.Meta().Get(svcerr.ReasonHeader), spelling)
