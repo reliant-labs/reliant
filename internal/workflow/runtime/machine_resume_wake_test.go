@@ -300,3 +300,49 @@ func (s *MachineResumeWakeSuite) TestSubAgentsResumingTogetherShareOneWake() {
 	s.Equal(1, m.wakeChecks, "the second sub-agent waited on the first's wake instead of starting its own")
 	s.Equal([]string{"ok", "ok"}, m.toolRuns, "both sub-agents' tool calls ran against an awake machine")
 }
+
+// A step placed on a pool member wakes that member, on its own clock: before
+// its first step there (nothing proves a member awake the run never used),
+// and again after a hold — never the run's inherited machine, which the step
+// does not use. A selector that was not placed (a node's configured id, as
+// before pools) still wakes the run's own machine, and a placement onto that
+// machine shares its clock.
+func TestMachineResumeWaker_WakesThePlacedMemberOnItsOwnClock(t *testing.T) {
+	t.Parallel()
+
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+	env.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		w := newMachineResumeWaker(ctx, map[string]interface{}{
+			"chat_id":         "c1",
+			"daemon_selector": map[string]interface{}{"id": "chat-pin", "session": true},
+		})
+		member := &DaemonSelectorValue{ID: "m-gpus", Placed: true}
+		w.beforeMachineStep(ctx, ctx, member, nil, false) // first use: wakes m-gpus
+		w.machineStepDone(ctx, member)
+		w.beforeMachineStep(ctx, ctx, member, nil, false) // just used: nothing
+		if err := workflow.Sleep(ctx, 10*time.Minute); err != nil {
+			return err
+		}
+		w.beforeMachineStep(ctx, ctx, member, nil, false) // after the hold: wakes m-gpus
+		w.machineStepDone(ctx, member)
+		w.beforeMachineStep(ctx, ctx, &DaemonSelectorValue{ID: "m-config"}, nil, false) // not placed: wakes chat-pin
+		w.machineStepDone(ctx, nil)
+		w.beforeMachineStep(ctx, ctx, &DaemonSelectorValue{ID: "chat-pin", Placed: true}, nil, false) // the root's clock: nothing
+		return nil
+	}, workflow.RegisterOptions{Name: "placedMemberWake"})
+	env.RegisterActivityWithOptions(func(map[string]interface{}) (map[string]interface{}, error) { return nil, nil },
+		activity.RegisterOptions{Name: "MachineResumeWake"})
+	var woke []string
+	env.OnActivity("MachineResumeWake", mock.Anything, mock.Anything).
+		Return(func(in map[string]interface{}) (map[string]interface{}, error) {
+			sel, _ := in["daemon_selector"].(map[string]interface{})
+			id, _ := sel["id"].(string)
+			woke = append(woke, id)
+			return map[string]interface{}{"ready": true}, nil
+		})
+
+	env.ExecuteWorkflow("placedMemberWake")
+
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, []string{"m-gpus", "m-gpus", "chat-pin"}, woke)
+}

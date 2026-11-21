@@ -3,9 +3,9 @@
 // environment. Every packaging target goes through here, so there is exactly
 // ONE place a build's endpoints can come from.
 //
-//   node scripts/with-release-config.mjs npm run pack:mac
+//   node scripts/with-release-config.mjs pnpm run pack:mac
 //
-// ## Why a wrapper instead of setting the vars in each npm script
+// ## Why a wrapper instead of setting the vars in each package script
 //
 // release.config.json is GENERATED from control-plane's KCL
 // (deploy/kcl/lib/env.k -> .github/scripts/sync-release-config.mjs). Nothing
@@ -184,7 +184,7 @@ const result = spawnSync(command, commandArgs, {
   cwd: process.cwd(),
   stdio: "inherit",
   env: { ...process.env, ...exported },
-  // npm resolves to npm.cmd on Windows, which needs a shell to be executable.
+  // pnpm resolves to pnpm.cmd on Windows, which needs a shell to be executable.
   shell: process.platform === "win32",
 });
 

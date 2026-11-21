@@ -50,7 +50,9 @@ import (
 // output, one a process or daemon work is using, and the daemon's own.
 //
 // Mode off does nothing; dry-run reports what it would reclaim, and the
-// bytes, and captures and deletes nothing; on reclaims.
+// bytes, and captures and deletes nothing (a capture-only dry-run captures
+// and verifies what it would reclaim, and still deletes nothing); on
+// reclaims.
 
 // SweepMode is worktree_reclaim.mode (RELIANT_WORKTREE_RECLAIM).
 type SweepMode string
@@ -117,6 +119,12 @@ type SweepOptions struct {
 	Authorized []AuthorizedApproval
 	// Version is the daemon's, recorded in captures and the journal.
 	Version string
+	// CaptureOnly, in dry-run, captures each worktree the pass would reclaim
+	// (auto-safe) into its refs/reliant/reclaimed/ ref and verifies the
+	// capture against the files, as a reclaim does before it deletes
+	// anything, and deletes nothing (captureOnlyEntry). It is how a person
+	// tries a restore: `reliant worktree reclaim scan --capture`.
+	CaptureOnly bool
 }
 
 func (o SweepOptions) withDefaults() SweepOptions {
@@ -253,10 +261,13 @@ type SweepClone struct {
 
 // SweepReport is one pass.
 type SweepReport struct {
-	Version       int          `json:"version"`
-	Mode          SweepMode    `json:"mode"`
-	Trigger       string       `json:"trigger,omitempty"`
-	ApprovedOnly  bool         `json:"approved_only,omitempty"`
+	Version      int       `json:"version"`
+	Mode         SweepMode `json:"mode"`
+	Trigger      string    `json:"trigger,omitempty"`
+	ApprovedOnly bool      `json:"approved_only,omitempty"`
+	// CaptureOnly: a dry-run that captured what it would reclaim
+	// (SweepOptions.CaptureOnly); entries it captured name their CaptureRef.
+	CaptureOnly   bool         `json:"capture_only,omitempty"`
 	StartedAt     time.Time    `json:"started_at"`
 	FinishedAt    time.Time    `json:"finished_at"`
 	DaemonVersion string       `json:"daemon_version,omitempty"`
@@ -275,7 +286,8 @@ type SweepReport struct {
 // journal line per worktree. Mode off returns at once.
 func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepReport {
 	opts = opts.withDefaults()
-	rep := SweepReport{Version: 1, Mode: opts.Mode, Trigger: opts.Trigger, ApprovedOnly: opts.ApprovedOnly, StartedAt: r.now().UTC(), DaemonVersion: opts.Version}
+	rep := SweepReport{Version: 1, Mode: opts.Mode, Trigger: opts.Trigger, ApprovedOnly: opts.ApprovedOnly, StartedAt: r.now().UTC(), DaemonVersion: opts.Version,
+		CaptureOnly: opts.CaptureOnly && opts.Mode == SweepDryRun}
 	if opts.Mode != SweepDryRun && opts.Mode != SweepOn {
 		return rep
 	}
@@ -678,6 +690,9 @@ func (r *Reclaimer) decide(ctx context.Context, e *SweepEntry, opts SweepOptions
 	case ClassAutoSafe:
 		if opts.Mode != SweepOn {
 			e.Outcome = OutcomeWouldReclaim
+			if opts.CaptureOnly && opts.Mode == SweepDryRun {
+				r.captureOnlyEntry(ctx, e, opts, dir)
+			}
 			return
 		}
 		r.reclaimEntry(ctx, e, opts, dir, "")
