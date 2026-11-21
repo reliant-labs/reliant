@@ -37,7 +37,7 @@ const (
 	RegisterPath       = "POST /auth/register"
 	LogoutPath         = "POST /auth/logout"
 	SessionPath        = "GET /auth/session"
-	PasswordPolicyPath = "GET /auth/password-policy"
+	PasswordPolicyPath = "GET /auth/password-policy" //nolint:gosec // G101: a route pattern, not a credential
 	OptionsPath        = "GET /auth/options"
 	ForgotPath         = "POST /auth/forgot"
 	ResetPath          = "POST /auth/reset"
@@ -826,6 +826,7 @@ func (b *loginBroker) revokeAtIssuer(ctx context.Context, tokens session.Tokens)
 
 // clearSessionCookie tells the browser to forget the session cookie.
 func (b *loginBroker) clearSessionCookie(w http.ResponseWriter) {
+	//nolint:gosec // G124: HttpOnly and SameSite are set; Secure is off only in local development (plain http)
 	http.SetCookie(w, &http.Cookie{
 		Name:     b.sessionCookie(),
 		Value:    "",
@@ -871,6 +872,7 @@ func (b *loginBroker) setSession(w http.ResponseWriter, r *http.Request, tokens 
 		}
 		value, maxAge = issued.ID, int(time.Until(issued.ExpiresAt).Seconds())
 	}
+	//nolint:gosec // G124: HttpOnly and SameSite are set; Secure is off only in local development (plain http)
 	http.SetCookie(w, &http.Cookie{
 		// Host-only: no Domain, ever, so the cookie goes to this host
 		// alone; __Host- prefixed when Secure (sessionCookie).
