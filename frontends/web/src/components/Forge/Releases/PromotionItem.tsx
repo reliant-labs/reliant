@@ -64,7 +64,7 @@ const HEALTH_WORDS: Record<PromotionHealth, { tone: "success" | "danger" | "warn
   unknown: {
     tone: "neutral",
     label: "unknown",
-    title: "No release-health check was recorded on this promotion (`forge obs check <env> --gate-json` with `forge gate record`).",
+    title: "No release-health check was recorded on this promotion (`forge obs check <env> --gate-json` with `forge release gate record`).",
   },
 };
 

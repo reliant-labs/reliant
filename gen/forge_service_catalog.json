@@ -497,6 +497,7 @@
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
+        "TriggerDeliveryRelay",
         "TriggerPollers",
         "UserUpdateHub",
         "Vault",
@@ -6904,6 +6905,11 @@
               "Name": "app_name",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListChatsResponse": [
@@ -8606,6 +8612,11 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListChatsResponse": [
@@ -35870,6 +35881,11 @@
               "Name": "app_name",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListSharedChatsResponse": [
@@ -36182,6 +36198,11 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListSharedChatsResponse": [
@@ -54013,6 +54034,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewTriggerAlerting"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "TriggerDeliveryRelay",
+      "name": "TriggerDeliveryRelay",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.TriggerDeliveryRelay",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTriggerDeliveryRelay"
       },
       "methods": [],
       "implementation_candidates": []

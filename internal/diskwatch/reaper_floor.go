@@ -124,7 +124,7 @@ type floorDecision struct {
 func (d floorDecision) proceed() bool { return d.verdict != verdictSkippedStaleForge }
 
 // checkFloor decides whether a pass that trims the Go cache may run, and says
-// so in the log. pass is "full" (forge storage auto-gc) or "gocache".
+// so in the log. pass is "full" (forge machine storage auto-gc) or "gocache".
 func (w *Watcher) checkFloor(ctx context.Context, policyPath, pass, trigger string) floorDecision {
 	v := w.reaper.forgeVer()
 	d := floorDecision{verdict: verdictTrimmed, forge: v}

@@ -111,7 +111,7 @@ export function DeleteWorktreeModal({
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold text-muted-foreground">
               Also remove
             </h4>
             {!isArchived && (

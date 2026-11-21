@@ -161,7 +161,7 @@ export function MobileDiagnosticsScreen({ onBack }: { onBack: () => void }) {
 
         <section>
           <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-semibold text-muted-foreground">
               Recent errors <span className="tabular-nums">{errors.length}</span>
             </h2>
             {errors.length > 0 && (

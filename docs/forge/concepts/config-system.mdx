@@ -190,7 +190,7 @@ database_url: ConfigSecretRef = ConfigSecretRef { name = "demo-secrets", key = "
 
 and it is projected into a workload's environment as a secret reference, not a string. A workload receives a credential only if it lists the variable in its `config_secrets` **and** its root reaches it. The scaffolded `migrate` job, for example, declares `config_secrets = ["DATABASE_URL"]` and gets nothing else. This is deliberate: a pod whose secret reference names a missing key does not start, so broadcasting every credential to every pod turns one missing secret into a whole-namespace outage. A `config_secrets` entry that the workload's root does not reach is a render error.
 
-Before anything starts, deploy checks every secret a workload declares against the environment's store, where forge can see the store, and fails with the full list of what is missing. A credential that is genuinely optional (a feature's off-switch) says so with `optional: true` next to `sensitive: true`. Setting values is covered in [Secrets](/hosting/secrets), and `forge secret set --env <env> <NAME>` is the command.
+Before anything starts, deploy checks every secret a workload declares against the environment's store, where forge can see the store, and fails with the full list of what is missing. A credential that is genuinely optional (a feature's off-switch) says so with `optional: true` next to `sensitive: true`. Setting values is covered in [Secrets](/hosting/secrets), and `forge env secret set --env <env> <NAME>` is the command.
 
 ### Checking a deployment's values against the schema
 

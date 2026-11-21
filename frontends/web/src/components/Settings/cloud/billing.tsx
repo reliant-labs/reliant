@@ -525,7 +525,7 @@ function SectionHeading({
 }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-xs font-semibold text-muted-foreground">
         {title}
       </h3>
       <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
@@ -1624,7 +1624,7 @@ function UsageStat({
       <CardContent>
         {/* Stat caption, deliberately a rung below a section label: it must not
             compete with the figure under it. See ui/card.tsx. */}
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-medium text-muted-foreground">
           {label}
         </p>
         <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>

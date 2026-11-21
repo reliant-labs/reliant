@@ -67,7 +67,7 @@ unguarded optional dep) and #2662 (three log calls without their context) turned
 main red on findings the scoped lint names in about two minutes
 (`/home/workspace/designs/reverse-walk-backtest-2026-11-13.md`, "fast lints").
 
-It holds **one** host heavy slot for the whole run (`forge slot run`), and every
+It holds **one** host heavy slot for the whole run (`forge machine slot run`), and every
 phase nests inside that slot, within a CPU budget (below). It prints one row per phase:
 
 ```
