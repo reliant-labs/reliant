@@ -216,6 +216,12 @@ func listWorkspaces(ctx context.Context, client worktreeClient, projectID string
 				req.PageToken = &token
 			}
 			resp, err := client.ListArchivedWorktrees(ctx, connect.NewRequest(req))
+			if connect.CodeOf(err) == connect.CodeUnimplemented {
+				// A server older than ListArchivedWorktrees: say so, and
+				// that the live list still works, rather than a bare
+				// "unimplemented".
+				return nil, fmt.Errorf("listing archived workspaces: this Reliant server predates the archived list; 'reliant worktree list' without --archived still works: %w", err)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("listing archived workspaces: %w", err)
 			}

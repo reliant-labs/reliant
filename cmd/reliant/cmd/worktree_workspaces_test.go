@@ -33,11 +33,13 @@ func (h workspaceProjects) ListProjects(context.Context, *connect.Request[relian
 // fakeWorkspaces serves one project's workspaces, a page at a time.
 type fakeWorkspaces struct {
 	reliantv1connect.UnimplementedWorktreeServiceHandler
-	mu       sync.Mutex
-	pages    [][]*reliantv1.Worktree
-	archived []*reliantv1.Worktree
-	listedIn []string
-	archive  []*reliantv1.ArchiveWorktreeRequest
+	// noArchivedList plays a server older than ListArchivedWorktrees.
+	noArchivedList bool
+	mu             sync.Mutex
+	pages          [][]*reliantv1.Worktree
+	archived       []*reliantv1.Worktree
+	listedIn       []string
+	archive        []*reliantv1.ArchiveWorktreeRequest
 }
 
 func (f *fakeWorkspaces) ListWorktrees(_ context.Context, req *connect.Request[reliantv1.ListWorktreesRequest]) (*connect.Response[reliantv1.ListWorktreesResponse], error) {
@@ -55,7 +57,10 @@ func (f *fakeWorkspaces) ListWorktrees(_ context.Context, req *connect.Request[r
 	return connect.NewResponse(resp), nil
 }
 
-func (f *fakeWorkspaces) ListArchivedWorktrees(context.Context, *connect.Request[reliantv1.ListArchivedWorktreesRequest]) (*connect.Response[reliantv1.ListArchivedWorktreesResponse], error) {
+func (f *fakeWorkspaces) ListArchivedWorktrees(ctx context.Context, req *connect.Request[reliantv1.ListArchivedWorktreesRequest]) (*connect.Response[reliantv1.ListArchivedWorktreesResponse], error) {
+	if f.noArchivedList {
+		return f.UnimplementedWorktreeServiceHandler.ListArchivedWorktrees(ctx, req)
+	}
 	return connect.NewResponse(&reliantv1.ListArchivedWorktreesResponse{Worktrees: f.archived}), nil
 }
 
@@ -167,4 +172,20 @@ func TestWorktreeArchiveRefusedInAnAgentShell(t *testing.T) {
 	out, err := executeRoot(t, "worktree", "list")
 	require.NoError(t, err, out)
 	assert.Contains(t, out, "fix-login")
+}
+
+// A server that predates ListArchivedWorktrees answers --archived with
+// Unimplemented: the CLI says the server is too old and that the live list
+// still works, and the live list does.
+func TestWorktreeListArchivedOnAnOlderServer(t *testing.T) {
+	f := workspaceServer(t)
+	f.noArchivedList = true
+
+	_, err := executeRoot(t, "worktree", "list", "--archived")
+	require.ErrorContains(t, err, "this Reliant server predates the archived list")
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+
+	out, err := executeRoot(t, "worktree", "list")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "main (main)")
 }
