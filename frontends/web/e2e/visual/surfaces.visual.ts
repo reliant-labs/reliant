@@ -338,6 +338,14 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
   {
+    // A project with nothing deployed: the page's own action, the agent and Move to Forge
+    // calls to action, and the section's Learn link (U6 14/16).
+    name: 'shell-empty-cta',
+    path: '/forge/p/docs-site/services',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('app-section-empty'),
+  },
+  {
     name: 'shell-app-observability',
     path: '/forge/p/shopfront/observability/errors',
     on: ['desktop', 'mobile'],
