@@ -71,18 +71,14 @@ service SharingService {
   // viewer_access, and leaves out what is the owner's alone (see
   // Chat.viewer_access).
   rpc ListSharedChats(ListSharedChatsRequest) returns (ListSharedChatsResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "reads only: lists what others shared"}
-    };
+    option (forge.v1.method) = {activity: {none: "reads only: lists what others shared"}};
   }
 
   // ListSharedProjects lists the projects other members shared with an
   // organization the caller is a live member of, most recently active first,
   // each with viewer_access set and without path.
   rpc ListSharedProjects(ListSharedProjectsRequest) returns (ListSharedProjectsResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "reads only: lists what others shared"}
-    };
+    option (forge.v1.method) = {activity: {none: "reads only: lists what others shared"}};
   }
 }
 
@@ -135,6 +131,10 @@ message ListSharedChatsRequest {
     lte: 100
   }];
   int32 offset = 4 [(buf.validate.field).int32.gte = 0];
+  // Narrow the list to chats tagged with this app (Chat.app_name): the
+  // shared half of an app's chat list. A malformed name lists nothing; an
+  // empty one is the same as unset.
+  optional string app_name = 5;
 }
 
 message ListSharedChatsResponse {

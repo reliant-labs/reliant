@@ -49,7 +49,7 @@ func TestReconcileProjectDaemonsRecordsForgeAppsOnConnect(t *testing.T) {
 		return projectPathState{Exists: true}, nil
 	}
 
-	_, _, err := reconcileProjectDaemons(ctx, repo, daemonID, userID, check)
+	_, _, err := reconcileProjectDaemons(ctx, repo, daemonID, userID, nil, "", check)
 	require.NoError(t, err)
 
 	apps, err := repo.ListRepoForgeAppsByProject(ctx, newer.ID)

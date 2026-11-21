@@ -752,6 +752,9 @@ func chatToRow(chat *core.Chat) *Chat {
 		NoMachine:       chat.NoMachine,
 		MachinePoolID:   chat.MachinePoolID,
 		Origin:          origin,
+		// Insert only: chatUpdateColumns never names app_name, so a chat's
+		// app tag is fixed at creation.
+		AppName: chat.AppName,
 	}
 	return row
 }

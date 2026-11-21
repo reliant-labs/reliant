@@ -704,6 +704,11 @@ func daemonCredentialRefused(err error) bool {
 // credential is re-minted (reRegister). Everything else is reported as is.
 func daemonStartFailure(err error, useToken bool, conn *connection) (failure error, reRegister bool) {
 	switch {
+	case errors.Is(err, daemonruntime.ErrUpgradeExit):
+		// Not a failure: the daemon drained and exited so it is restarted
+		// for an update. It carries its own exit code (75).
+		logging.Info("tools-daemon exited to be restarted for an update")
+		return err, false
 	case bootstrap.IsForeignDaemonIDError(err), bootstrap.IsReservedDaemonIDError(err):
 		return fmt.Errorf("tools-daemon stopped: %w", err), false
 	case !daemonCredentialRefused(err):
@@ -1014,6 +1019,12 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 					Guards:             daemonGuards(dcfg),
 					OAuthHelperOrigins: webOrigins,
 				})
+				if errors.Is(err, daemonruntime.ErrUpgradeExit) {
+					// Drained and exited to be restarted for an update; the
+					// error carries its own exit code (75).
+					logging.Info("tools-daemon exited to be restarted for an update")
+					return err
+				}
 				if err != nil && !errors.Is(err, context.Canceled) {
 					return fmt.Errorf("tools-daemon exited with error: %w", err)
 				}
@@ -1197,6 +1208,20 @@ func printDaemonRuntimeRecord(w io.Writer, state daemonstate.State, recordPath s
 	printDaemonStreamStability(w, state, now)
 	if state.StreamDetail != "" {
 		fmt.Fprintf(w, "  Error:    %s\n", state.StreamDetail)
+	}
+	if up := state.Upgrade; up != nil {
+		// A restart the platform asked for (the drain protocol).
+		line := fmt.Sprintf("%s for %s", up.State, now.Sub(up.Since).Round(time.Second))
+		if up.TargetVersion != "" {
+			line += ", to " + up.TargetVersion
+		}
+		if !up.Deadline.IsZero() {
+			line += ", deadline " + up.Deadline.Local().Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "  Restart:  %s\n", line)
+		if up.Detail != "" {
+			fmt.Fprintf(w, "            %s\n", up.Detail)
+		}
 	}
 	fmt.Fprintf(w, "  Record:   %s\n", recordPath)
 }

@@ -465,9 +465,13 @@ func userDefaultSelector(daemons []*db.Daemon) *DaemonSelector {
 	return nil
 }
 
-// daemonRecordMatches applies a selector to a registry record. Records carry
-// no labels, so label criteria are not applied here (the connected resolver,
-// which has them, already ran).
+// daemonRecordMatches applies a selector to a registry record, labels
+// included: a record's labels are the machine's durable ones (daemons.labels,
+// set by its owner or declared by the daemon at start), which hold while it
+// sleeps. Ignoring them let a `daemon: labels:` selector that no machine
+// satisfies route to whichever machine the user had — the step ran on a
+// machine without the label it asked for. Now a selector with labels fails
+// closed (ErrNoDaemon) unless a machine carries every one of them.
 func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 	if selector == nil {
 		return true
@@ -483,7 +487,7 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 			return false
 		}
 	}
-	return true
+	return labelsMatch(d.Labels, selector.Labels)
 }
 
 // recordAnswersToName reports whether a record is the machine a caller means
@@ -588,9 +592,60 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 	logMachineState("none", userID, "[DaemonRouter] no daemon could be resolved",
 		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
-		return "", noMachine("the machine this request asked for is not connected")
+		return "", noMachine(noMatchingMachineSentence(selector))
 	}
 	return "", noMachine("no machine is connected to your account yet")
+}
+
+// noMatchingMachineSentence says which selector matched no machine, in the
+// words the author wrote it with: the name, type and labels of a workflow's
+// `daemon:` block. A bare "the machine this request asked for" left them to
+// guess which of a step's criteria failed.
+//
+// The id is never named. A selector's ID is most often one the server filled
+// in (a chat's pin, the user's default), not one the user wrote, and an id
+// they wrote that is one of their machines would have matched. An ID-only
+// selector keeps its original sentence.
+func noMatchingMachineSentence(selector *DaemonSelector) string {
+	var criteria []string
+	if selector.Name != "" {
+		criteria = append(criteria, fmt.Sprintf("name %q", selector.Name))
+	}
+	switch t := canonicalDaemonType(selector.Type); t {
+	case "":
+	case "managed":
+		criteria = append(criteria, "type cloud")
+	case "self_hosted":
+		criteria = append(criteria, "type local")
+	default:
+		criteria = append(criteria, "type "+t)
+	}
+	if len(selector.Labels) > 0 {
+		criteria = append(criteria, "labels "+formatLabels(selector.Labels))
+	}
+	if len(criteria) == 0 {
+		return "the machine this request asked for is not connected"
+	}
+	sentence := "no machine of yours matches this request's machine selector (" + strings.Join(criteria, ", ") + ")"
+	if len(selector.Labels) > 0 {
+		sentence += "; a machine gets labels with `reliant machine label <machine> " + formatLabels(selector.Labels) + "`"
+	}
+	return sentence
+}
+
+// formatLabels renders labels as space-separated k=v pairs in key order, the
+// form `reliant machine label` takes them in.
+func formatLabels(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+labels[k])
+	}
+	return strings.Join(pairs, " ")
 }
 
 // machineStateLogWindow is how often the router writes one user's
@@ -903,8 +958,8 @@ func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID st
 		return r.isDaemonOnlineViaNATS(ctx, userID, selector)
 	}
 
-	// Otherwise ask about each registry record the selector matches. Records
-	// carry no labels, so label criteria were only applied by the resolver.
+	// Otherwise ask about each registry record the selector matches, durable
+	// labels included (daemonRecordMatches).
 	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
 		return false, fmt.Errorf("listing daemons for liveness: %w", err)
@@ -1344,14 +1399,16 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		Success      bool   `json:"success"`
 		Payload      []byte `json:"payload"`
 		ErrorMessage string `json:"error_message,omitempty"`
-		// ErrorCode is set only for a transport failure the requester acts
-		// on: ErrorCodeDaemonInterrupted (see NATSToolBridge).
+		// ErrorCode carries failures the requester can classify without matching prose.
 		ErrorCode string `json:"error_code,omitempty"`
 	}
 	if err := json.Unmarshal(msg.Data, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal daemon command response: %w", err)
 	}
 	if !resp.Success {
+		if commandType == RequestRestartCommand && resp.ErrorCode == restartNotSupportedCode {
+			return nil, ErrRestartNotSupported
+		}
 		switch resp.ErrorCode {
 		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))
@@ -1651,6 +1708,12 @@ func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, dae
 	if err != nil {
 		forget()
 		return nil, dispatchFinal, err
+	}
+	if resp.ErrorCode == ErrorCodeDaemonUpdating {
+		// The daemon is draining for a restart and did not take it, or its
+		// gateway did not send it: nothing ran (daemon_upgrade.go).
+		forget()
+		return nil, dispatchUndelivered, fmt.Errorf("tool request: %w", ErrDaemonUpdating)
 	}
 	if resp.ErrorCode == ErrorCodeDaemonInterrupted {
 		resp, outcome, err := r.awaitRedelivery(ctx, inbox, userID, daemonID, request, resp, deadline)

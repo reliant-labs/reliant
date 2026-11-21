@@ -1,6 +1,7 @@
 // ModernApp - Main application component
 import { useSearch, useNavigate, useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import type { IndexSearch } from './routeSchemas';
 import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
@@ -84,6 +85,7 @@ import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
+import { appsPath, homePath, inboxPath, onboardingPath, runsPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -110,7 +112,9 @@ function App() {
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
   // or /project/$id and we want a toast + credential cache refresh at the
   // route they came back to. Settings has its own local handler.
-  const { github_connected, github_installed, github_error, github_error_msg } = useSearch({ from: '/_app' });
+  // Not strict: the workspace is mounted at `/_app` and, in the org tree, at
+  // `/o/$org/_app` (routes.tsx); both validate this search (indexSearchSchema).
+  const { github_connected, github_installed, github_error, github_error_msg } = useSearch({ strict: false }) as IndexSearch;
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();
@@ -1077,7 +1081,7 @@ function App() {
   useEffect(() => {
     const handler = () => {
       // Navigate to the prompts settings section
-      navigate({ to: '/settings/$section', params: { section: 'prompts' } });
+      navigate({ to: settingsPath('prompts') });
     };
     window.addEventListener("open-settings-prompts", handler as EventListener);
     return () =>
@@ -1356,7 +1360,7 @@ function App() {
       const unsubscribe = window.electronAPI.onTrayGoToWorkflowHub(() => {
         const projectId = useProjectStore.getState().currentProject?.id;
         if (!projectId) return;
-        navigate({ to: '/workflows' });
+        navigate({ to: workflowsPath() });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1370,8 +1374,7 @@ function App() {
         if (!workflowName) return;
 
         navigate({
-          to: '/workflow/$workflowName',
-          params: { workflowName },
+          to: workflowBuilderPath(workflowName),
         });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
@@ -1379,7 +1382,7 @@ function App() {
 
     if ("onTrayGoToSettings" in window.electronAPI) {
       const unsubscribe = window.electronAPI.onTrayGoToSettings(() => {
-        navigate({ to: '/settings' });
+        navigate({ to: settingsPath() });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1551,7 +1554,7 @@ function App() {
     if (isUserLoading) return;
     if (!inOnboarding) return;
     navigate({
-      to: '/onboarding',
+      to: onboardingPath(),
       search: (prev: Record<string, unknown>) => prev,
       replace: true,
     });
@@ -1585,7 +1588,7 @@ function App() {
     }
 
     navigate({
-      to: '/',
+      to: homePath(),
       search: (prev: Record<string, unknown>) => {
         const { github_connected: _c, github_installed: _i, github_error: _e, github_error_msg: _m, ...rest } = prev;
         return rest;
@@ -1662,23 +1665,23 @@ function App() {
               <Sidebar
                 paddingClass=""
                 onOpenWorkflows={() => {
-                  navigate({ to: '/workflows' });
+                  navigate({ to: workflowsPath() });
                 }}
                 onOpenInbox={() => {
-                  navigate({ to: '/inbox' });
+                  navigate({ to: inboxPath() });
                 }}
                 onOpenRuns={(search) => {
-                  navigate({ to: '/workflows/runs', search: search ?? {} });
+                  navigate({ to: runsPath(), search: search ?? {} });
                 }}
                 onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                 onNavigateToSettings={() => {
-                  navigate({ to: '/settings' });
+                  navigate({ to: settingsPath() });
                 }}
                 onManageProjects={() => {
-                  navigate({ to: '/settings/$section', params: { section: 'projects' } });
+                  navigate({ to: settingsPath('projects') });
                 }}
                 onOpenForge={() => {
-                  navigate({ to: '/apps' });
+                  navigate({ to: appsPath() });
                 }}
               />
             </div>
@@ -1700,23 +1703,23 @@ function App() {
                 <Sidebar
                   paddingClass=""
                   onOpenWorkflows={() => {
-                    navigate({ to: '/workflows' });
+                    navigate({ to: workflowsPath() });
                   }}
                   onOpenInbox={() => {
-                    navigate({ to: '/inbox' });
+                    navigate({ to: inboxPath() });
                   }}
                   onOpenRuns={(search) => {
-                    navigate({ to: '/workflows/runs', search: search ?? {} });
+                    navigate({ to: runsPath(), search: search ?? {} });
                   }}
                   onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                   onNavigateToSettings={() => {
-                    navigate({ to: '/settings' });
+                    navigate({ to: settingsPath() });
                   }}
                   onManageProjects={() => {
-                    navigate({ to: '/settings/$section', params: { section: 'projects' } });
+                    navigate({ to: settingsPath('projects') });
                   }}
                   onOpenForge={() => {
-                    navigate({ to: '/apps' });
+                    navigate({ to: appsPath() });
                   }}
                 />
               </div>
@@ -1891,19 +1894,19 @@ function App() {
           ref={headerRef}
           windowAligned={true}
           onNavigateHome={() => {
-            navigate({ to: '/' });
+            navigate({ to: homePath() });
           }}
           onNavigateToSettings={() => {
-            navigate({ to: '/settings' });
+            navigate({ to: settingsPath() });
           }}
           onNavigateToSettingsSection={(section) => {
-            navigate({ to: '/settings/$section', params: { section } });
+            navigate({ to: settingsPath(section) });
           }}
           onToggleTerminal={toggleTerminal}
           onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
           onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
           onOpenWorkflows={() => {
-            navigate({ to: '/workflows' });
+            navigate({ to: workflowsPath() });
           }}
         />
       )}

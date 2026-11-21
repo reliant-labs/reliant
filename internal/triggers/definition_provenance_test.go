@@ -99,9 +99,11 @@ func (p *provenanceProject) pushOn(t *testing.T, at int64, content, branch strin
 		{Repo: "control-plane", Branch: branch, Commit: provenanceCommit, DefaultBranch: "main"},
 	})
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, p.repo, p.projectID, p.daemonID)
 	_, err = p.repo.SyncProjectConfigSnapshot(p.ctx, &db.ProjectConfigRecord{
 		ProjectID: p.projectID, DaemonID: p.daemonID, ProjectWorkflowsJSON: wj, RepoStatesJSON: sj, PushedAt: time.UnixMilli(at).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 }
 
@@ -316,9 +318,11 @@ func TestPoolBoundFiringPinsTheAgreedMembersCatalog(t *testing.T) {
 	newer := strings.Replace(provenanceWorkflow, "args: {title: ok}", "args: {title: newer}", 1)
 	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "release", Name: "release", RelativePath: provenancePath, YAMLContent: newer}})
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, p.repo, p.projectID, other)
 	_, err = p.repo.SyncProjectConfigSnapshot(p.ctx, &db.ProjectConfigRecord{
 		ProjectID: p.projectID, DaemonID: other, ProjectWorkflowsJSON: wj, PushedAt: time.UnixMilli(5000).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 
 	bound := *p.schedule

@@ -1143,7 +1143,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		}
 
 		// Wait for step completions
-		if len(runningSteps) > 0 {
+		if len(runningSteps) > 0 && !routePendingFirst(e.ctx, len(events)) {
 			completedSteps := waitForStepCompletions(e.ctx, runningSteps)
 
 			for _, running := range completedSteps {

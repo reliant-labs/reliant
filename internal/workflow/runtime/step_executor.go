@@ -483,6 +483,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		SaveDelegated:         saveDelegated,
 		ProviderPinsKey:       e.providerPinsKey(),
 	}
+	if (activityName == "CallLLM" || activityName == "Compact") && e.pauseCtrl.activeManualFallback(e.ctx, e.GetThread()) {
+		// This dispatch did not use or clean up the saved provider's pins.
+		running.ProviderPinsKey = ""
+	}
 	if e.pauseCtrl != nil {
 		e.pauseCtrl.CapacitySlot.trackStep(running)
 	}
@@ -1444,6 +1448,14 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		}
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
+	}
+	if rtx.FallbackModel != "" && e.pauseCtrl.activeManualFallback(e.ctx, rtx.Thread) {
+		// The fallback's model@driver constrains this call, not the saved pin.
+		// Do not clear the original provider's account assignment on this stay.
+		rtx.ManualFallback = true
+		rtx.ChatProvider = ""
+		rtx.ProviderPreference = nil
+		rtx.ClearProviderPins = false
 	}
 
 	// Loop context

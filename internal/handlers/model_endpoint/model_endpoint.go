@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -57,66 +55,4 @@ func endpointUser(ctx context.Context) (string, error) {
 		return "", svcerr.ErrUnauthenticated
 	}
 	return userID, nil
-}
-
-func (s *Service) ListModelEndpoints(ctx context.Context, _ *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error) {
-	userID, err := endpointUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	eps, err := s.manager.List(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
-	}
-	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{
-		Endpoints:            eps,
-		CredentialsAvailable: s.manager.CredentialsAvailable(),
-	}), nil
-}
-
-func (s *Service) CreateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.CreateModelEndpointRequest]) (*connect.Response[reliantv1.CreateModelEndpointResponse], error) {
-	userID, err := endpointUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ep, err := s.manager.Create(ctx, userID, req.Msg.GetEndpoint())
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
-	}
-	return connect.NewResponse(&reliantv1.CreateModelEndpointResponse{Endpoint: ep}), nil
-}
-
-func (s *Service) UpdateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.UpdateModelEndpointRequest]) (*connect.Response[reliantv1.UpdateModelEndpointResponse], error) {
-	userID, err := endpointUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ep, err := s.manager.Update(ctx, userID, req.Msg.GetId(), req.Msg.GetEndpoint())
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
-	}
-	return connect.NewResponse(&reliantv1.UpdateModelEndpointResponse{Endpoint: ep}), nil
-}
-
-func (s *Service) DeleteModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.DeleteModelEndpointRequest]) (*connect.Response[reliantv1.DeleteModelEndpointResponse], error) {
-	userID, err := endpointUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.manager.Delete(ctx, userID, req.Msg.GetId()); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
-	}
-	return connect.NewResponse(&reliantv1.DeleteModelEndpointResponse{}), nil
-}
-
-func (s *Service) TestModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.TestModelEndpointRequest]) (*connect.Response[reliantv1.TestModelEndpointResponse], error) {
-	userID, err := endpointUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	probe, latency, err := s.manager.Test(ctx, userID, req.Msg.GetId(), req.Msg.GetDraft())
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
-	}
-	return connect.NewResponse(&reliantv1.TestModelEndpointResponse{Probe: probe, LatencyMs: latency.Milliseconds()}), nil
 }

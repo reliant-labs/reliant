@@ -16,6 +16,7 @@ import {
   MobileEmptyState,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { mobileChatsPath } from "@/lib/paths";
 
 export function MobileComingSoon({ title }: { title: string }) {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export function MobileComingSoon({ title }: { title: string }) {
         title={title}
         leading={
           <MobileBackButton
-            onClick={() => void navigate({ to: "/m/chats" })}
+            onClick={() => void navigate({ to: mobileChatsPath() })}
             label="Back to chats"
           />
         }

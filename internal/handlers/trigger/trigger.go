@@ -3,7 +3,6 @@ package trigger
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -601,16 +601,15 @@ func (s *Service) ListTriggerEvents(
 // opaque to callers. It is the list's sort key, so a firing recorded
 // mid-pagination can neither repeat nor be skipped.
 func encodeTriggerEventCursor(c core.TriggerEventCursor) string {
-	raw := strconv.FormatInt(c.OccurredAt.UnixMicro(), 10) + "|" + c.ID
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+	return orm.EncodeCursor(strconv.FormatInt(c.OccurredAt.UnixMicro(), 10) + "|" + c.ID)
 }
 
 func decodeTriggerEventCursor(token string) (*core.TriggerEventCursor, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
+	raw, err := orm.DecodeCursor(token)
 	if err != nil {
 		return nil, err
 	}
-	micros, id, ok := strings.Cut(string(raw), "|")
+	micros, id, ok := strings.Cut(raw, "|")
 	if !ok || id == "" {
 		return nil, errors.New("malformed cursor")
 	}
@@ -903,10 +902,12 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 		return nil, tools.RefuseActivation(msg, svcerr.WithMessage(svcerr.ErrNotFound, msg))
 	}
 	// The activation's message overrides the declaration's prompt template;
-	// with neither, a run would start with nothing to do.
-	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" {
+	// with neither, an agent would start with nothing to do. A workflow that
+	// runs no agent needs no prompt: its runs start from
+	// triggers.DefaultSeedPrompt.
+	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" && triggers.WorkflowRunsAgent(wf) {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf(
-			"message is required: the declared trigger %q has no prompt, so the activation must write one", name))
+			"message is required: the declared trigger %q has no prompt and the workflow runs an agent, so the activation must write one", name))
 	}
 	// Activation has no previous kind to hold the declaration to.
 	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: def.Workflow, WorkflowTrigger: &name})

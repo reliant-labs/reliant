@@ -37,6 +37,14 @@ type AccessTokenAccount struct {
 	// a token acting as no user. An empty email is never a reason to refuse
 	// the token.
 	Email string
+	// MachineOrgID is the organization of the machine a daemon-bound token
+	// is bound to (control-plane's daemons.org_id), as the authority names it
+	// at introspection, or "" when it names none: an unbound token, a machine
+	// with no recorded org, a self-hosted authority, or an older control
+	// plane. It is the machine's org, which need not be the token's own
+	// (Principal.OrgID): a machine's credential is minted in its owner's
+	// primary org. An empty one is never a reason to refuse the token.
+	MachineOrgID string
 }
 
 // AccessTokenAccountIntrospector resolves a presented access token like

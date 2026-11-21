@@ -3998,9 +3998,15 @@ type WorkflowTriggerOverride struct {
 	// Replaces the shared prompt for this trigger.
 	Message *string `protobuf:"bytes,6,opt,name=message,proto3,oneof" json:"message,omitempty"`
 	// Merged over the shared params for this trigger.
-	Params        map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Write-only, for a declared webhook trigger with hmac: the shared signing
+	// secret, as TriggerDefinition.webhook_hmac_secret. Required to enable one
+	// that has no stored secret; set on an existing activation to replace its
+	// secret; unset keeps the stored one. Stored sealed and never returned. A
+	// trigger whose declaration has no hmac refuses it.
+	WebhookHmacSecret *string `protobuf:"bytes,9,opt,name=webhook_hmac_secret,json=webhookHmacSecret,proto3,oneof" json:"webhook_hmac_secret,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WorkflowTriggerOverride) Reset() {
@@ -4087,6 +4093,13 @@ func (x *WorkflowTriggerOverride) GetParams() map[string]*structpb.Value {
 		return x.Params
 	}
 	return nil
+}
+
+func (x *WorkflowTriggerOverride) GetWebhookHmacSecret() string {
+	if x != nil && x.WebhookHmacSecret != nil {
+		return *x.WebhookHmacSecret
+	}
+	return ""
 }
 
 // WorkflowTriggerResult is one declared trigger's part of an EnableWorkflow.
@@ -5722,7 +5735,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
-	"\f_worktree_id\"\xfc\x03\n" +
+	"\f_worktree_id\"\xc9\x04\n" +
 	"\x17WorkflowTriggerOverride\x12\x18\n" +
 	"\atrigger\x18\x01 \x01(\tR\atrigger\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12 \n" +
@@ -5732,7 +5745,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x0fmachine_pool_id\x18\b \x01(\tH\x03R\rmachinePoolId\x88\x01\x01\x12(\n" +
 	"\rconnection_id\x18\x05 \x01(\tH\x04R\fconnectionId\x88\x01\x01\x12\x1d\n" +
 	"\amessage\x18\x06 \x01(\tH\x05R\amessage\x88\x01\x01\x12G\n" +
-	"\x06params\x18\a \x03(\v2/.reliant.v1.WorkflowTriggerOverride.ParamsEntryR\x06params\x1aQ\n" +
+	"\x06params\x18\a \x03(\v2/.reliant.v1.WorkflowTriggerOverride.ParamsEntryR\x06params\x123\n" +
+	"\x13webhook_hmac_secret\x18\t \x01(\tH\x06R\x11webhookHmacSecret\x88\x01\x01\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B\a\n" +
@@ -5743,7 +5757,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x10_machine_pool_idB\x10\n" +
 	"\x0e_connection_idB\n" +
 	"\n" +
-	"\b_message\"\xdf\x02\n" +
+	"\b_messageB\x16\n" +
+	"\x14_webhook_hmac_secret\"\xdf\x02\n" +
 	"\x15WorkflowTriggerResult\x12\x18\n" +
 	"\atrigger\x18\x01 \x01(\tR\atrigger\x12<\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\".reliant.v1.WorkflowTriggerOutcomeR\aoutcome\x12\x18\n" +

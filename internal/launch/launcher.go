@@ -298,6 +298,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Title:        title,
 		ProjectID:    spec.ProjectID,
 		OrgID:        orgID,
+		AppName:      spec.AppName,
 		WorkflowName: &workflowName,
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat
@@ -400,7 +401,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if err != nil {
 		return nil, err
 	}
-	if err := l.checkOrgAccountsOnly(ctx, spec, chat, initialData); err != nil {
+	if err := l.checkOrgAccountsOnly(ctx, spec, userID, chat, workflowName, spec.CatalogPin, initialData); err != nil {
 		return nil, err
 	}
 
@@ -766,7 +767,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if err != nil {
 			return nil, err
 		}
-		if err := l.checkOrgAccountsOnly(ctx, spec, &checked, inputs); err != nil {
+		if err := l.checkOrgAccountsOnly(ctx, spec, userID, &checked, workflowName, spec.CatalogPin, inputs); err != nil {
 			return nil, err
 		}
 	}

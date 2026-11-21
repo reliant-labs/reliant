@@ -52,6 +52,8 @@ func (s *daemonServer) ConnectGateway(
 			DaemonType:    resolveDaemonType(d.host.DaemonType, "cloud"),
 			Labels:        d.registerLabels(),
 			MachineLabels: d.machineLabels(),
+			// Acts on RestartRequested (upgrade_drain.go).
+			DrainsOnRestartRequest: true,
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())

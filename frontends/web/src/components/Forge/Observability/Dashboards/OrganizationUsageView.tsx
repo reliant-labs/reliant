@@ -24,6 +24,7 @@ import type { OrganizationCostSummary } from "@/services/controlPlane/observabil
 import type { OrganizationUsage, OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
 import { costSourceLabel } from "./organizationCostModel";
+import { BUTTON_SECONDARY } from "./parts";
 import {
   FORGE_USAGE_CATEGORIES,
   forgeScopedCostSummary,
@@ -60,6 +61,7 @@ import {
   ElsewhereNote,
   isPermissionDenied,
   Loaded,
+  type LoadedQuery,
   Money,
   PurposeTable,
   RangePicker,
@@ -71,6 +73,7 @@ import {
   UsagePanel,
   UsageViewHeader,
 } from "./usageParts";
+import { settingsPath } from "@/lib/paths";
 
 export interface OrganizationUsageViewProps {
   orgId: string;
@@ -85,7 +88,7 @@ export interface OrganizationUsageViewProps {
   nowMs?: number;
 }
 
-const BILLING_SETTINGS = "/settings/billing";
+const BILLING_SETTINGS = settingsPath("billing");
 const HOSTED = ["hosted_apps", "databases", "static_hosting", "hosted_other", "observability"] as const;
 
 export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organization" }: OrganizationUsageViewProps) {
@@ -250,8 +253,8 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organiz
 }
 
 /** A query as the panels read it, its answer narrowed by `narrow` when given. */
-function scopedQuery<T>(query: { isPending: boolean; isError: boolean; data: T | undefined }, narrow?: (data: T) => T) {
-  return { isPending: query.isPending, isError: query.isError, data: narrow && query.data ? narrow(query.data) : query.data };
+function scopedQuery<T>(query: LoadedQuery<T>, narrow?: (data: T) => T): LoadedQuery<T> {
+  return { isPending: query.isPending, isError: query.isError, isFetching: query.isFetching, refetch: query.refetch, data: narrow && query.data ? narrow(query.data) : query.data };
 }
 
 function ManagedPurposes({ purposes }: { purposes: ReturnType<typeof useOwnManagedPurposeUsage> }) {
@@ -266,12 +269,17 @@ function ManagedPurposes({ purposes }: { purposes: ReturnType<typeof useOwnManag
       </div>
     );
   }
-  const text =
-    purposes.status === "loading"
-      ? "Loading your calls by purpose…"
-      : purposes.status === "not-deployed"
-        ? "Not available from this server yet. Nothing is estimated in its place."
-        : "Could not load your calls by purpose. It is unknown, not zero.";
+  if (purposes.status !== "loading" && purposes.status !== "not-deployed") {
+    return (
+      <div role="alert" className="text-sm text-ink-muted" data-testid="usage-llm-purpose-state">
+        <p>Couldn't load your calls by purpose.</p>
+        <button type="button" className={`${BUTTON_SECONDARY} mt-2`} onClick={purposes.refresh} disabled={purposes.fetching}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+  const text = purposes.status === "loading" ? "Loading your calls by purpose…" : "Not available from this server yet. Nothing is estimated in its place.";
   return (
     <p role={purposes.status === "loading" ? "status" : undefined} className="text-sm text-ink-muted" data-testid="usage-llm-purpose-state">
       {text}

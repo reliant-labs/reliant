@@ -16,9 +16,12 @@
  *   2. spells one of the app's routes anywhere else — a constant, a nav item,
  *      a return value — except to MATCH a pathname against it (`route` sites).
  *
- * The analysis is static (test/navPathAnalysis.ts). A deliberate exception
- * goes in ALLOWED with the reason it is safe; the matchers there are the
- * pathname tests U3 has to teach the org segment as well.
+ * The analysis is static (test/navPathAnalysis.ts), and its header says what
+ * it cannot see: a passing guard is not a proof, and the real-router tests
+ * (lib/paths/__tests__, test/orgRouteHarness.ts) are what show destinations
+ * resolve. A deliberate exception goes in ALLOWED with the reason it is safe
+ * and, for a route literal, its exact text, so a file allowed to MATCH paths
+ * still cannot spell a new destination.
  */
 
 import { join } from "node:path";
@@ -29,88 +32,55 @@ import { findPathSites, scanSource, type PathSite } from "@/test/navPathAnalysis
 const SRC = join(__dirname, "..");
 
 /** The builder modules: the only files that spell destinations. */
-const BUILDERS = new Set(["lib/paths/index.ts", "lib/paths/org.ts", "lib/paths/search.ts", "components/Forge/Console/paths.ts"]);
+const BUILDERS = new Set([
+  "lib/paths/index.ts",
+  "lib/paths/org.ts",
+  "lib/paths/search.ts",
+  // The org-less paths that forward into an org (U3): a table of today's paths, one place.
+  "lib/paths/legacy.ts",
+  "components/Forge/Console/paths.ts",
+]);
 
-/** Files allowed to spell a route outside a navigation, by why. */
-const ALLOWED_ROUTE: Record<string, string> = {
-  "lib/workflowsArea.ts":
-    "Matchers: the area's paths as a pathname is tested against them (which tab, is this a workflow page), and the retired paths' translation to the new ones. Its links go through lib/paths.",
-  "lib/mobileRedirect.ts":
-    "Matchers and a translation: which desktop paths stay desktop on a phone, and each desktop path's mobile twin. Rewritten with the mobile tree's move under /o/<org>/m (U15).",
-  "lib/monacoPreload.ts": "Matchers: the entry pages the editor preload skips.",
-  "components/OnboardingFlow/onboardingGate.ts": "Matchers: the path prefixes the onboarding gate lets through.",
-  "services/controlPlane/pairing.ts": "Control-plane HTTP endpoints (`/oauth/device/lookup`), not pages of this app.",
+/**
+ * Route literals allowed outside a navigation, by file: why, and the exact
+ * texts. Each file is held to its list, so a NEW destination spelled there
+ * (an outbound path that should go through a builder) fails, even in a file
+ * that legitimately matches paths. Every one listed must still be used.
+ */
+const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> = {
+  "lib/workflowsArea.ts": {
+    why: "Matchers: the area's paths as a pathname is tested against them (which tab, is this a workflow page). Its destinations, the retired paths' included, go through lib/paths.",
+    texts: ["/workflows", "/workflows/library", "/workflows/runs", "/workflow", "/workflows/automations"],
+  },
+  "lib/mobileRedirect.ts": {
+    why: "Matchers: the desktop paths a phone is never handed off from. Each desktop path's mobile twin is built by lib/paths.",
+    texts: ["/auth", "/oauth", "/connections/oauth", "/onboarding", "/reset-password", "/verify-email", "/upgrade", "/claim", "/accept-invite", "/design-sandbox", "/forge", "/apps"],
+  },
+  "lib/monacoPreload.ts": {
+    why: "Matchers: the entry pages the editor preload skips.",
+    texts: ["/auth", "/oauth", "/reset-password", "/verify-email", "/upgrade", "/claim"],
+  },
+  "components/OnboardingFlow/onboardingGate.ts": {
+    why: "Matchers: the path prefixes the onboarding gate lets through.",
+    texts: ["/onboarding", "/settings", "/m", "/forge/demo", "/apps"],
+  },
+  "components/Onboarding/journeys/workflows.tsx": {
+    why: "Tour step route prefixes, matched against the pathname (useTourNavigation isOnRoute, org-less). The step's link is built by its `open`.",
+    texts: ["/workflow/", "/project/"],
+  },
+  "services/controlPlane/pairing.ts": {
+    why: "Control-plane HTTP endpoints (`/oauth/device/lookup`), not pages of this app.",
+    texts: ["/oauth/device/lookup", "/oauth/device/approve"],
+  },
 };
 
 /** Files allowed to navigate to a path literal, by why. */
 const ALLOWED_NAVIGATION: Record<string, string> = {
-  "components/forge-ui/ForgeTokenSandbox.tsx": "A dev-only harness whose links point at its own dev-only route; never org-scoped.",
+  "components/DesignSandbox/forgeTokens/ForgeTokenSandbox.tsx": "A dev-only harness whose links point at its own dev-only route; never org-scoped.",
 };
 
-/**
- * Files U1's codemod PRs ("refactor(web): typed paths for every destination
- * (codemod N/M)") move onto the builders. Each PR deletes its lines; the last
- * deletes the list. Never add to it.
- */
-const PENDING_CODEMOD = new Set<string>([
-  "ModernApp.tsx",
-  "components/Apps/AppsPage.tsx",
-  "components/Apps/DeployedAppCard.tsx",
-  "components/Apps/SidebarApps.tsx",
-  "components/Apps/startBuilding.ts",
-  "components/Chat/OomKillBanner.tsx",
-  "components/Chat/PersonalFundingPrompt.tsx",
-  "components/Chat/WorkflowErrorMessage.tsx",
-  "components/Chat/settings/ModelSettingsPage.tsx",
-  "components/Chat/tool-renderers/RunToolRenderer.tsx",
-  "components/Forge/Console/ForgeEntryRoutes.tsx",
-  "components/Forge/Demo/DemoBanner.tsx",
-  "components/Forge/Demo/demoEntry.ts",
-  "components/Forge/Demo/demoPath.ts",
-  "components/Forge/Observability/AskReliant/AskReliant.tsx",
-  "components/Forge/Observability/Dashboards/LLMUsageView.tsx",
-  "components/Forge/Observability/Dashboards/OrganizationBillingView.tsx",
-  "components/Forge/Observability/Dashboards/OrganizationUsageView.tsx",
-  "components/Forge/Observability/ObsStates.tsx",
-  "components/Forge/Observability/UsageView.tsx",
-  "components/Forge/Org/OrgConsoleLayout.tsx",
-  "components/ForgeShell/ForgeAuthGuard.tsx",
-  "components/ForgeShell/ForgeSettingsPage.tsx",
-  "components/ForgeShell/ForgeShellLayout.tsx",
-  "components/Layout/DaemonStatusDot.tsx",
-  "components/Layout/Header.tsx",
-  "components/Mobile/MobileAccountScreen.tsx",
-  "components/Mobile/MobileAutomationRedirect.tsx",
-  "components/Mobile/MobileBillingScreen.tsx",
-  "components/Mobile/MobileChatList.tsx",
-  "components/Mobile/MobileChatSearchTab.tsx",
-  "components/Mobile/MobileChatSheet.tsx",
-  "components/Mobile/MobileChatTopBar.tsx",
-  "components/Mobile/MobileComingSoon.tsx",
-  "components/Mobile/MobileDaemonList.tsx",
-  "components/Mobile/MobileDaemonScreen.tsx",
-  "components/Mobile/MobileDiagnosticsRoute.tsx",
-  "components/Mobile/MobileNavDrawer.tsx",
-  "components/Mobile/MobileNewChat.tsx",
-  "components/Mobile/MobileProjectList.tsx",
-  "components/Mobile/MobileRunsScreen.tsx",
-  "components/Mobile/MobileSearchScreen.tsx",
-  "components/Mobile/MobileSettingsScreen.tsx",
-  "components/Mobile/MobileShell.tsx",
-  "components/Mobile/MobileSplitLayout.tsx",
-  "components/Mobile/MobileWorkflowCatalog.tsx",
-  "components/Mobile/MobileWorkflowDetailRoute.tsx",
-  "components/Mobile/MobileWorkflowScreen.tsx",
-  "components/Shortcuts/ShortcutHost.tsx",
-  "components/inbox/InboxItem.tsx",
-  "components/inbox/InboxPage.tsx",
-  "forgeShellRoutes.tsx",
-  "routes.tsx",
-  "store/projectStore.ts",
-]);
-
 const { sites, roots } = findPathSites(SRC);
-const outside = sites.filter((site) => !BUILDERS.has(site.file) && !PENDING_CODEMOD.has(site.file));
+const outside = sites.filter((site) => !BUILDERS.has(site.file));
 
 const describeSite = (site: PathSite) => `  ${site.where}: ${site.text}`;
 
@@ -155,14 +125,36 @@ describe("app paths", () => {
       const sites = scanSource("probe.tsx", nav, new Set(["settings", "inbox", "auth"]));
       expect(sites.filter((site) => site.text === "/inbox").map((site) => site.kind), nav).toEqual(["navigation"]);
     }
-    for (const route of [`const BILLING = "/settings/billing"`, `const items = [{ path: x, target: "/inbox" }]`, `return "/inbox"`]) {
+    for (const route of [
+      `const BILLING = "/settings/billing"`,
+      `const items = [{ path: x, target: "/inbox" }]`,
+      `return "/inbox"`,
+      // A \`path\` that is not a route's own declaration (review of #2931, R1).
+      `const items = [{ path: "/inbox" }]`,
+      `const nav = { id: "/inbox", path: x }`,
+    ]) {
       expect(kinds(route), route).toEqual(["route"]);
+    }
+    // Navigations the guard used to miss (review of #2931, R1).
+    for (const nav of [
+      // A constant holding a path, navigated to by name.
+      `const HOME = "/"; navigate({ to: HOME })`,
+      `const INBOX = "/inbox"; const a = <Link to={INBOX} />`,
+      // An absolute URL of this app's own origin.
+      `window.location.href = \`\${window.location.origin}/inbox\``,
+      `navigate({ href: \`\${location.origin}/settings/ai\` })`,
+    ]) {
+      expect(kinds(nav), nav).toContain("navigation");
     }
     for (const fine of [
       `if (pathname === "/inbox") go()`,
       `pathname.startsWith("/settings/")`,
       `switch (p) { case "/inbox": break }`,
       `createRoute({ path: "/settings/$section" })`,
+      `createRoute({ getParentRoute, id: "/inbox" })`,
+      `legacyRoute("/settings")`,
+      `const SEP = "/"; parts.join(SEP)`,
+      `const url = \`\${forgeAppOrigin()}/apps\``,
       `useSearch({ from: "/_app" })`,
       `isAtOrBelow(pathname, "/settings")`,
       `type T = { to: "/inbox" }`,
@@ -183,7 +175,7 @@ describe("app paths", () => {
   });
 
   it("spells a route only to match a pathname", () => {
-    const offenders = outside.filter((site) => site.kind === "route" && !(site.file in ALLOWED_ROUTE));
+    const offenders = outside.filter((site) => site.kind === "route" && !ALLOWED_ROUTE[site.file]?.texts.includes(site.text));
     expect(
       offenders,
       `${offenders.length} route path literal(s) outside lib/paths: build it with a builder, or (to match a pathname) compare it directly\n${offenders.map(describeSite).join("\n")}`,
@@ -191,8 +183,12 @@ describe("app paths", () => {
   });
 
   it("allows nothing it no longer needs", () => {
-    const used = new Set(sites.map((site) => site.file));
-    const stale = [...Object.keys(ALLOWED_ROUTE), ...Object.keys(ALLOWED_NAVIGATION), ...PENDING_CODEMOD].filter((file) => !used.has(file));
+    const used = new Set(outside.map((site) => site.file));
+    const stale = [...Object.keys(ALLOWED_ROUTE), ...Object.keys(ALLOWED_NAVIGATION)].filter((file) => !used.has(file));
     expect(stale, "allowlist entries with nothing left to allow").toEqual([]);
+    const staleTexts = Object.entries(ALLOWED_ROUTE).flatMap(([file, { texts }]) =>
+      texts.filter((text) => !outside.some((site) => site.file === file && site.kind === "route" && site.text === text)).map((text) => `${file}: ${text}`),
+    );
+    expect(staleTexts, "allowed route literals no longer spelled").toEqual([]);
   });
 });

@@ -335,7 +335,9 @@ func TestCreateWorktree_UnpinnedChatIsPlacedOnTheMachineWithTheProject(t *testin
 	f.svc.deps.Router = &placingRouter{f.router}
 	require.NoError(t, f.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: "daemon-vm", UserID: f.userID}))
 	require.NoError(t, f.repo.UpsertProjectDaemon(context.Background(), f.projectID, "daemon-vm", "/work/project", nil))
-	require.NoError(t, f.repo.MarkProjectDaemonInstalled(context.Background(), f.projectID, "daemon-vm"))
+	installed, err := f.repo.MarkProjectDaemonInstalledInScope(context.Background(), f.projectID, "daemon-vm", nil)
+	require.NoError(t, err)
+	require.True(t, installed)
 	chatID := f.chat(t, f.userID, "", "")
 
 	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID})
