@@ -15,8 +15,9 @@
  *
  * GetTestSummary is answered here (the Overview's one read, W1); ListTestRuns,
  * GetTestRun, ListFlakyTests and GetTest from runFlakeFixtures.ts (the Runs
- * and Flaky tests pages, W3). The Coverage reads (W2) still answer
- * Unimplemented until their page adds them.
+ * and Flaky tests pages, W3); GetCoverage and GetFileCoverage from
+ * coverageFixtures.ts (the Coverage page, W2). GetReleaseTests still answers
+ * Unimplemented until the release Tests tab adds it.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -40,6 +41,7 @@ import {
 } from "@/services/controlPlane/tests/wire";
 
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
+import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
 
 /** A fixed "now", so relative times in snapshots do not move. */
 export const FIXTURE_NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
@@ -236,7 +238,7 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     if (scenario === "denied") return Promise.reject(new ConnectError("missing tests:read", Code.PermissionDenied));
     return Promise.reject(new ConnectError("TestsService is not available", Code.Unimplemented));
   };
-  // Answered by the Coverage page (W2), which adds its fixtures here.
+  // Answered by the release Tests tab, which adds its fixtures here.
   const notInFixture = (method: keyof TestApi) => (req: unknown) => {
     calls.push({ method, req });
     return Promise.reject(new ConnectError(`${method} is not in the Tests fixture yet`, Code.Unimplemented));
@@ -260,8 +262,16 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     },
     listTestRuns: (req) => answer("listTestRuns", req, () => runPageOf(fixtureRunsWire(scenario, req))),
     getTestRun: (req) => answer("getTestRun", req, () => runDetailOf(fixtureRunWire(scenario, req))),
-    getCoverage: notInFixture("getCoverage"),
-    getFileCoverage: notInFixture("getFileCoverage"),
+    getCoverage: (req) =>
+      answer("getCoverage", req, () => {
+        if (scenario === "no-runs" || scenario === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
+        return req;
+      }).then(fixtureCoverage),
+    getFileCoverage: (req) =>
+      answer("getFileCoverage", req, () => {
+        if (scenario === "no-runs" || scenario === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
+        return req;
+      }).then(fixtureFileCoverage),
     getReleaseTests: notInFixture("getReleaseTests"),
     listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(scenario, req))),
     getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(scenario, req))),
