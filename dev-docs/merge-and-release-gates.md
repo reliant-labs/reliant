@@ -468,8 +468,10 @@ when every change since it is release metadata: docs, `*.md`, or a change to
 field. So you can run the gate on main before opening the bump PR. As long as
 nothing else merges in between, the bump commit inherits that green.
 
-A hotfix that cannot wait takes `scripts/release-tag.sh --skip-release-gate`.
-Say so in the release notes. There is no waiver for a red run: fix it.
+A hotfix is cut from the commit prod runs and gated narrowly (below,
+"Hotfixes"). One that cannot wait even for that takes
+`scripts/release-tag.sh --skip-release-gate`. Say so in the release notes.
+There is no waiver for a red run: fix it.
 
 ### Release candidates: gate a frozen commit, never main's tip (owner, 2026-10-31)
 
@@ -507,6 +509,34 @@ and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
 gated yet. Two `v*` tags on one commit would also make
 `scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
 `release/` branch and the `rc/` tag trigger no workflow.
+
+### Hotfixes: prod's commit plus the fix, gated narrowly (owner, 2026-11-20)
+
+A `release:asap` fix whose train set is red, or that is still not in prod two
+hours after it merged, ships on its own: control-plane's rc-train **hotfix
+lane** (control-plane `docs/pr-pipeline.md`, "Hotfix lane") cuts it from the
+reliant commit prod runs, never from main.
+
+1. **Cut.** The commit prod runs, R', then each fix PR's squash commit
+   cherry-picked onto it (`RC-Set:` trailer, so the head keeps the RC shape),
+   then the version bump `scripts/hotfix-bump.sh vX.Y.Z` writes: the version
+   after prod's (above every final tag the commit contains), its notes
+   (`tools/releasenotes`) and the regenerated changelog. It is pushed as
+   `release/vX.Y.Z-rc.N`, like any RC. A pick that conflicts, or that changes a
+   migration or the forge pin, is refused: that fix waits for the train.
+2. **Gate the picks, on top of prod's green.** `scripts/release-gate.sh hotfix
+   --base <R'> <head>` runs the merge gate against R' with every dependent of a
+   change (`MG_REACH=all`) and the Go tests of each changed package under
+   `-race` with no `-short`, and records `{kind: "hotfix", base}`. `check`
+   passes that record only while R' is its ancestor and is itself green: the
+   whole release gate judged prod's commit, and the hotfix gate judges what the
+   picks can reach.
+3. **Tag.** `scripts/release-tag.sh vX.Y.Z --commit <head> --rc --hotfix`: the
+   version is the RC head's own, not main's (main declares the next release),
+   and the head must be on a `release/` branch.
+
+When main's bump PR later declares the same version, that version is burned and
+the train asks for the next bump, as after any release.
 
 ## The merge queue
 
