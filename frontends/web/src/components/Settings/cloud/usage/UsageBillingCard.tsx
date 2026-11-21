@@ -84,19 +84,19 @@ export function UsageBillingCard(props: UsageBillingCardProps) {
   });
   const canCheckout = !props.agreement || pending;
   return <Card><CardHeader><CardTitle>App hosting billing</CardTitle></CardHeader><CardContent className="space-y-4">
-    <p className="text-sm text-muted-foreground">Pay as you go for the apps you host. One agreement covers this organization’s apps and environments. Machine plans and AI credit are separate, and you don’t need a machine plan to host apps.</p>
+    <p className="text-ui text-muted-foreground">Pay as you go for the apps you host. One agreement covers this organization’s apps and environments. Machine plans and AI credit are separate, and you don’t need a machine plan to host apps.</p>
     {props.isLoading ? <p role="status">Loading app hosting billing…</p> : props.error ? <div role="alert"><p>{props.error}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : !props.enabled ? <HostingBillingUnavailable reason={props.unavailableReason} onRetry={props.onRetry} /> : active ? <>
       <p role="status">App hosting billing is active.</p>
       {props.budgetControl ?? <>
         <p>Monthly budget: {formatCents(Number(props.agreement!.infraBudgetCents))}.</p>
-        <p className="text-xs text-muted-foreground">This is not a guaranteed maximum bill. Enforcement can lag and in-flight workloads may continue accruing charges; storage is not deleted.</p>
+        <p className="text-meta text-muted-foreground">This is not a guaranteed maximum bill. Enforcement can lag and in-flight workloads may continue accruing charges; storage is not deleted.</p>
       </>}
     </> : <>
       <p role="status">{pending ? "Checkout is pending. Hosting billing is not active until the server verifies funding." : props.agreement ? `App hosting billing is not active (${props.agreement.status}). Resolve billing before starting new paid work.` : "App hosting billing is not enabled."}</p>
       {!props.canManage ? <p>Only an organization owner or admin can authorize usage billing.</p> : canCheckout ? props.rates.length === 0 || !props.policyVersion || (pending && !!props.agreement?.policyVersion && props.agreement.policyVersion !== props.policyVersion) ? <p>Usage rates or policy are unavailable. Checkout is disabled until they can be verified.</p> : <form className="space-y-4" onSubmit={handleSubmit(({ infraBudgetCents }) => props.onCheckout({ policyVersion: props.policyVersion, infraBudgetCents }))}>
-        <p className="text-sm">Hosting is billed from first use at these rates. Machine plans don’t include hosting.</p>
-        <ul className="list-inside list-disc text-sm" data-testid="hosting-rates">{props.rates.map(rate => <li key={rate}>{rate}</li>)}</ul>
-        {props.minimumLine && <p className="text-sm" data-testid="hosting-minimum">{props.minimumLine}</p>}
+        <p className="text-ui">Hosting is billed from first use at these rates. Machine plans don’t include hosting.</p>
+        <ul className="list-inside list-disc text-ui" data-testid="hosting-rates">{props.rates.map(rate => <li key={rate}>{rate}</li>)}</ul>
+        {props.minimumLine && <p className="text-ui" data-testid="hosting-minimum">{props.minimumLine}</p>}
         <div className="forge-ui">
           <label htmlFor={`${fieldId}-budget`}>Monthly app hosting admission budget (USD)</label>
           {pendingBudget !== undefined ? (
@@ -109,13 +109,13 @@ export function UsageBillingCard(props: UsageBillingCardProps) {
           </p>
           {errors.budget && <p role="alert">{errors.budget.message}</p>}
         </div>
-        <p id={`${fieldId}-policy`} className="text-xs text-muted-foreground">When usage reaches this budget, new deployments are paused. It isn’t a hard limit on your bill: usage already running can keep adding charges for a short while. Stored data is never deleted when the budget is reached.</p>
+        <p id={`${fieldId}-policy`} className="text-meta text-muted-foreground">When usage reaches this budget, new deployments are paused. It isn’t a hard limit on your bill: usage already running can keep adding charges for a short while. Stored data is never deleted when the budget is reached.</p>
         <ConsentCheckbox {...register("accepted")}>I agree to pay for this organization’s app hosting at the rates above{props.minimumLine ? ", including the monthly minimum," : ","} billed monthly as it is used, with the monthly budget I set.</ConsentCheckbox>
         {errors.accepted && <p role="alert">{errors.accepted.message}</p>}
         <Button type="submit" loading={props.isSubmitting} disabled={props.isSubmitting}>{pending ? "Continue checkout" : "Authorize and continue to checkout"}</Button>
       </form> : <p>Contact your organization’s billing administrator to resolve this agreement.</p>}
       {pending && <Button variant="outline" onClick={props.onRetry}>Check activation status</Button>}
     </>}
-    <p className="text-xs text-muted-foreground">App hosting authorization does not grant a new observability allowance or longer analytics retention.</p>
+    <p className="text-meta text-muted-foreground">App hosting authorization does not grant a new observability allowance or longer analytics retention.</p>
   </CardContent></Card>;
 }

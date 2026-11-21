@@ -280,6 +280,7 @@ var shareGuard = struct {
 		"internal/handlers/question/rpc_list_pending_questions.go": "ListPendingQuestions for one chat: read-only cards",
 		"internal/handlers/question/rpc_list_async_questions.go":   "ListAsyncQuestions: read-only cards",
 		"internal/handlers/project/rpc_get_project.go":             "GetProject (projectproto.ForViewer, no git check)",
+		"internal/handlers/project/rpc_list_projects_with_apps.go": "ListProjectsWithApps: shared projects in the viewer's shape (projectproto.ForViewer), repos without remotes, no checkouts",
 		"internal/handlers/sharing/rpc_set_chat_visibility.go":     "decides who may change a shared chat",
 		"internal/handlers/sharing/rpc_set_project_visibility.go":  "decides who may change a shared project",
 		"internal/handlers/sharing/rpc_list_shared_chats.go":       "the shared list, in the viewer's shape",

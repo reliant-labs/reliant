@@ -56,7 +56,26 @@ type Workflow struct {
 	// the only record of a run that failed before any node ran, which has no
 	// node attempt to carry its error. nil when the run did not fail.
 	FailureDetail *string `json:"failure_detail,omitempty"`
+
+	// RunOutcome is how the run ended for whoever judges whether it worked
+	// (a RunOutcome* value): written with the terminal status by the
+	// WorkflowStatus activity, and never declared. Unlike Status it tells a
+	// clean completion from one where the run's own failure path handled a
+	// node that failed (reliant#2753). nil while the run is live, when it was
+	// cancelled, and on a run that ended before the column existed.
+	RunOutcome *string `json:"run_outcome,omitempty"`
 }
+
+// How a run ended (Workflow.RunOutcome, TriggerEvent.RunOutcome).
+const (
+	// RunOutcomeSucceeded: completed, and no node's last attempt failed.
+	RunOutcomeSucceeded = "succeeded"
+	// RunOutcomeFailed: failed, or completed into a declared outcome: failure.
+	RunOutcomeFailed = "failed"
+	// RunOutcomeFailureHandled: completed, but a node's last attempt failed
+	// and the run went on past it.
+	RunOutcomeFailureHandled = "failure_handled"
+)
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last
 // top-level node it entered and, for loop nodes, the loop iteration in flight.
@@ -114,6 +133,14 @@ type StepExecution struct {
 	Attempt *int32 `json:"attempt"`
 	// NodePath is the node's dotted graph position ("agent.agent_loop.call_llm").
 	NodePath *string `json:"node_path"`
+	// RunID is the run the attempt belongs to: the root run's id
+	// (forge.ai.run.id, RuntimeContext.Telemetry), kept across continue-as-new
+	// and shared by the sub-agents it spawned. A root run's workflow id is
+	// reused by every run of its chat, so this is what tells one run's
+	// attempts from the previous run's (store.FirstHandledNodeFailure). NULL
+	// on rows written before it, and by an activity that names no run. It is
+	// a write-side column only: not part of the JSON shape (legacy_json.go).
+	RunID *string `json:"-"`
 }
 
 // ChatStepExecution is one step of one workflow of a chat, as the chat's

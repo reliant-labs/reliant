@@ -2,7 +2,7 @@
 -- Migration: access_tokens_v190_scopes_validate
 -- Created: 2026-11-21T08:20:48Z
 --
--- The schema is the 201 migration(s) in this directory, applied in order (newest: 20261121082048_access_tokens_v190_scopes.up.sql). To read it:
+-- The schema is the 205 migration(s) in this directory, applied in order (newest: 20261121164700_access_tokens_v190_scopes.up.sql). To read it:
 --   forge project shapes --kind table          every table, with the file:line declaring it
 --   forge db introspect --dsn "$DATABASE_URL"  the schema a database actually has
 --   forge db migration new <name> --context    a new file with the schema written into it

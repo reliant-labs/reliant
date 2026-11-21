@@ -57,6 +57,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/pull_request_record"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -192,6 +193,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
+		MachineStats:    machineStatsSelection(g.GatewayConfig),
 		ClientVersions:  g.ServerProcessConfig.GetClientVersions(),
 	})
 }
@@ -973,6 +975,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgProviderAccount: g.OrgProviderAccount(),
 		OrgUsage:           g.OrgUsage(),
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
+		PullRequestRecord:  g.PullRequestRecord(),
 	})
 }
 
@@ -1278,7 +1281,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Orgs:         g.OrgResolver(),
+		// The Projects list reads the org's hosted apps as the caller; nil
+		// self-hosted, where it lists them as unavailable.
+		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
+		Orgs: g.OrgResolver(),
 		// Moving a project is off until control-plane's half is in prod and
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
@@ -1566,5 +1572,15 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
 		Membership:  g.OrgResolver(),
+	})
+}
+
+// newPullRequestRecord constructs the pull-request-record handler (internal/handlers/pull_request_record).
+func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
+	return pull_request_record.New(pull_request_record.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
 	})
 }

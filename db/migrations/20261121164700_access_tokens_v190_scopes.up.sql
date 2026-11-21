@@ -2,7 +2,7 @@
 -- Migration: access_tokens_v190_scopes
 -- Created: 2026-11-21T08:20:48Z
 --
--- The schema is the 200 migration(s) in this directory, applied in order (newest: 20261121040111_automation_attention.up.sql). To read it:
+-- The schema is the 204 migration(s) in this directory, applied in order (newest: 20261121122326_pr_records.up.sql). To read it:
 --   forge project shapes --kind table          every table, with the file:line declaring it
 --   forge db introspect --dsn "$DATABASE_URL"  the schema a database actually has
 --   forge db migration new <name> --context    a new file with the schema written into it

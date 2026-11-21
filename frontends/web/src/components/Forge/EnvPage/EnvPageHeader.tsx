@@ -74,9 +74,9 @@ export function EnvPageHeader({
   return (
     <header className="space-y-2" data-testid="env-page-header">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="min-w-0 truncate font-mono text-2xl font-semibold tracking-tight text-ink" title={envName}>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="min-w-0 truncate text-title text-ink" title={envName}>
               {envName}
             </h1>
             <span className="flex shrink-0 items-center gap-2" data-testid="env-page-badges">
@@ -90,7 +90,7 @@ export function EnvPageHeader({
           </div>
 
           {lifecycle !== "local" && (release !== "" || headline) && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-ui text-ink-muted">
               {release !== "" && (
                 <span className="flex min-w-0 max-w-full items-center gap-1.5" data-testid="env-page-release">
                   <span className="shrink-0">Release</span>
@@ -104,7 +104,7 @@ export function EnvPageHeader({
         </div>
 
         {lifecycle === "local" ? (
-          <p className="flex max-w-xs items-center gap-1.5 text-xs text-ink-muted" data-testid="env-page-local-note">
+          <p className="flex max-w-xs items-center gap-1.5 text-meta text-ink-muted" data-testid="env-page-local-note">
             <Cpu className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             Runs your working tree via <code className="font-mono text-ink">forge env up</code> — never built or released.
           </p>

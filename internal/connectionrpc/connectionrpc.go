@@ -19,6 +19,8 @@ import (
 
 // Caller is the authenticated user a connection RPC acts for, or
 // Unauthenticated.
+//
+//forge:resolves-caller
 func Caller(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {

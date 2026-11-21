@@ -508,10 +508,17 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge why`](#reliant-forge-why) | Why forge: the reasons to use it, each with the checked benefits that back it |
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`reliant github records`](#reliant-github-records) | Read the pull request records Reliant keeps from GitHub's webhooks |
+| [`reliant github records diff`](#reliant-github-records-diff) | Compare each open pull request's labels and verdict check with its head's verdict |
+| [`reliant github records get`](#reliant-github-records-get) | Show one pull request's record, heads, review markers and checks (JSON) |
+| [`reliant github records list`](#reliant-github-records-list) | List a repository's pull request records |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 | [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
 | [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
-| [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
+| [`reliant machine`](#reliant-machine) | Create, list, start, stop, resize, rename, delete and label your machines, and manage machine pools |
+| [`reliant machine create`](#reliant-machine-create) | Create a cloud machine |
+| [`reliant machine delete`](#reliant-machine-delete) | Delete a machine and its workspace |
+| [`reliant machine grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
 | [`reliant machine pool`](#reliant-machine-pool) | List, define and delete machine pools |
@@ -532,6 +539,12 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
 | [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
 | [`reliant models list`](#reliant-models-list) | List the models you can use |
+| [`reliant preview`](#reliant-preview) | Control who may open your cloud machines' preview URLs |
+| [`reliant preview access`](#reliant-preview-access) | List and change who may open a machine's preview URLs |
+| [`reliant preview access default`](#reliant-preview-access-default) | Set who may open the ports that have no rule of their own |
+| [`reliant preview access list`](#reliant-preview-access-list) | List a machine's port access rules and its default |
+| [`reliant preview access remove`](#reliant-preview-access-remove) | Remove one port's rule, so it follows the machine's default |
+| [`reliant preview access set`](#reliant-preview-access-set) | Set who may open one port's preview URL |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -22433,6 +22446,7 @@ reliant github
 | Command | Description |
 |---------|-------------|
 | [`gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`records`](#reliant-github-records) | Read the pull request records Reliant keeps from GitHub's webhooks |
 | [`token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 
 **Flags:**
@@ -22469,6 +22483,104 @@ reliant github gh [flags] -- <gh arguments>
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
 | `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions, checks and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
+
+---
+
+### reliant github records
+
+Read the pull request records Reliant keeps from GitHub's webhooks
+
+Read PR records: the pull requests of the repositories Reliant keeps records
+for, mirrored from GitHub's webhook deliveries (state, head, labels, the
+pipeline markers of reviews, the check runs on each head). A head's verdict is
+computed under --trusted-author when it is read.
+
+Records read Reliant, never GitHub: no GitHub quota is spent. You see a
+repository's records when your own GitHub access reaches it.
+
+```
+reliant github records
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`diff`](#reliant-github-records-diff) | Compare each open pull request's labels and verdict check with its head's verdict |
+| [`get`](#reliant-github-records-get) | Show one pull request's record, heads, review markers and checks (JSON) |
+| [`list`](#reliant-github-records-list) | List a repository's pull request records |
+
+---
+
+#### reliant github records diff
+
+Compare each open pull request's labels and verdict check with its head's verdict
+
+Compare each open pull request's review labels, and its verdict check, with
+the verdict its head's review markers carry: the shadow report of PR records.
+
+Each open pull request is one of: agree, label_missing (the head has a verdict
+its label does not show), label_stale (a verdict label the head's verdict does
+not support), check_disagrees, settling (a disagreement younger than --settle),
+held or draft. It exits 0 even when they disagree: it reports.
+
+```
+reliant github records diff [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | List every pull request, not only those that disagree |
+| `--changes-label` | `string` | `review:changes` | The label that shows a head that got changes |
+| `--check` | `string` | `Reliant review` | The check run that reports a head's verdict |
+| `--held-label` | `stringSlice` | `[hold]` | A label that takes a pull request out of the pipeline (repeatable) |
+| `--json` | `bool` | - | Print the report as JSON |
+| `--passed-label` | `string` | `review:passed` | The label that shows a passed head |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--settle` | `duration` | `10m0s` | How long after a record changed a disagreement is still expected |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
+
+---
+
+#### reliant github records get
+
+Show one pull request's record, heads, review markers and checks (JSON)
+
+```
+reliant github records get [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--pr` | `int32` | `0` | The pull request number |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
+
+---
+
+#### reliant github records list
+
+List a repository's pull request records
+
+```
+reliant github records list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the records as JSON |
+| `--repo` | `string` | - | The repository, owner/name |
+| `--rereview-author` | `stringSlice` | `[reliant-labs[bot]]` | A login or numeric id whose evidence re-review re-decides a head (repeatable) |
+| `--state` | `string` | `open` | open, closed, merged, or empty for all |
+| `--trusted-author` | `stringSlice` | `[reliant-labs[bot],reliant-01]` | A login or numeric id whose review markers decide a head's verdict (repeatable) |
 
 ---
 
@@ -22551,7 +22663,7 @@ reliant integrations list [flags]
 
 ## reliant machine
 
-List, start, stop, resize, rename and label your machines, and manage machine pools
+Create, list, start, stop, resize, rename, delete and label your machines, and manage machine pools
 
 Manage your own machines, exactly as Settings -> Machines does.
 
@@ -22559,7 +22671,8 @@ A machine is billed while it runs. start wakes a suspended machine; stop
 suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
 m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
-called, and nothing else.
+called, and nothing else. create makes a cloud machine, delete removes one
+(its disk too: --yes), and grow-disk grows a cloud machine's disk.
 
 label sets a machine's durable labels, and pool defines machine pools: a
 pool is the set of your machines whose labels contain its selector, and a
@@ -22568,8 +22681,13 @@ also declare its own labels when it starts ('reliant daemon start --label').
 
 start, stop, resize and rename need a login made by this release ('reliant
 auth login'): it carries the daemon:manage permission, which only a person's
-login can hold. An agent's shell is refused start, stop, resize, label and
-the pool changes.
+login can hold. An agent's shell is refused create, delete, start, stop,
+resize, grow-disk, label and the pool changes.
+
+Changing labels and pools is a person's decision. The preferred way is to ask
+the agent in a Reliant chat and approve its card. Writing them with the CLI
+login still works but is deprecated: the CLI login is inherited by every
+agent's shell. A machine's own credential is never accepted.
 
 ```
 reliant machine
@@ -22579,6 +22697,9 @@ reliant machine
 
 | Command | Description |
 |---------|-------------|
+| [`create`](#reliant-machine-create) | Create a cloud machine |
+| [`delete`](#reliant-machine-delete) | Delete a machine and its workspace |
+| [`grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`list`](#reliant-machine-list) | List your machines |
 | [`pool`](#reliant-machine-pool) | List, define and delete machine pools |
@@ -22593,6 +22714,68 @@ reliant machine
 |------|------|---------|-------------|
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant machine create
+
+Create a cloud machine
+
+Create a Reliant cloud machine (a managed machine) of the given size, as
+Settings -> Machines -> Add machine does. It is billed while it runs, and starts
+at once. --idle-timeout suspends it after that long with nothing to do.
+
+To connect a computer of your own instead, run 'reliant daemon start' on it.
+
+```
+reliant machine create <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--idle-timeout` | `string` | - | Suspend the machine after this long idle, e.g. 30m (default: your plan's) |
+| `--size` | `string` | `s1` | Machine size: s1, s2, m, l, xl, 2xl or 3xl |
+
+---
+
+### reliant machine delete
+
+Delete a machine and its workspace
+
+Delete one of your machines. A cloud machine's disk is deleted with it: every
+checkout, branch workspace and file on it, including work that was never
+pushed: push it, or copy it off, first. A computer of your own is only
+disconnected from your account; nothing on it is deleted.
+
+It needs --yes: there is no undo.
+
+```
+reliant machine delete <name|id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--snapshot` | `bool` | - | Not supported yet: refused, because deleting a machine does not snapshot its disk |
+| `--yes` | `bool` | - | Confirm the deletion |
+
+---
+
+### reliant machine grow-disk
+
+Grow a cloud machine's disk
+
+Grow a cloud machine's disk to the given size in GiB (a multiple of 10, larger
+than it is now). Disks only grow. A running machine uses the space after its
+next restart ('reliant machine stop', then 'start'). Disk above your plan's
+allowance is billed as storage, and your plan caps the size.
+
+```
+reliant machine grow-disk <name|id> <GiB>
+```
 
 ---
 
@@ -23017,6 +23200,105 @@ reliant models list [flags]
 | `--json` | `bool` | - | Print JSON |
 | `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
 | `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
+
+---
+
+## reliant preview
+
+Control who may open your cloud machines' preview URLs
+
+A cloud machine serves each listening port at a preview URL ('reliant
+preview-url <port>' prints it). By default only you, signed in, may open one.
+'reliant preview access' changes that, per port or for the whole machine.
+
+```
+reliant preview
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`access`](#reliant-preview-access) | List and change who may open a machine's preview URLs |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant preview access
+
+List and change who may open a machine's preview URLs
+
+Who may open a cloud machine's preview URLs, per port:
+
+  authenticated  you, signed in to Reliant (the default)
+  public         anyone with the URL
+
+A port shared by bearer token is set up in the app (the machine's Ports
+panel), which shows the token once; list shows such a port as token. A port
+with no rule of its own follows the machine's default, which is
+authenticated or public ('reliant preview access default').
+
+```
+reliant preview access
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`default`](#reliant-preview-access-default) | Set who may open the ports that have no rule of their own |
+| [`list`](#reliant-preview-access-list) | List a machine's port access rules and its default |
+| [`remove`](#reliant-preview-access-remove) | Remove one port's rule, so it follows the machine's default |
+| [`set`](#reliant-preview-access-set) | Set who may open one port's preview URL |
+
+---
+
+#### reliant preview access default
+
+Set who may open the ports that have no rule of their own
+
+Set the machine's default: who may open a port that has no rule of its own.
+public makes every such listening port reachable by anyone with its URL.
+
+```
+reliant preview access default <machine> <authenticated|public>
+```
+
+---
+
+#### reliant preview access list
+
+List a machine's port access rules and its default
+
+```
+reliant preview access list <machine>
+```
+
+---
+
+#### reliant preview access remove
+
+Remove one port's rule, so it follows the machine's default
+
+```
+reliant preview access remove <machine> <port>
+```
+
+---
+
+#### reliant preview access set
+
+Set who may open one port's preview URL
+
+```
+reliant preview access set <machine> <port> <public|authenticated>
+```
 
 ---
 

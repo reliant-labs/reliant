@@ -58,6 +58,10 @@ REQUESTED_COMMIT=""
 # --rc: tag the head of an RC branch (release/vX.Y.Z-rc.N) — main plus the RC train's one
 # pin commit — instead of a main commit (control-plane docs/design/gitops-promotion.md).
 RC_MODE=false
+# --hotfix: with --rc --commit and a version, tag a HOTFIX: control-plane's rc-train hotfix
+# lane cut the RC branch from the reliant commit prod runs plus fix PRs and a version bump,
+# so its version is the RC head's own, never main's (main declares the next release).
+HOTFIX=false
 
 while [[ $# -gt 0 ]]; do
     arg="$1"
@@ -72,6 +76,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --rc)
             RC_MODE=true
+            ;;
+        --hotfix)
+            HOTFIX=true
             ;;
         --skip-release-gate)
             SKIP_RELEASE_GATE=true
@@ -90,6 +97,10 @@ while [[ $# -gt 0 ]]; do
             echo "                       the train's pin commit, then any fix commits. The version and notes are"
             echo "                       the RC commit's (main must carry the same version); its gate is its"
             echo "                       green release-gate record, else that commit's 'Release gate' job"
+            echo "  --hotfix             With --rc --commit and vX.Y.Z: the RC branch is rc-train's hotfix of the"
+            echo "                       commit prod runs. The version is the RC head's (its bump and notes are"
+            echo "                       on it), not main's, and must be above every final tag it contains; its"
+            echo "                       gate is its hotfix gate record (release-gate.sh hotfix), on a green base"
             exit 0
             ;;
         *)
@@ -136,7 +147,15 @@ if [[ -z "$VERSION_ON_MAIN" ]]; then
     exit 1
 fi
 
-if [[ -n "$REQUESTED_TAG" ]]; then
+if [[ "$HOTFIX" == "true" ]]; then
+    if [[ "$RC_MODE" != "true" || -z "$REQUESTED_COMMIT" || -z "$REQUESTED_TAG" ]]; then
+        echo -e "${RED}Error: --hotfix needs --rc, --commit <the hotfix RC branch head> and the version vX.Y.Z${NC}" >&2
+        exit 1
+    fi
+    # A hotfix's version is the RC head's own (checked below), whatever main declares.
+    RELEASE_TAG="$REQUESTED_TAG"
+    NEW_VERSION="${RELEASE_TAG#v}"
+elif [[ -n "$REQUESTED_TAG" ]]; then
     RELEASE_TAG="$REQUESTED_TAG"
     NEW_VERSION="${RELEASE_TAG#v}"
     if [[ "$NEW_VERSION" != "$VERSION_ON_MAIN" ]]; then
@@ -181,8 +200,16 @@ fi
 RC_VERSION_COMMIT=""
 if [[ "$RC_MODE" == "true" && -n "$REQUESTED_COMMIT" ]]; then
     RC_VERSION_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
+    # A hotfix ships after the release it fixes: above every final tag its commit contains.
+    if [[ "$HOTFIX" == "true" ]]; then
+        CONTAINED=$(git tag --merged "$RC_VERSION_COMMIT" -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+        if [[ -n "$CONTAINED" && "$(printf '%s\n%s\n' "$CONTAINED" "$RELEASE_TAG" | sort -V | tail -1)" != "$RELEASE_TAG" || "$CONTAINED" == "$RELEASE_TAG" ]]; then
+            echo -e "${RED}Error: --hotfix ${RELEASE_TAG} is not above ${CONTAINED}, a release ${RC_VERSION_COMMIT:0:9} already contains${NC}" >&2
+            exit 1
+        fi
+    fi
     if [[ "$(git show "$RC_VERSION_COMMIT:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")" != "$NEW_VERSION" ]]; then
-        echo -e "${RED}Error: --rc ${RC_VERSION_COMMIT:0:9} does not carry version ${NEW_VERSION} (main's)${NC}" >&2
+        echo -e "${RED}Error: --rc ${RC_VERSION_COMMIT:0:9} does not carry version ${NEW_VERSION} ($([[ "$HOTFIX" == "true" ]] && echo "the hotfix's" || echo "main's"))${NC}" >&2
         echo -e "${YELLOW}  Put the version bump on the RC branch as a fix commit, as on main.${NC}" >&2
         exit 1
     fi
@@ -245,6 +272,10 @@ if [[ "$RC_MODE" == "true" ]]; then
     fi
     RC_BRANCH=$(git ls-remote origin 'refs/heads/release/*' | awk -v s="$RELEASE_COMMIT" '$1 == s {print $2}' \
         | grep -E '^refs/heads/release/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -1 || true)
+fi
+if [[ "$HOTFIX" == "true" && -z "$RC_BRANCH" ]]; then
+    echo -e "${RED}✖ REFUSING TO TAG: --hotfix ${RELEASE_COMMIT:0:9} heads no release/vX.Y.Z-rc.N branch on origin${NC}" >&2
+    exit 1
 fi
 if [[ -n "$RC_BRANCH" ]] && ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
     if ! rc_shaped "$RELEASE_COMMIT" origin/main; then

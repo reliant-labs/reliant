@@ -91,8 +91,27 @@ function classifyCheckResult(result) {
  *   the check answers.
  * - An "error" leaves the previous state in place, except that a failed
  *   download falls back to "available", from where the user can retry it.
+ * - "forced" (createForcedUpdate) marks the state `forced` with the server's
+ *   `minVersion`, and every later state keeps the mark: the update is no
+ *   longer optional for the rest of the session.
  */
 function nextUpdateState(previous, event) {
+  if (event.type === "forced") {
+    // A found or downloading update stays what the window shows; it is now
+    // the forced one. Otherwise the forced update has not found one yet.
+    const base = isUpdatePending(previous) ? previous : { type: "forced" };
+    return { ...base, forced: true, minVersion: event.minVersion };
+  }
+  const next = unforcedNextState(previous, event);
+  // Forced is sticky for the session: the server will not serve this version
+  // again, so no later event makes the update optional.
+  if (previous && previous.forced && next && !next.forced) {
+    return { ...next, forced: true, minVersion: previous.minVersion };
+  }
+  return next;
+}
+
+function unforcedNextState(previous, event) {
   switch (event.type) {
     case "checking":
       return previous;
@@ -104,6 +123,78 @@ function nextUpdateState(previous, event) {
     default:
       return event;
   }
+}
+
+/**
+ * The forced update: the server requires a newer version than this one
+ * (the renderer's forceUpdate(minVersion) IPC, after an `upgrade_required`
+ * refusal or a served minimum above this version). Unlike every other update
+ * it does not wait for the user: it checks, downloads and installs, and the
+ * renderer's update dialog cannot be dismissed while it runs.
+ *
+ * Resolves the outcome: "installing" (the app is quitting to install),
+ * "up-to-date" (the update feed has nothing newer, so the user must install
+ * from the download page), "inactive" (an unpackaged build), or "error" with
+ * the message (the dialog offers to retry, which calls this again).
+ *
+ * @param {object} deps
+ * @param {() => object|null} deps.getStatus   the updater's state (nextUpdateState)
+ * @param {() => boolean} deps.isDownloading   a download has been asked for and not finished
+ * @param {() => Promise<object|null>} deps.check   autoUpdater.checkForUpdates
+ * @param {() => Promise<{success?: boolean, error?: string}>} deps.download   the download runner; joins one in flight
+ * @param {() => Promise<{success?: boolean, error?: string}>} deps.install   quits and installs
+ * @param {(minVersion: string) => void} deps.announce   broadcasts the forced state to every window
+ */
+function createForcedUpdate({ getStatus, isDownloading, check, download, install, announce }) {
+  let inFlight = null;
+
+  async function run(minVersion) {
+    announce(minVersion);
+    const status = getStatus();
+    if (!status || status.type !== "downloaded") {
+      // Nothing found yet: look. A found or downloading update needs no check.
+      if (canCheckForUpdates(status, isDownloading()) && !(status && status.type === "available")) {
+        let result;
+        try {
+          result = await check();
+        } catch (error) {
+          return { outcome: "error", error: errorMessage(error) };
+        }
+        const found = classifyCheckResult(result);
+        if (found !== "available") return { outcome: found };
+      }
+      let downloaded;
+      try {
+        downloaded = await download();
+      } catch (error) {
+        return { outcome: "error", error: errorMessage(error) };
+      }
+      if (downloaded && downloaded.error) return { outcome: "error", error: downloaded.error };
+    }
+    let installed;
+    try {
+      installed = await install();
+    } catch (error) {
+      return { outcome: "error", error: errorMessage(error) };
+    }
+    if (installed && installed.error) return { outcome: "error", error: installed.error };
+    return { outcome: "installing" };
+  }
+
+  // A second request (another window, a retry while it runs) joins the first.
+  return function forceUpdate(minVersion) {
+    if (!inFlight) {
+      inFlight = run(minVersion).finally(() => {
+        inFlight = null;
+      });
+    }
+    return inFlight;
+  };
+}
+
+/** A minimum version from the renderer, or "" when it is not a version token. */
+function cleanMinVersion(value) {
+  return typeof value === "string" && /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/.test(value) ? value : "";
 }
 
 function errorMessage(error) {
@@ -189,7 +280,9 @@ function createMenuUpdateCheck({ getStatus, isDownloading = () => false, check, 
 module.exports = {
   canCheckForUpdates,
   classifyCheckResult,
+  cleanMinVersion,
   createDownloadRunner,
+  createForcedUpdate,
   createMenuUpdateCheck,
   isUpdatePending,
   nextUpdateState,
