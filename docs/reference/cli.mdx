@@ -588,6 +588,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
 | [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
+| [`reliant update`](#reliant-update) | Update this reliant to the newest signed release |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
@@ -24779,6 +24780,52 @@ reliant trigger update <id-or-name> [flags]
 | `--timezone` | `string` | - | IANA zone the cron expressions are read in (default: UTC) |
 | `--workflow` | `string` | - | Workflow to run (default: your default workflow) |
 | `--worktree` | `string` | - | Worktree id to run in (default: the project's main worktree) |
+
+---
+
+## reliant update
+
+Update this reliant to the newest signed release
+
+Replaces this reliant binary with the newest release on its channel, after
+checking the release's Sigstore signature: release.yml at a release tag of
+reliant-labs/reliant must have signed it, for that tag. An unsigned or
+mis-signed release is refused, and nothing is replaced.
+
+The channel is the one this build came from: alpha for a release candidate,
+latest otherwise. --channel picks one. A client on alpha takes the newer of
+alpha and latest, so a stable release that follows an RC train reaches it.
+
+Only a reliant that nothing else owns updates itself: one you unpacked from a
+release archive into a directory you can write. A reliant that the desktop
+app, Homebrew, a system package or a Reliant cloud machine installed is left
+alone, and the command says what updates it instead. Nothing is replaced on
+Windows yet; --check works there.
+
+The new binary is checked before anything changes (it must run 'version'),
+and the old one is kept under ~/.reliant/upgrade/previous. After the swap the
+new binary starts and confirms itself; one that does not is put back. A
+running daemon keeps its version until it restarts, or updates itself when it
+was started with --auto-update.
+
+--check reports what an update would do, and changes nothing.
+
+  reliant update --check
+  reliant update --yes
+  reliant update --channel alpha --json --yes
+
+```
+reliant update [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--channel` | `string` | - | Release channel: latest or alpha (default: the channel this build came from) |
+| `--check` | `bool` | - | Report whether an update is available and whether this install can take it; change nothing |
+| `--json` | `bool` | - | Print the report as JSON (with --check, or with --yes) |
+| `--yes` | `bool` | - | Update without asking |
 
 ---
 
