@@ -32,6 +32,8 @@ vi.mock("@/components/Projects/AppChip", () => ({
   AppChip: ({ app }: { app: AppChipModel }) => <span data-testid="app-chip">{app.name}</span>,
 }));
 
+import { resetShellForTests } from "@/lib/shell";
+
 import { buildItems, ProjectSelectorDialog, ProjectSelectorPanel } from "../ProjectSelector";
 
 function project(id: string, at: number, over: Partial<ProjectCatalogRow> = {}): ProjectCatalogRow {
@@ -81,6 +83,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  resetShellForTests(null);
 });
 
 const NO_PREFS = { pinned: new Set<string>(["f"]), hidden: new Set<string>(["p-hidden"]) };
@@ -183,6 +186,23 @@ describe("ProjectSelectorPanel", () => {
     catalogView.isLoading = true;
     render(<ProjectSelectorPanel mode="chat" onClose={() => {}} />);
     expect(screen.getByTestId("project-selector-loading")).toBeTruthy();
+  });
+
+  it("on the forge brand, waits for the catalog and then lists its app-only rows", () => {
+    resetShellForTests("forge");
+    catalogView.catalog = undefined;
+    catalogView.isLoading = true;
+    const { unmount } = render(<ProjectSelectorPanel mode="navigate" onClose={() => {}} />);
+    expect(screen.getByTestId("project-selector-loading")).toBeTruthy();
+    unmount();
+
+    catalogView.catalog = ROWS;
+    catalogView.isLoading = false;
+    render(<ProjectSelectorPanel mode="navigate" onClose={() => {}} />);
+    const search = screen.getByTestId("project-selector-search");
+    fireEvent.change(search, { target: { value: "billing" } });
+    expect(screen.getByTestId("project-selector-row-app:billing")).toBeTruthy();
+    expect(screen.getAllByTestId("app-chip").map((c) => c.textContent)).toContain("billing");
   });
 
   it("renders only the rows on screen of hundreds", () => {
