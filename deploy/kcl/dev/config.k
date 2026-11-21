@@ -33,7 +33,13 @@ cli_config: config_gen.CLIConfig = {
 
 # Every `reliant` process (the binary's root config).
 reliant_config: config_gen.ReliantConfig = {
-    runtime = {environment = "dev"}
+    runtime = {
+        # On a line of its own: `forge db seed apply|reset` and `forge db
+        # reset` confirm an env is development by reading
+        # `environment = "dev"` at the start of a line in this file, and
+        # refuse (fail closed) when they cannot find it.
+        environment = "dev"
+    }
 }
 
 # The `reliant daemon start` process.
