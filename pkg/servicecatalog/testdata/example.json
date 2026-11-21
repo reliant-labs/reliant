@@ -1,0 +1,10 @@
+{
+  "schema": "forge.dev/service-catalog/v1",
+  "module": "example.com/shop",
+  "processes": [{"id":"example.com/shop#api","root":"API","command":["server","api"],"components":["Orders","UserRoutes"],"serves":[{"component":"Orders","service":"shop.v1.OrdersService","route_set":"UserRoutes","audience":"user","resolution":"declared_route_set"}],"clients":[],"source":{"path":"internal/app/roots.go","line":4}}],
+  "services": [{"name":"shop.v1.OrdersService","proto_file":"shop/v1/orders.proto","methods":[{"id":"shop.v1.OrdersService/GetOrder","name":"GetOrder","input":"shop.v1.GetOrderRequest","output":"shop.v1.GetOrderResponse","client_streaming":false,"server_streaming":false,"idempotency":"NO_SIDE_EFFECTS","auth_required":true}],"descriptor":{"Name":"OrdersService","Package":"shop.v1","Schemas":{"shop.v1.GetOrderRequest":[{"name":"id","kind":"string","validate_options":"[(buf.validate.field).string.min_len = 1]"}]}}}],
+  "components": [],
+  "bindings": [],
+  "clients": [],
+  "diagnostics": []
+}

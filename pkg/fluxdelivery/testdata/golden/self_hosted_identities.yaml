@@ -1,0 +1,129 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    deploy.reliant.dev/generation: "7"
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/delivery-env: prod
+    resourceset.fluxcd.controlplane.io/name: delivery.prod
+    resourceset.fluxcd.controlplane.io/namespace: forge-delivery-acme-prod
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.prod
+  namespace: forge-delivery-acme-prod
+spec:
+  interval: 10m0s
+  layerSelector:
+    mediaType: application/vnd.forge.bundle.manifests.v1.tar+gzip
+    operation: extract
+  ref:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  secretRef:
+    name: forge-delivery-pull
+  url: oci://ghcr.io/acme/acme/bundle.v1/prod
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/delivery-env: prod
+    reliant.dev/cluster: gke-acme-prod
+    reliant.dev/delivery-unit: base
+    reliant.dev/phase: pre
+    resourceset.fluxcd.controlplane.io/name: delivery.prod
+    resourceset.fluxcd.controlplane.io/namespace: forge-delivery-acme-prod
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.prod-gke-acme-prod-base-pre
+  namespace: forge-delivery-acme-prod
+spec:
+  deletionPolicy: Orphan
+  healthChecks:
+  - apiVersion: batch/v1
+    kind: Job
+    name: migrate-abc123
+    namespace: acme-prod
+  interval: 10m0s
+  path: manifests/gke_acme_prod/base/pre
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: forge-delivery-pre
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.prod
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/delivery-env: prod
+    reliant.dev/cluster: gke-acme-prod
+    reliant.dev/delivery-unit: base
+    reliant.dev/phase: rollout
+    resourceset.fluxcd.controlplane.io/name: delivery.prod
+    resourceset.fluxcd.controlplane.io/namespace: forge-delivery-acme-prod
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.prod-gke-acme-prod-base-rollout
+  namespace: forge-delivery-acme-prod
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.prod-gke-acme-prod-base-pre
+  healthChecks:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: api
+    namespace: acme-prod
+  interval: 10m0s
+  path: manifests/gke_acme_prod/base/rollout
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: forge-delivery-apply
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.prod
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/delivery-env: prod
+    reliant.dev/cluster: gke-acme-prod
+    reliant.dev/delivery-unit: base
+    reliant.dev/phase: post
+    resourceset.fluxcd.controlplane.io/name: delivery.prod
+    resourceset.fluxcd.controlplane.io/namespace: forge-delivery-acme-prod
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.prod-gke-acme-prod-base-post
+  namespace: forge-delivery-acme-prod
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.prod-gke-acme-prod-base-rollout
+  interval: 10m0s
+  path: manifests/gke_acme_prod/base/post
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: forge-delivery-apply
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.prod
+  timeout: 1m30s
+  wait: false
