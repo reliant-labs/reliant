@@ -33,7 +33,16 @@ installed="$(node -p "require('$WEB/node_modules/@playwright/test/package.json')
   die "frontends/web/node_modules has no @playwright/test: run task install:web first."
 [ "$installed" = "$PLAYWRIGHT_VERSION" ] ||
   die "the lockfile installs @playwright/test $installed but this script pins the $PLAYWRIGHT_VERSION image. Set PLAYWRIGHT_VERSION=$installed in $0 and re-capture the baselines (-- --update-snapshots)."
-[ -f "$WEB/dist/index.html" ] || die "no build in frontends/web/dist: run npm run build:alpha (task test:web:visual does)."
+[ -f "$WEB/dist/index.html" ] || die "no build in frontends/web/dist: run task test:web:visual, which builds it."
+
+# The settings footer prints the build's version. A build of a commit, a tag
+# or a dirty tree each prints a different one, so the baselines are captured
+# from a build whose version is pinned (Taskfile.yml's test:web:visual builds
+# with RELEASE_VERSION set to this).
+VISUAL_RELEASE_VERSION="0.0.0-visual"
+built="$(node -p "require('$WEB/dist/version.json').version" 2>/dev/null || echo "none")"
+[ "$built" = "$VISUAL_RELEASE_VERSION" ] ||
+  die "frontends/web/dist was built as version '$built', not the visual lane's pinned '$VISUAL_RELEASE_VERSION'. Rebuild it: task test:web:visual (without VISUAL_SKIP_BUILD), or RELEASE_VERSION=$VISUAL_RELEASE_VERSION npm run build:alpha."
 
 tty=()
 [ -t 1 ] && tty=(-t)
