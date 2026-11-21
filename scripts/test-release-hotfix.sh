@@ -28,7 +28,13 @@ cat >"$T/bin/task" <<'EOF'
 #!/usr/bin/env bash
 echo "task $*" >>"$RG_TEST_LOG"; exit "${RG_TEST_TASK_RC:-0}"
 EOF
-chmod +x "$T/bin/go" "$T/bin/task"
+# `pnpm install --dir <d> ...` (the npm step, for each frontend with no current
+# node_modules): makes the node_modules the step then dates, nothing else.
+cat >"$T/bin/pnpm" <<'EOF'
+#!/usr/bin/env bash
+while [ $# -gt 0 ]; do [ "$1" = --dir ] && mkdir -p "$2/node_modules"; shift; done
+EOF
+chmod +x "$T/bin/go" "$T/bin/task" "$T/bin/pnpm"
 export PATH="$T/bin:$PATH" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 RELEASE_GATE_PUBLISH=0
 # The hotfix gate's runner: its private checkout under $T, the pinned forge stubbed, and
