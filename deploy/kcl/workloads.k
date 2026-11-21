@@ -339,13 +339,13 @@ reliant_cli = fw.Workload {
 # release.yml downloads those from other jobs. pack-desktop.js refuses, naming
 # what is missing, unless they are on disk (paths from the repo root):
 #
-#   electron/node_modules                    cd electron && npm ci --legacy-peer-deps
+#   electron/node_modules                    cd electron && pnpm install --frozen-lockfile
 #   electron/resources/server/<plat>-<arch>/ scripts/build-electron.sh <mac|linux|win>
 #     reliant-backend[.exe], both arches
 #   frontends/web/dist                       cd frontends/web && pnpm install --frozen-lockfile \
-#                                              && NODE_ENV=production npm run build
+#                                              && NODE_ENV=production pnpm run build
 #   electron/src/build-config.js and         cd electron && node scripts/with-release-config.mjs
-#     electron/src/release-renderer-config.js  npm run build:config
+#     electron/src/release-renderer-config.js  pnpm run build:config
 #
 # No `image`: the app is not one, and at this forge pin a build-only ShellBuild
 # needs none (`forge env build release --target reliant-desktop` runs it), so

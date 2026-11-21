@@ -15,7 +15,7 @@
 #       Is <rev> (default HEAD) release-ready? exit 0 green | 1 red | 3 no
 #       record. A green on a first-parent ancestor (at most 50 back) also
 #       passes when every change since it is release metadata: the version
-#       field of electron/package.json and its lockfile, docs/, dev-docs/,
+#       field of electron/package.json, docs/, dev-docs/,
 #       research/, *.md (a release PR's own diff).
 #   release-gate.sh latest [<ref>]
 #       Print the newest green-recorded sha on <ref>'s first-parent history
@@ -49,9 +49,8 @@
 # integration and e2e. dev-docs/merge-and-release-gates.md lists the split.
 #
 # Steps, in order (every step runs even after a failure; one table at the end):
-#   npm          npm ci (pnpm install --frozen-lockfile for frontends/web)
-#                wherever node_modules is stale (., frontends/web, electron,
-#                tools/protoc-gen-es)
+#   npm          pnpm install --frozen-lockfile wherever node_modules is
+#                stale (frontends/web, electron, tools/protoc-gen-es)
 #   generate     task generate:check  (pinned forge generate is a no-op, + conventions)
 #   docs         task generate:docs:check
 #   lint         forge lint --no-fix, UNSCOPED: golangci over the module, buf
@@ -172,11 +171,13 @@ release_metadata_only() {
     [ -z "$f" ] && continue
     case "$f" in
       docs/*|dev-docs/*|research/*|*.md) continue ;;
-      electron/package.json|electron/package-lock.json)
+      electron/package.json)
         # Only the version may differ: a dependency change is not metadata.
+        # (electron/pnpm-lock.yaml records no app version, so a release never
+        # touches it.)
         node -e '
           const [a, b] = process.argv.slice(1).map(s => JSON.parse(s || "{}"));
-          const strip = j => { delete j.version; if (j.packages && j.packages[""]) delete j.packages[""].version; return JSON.stringify(j); };
+          const strip = j => { delete j.version; return JSON.stringify(j); };
           process.exit(strip(a) === strip(b) ? 0 : 1);
         ' "$(git show "$from:$f" 2>/dev/null)" "$(git show "$to:$f" 2>/dev/null)" || return 1 ;;
       *) return 1 ;;
@@ -464,25 +465,21 @@ run_step() {
   case "$1" in
     npm)
       local d scripts
-      for d in . frontends/web electron tools/protoc-gen-es; do
-        if [ -f "$d/pnpm-lock.yaml" ]; then
-          # pnpm rewrites node_modules/.modules.yaml on every install it completes.
-          [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] && continue
-          pnpm install --dir "$d" --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent || return 1
-          continue
-        fi
-        [ -f "$d/package-lock.json" ] || continue
-        # Current when npm's lockfile copy is newer than the lockfile and, for
-        # electron, its postinstall also fetched the binary its tests load
-        # (node_modules/electron/path.txt). As scripts/merge-gate.sh does:
-        # without it every electron test fails "Electron failed to install
-        # correctly" (release gate a2783da3, 10 of 315).
-        if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+      for d in frontends/web electron tools/protoc-gen-es; do
+        # Current when node_modules/.modules.yaml is newer than the lockfile
+        # (the touch dates it after a no-op install, which pnpm 12 leaves
+        # alone) and, for electron, its postinstall also fetched the binary
+        # its tests load (node_modules/electron/path.txt). As
+        # scripts/merge-gate.sh does: without it every electron test fails
+        # "Electron failed to install correctly" (release gate a2783da3, 10 of
+        # 315).
+        if [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] \
           && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
           continue
         fi
         scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
-        npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error || return 1
+        pnpm install --dir "$d" --frozen-lockfile $scripts --config.confirmModulesPurge=false --reporter=silent || return 1
+        touch "$d/node_modules/.modules.yaml"
       done ;;
     generate) task generate:check ;;
     docs) task generate:docs:check ;;

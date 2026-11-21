@@ -231,6 +231,41 @@ func upgradeStateName(s reliantv1.DaemonUpgradeState) string {
 	return strings.ToLower(strings.TrimPrefix(s.String(), "DAEMON_UPGRADE_STATE_"))
 }
 
+// awaitingOwner reports whether the daemon already told its owner to
+// upgrade: a repeat (the gateway asks again on every new stream) is only
+// logged, not printed again.
+func (u *upgradeDrain) awaitingOwner() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.status.GetState() == reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER
+}
+
+// defaultUpgradeAdvice is what a person's daemon tells its owner when the
+// server names no upgrade command or URL: the desktop app updates the daemon
+// it bundles; a CLI install is upgraded the way it was installed.
+const defaultUpgradeAdvice = "update the Reliant desktop app, or upgrade the reliant CLI (brew upgrade --cask reliant-labs/reliant/reliant)"
+
+// upgradeAdvice is how the owner of a person's machine upgrades: the
+// server's command, else its URL, else defaultUpgradeAdvice.
+func upgradeAdvice(req *reliantv1.RestartRequested) string {
+	if c := strings.TrimSpace(req.GetUpgradeCommand()); c != "" {
+		return c
+	}
+	if u := strings.TrimSpace(req.GetUpgradeUrl()); u != "" {
+		return u
+	}
+	return defaultUpgradeAdvice
+}
+
+// awaitingOwnerNotice is the console notice a person's daemon prints when the
+// platform asks it to upgrade.
+func awaitingOwnerNotice(reason, advice string) string {
+	if reason = strings.TrimSpace(reason); reason == "" {
+		reason = "a newer version is due"
+	}
+	return "\n  ! Upgrade needed: " + reason + "\n    Upgrade: " + advice + "\n    This daemon keeps serving until then.\n\n"
+}
+
 // drainDeadline is when a drain asked to end at deadlineMs ends: never later
 // than maxDrain from now, never earlier than now. 0 means maxDrain from now.
 func drainDeadline(deadlineMs int64, now time.Time, maxDrain time.Duration) time.Time {
@@ -263,13 +298,20 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 	if !d.host.Managed() {
 		// Never block a person's machine (D6). Nothing here can update it:
 		// its owner's app or package manager does, and stops it as it
-		// always does.
+		// always does. So the owner is told why and how, in the log, on the
+		// console once, and in `reliant daemon status` (the detail).
+		advice := upgradeAdvice(req)
+		logging.WarnContext(ctx, logPrefix+" The platform asked this daemon to upgrade; it keeps serving until its owner does",
+			"reason", req.GetReason(), "upgrade", advice)
+		if !u.awaitingOwner() {
+			fmt.Fprint(logging.Notices(), awaitingOwnerNotice(req.GetReason(), advice))
+		}
 		u.publish(&reliantv1.DaemonUpgradeStatus{
 			State:          reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER,
 			DeadlineUnixMs: req.GetDeadlineUnixMs(),
 			RolloutId:      req.GetRolloutId(),
 			TargetVersion:  req.GetTargetVersion(),
-			Detail:         "this machine is updated by its owner's app or package manager; the daemon keeps serving until then",
+			Detail:         "this machine is updated by its owner's app or package manager; the daemon keeps serving until then. Upgrade: " + advice,
 		})
 		return
 	}
