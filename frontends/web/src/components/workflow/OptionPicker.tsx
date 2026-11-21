@@ -237,7 +237,7 @@ export function OptionPicker({
             {groups.map((group) => (
               <div key={group.name || "_"} role="group" aria-label={group.name || undefined}>
                 {group.name && (
-                  <div className="px-2.5 pb-0.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.name}</div>
+                  <div className="px-2.5 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">{group.name}</div>
                 )}
                 {group.options.map((option) => {
                   const isSelected = option.value === value;

@@ -19,7 +19,7 @@ import (
 
 // fakePinnedForge stands in for the forge a project pins: resolve says which
 // one (or why it cannot be had), run plays its `skill list --json` and
-// `skill load`, and counts the calls.
+// `skill load` (`agent skill …` when agentNoun), and counts the calls.
 type fakePinnedForge struct {
 	mu         sync.Mutex
 	resolveErr error
@@ -28,6 +28,10 @@ type fakePinnedForge struct {
 	resolves   int
 	// withBodies: the pinned forge has `skill list --with-bodies`.
 	withBodies bool
+	// agentNoun: the pinned forge spells its skill commands `agent skill …`
+	// (forge v1.4.0 and later). Without it the pin predates the noun and
+	// knows only `skill …`.
+	agentNoun bool
 	// restart stands in for a new process: fresh memory, the same disk cache.
 	restart func()
 }
@@ -56,6 +60,12 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 		f.mu.Lock()
 		f.runs = append(f.runs, strings.Join(args, " "))
 		f.mu.Unlock()
+		if f.agentNoun != (len(args) > 0 && args[0] == "agent") {
+			return nil, errors.New("unknown command " + strings.Join(args, " "))
+		}
+		if f.agentNoun {
+			args = args[1:]
+		}
 		switch {
 		case strings.Join(args, " ") == "skill list --json --with-bodies" && f.withBodies:
 			return []byte(`[{"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge", "body": "# only-in-v104, listed with its body\n"}]`), nil
@@ -131,7 +141,12 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	f.restart()
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
-	assert.Equal(t, []string{"skill list --json --with-bodies", "skill list --json", "skill load only-in-v104"}, f.runs, "the pinned forge was asked again for what it already said")
+	// v1.0.4 predates the `agent` noun: each new spelling is refused once,
+	// and the old one answers.
+	assert.Equal(t, []string{
+		"agent skill list --json --with-bodies", "agent skill list --json", "skill list --json --with-bodies", "skill list --json",
+		"agent skill load only-in-v104", "skill load only-in-v104",
+	}, f.runs, "the pinned forge was asked again for what it already said")
 	// One resolution per process: the restart asked again.
 	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
 }
@@ -186,5 +201,20 @@ func TestPinnedProject_ACatalogWithBodiesIsReadInOneCall(t *testing.T) {
 	defs := paths(discoverForgeSkills(dir, "", true))
 	require.Contains(t, defs, "forge/only-in-v104")
 	assert.Equal(t, "# only-in-v104, listed with its body\n", defs["forge/only-in-v104"].Body)
-	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "agent skill list --json", "skill list --json --with-bodies"}, f.runs)
+}
+
+// A pin that has the `agent` noun is asked in the new spelling only.
+func TestPinnedProject_APinWithTheAgentNounIsAskedInTheNewSpelling(t *testing.T) {
+	isolateHome(t)
+	f := &fakePinnedForge{agentNoun: true}
+	useFakePinnedForge(t, f)
+	dir := pinnedProject(t)
+
+	defs := paths(discoverForgeSkills(dir, "", false))
+	require.Contains(t, defs, "forge/only-in-v104")
+	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err)
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "agent skill list --json", "agent skill load only-in-v104"}, f.runs)
 }

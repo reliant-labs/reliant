@@ -3,7 +3,7 @@ title: "Forge sign-in"
 description: "Hosted Forge commands use your Reliant sign-in, on your computer and on cloud machines"
 ---
 
-If you are signed in to Reliant, forge is signed in too. Every forge command that talks to a hosted control plane — `forge env deploy`, `forge env status`, `forge env stop|start|delete`, `forge secret`, `forge domain`, `forge cloud`, `forge release`, `forge registry login` and `forge cluster connect` among them — works without `forge login`, both when you run them as `reliant forge …` and when an agent runs them in a shell on a daemon, local or managed.
+If you are signed in to Reliant, forge is signed in too. Every forge command that talks to a hosted control plane — `forge env deploy`, `forge env status`, `forge env stop|start|delete`, `forge env secret`, `forge cloud domain`, `forge cloud`, `forge release`, `forge cloud registry login` and `forge cloud cluster connect` among them — works without `forge cloud login`, both when you run them as `reliant forge …` and when an agent runs them in a shell on a daemon, local or managed.
 
 How it works:
 
@@ -21,7 +21,7 @@ A token acts in exactly one organization. If you belong to several, forge uses t
 
 You must be a member of the organization. Your permissions are those you hold **in that organization**: a deploy token for one organization never carries a permission you only hold in another. Tokens are cached per organization, so switching does not reuse a token minted for the other one.
 
-forge's own sources still come first, in this order: `--token`, the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` by default, for CI), a stored `forge login`, then your Reliant session, which also takes over when a stored login has expired. `forge cloud status <env>` shows which one a command will use — never the token itself.
+forge's own sources still come first, in this order: `--token`, the environment's token variable (`FORGE_CONTROL_PLANE_TOKEN` by default, for CI), a stored `forge cloud login`, then your Reliant session, which also takes over when a stored login has expired. `forge cloud status <env>` shows which one a command will use — never the token itself.
 
 CI has no Reliant session to exchange. Give it an organization automation token instead: `forge cloud token create --env prod --name github-actions --scopes deploy:read,deploy:write` prints the secret once, and `forge cloud token list` / `revoke` manage it afterwards.
 

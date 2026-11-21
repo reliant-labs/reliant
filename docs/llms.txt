@@ -12,8 +12,8 @@
 ## Forge: start here
 
 - [Deploy a Vite or Next.js app without an account](https://docs.reliantlabs.io/forge/deploy-without-an-account.md): `npx -y @reliantlabs/forge@latest env deploy prod --claimable` puts a Vite or Next.js static app live with no account and prints a live URL plus a claim link. Limits and exit codes.
-- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): `claude mcp add forge -- npx -y @reliantlabs/forge mcp` lets an agent deploy, lint, generate and read telemetry. The tools and every config: https://github.com/reliant-labs/forge/blob/main/docs/mcp.md
-- [forge start: the first command to run](https://docs.reliantlabs.io/reference/cli.md#reliant-forge-start): `forge start` prints the one next command for the directory you are in (deploy the app already there, or create one); `forge start app` goes from an empty directory to authored protos. Run it first.
+- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): `claude mcp add forge -- npx -y @reliantlabs/forge agent mcp` lets an agent deploy, lint, generate and read telemetry. The tools and every config: https://github.com/reliant-labs/forge/blob/main/docs/mcp.md
+- [forge project start: the first command to run](https://docs.reliantlabs.io/reference/cli.md#reliant-forge-project-start): `forge project start` prints the one next command for the directory you are in (deploy the app already there, or create one); `forge project start app` goes from an empty directory to authored protos. Run it first.
 - [Forge overview](https://docs.reliantlabs.io/forge/overview.md): What forge is: a Go + React framework with tests, environments, hosting and monitoring from the first commit.
 - [Forge quick start](https://docs.reliantlabs.io/forge/quick-start.md): From a prompt to a deployed URL.
 - [Lint AI-generated code](https://docs.reliantlabs.io/forge/linting/overview.md): What forge lint checks and why it matters more when an agent writes the code.
@@ -145,7 +145,7 @@
 - [Hosted dashboards, alerts and issues](https://docs.reliantlabs.io/hosting/observability/dashboards-and-alerts.md): The dashboards forge generates, the default alerts, how errors are grouped into issues, and how source maps and session replay work on Reliant hosting
 - [Session timelines and replay for frontend errors](https://docs.reliantlabs.io/hosting/observability/session-timelines.md): See what a user did before a frontend error: browser sessions, text timelines for agents, and replay. Replay is opt-in, masked, and needs consent.
 - [Continuous profiling for Go services](https://docs.reliantlabs.io/hosting/observability/profiling.md): How forge samples CPU and heap profiles from your Go services, and how to read a flamegraph from the local stack or in the Reliant app.
-- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills and exit codes.
+- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): Run forge as an MCP server (forge agent mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills and exit codes.
 - [Observability billing & limits](https://docs.reliantlabs.io/hosting/observability-billing.md): Observability billing on Reliant hosting: the free monthly telemetry allowance, ingest pricing, spend caps, included retention and query fair-use limits.
 
 ## Guides

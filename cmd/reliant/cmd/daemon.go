@@ -797,7 +797,7 @@ func daemonStartFailure(err error, useToken bool, conn *connection) (failure err
 //
 // The URL is the --grpc-url flag, else the credential's gateway, else a local
 // gateway on --port; grpc:// and grpcs:// are normalized first because the TLS
-// inference below keys off the scheme (`forge cluster urls` prints grpc://).
+// inference below keys off the scheme (`forge dev cluster urls` prints grpc://).
 // TLS mode is the explicit flag, else TLS when a cert and key are given (which
 // also points an unflagged URL at the local TLS listener), else TLS for an
 // https:// URL, else h2c.
@@ -877,6 +877,7 @@ func newDaemonStartCmd() *cobra.Command {
 	var (
 		useToken   bool
 		daemonName string
+		attachDir  string
 		labelFlag  = &labelsFlag{name: "label"}
 	)
 
@@ -925,7 +926,15 @@ you did not declare are left alone. Labels decide machine-pool membership, so
 a box started with
   reliant daemon start --label pool=pipeline --label gate=yes
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
-RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
+RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
+
+--attach <dir> links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base, err := loadRootConfig(cmd)
 			if err != nil {
@@ -1168,6 +1177,20 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 				})
 			}
 
+			if attachDir != "" {
+				// The daemon's own credential, read once connected (a
+				// re-registration replaces it): it is the account this
+				// machine serves, so the project lands where its agents run.
+				account := instance.account
+				go attachCheckoutWhenConnected(ctx, cmd.ErrOrStderr(), dataDir, attachDir, func() (projectCreator, error) {
+					c, err := auth.ReadDaemonCredentials(conn.ServerURL, account)
+					if err != nil || c == nil || strings.TrimSpace(c.PAT) == "" {
+						return nil, errors.New("no daemon credential for this server")
+					}
+					return newProjectServiceClient(&connection{ServerURL: conn.ServerURL, skipTLSVerify: conn.skipTLSVerify, Token: c.PAT}), nil
+				}, daemonAttachPoll)
+			}
+
 			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL)
 			err = startDaemon(creds)
 			if err != nil {
@@ -1217,6 +1240,7 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
+	cmd.Flags().StringVar(&attachDir, "attach", "", "Once connected, link this folder (a checkout) as a project on this machine")
 	// Hand-registered: the generated flag of DaemonConfig.labels (a repeated
 	// field) would keep only its last use. It replaces that field's value.
 	cmd.Flags().Var(labelFlag, "label", "Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool")
@@ -1359,17 +1383,16 @@ stream is not established.`,
 			}
 			recordPath := daemonstate.Path(dataDir)
 
-			state, err := daemonstate.Read(dataDir)
+			state, status, err := readDaemonRecord(dataDir)
 			if err != nil {
-				if os.IsNotExist(err) {
-					fmt.Fprintln(out, "No daemon running (no runtime record found)")
-					fmt.Fprintf(out, "  Record:   %s\n", recordPath)
-					return fmt.Errorf("daemon not running")
-				}
 				return fmt.Errorf("reading daemon runtime record: %w", err)
 			}
-
-			if !daemonProcessAlive(state.PID) {
+			if status == daemonRecordMissing {
+				fmt.Fprintln(out, "No daemon running (no runtime record found)")
+				fmt.Fprintf(out, "  Record:   %s\n", recordPath)
+				return fmt.Errorf("daemon not running")
+			}
+			if status == daemonRecordStale {
 				fmt.Fprintf(out, "Daemon PID %d is not running (stale runtime record)\n", state.PID)
 				fmt.Fprintf(out, "  Record:   %s\n", recordPath)
 				return fmt.Errorf("daemon not running")

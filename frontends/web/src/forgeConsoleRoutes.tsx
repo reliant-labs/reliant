@@ -26,9 +26,24 @@
  *
  * The path builders and the redirect mapping live in
  * components/Forge/Console/paths.ts; this file only declares the routes.
+ * Every redirect here runs only outside the org tree or in a member org
+ * (memberOnly, lib/routeOrg.ts): under `/o/$org` a redirect must never carry
+ * a URL off the "no access" page.
+ *
+ * The org form (`form: 'org'`, mounted under `/o/$org` by routes.tsx; control-plane
+ * docs/design/unified-shell-and-projects.md §3.1) is the same tree with the
+ * two paths the design moves: the console at `/apps/$project` and the org
+ * Observability at `/observability[/$view]`. The entries and retired paths
+ * keep their `/forge/…` paths there: harmless, and one tree shape for both.
+ * The moved paths are typed as today's, so both forms register the same
+ * route types (the pages read params without a route id).
  */
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
+
+import { usagePath } from './lib/paths'
+import { inOrgOfPath } from './lib/paths/org'
+import { memberOnly } from './lib/routeOrg'
 
 import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
@@ -90,10 +105,19 @@ export interface ForgeConsoleComponents {
 
 type LegacyCommandPath = '/forge/topology' | '/forge/environments' | '/forge/status' | '/forge/secrets'
 
+export interface ForgeConsoleRouteOptions {
+  /** Today's paths (`/forge/p/$project`, the default), or the org form under `/o/$org` (`/apps/$project`). */
+  form?: 'legacy' | 'org'
+}
+
 export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   getParentRoute: () => TParent,
   components: ForgeConsoleComponents,
+  { form = 'legacy' }: ForgeConsoleRouteOptions = {},
 ) {
+  // The org form's two moved paths are typed as today's (see the header).
+  const inOrg = form === 'org'
+
   const layoutRoute = createRoute({
     getParentRoute,
     id: '_forge',
@@ -108,19 +132,19 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   })
   const orgObservabilityRoute = createRoute({
     getParentRoute: () => orgLayoutRoute,
-    path: '/forge/observability',
+    path: (inOrg ? '/observability' : '/forge/observability') as '/forge/observability',
     validateSearch: forgeOrgObsSearchSchema,
     component: components.orgObservability,
   })
   // A view that is not a nav entry (a hand-edited URL) lands on the org Observability overview.
   const orgObservabilityViewRoute = createRoute({
     getParentRoute: () => orgLayoutRoute,
-    path: '/forge/observability/$view',
+    path: (inOrg ? '/observability/$view' : '/forge/observability/$view') as '/forge/observability/$view',
     validateSearch: forgeOrgObsSearchSchema,
-    beforeLoad: ({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isObsNavView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
-    },
+    }),
     component: components.orgObservability,
   })
 
@@ -154,7 +178,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   // ── The console ──
   const consoleRoute = createRoute({
     getParentRoute: () => layoutRoute,
-    path: '/forge/p/$project',
+    path: (inOrg ? '/apps/$project' : '/forge/p/$project') as '/forge/p/$project',
     component: components.console,
   })
   const overviewRoute = createRoute({
@@ -186,9 +210,9 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const observabilityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'observability',
-    beforeLoad: ({ location }) => {
+    beforeLoad: memberOnly(({ location }) => {
       throw redirect({ href: `${location.pathname.replace(/\/observability\/?$/, '')}${location.searchStr}`, replace: true })
-    },
+    }),
   })
   // A view that is not a nav entry (a hand-edited URL) lands on the first
   // view rather than an empty page.
@@ -196,10 +220,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'observability/$view',
     validateSearch: forgeConsoleObsSearchSchema,
-    beforeLoad: ({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isObsNavView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, `/${OBS_NAV_VIEWS[0]}`)}${location.searchStr}`, replace: true })
-    },
+    }),
     component: components.observabilityView,
   })
   // Static, so it wins over observability/$view: the index has search state of its own.
@@ -214,10 +238,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'observability/dashboards/$kind/$key',
     validateSearch: forgeConsoleDashboardSearchSchema,
-    beforeLoad: ({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (params.kind === 'release' || params.kind === 'workspace') return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
-    },
+    }),
     component: components.dashboard,
   })
   // The storage browser: the scoped environment's buckets (components/Forge/Storage).
@@ -270,9 +294,9 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const monitoringRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'monitoring',
-    beforeLoad: ({ location }) => {
+    beforeLoad: memberOnly(({ location }) => {
       throw redirect({ href: `${location.pathname.replace(/\/monitoring\/?$/, '/observability/alerts')}${location.searchStr}`, replace: true })
-    },
+    }),
   })
   const activityRoute = createRoute({
     getParentRoute: () => consoleRoute,
@@ -285,9 +309,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const settingsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'settings',
-    beforeLoad: () => {
-      throw redirect({ href: orgUsagePath(), replace: true })
-    },
+    beforeLoad: memberOnly(({ location }) => {
+      // Keep the destination's org in the URL until it commits. Org-less
+      // Settings would read the previously committed tab's org instead.
+      const href = inOrg ? inOrgOfPath(location.pathname, usagePath()) : orgUsagePath()
+      throw redirect({ href, replace: true })
+    }),
   })
 
   return layoutRoute.addChildren([

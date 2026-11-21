@@ -546,7 +546,7 @@ export function MachineAccess({
         {grants.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent activity</h4>
+              <h4 className="text-xs font-semibold text-muted-foreground">Recent activity</h4>
               {deniedCount > 0 && <Badge label={`${deniedCount} blocked`} variant="error" size="sm" />}
             </div>
             {activity.length === 0 ? (

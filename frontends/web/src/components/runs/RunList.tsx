@@ -121,7 +121,7 @@ function RunSection({ label, id, children }: { label: string; id: string; childr
     <section aria-labelledby={id} className="border-b border-border/60 last:border-b-0">
       <h2
         id={id}
-        className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        className="px-4 pb-1 pt-3 text-xs font-semibold text-muted-foreground"
       >
         {label}
       </h2>

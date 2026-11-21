@@ -628,7 +628,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               {!walletLoading && !creditsAvailable && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <h4 className="text-xs font-medium text-muted-foreground">
                       How much credit?
                     </h4>
                     <CreditAmountPicker

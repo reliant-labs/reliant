@@ -102,11 +102,7 @@ func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
 			(SELECT COUNT(*) FROM messages m
 			   JOIN chats c ON c.id = m.chat_id
 			  WHERE c.user_id = $1),
-			(EXISTS (SELECT 1 FROM claude_auth_tokens      WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM codex_auth_tokens       WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM copilot_auth_tokens     WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM antigravity_auth_tokens WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1)
+			(EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM provider_accounts       WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM connections             WHERE user_id = $1 AND deleted_at IS NULL))`,
 		userID)
@@ -285,14 +281,7 @@ var purgeSteps = []step{
 	// tokens and provider API keys; if any earlier step fails and the
 	// transaction rolls back, the user keeps working with their credentials
 	// intact rather than being left authenticated to nothing.
-	// The four *_auth_tokens tables and the LLM rows of api_keys are no longer read or written, but
-	// they still hold the credentials of every user who connected before the one-time copy, until
-	// the migration that drops them. An account deletion must keep wiping them; delete these steps
-	// together with that migration.
-	{"claude_auth_tokens", `DELETE FROM claude_auth_tokens WHERE user_id = $1`},
-	{"codex_auth_tokens", `DELETE FROM codex_auth_tokens WHERE user_id = $1`},
-	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},
-	{"antigravity_auth_tokens", `DELETE FROM antigravity_auth_tokens WHERE user_id = $1`},
+	// api_keys holds the person's automation tokens (one per daemon).
 	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
 	// The person's grants to use org accounts (the grants they made as an
 	// admin stay: granted_by_user_id is attribution, not ownership).
