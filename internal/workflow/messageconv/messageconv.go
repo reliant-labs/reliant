@@ -113,10 +113,7 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 			// preview so it can save the original without recreating it.
 			if image, ok := part.(message.BinaryContent); ok && role == message.User &&
 				block.Content != nil && strings.HasPrefix(image.MIMEType, "image/") && len(image.Data) > 0 {
-				parts = append(parts, message.TextContent{Text: fmt.Sprintf(
-					"[Attached image (attachment_id=%s). To copy the original file into the workspace, use save_attachment with this attachment_id.]",
-					*block.Content,
-				)})
+				parts = append(parts, message.TextContent{Text: userImageReference(*block.Content, image.MIMEType)})
 			}
 			parts = append(parts, part)
 		}
@@ -151,6 +148,21 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 	}
 
 	return msg
+}
+
+// userImageReference is the text a user's attached image replays with.
+//
+// It names the stored type because a model that only SEES the image cannot
+// tell a PNG from a JPEG, and picks the file extension from that guess. And it
+// says a sub-agent cannot see the image, because the usual failure is not this
+// agent's save but a delegated one: the agent that is told to "use the image
+// the user sent" starts with only its prompt, so the id has to travel in it.
+func userImageReference(attachmentID, mimeType string) string {
+	return fmt.Sprintf(
+		"[Attached image (attachment_id=%s, %s). To copy the original file into the workspace, use save_attachment "+
+			"with this attachment_id and a file extension that matches %s. A sub-agent cannot see this image: "+
+			"to delegate work on it, pass the attachment_id in the sub-agent's prompt, or save the file first and pass its path.]",
+		attachmentID, mimeType, mimeType)
 }
 
 // foldToolResultMedia attaches an IMAGE or DOCUMENT block of a tool message to
@@ -265,7 +277,8 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			return message.TextContent{
 				Text: fmt.Sprintf(
 					"[Attached document: %s (attachment_id=%s). Use the read_attachment tool with this "+
-						"attachment_id to read it. For PDFs, pass a pages range (e.g. pages=\"1-5\").]",
+						"attachment_id to read it. For PDFs, pass a pages range (e.g. pages=\"1-5\"). "+
+						"To copy the file into the workspace, use save_attachment with this attachment_id.]",
 					attachment.FileName, attachmentID),
 			}
 		}

@@ -2990,6 +2990,8 @@ While a spawned agent runs you can steer, observe and stop it: spawn_status(agen
 
 If an agent fails for good (its provider keeps erroring, say), only that agent stops — you keep running — and you are notified with status="failed", the error and its agent_id. Deciding what happens next is yours: resume it where it stopped with spawn(agent_id, prompt), retry the work with a fresh agent, or continue without it.
 
+A sub-agent sees ONLY its prompt — not this conversation, and not the images or files the user attached to it. When the task involves one (an image to put in an app, a PDF to read), either save it into the workspace yourself first (save_attachment) and give the sub-agent the path, or put its attachment_id in the prompt and tell the sub-agent to save it with save_attachment (or read it with read_attachment). "The image the user sent" is not something a sub-agent can find.
+
 %s
 
 Available presets:
