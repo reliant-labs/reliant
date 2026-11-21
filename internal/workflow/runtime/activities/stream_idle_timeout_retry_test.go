@@ -2,11 +2,14 @@
 package activities
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -44,6 +47,42 @@ func TestStreamIdleTimeoutIsRetryable(t *testing.T) {
 				"an idle stream is a network fault and should be reported as one")
 		})
 	}
+}
+
+// TestStreamEndedEarlyIsRetryable is the same contract for a stream that
+// closed cleanly before its terminal event (a Responses stream with no
+// response.completed). Unlike its siblings it is recognised by identity, not
+// wording: ClassifyError checks errors.Is before any text rule. The "terminal
+// words" case proves identity wins — wrapping layers add text, and "not found"
+// and "invalid" are terminal patterns — and its control below proves those
+// words alone would have been terminal.
+func TestStreamEndedEarlyIsRetryable(t *testing.T) {
+	driverErr := responseswire.ErrStreamEndedWithoutTerminalEvent
+	const terminalWords = "thread not found in cache; invalid partial response"
+
+	for name, err := range map[string]error{
+		"bare": drivererrors.ErrStreamEndedEarly,
+		// Wrapped exactly as call_llm.go's handleError reports it.
+		"wrapped":                     fmt.Errorf("LLM streaming error: %w", driverErr),
+		"wrapped with terminal words": fmt.Errorf("%s: %w", terminalWords, fmt.Errorf("LLM streaming error: %w", driverErr)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			classified := ClassifyError(err)
+			require.Error(t, classified)
+
+			var appErr *temporal.ApplicationError
+			assert.NotErrorAs(t, classified, &appErr,
+				"a stream cut short must be retried, not turned into a non-retryable failure")
+			assert.False(t, IsTerminal(classified))
+			assert.ErrorIs(t, classified, drivererrors.ErrStreamEndedEarly,
+				"classification must not lose the cause")
+			assert.Equal(t, ErrorCategoryNetwork, CategorizeError(err),
+				"a stream cut short is a network fault and should be reported as one")
+		})
+	}
+
+	assert.True(t, IsTerminal(ClassifyError(errors.New(terminalWords))),
+		"control: without the sentinel these words are terminal, so the case above is identity winning")
 }
 
 // TestStalledStreamWithMarkerIsRetryable guards the composed string that the

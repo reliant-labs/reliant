@@ -151,7 +151,7 @@ type Plan struct {
 	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`
 }
 
-// LockfileCheck is one npm project whose package.json or package-lock.json
+// LockfileCheck is one Node project whose package.json or lockfile
 // changed. The lanes' tests run against whatever node_modules is already on
 // disk, so without this nothing in the affected tier notices a lockfile that
 // `npm ci` rejects: reliant #1343 bumped forge-web-runtime in package.json,
@@ -179,10 +179,10 @@ const (
 // npmProjects are the repo's npm projects. TestNPMProjectsNameEveryLockfile
 // holds this to the tree.
 var npmProjects = map[string]npmProject{
-	".":                   {npmLock, []lane{laneWeb, laneElectron}},
+	".":                   {pnpmLock, []lane{laneWeb, laneElectron}},
 	"frontends/web":       {pnpmLock, []lane{laneWeb}},
-	"electron":            {npmLock, []lane{laneElectron}},
-	"tools/protoc-gen-es": {npmLock, []lane{laneForgeGen}},
+	"electron":            {pnpmLock, []lane{laneElectron}},
+	"tools/protoc-gen-es": {pnpmLock, []lane{laneForgeGen}},
 }
 
 func (c *classifier) noteLockfile(ch Change) {

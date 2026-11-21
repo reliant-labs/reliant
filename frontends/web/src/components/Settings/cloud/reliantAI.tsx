@@ -322,7 +322,7 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
                 </p>
                 {allowedModels.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Available models
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">

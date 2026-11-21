@@ -2,7 +2,7 @@
 
 /**
  * The caller's own CLI logins (`controlplane.v1.AccessTokenService`
- * ListMyCLILogins / RevokeMyCLILogin): each `forge login` is a credential of
+ * ListMyCLILogins / RevokeMyCLILogin): each `forge cloud login` is a credential of
  * its own (an `rlci_` identity) that acts as the person on that device until
  * it expires, is signed out, or is revoked here.
  *

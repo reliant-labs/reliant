@@ -95,7 +95,7 @@ forge db query prod "select status, count(*) from jobs group by 1" \
 - **A named reason and an audit record.** On a real environment you pass `--confirm-env <env>` (the name again) and `--reason`. A hosted query needs the organization's `db:query` grant, which owners and admins hold, and is recorded in the control plane's audit log and activity feed. It is limited to one query at a time per person and 30 a minute.
 - **A policy per environment.** `data_access = forge.DataAccess {db_query = "audited"}` in the environment's KCL sets who may query: `open`, `audited` (a person, with confirmation and a reason) or `deny` (nobody).
 
-A non-zero exit of 2 means forge could not look, not that there were no rows. `forge skill load db/query` has the transports, the JSON output and every exit code.
+A non-zero exit of 2 means forge could not look, not that there were no rows. `forge agent skill load db/query` has the transports, the JSON output and every exit code.
 
 ## Delete an environment, keep the data
 
@@ -122,7 +122,7 @@ Nothing else ever deletes retained data, so a kept database stays, and keeps bil
 
 ## Bring your own database
 
-You don't have to use the managed one. Keep your own Postgres and set its connection string as a secret with `forge secret set --env <env> DATABASE_URL` (see [Secrets](/hosting/secrets)); to let `forge db query` read a database forge doesn't run, such as Cloud SQL or RDS, declare it as a `forge.ExternalDatabase` in the environment's `external_databases`. forge renders nothing for it; the declaration only gives `forge db query` a route, under the same read-only and audit rules. Backups of a database you bring are yours to manage. A workload on Reliant hosting reaches the internet only over TCP 80 and 443, so it cannot connect to a Postgres server outside hosting on 5432; bringing your own database works for workloads bound to a cluster you operate.
+You don't have to use the managed one. Keep your own Postgres and set its connection string as a secret with `forge env secret set --env <env> DATABASE_URL` (see [Secrets](/hosting/secrets)); to let `forge db query` read a database forge doesn't run, such as Cloud SQL or RDS, declare it as a `forge.ExternalDatabase` in the environment's `external_databases`. forge renders nothing for it; the declaration only gives `forge db query` a route, under the same read-only and audit rules. Backups of a database you bring are yours to manage. A workload on Reliant hosting reaches the internet only over TCP 80 and 443, so it cannot connect to a Postgres server outside hosting on 5432; bringing your own database works for workloads bound to a cluster you operate.
 
 ## Related topics
 

@@ -99,12 +99,12 @@ describe("ToolExecution approval UI across surfaces", () => {
     }
   });
 
-  it("keeps the compact desktop buttons unchanged", () => {
+  it("keeps the desktop buttons at the 36px control height", () => {
     renderApproval("desktop");
 
     const approve = screen.getByRole("button", { name: "Approve tool execution" });
     expect(approve.className).not.toMatch(/min-h-\[44px\]/);
-    expect(approve.className).toMatch(/py-1\.5/);
+    expect(approve.className).toMatch(/\bh-9\b/);
   });
 
   it("renders the diff with the lightweight viewer, never Monaco", () => {

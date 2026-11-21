@@ -67,9 +67,9 @@ holds up. Three facts found here change the shape, though:
 | DB-backed tests | **54 packages** (`rg -l 'SetupTestDB\|storetest.New\|resolveTestDSN\|DATABASE_URL' -g '*_test.go'`). They read `DATABASE_URL` only and never pick a server themselves; `REQUIRE_TEST_DB=1` turns the skip into a failure; `-short` skips them. Two harnesses: `internal/db/testutil.go` (its own template clone) and `internal/store/storetest` (already `pgtest.NewFromTemplate`, but refuses to boot embedded PG) | `internal/db/testutil.go:230`, `storetest.go:75` |
 | Test DB in CI | `pr-ci.yml` backend + flake-gate: `services: postgres:16`, `DATABASE_URL=…:5432/reliant`, `REQUIRE_TEST_DB=1` | `pr-ci.yml:885-907,1032-1047` |
 | Postgres versions | prod `reliant-pg` is **POSTGRES_16** (control-plane `docs/openbao-secret-store.md:34`); reliant compose is 16; control-plane compose is 17; pgtest embedded is **18.3** (its cached binary, `embedded-postgres-binaries-linux-amd64-18.3.0.txz`; `bootEmbedded` sets no version) | `ls ~/.cache/forge/embedded-postgres` |
-| Heavy queue | the Makefile's `SLOT` (`forge slot run --class heavy --`) is identical to forge's Taskfile `SLOT`; the daemon's `internal/heavyjob` already classifies `make test*` **and** `task test*` (`heavyjob.go:85-86`) | — |
+| Heavy queue | the Makefile's `SLOT` (`forge machine slot run --class heavy --`) is identical to forge's Taskfile `SLOT`; the daemon's `internal/heavyjob` already classifies `make test*` **and** `task test*` (`heavyjob.go:85-86`) | — |
 | Workflows | 9 files, 4,304 lines; `pr-ci.yml` alone is 1,684 lines (13 jobs, sharded by `tools/test-affected shard`). forge's ci.yml / proto-breaking.yml were scaffolded on 2026-10-12 and then deleted (`.forge/scaffolded.json` → `absent_reported`) | `wc -l .github/workflows/*` |
-| Pinned buf | reliant builds buf **v1.57.0** (`Makefile:378`) and hands it to forge as `$BUF`; forge pins buf **1.50.0** (`forge tools pins`) | — |
+| Pinned buf | reliant builds buf **v1.57.0** (`Makefile:378`) and hands it to forge as `$BUF`; forge pins buf **1.50.0** (`forge machine tools pins`) | — |
 
 ## 2. Make target inventory (124 → keep / move / delete)
 
@@ -90,7 +90,7 @@ both repos.
 | `install` | → `task install` | `go install` with ldflags |
 | `deps` | → `task deps` (forge's, extended with `web/`, `electron/`, `tools/protoc-gen-es` `npm ci`) | — |
 | `setup-hooks` | **delete** | forge configures `.githooks` on the clone (`githooks.go`) |
-| `tools` | **delete** → `forge tools install` | forge pins golangci-lint/govulncheck; `@latest` installs are what the gate's pins replace |
+| `tools` | **delete** → `forge machine tools install` | forge pins golangci-lint/govulncheck; `@latest` installs are what the gate's pins replace |
 | `clean` | → `task clean` | — |
 | `clean-all`, `clean-full` | **delete** | they depend on `docker-clean`, which is dead |
 | `all`, `dev-build`, `check`, `ci` | **delete** → `task ci` | `ci` depends on the nonexistent `schema-validate` and has not worked |
@@ -325,7 +325,7 @@ control-plane edits (lane L6, small):
 | FG1 | `pgtest` embedded Postgres has no version knob: 18.3, while prod is 16. Pin the embedded major to a project declaration (e.g. `database.postgres_version` in forge.yaml, which `forge env up` host infra can share) | `bootEmbedded` sets no `.Version`; cached 18.3 binary | dropping CI's service container (§4.7) |
 | FG2 | The scaffolded Taskfile is wrong for an in-place adopter. `test:frontend`/`deps`/`fmt` glob `frontends/*` instead of the declared `frontends:` paths. `generate` runs bare `buf generate` and checks for `protoc-gen-go` on PATH instead of running `forge generate`. `verify-generate` and `proto` duplicate forge's own steps. `dev-up`/`dev-down`/`dev-psql` assume a compose dev app the project may not have | scratch rescaffold | nothing (reliant edits its own copy), but every adopter hits it |
 | FG2b | Scaffolded tasks call bare `forge`, which can be a different forge from the pin: here `reliant forge` rejected forge.yaml. The Taskfile should resolve the pinned forge, or forge should re-exec the pin when it is not the pin (the merge driver already does this) | §1 | L1 correctness |
-| FG3 | One buf per project. forge pins buf 1.50.0 while reliant needs 1.57.0 and smuggles it in through `$BUF`. Let forge.yaml pin tool versions, or bump forge's | `forge tools pins`; `Makefile:378` | L1 (drops the Makefile's buf bootstrap) |
+| FG3 | One buf per project. forge pins buf 1.50.0 while reliant needs 1.57.0 and smuggles it in through `$BUF`. Let forge.yaml pin tool versions, or bump forge's | `forge machine tools pins`; `Makefile:378` | L1 (drops the Makefile's buf bootstrap) |
 | FG4 | Affected selection exists three times: forge's gate (Go only; full fallback on any non-Go path), reliant `tools/test-affected` (4,375 LOC: Go, web import graph, electron, codegen lanes, migrations → DB packages) and control-plane `tools/ci-affected`. Upstream one engine with project rules (`ci.gate.affected.rules`) | `wc -l tools/test-affected/*.go` | not blocking (`replaces: unit-tests`) |
 | FG5 | `forge ci gate test` cannot shard (reliant CI runs up to 6 weighted shards) | `pr-ci.yml:117` | not blocking |
 | FG6 | = PLAN F6: cross-project KCL import of workloads + `config_gen.k` | PLAN §5 | P8b |

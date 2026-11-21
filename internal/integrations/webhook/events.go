@@ -39,6 +39,7 @@ const AccessFreshness = core.IntegrationAccessFreshness
 type EventsOptions struct {
 	Store    EventsStore
 	Intake   Intake
+	Inbox    ReceiptStore
 	Registry *Registry
 	// PublicURL is this server's externally reachable base (PUBLIC_URL).
 	// Required: a provider signs the URL it was given, and without the base
@@ -149,20 +150,33 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	e.recordAndAck(ctx, w, providerID, delivery, nil)
+	e.recordAndAck(ctx, w, providerID, delivery, nil, req.ReceivedAt)
 }
 
-// recordAndAck applies a parsed delivery's revocations, routes its events
-// and answers the sender. verified, when non-nil, is the only set of
-// connection-account routes the events may reach (a ConnectionSigned
-// provider's routes whose connection verified the delivery); nil means
-// every route of the integration.
-//
-// The delivery is recorded under the request's values without its
-// cancellation (see recordingContext), bounded by deliveryTimeout as a whole
-// and by recordTimeout for each step: applying the revocations, listing the
-// triggers an event reaches, recording the event for one trigger.
-func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute) {
+// recordAndAck commits a verified delivery and its revocations before
+// replying. Without an inbox, it applies revocations and routes inline, with
+// a whole-delivery cap and a separate deadline for each step. Both paths
+// retain request values without inheriting the sender's cancellation.
+func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute, receivedAt time.Time) {
+	if e.opts.Inbox != nil {
+		ctx, cancel := recordingContext(reqCtx)
+		defer cancel()
+		if len(delivery.Events) != 0 || len(delivery.Revocations) != 0 {
+			receipt, err := newIntegrationReceipt(providerID, delivery, verified, receivedAt)
+			var created bool
+			if err == nil {
+				created, err = e.opts.Inbox.RecordTriggerDelivery(ctx, receipt, delivery.Revocations)
+			}
+			recordReceiptMetric(core.TriggerDeliveryIntegration, created, err)
+			if err != nil {
+				logging.ErrorContext(ctx, "integration inbox receipt failed", "provider", providerID, "receipt_id", receipt.ID)
+				writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
+				return
+			}
+		}
+		ackDelivery(w, delivery)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), e.deliveryTimeout)
 	defer cancel()
 	// Revocations first: an event in the same delivery routes under the
@@ -176,13 +190,17 @@ func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWri
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
-	if err := e.route(ctx, providerID, delivery.Events, verified); err != nil {
+	if err := e.route(ctx, providerID, delivery.Events, verified, nil); err != nil {
 		// A partial failure still recorded what it could. Asking the sender
 		// to retry is right: the recorded half dedupes.
 		logging.ErrorContext(ctx, "integration delivery could not be fully recorded", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
+	ackDelivery(w, delivery)
+}
+
+func ackDelivery(w http.ResponseWriter, delivery *Delivery) {
 	if delivery.Ack != nil {
 		writeResponse(w, delivery.Ack)
 		return
@@ -269,7 +287,7 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 	}
 	// The verified routes all record `account`; an event claiming another
 	// account would be the provider's bug, and routeMatches drops it.
-	e.recordAndAck(ctx, w, providerID, delivery, verified)
+	e.recordAndAck(ctx, w, providerID, delivery, verified, req.ReceivedAt)
 }
 
 func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider ConnectionSigned, req *Request, userID, connectionID string) bool {
@@ -286,6 +304,12 @@ func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider Conn
 		return false
 	}
 	return true
+}
+
+// routeAttempt carries the cutoff and lease check for replaying an inbox row.
+type routeAttempt struct {
+	receivedAt    time.Time
+	beforeTrigger func(context.Context) error
 }
 
 // route hands each event to every trigger it reaches.
@@ -306,9 +330,8 @@ func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider Conn
 // may hear it. It is never widened to the full list.
 //
 // The triggers are recorded one at a time, each in a step of its own
-// (recordTimeout), and all of them through one triggers.Batch, so the
-// triggers that read one workflow catalog pin and read it once.
-func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event, verified []*core.IntegrationTriggerRoute) error {
+// (recordTimeout), and share one triggers.Batch for this routing attempt.
+func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event, verified []*core.IntegrationTriggerRoute, attempt *routeAttempt) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -332,7 +355,11 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 					"provider", providerID, "type", ev.Type)
 				continue
 			}
-			errs = append(errs, e.routeByAccess(ctx, batch, providerID, ev))
+			err := e.routeByAccess(ctx, batch, providerID, ev, attempt)
+			if errors.Is(err, errInboxLeaseLost) {
+				return err
+			}
+			errs = append(errs, err)
 			continue
 		}
 		if !routesLoaded {
@@ -349,7 +376,11 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 			if !routeMatches(r, ev) {
 				continue
 			}
-			errs = append(errs, e.recordFor(ctx, batch, providerID, r.Trigger, ev))
+			err := e.recordFor(ctx, batch, providerID, r.Trigger, ev, attempt)
+			if errors.Is(err, errInboxLeaseLost) {
+				return err
+			}
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
@@ -358,9 +389,17 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 // recordFor hands ev to trigger t in a step of its own, so a trigger that is
 // slow to record (or fails) leaves the rest of the delivery its full budget.
 // A trigger its org's policy refuses hears nothing and is not an error.
-func (e *EventsReceiver) recordFor(ctx context.Context, batch *triggers.Batch, providerID string, t *core.Trigger, ev Event) error {
+func (e *EventsReceiver) recordFor(ctx context.Context, batch *triggers.Batch, providerID string, t *core.Trigger, ev Event, attempt *routeAttempt) error {
+	if attempt != nil && t.CreatedAt.After(attempt.receivedAt) {
+		return nil
+	}
 	ctx, cancel := e.step(ctx)
 	defer cancel()
+	if attempt != nil {
+		if err := attempt.beforeTrigger(ctx); err != nil {
+			return err
+		}
+	}
 	if ok, err := e.policyAdmits(ctx, providerID, t); !ok {
 		return err
 	}
@@ -373,7 +412,7 @@ func (e *EventsReceiver) recordFor(ctx context.Context, batch *triggers.Batch, p
 // routeByAccess hands an access-gated event to every trigger whose owner can
 // see its resource. The decision is made before any row is written, so the
 // event never appears in the history of a user who cannot see it.
-func (e *EventsReceiver) routeByAccess(ctx context.Context, batch *triggers.Batch, providerID string, ev Event) error {
+func (e *EventsReceiver) routeByAccess(ctx context.Context, batch *triggers.Batch, providerID string, ev Event, attempt *routeAttempt) error {
 	stepCtx, cancelStep := e.step(ctx)
 	matched, err := e.opts.Store.ListAccessRoutedTriggers(stepCtx, providerID, ev.AccountKey, ev.ResourceKey, e.now().Add(-AccessFreshness))
 	cancelStep()
@@ -386,7 +425,11 @@ func (e *EventsReceiver) routeByAccess(ctx context.Context, batch *triggers.Batc
 		if err != nil || !t.Enabled || !eventInScope(t, cfg, ev) {
 			continue
 		}
-		errs = append(errs, e.recordFor(ctx, batch, providerID, t, ev))
+		err = e.recordFor(ctx, batch, providerID, t, ev, attempt)
+		if errors.Is(err, errInboxLeaseLost) {
+			return err
+		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

@@ -3330,9 +3330,16 @@ type RestartRequested struct {
 	// The roll this request belongs to, echoed in DaemonUpgradeStatus.
 	RolloutId string `protobuf:"bytes,6,opt,name=rollout_id,json=rolloutId,proto3" json:"rollout_id,omitempty"`
 	// Why, in words an operator can read.
-	Reason        string `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Reason string `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
+	// What the owner of a person's machine runs to upgrade, and where they are
+	// sent to, when the request comes from a version floor
+	// (ClientVersionPolicy daemon_upgrade_command / daemon_upgrade_url). Empty when
+	// the server names none; the daemon then prints its own advice. A daemon
+	// that predates them ignores them.
+	UpgradeCommand string `protobuf:"bytes,8,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
+	UpgradeUrl     string `protobuf:"bytes,9,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RestartRequested) Reset() {
@@ -3410,6 +3417,20 @@ func (x *RestartRequested) GetRolloutId() string {
 func (x *RestartRequested) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *RestartRequested) GetUpgradeCommand() string {
+	if x != nil {
+		return x.UpgradeCommand
+	}
+	return ""
+}
+
+func (x *RestartRequested) GetUpgradeUrl() string {
+	if x != nil {
+		return x.UpgradeUrl
 	}
 	return ""
 }
@@ -6449,7 +6470,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05drain\x18\x14 \x01(\v2\x18.reliant.v1.GatewayDrainH\x00R\x05drain\x12C\n" +
 	"\x0ftool_result_ack\x18\x15 \x01(\v2\x19.reliant.v1.ToolResultAckH\x00R\rtoolResultAck\x12K\n" +
 	"\x11restart_requested\x18\x16 \x01(\v2\x1c.reliant.v1.RestartRequestedH\x00R\x10restartRequestedB\t\n" +
-	"\amessage\"\x9f\x02\n" +
+	"\amessage\"\xe9\x02\n" +
 	"\x10RestartRequested\x12%\n" +
 	"\x0etarget_version\x18\x01 \x01(\tR\rtargetVersion\x12#\n" +
 	"\rtarget_commit\x18\x02 \x01(\tR\ftargetCommit\x12(\n" +
@@ -6458,7 +6479,10 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x05 \x01(\x03R\x0edeadlineUnixMs\x12\x1d\n" +
 	"\n" +
 	"rollout_id\x18\x06 \x01(\tR\trolloutId\x12\x16\n" +
-	"\x06reason\x18\a \x01(\tR\x06reason\"\x0e\n" +
+	"\x06reason\x18\a \x01(\tR\x06reason\x12'\n" +
+	"\x0fupgrade_command\x18\b \x01(\tR\x0eupgradeCommand\x12\x1f\n" +
+	"\vupgrade_url\x18\t \x01(\tR\n" +
+	"upgradeUrl\"\x0e\n" +
 	"\fGatewayHello\"8\n" +
 	"\fGatewayDrain\x12(\n" +
 	"\x10deadline_unix_ms\x18\x01 \x01(\x03R\x0edeadlineUnixMs\".\n" +

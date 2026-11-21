@@ -322,19 +322,19 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			name:      "expanded web tests and full generation",
 			next:      Plan{Go: GoPlan{LaneFull: full}, Web: WebPlan{Tests: []string{"generated.test.ts"}}, ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "true|false|false|false|true|true|false|1",
-			wantDeps:  []string{"npm .", "npm tools/protoc-gen-es", "pnpm frontends/web"},
+			wantDeps:  []string{"pnpm frontends/web", "pnpm tools/protoc-gen-es"},
 		},
 		{
 			name:      "expanded full web lane",
 			next:      Plan{Web: WebPlan{LaneFull: full}},
 			wantState: "false|true|false|false|true|false|false|0",
-			wantDeps:  []string{"npm .", "pnpm frontends/web"},
+			wantDeps:  []string{"pnpm frontends/web"},
 		},
 		{
 			name:       "generated web source needs typecheck without tests",
 			changedWeb: true,
 			wantState:  "false|false|false|false|true|false|false|0",
-			wantDeps:   []string{"npm .", "pnpm frontends/web"},
+			wantDeps:   []string{"pnpm frontends/web"},
 		},
 		{
 			name:      "hook-only generation needs no protoc install",
@@ -346,7 +346,7 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			initial:   Plan{ForgeGen: ForgeGenPlan{LaneFull: full, HooksOnly: true}},
 			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "false|false|false|false|false|true|false|0",
-			wantDeps:  []string{"npm tools/protoc-gen-es"},
+			wantDeps:  []string{"pnpm tools/protoc-gen-es"},
 		},
 		{
 			// Electron and docs run in the merge gate again (#1768). Electron's
@@ -355,13 +355,13 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			name:      "electron lane installs electron; docs installs nothing",
 			next:      Plan{Electron: ElectronPlan{LaneFull: full}, DocGen: DocGenPlan{LaneFull: full}},
 			wantState: "false|false|true|true|false|false|false|0",
-			wantDeps:  []string{"npm .", "npm electron"},
+			wantDeps:  []string{"pnpm electron"},
 		},
 		{
 			name:      "new dependency failure is propagated after waiting",
 			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "false|false|false|false|false|true|false|0",
-			wantDeps:  []string{"npm tools/protoc-gen-es"},
+			wantDeps:  []string{"pnpm tools/protoc-gen-es"},
 			failedDir: "tools/protoc-gen-es",
 		},
 	} {
@@ -374,27 +374,23 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 				}
 				putFixture(t, dir, name, string(data), 0644)
 			}
-			for _, d := range []string{".", "electron", "tools/protoc-gen-es"} {
-				putFixture(t, dir, filepath.Join(d, "package-lock.json"), "{}", 0644)
+			for _, d := range []string{"frontends/web", "electron", "tools/protoc-gen-es"} {
+				putFixture(t, dir, filepath.Join(d, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", 0644)
 			}
-			putFixture(t, dir, "frontends/web/pnpm-lock.yaml", "lockfileVersion: '9.0'\n", 0644)
 			// Assert the actual frozen-install commands, not just selected dirs.
-			putFixture(t, dir, "bin/npm", `#!/usr/bin/env bash
+			// The fake writes node_modules as a real install does (the gate
+			// stamps its .modules.yaml after a success).
+			putFixture(t, dir, "bin/pnpm", `#!/usr/bin/env bash
 set -euo pipefail
 # electron keeps its install script (it fetches the binary); everything else ignores scripts.
 if [[ $3 = electron ]]; then
-  [[ $# = 6 && $1 = ci && $2 = --prefix && $4 = --no-audit && $5 = --no-fund && $6 = --loglevel=error ]]
+  [[ $# = 6 && $1 = install && $2 = --dir && $4 = --frozen-lockfile && $5 = --config.confirmModulesPurge=false && $6 = --reporter=silent ]]
 else
-  [[ $# = 7 && $1 = ci && $2 = --prefix && $4 = --ignore-scripts && $5 = --no-audit && $6 = --no-fund && $7 = --loglevel=error ]]
+  [[ $# = 7 && $1 = install && $2 = --dir && $4 = --frozen-lockfile && $5 = --ignore-scripts && $6 = --config.confirmModulesPurge=false && $7 = --reporter=silent ]]
 fi
-printf 'npm %s\n' "$3" >>"$INSTALL_LOG"
-[[ $3 != "$FAILED_DIR" ]]
-`, 0755)
-			putFixture(t, dir, "bin/pnpm", `#!/usr/bin/env bash
-set -euo pipefail
-[[ $# = 7 && $1 = install && $2 = --dir && $3 = frontends/web && $4 = --frozen-lockfile && $5 = --ignore-scripts && $6 = --config.confirmModulesPurge=false && $7 = --reporter=silent ]]
 printf 'pnpm %s\n' "$3" >>"$INSTALL_LOG"
 [[ $3 != "$FAILED_DIR" ]]
+mkdir -p "$3/node_modules"
 `, 0755)
 			putFixture(t, dir, "changed-1", "", 0644)
 			changed := ""

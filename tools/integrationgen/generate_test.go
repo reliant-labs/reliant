@@ -182,6 +182,8 @@ func TestSpecErrors(t *testing.T) {
 		{"unknown group", demoEvent, "{ group: owned }", "{ group: nobody }", `attribute group "nobody"`},
 		{"unknown envelope omit", demoEvent, "keywords: [thing, new]", "keywords: [thing, new]\nomit: [nothing]", `omit "nothing"`},
 		{"cap on a number", demoEvent, "id: integer\n      name", "id: { kind: integer, cap: true }\n      name", "cap applies to a string"},
+		{"markers without from", demoEvent, "kind: markers, from: notes,", "kind: markers,", "markers needs `from:`"},
+		{"markers of a number", demoEvent, "kind: markers, from: notes,", "kind: markers, from: id,", `field "marks" (markers) reads "id", which upstream types [integer]`},
 		{"duplicate key", demoEvent, "event: thing.created", "event: thing.created\nsummary: x", "already defined"},
 		{"file name is the id", demoEvent, "id: thing.created", "id: thing.made", `file name must be the trigger id it declares, "thing.created"`},
 	}

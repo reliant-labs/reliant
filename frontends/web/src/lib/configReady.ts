@@ -23,6 +23,7 @@ const FLAG_KEYS = [
   "AUTO_ANON_SIGN_IN",
   "CLI_DEFAULTS_BAKED",
   "OTEL_REPLAY",
+  "ORG_ROUTES",
 ] as const;
 
 // "self-hosted" is unset spelled out, for a document another project renders

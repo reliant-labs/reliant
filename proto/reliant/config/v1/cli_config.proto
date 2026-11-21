@@ -28,10 +28,12 @@ message CLIConfig {
       {path: ["integrations"]},
       {path: ["machine"]},
       {path: ["mcp"]},
+      {path: ["models"]},
       {path: ["project"]},
       {path: ["providers"]},
       {path: ["trigger"]},
-      {path: ["workflow"]}
+      {path: ["workflow"]},
+      {path: ["worktree"]}
     ]
   };
 

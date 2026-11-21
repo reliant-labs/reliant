@@ -63,7 +63,7 @@ export PATH="$HOME/go/bin:$PATH"
 From the repo root:
 
 ```bash
-task deps        # Go modules + the web, electron and protoc-gen-es npm packages
+task deps        # Go modules + the web, electron and protoc-gen-es packages (pnpm)
 ```
 
 Generated code is committed, so there is nothing to generate on a fresh clone.

@@ -46,7 +46,7 @@ now; W2 → W3. **Observability:** O2 → O3 run now; O1 → soak → O4/O5. **M
 
 ## 1. What forge's deployment model expects, and where reliant stands
 
-### 1.1 The model (from `forge skill load deploy`, `secrets`, `deploy/hosting`, `deploy/static-site`, `observability/destination`)
+### 1.1 The model (from `forge agent skill load deploy`, `secrets`, `deploy/hosting`, `deploy/static-site`, `observability/destination`)
 
 1. **Declare once.** Every process is a `fw.Workload` in `deploy/kcl/workloads.k`. Each env's
    `main.k` *binds* each workload to a runtime (`OnHost`, `OnCluster`, `OnHosted`,
@@ -157,7 +157,7 @@ or F6 cannot carry these.
 - **forge, pinned at `df09b730` in both repos:** SF1 schema, SF2 `pkg/secretaccess` and
   `secretgen`, SF3 release shape, SF4 the hardened ESO, SF5 the store-backed
   `ExternalSecret` rendering SecretStore, Role and ES, SF6–SF8 `forge.OpenBao` (bootstrap,
-  escrow, public edge), SF9 preflight, SF10 `forge secret set/list/import` and
+  escrow, public edge), SF9 preflight, SF10 `forge env secret set/list/import` and
   `env secrets verify/adopt`, SF11 apply-before-consumers and pin-bump rollout ordering,
   SF12 `forge lint --secrets`, SF13 issuer registration, SF14 `ControlPlaneSecret` through
   the store **[V: forge PR list]**.
@@ -204,7 +204,7 @@ value has not synced reports "unavailable"; it does not fail the pod.
 They are in the hosted store at `secret/tenants/55949942…/13b10699…/<NAME>`. That is the
 same layout `HostedStore` reads (secrets-design §2.1 rec. 5; `forge/kcl/schema.k:3880-3910`).
 So no import step is needed. **[U]** Their exact names and versions: run
-`forge secret list --env prod` (names and versions only), or ask the sibling agent.
+`forge env secret list --env prod` (names and versions only), or ask the sibling agent.
 
 Proposal (**OD5**): **move them into W0a**, beside or instead of the GitHub App key, for
 three reasons:
@@ -240,7 +240,7 @@ The sequence:
 
 ### 2.5 Rotation, bootstrap and dev
 
-- **Rotation (D3).** `forge secret set --env prod NAME` writes vN (write-only, audited,
+- **Rotation (D3).** `forge env secret set --env prod NAME` writes vN (write-only, audited,
   step-up on a `protected` env). A PR bumps `pin`. SF11 syncs the ES *before* rolling the
   consumers that read it. `RELIANT_VAULT_KEY` is `immutable` (a pin above 1 is refused).
   `INTERNAL_SERVICE_SECRET` and the NATS password need a dual-key window first (P11),
@@ -342,7 +342,7 @@ forge's CNPG today:
    "declare once, bind per env" primitive workloads use: dev binds host postgres, a
    customer's cluster binds `OnCluster` (CNPG), hosted binds `OnHosted`. Its first version
    *verifies* the declared durability settings (availability, PITR, backups, maintenance
-   window) in `forge doctor` and the deploy preflight. `provision.sh` keeps applying them
+   window) in `forge project doctor` and the deploy preflight. `provision.sh` keeps applying them
    until forge converges them itself, which removes the "a script must be run" smell
    behind `cloudsql_instance.k`.
 3. **forge (lane D3):** make CNPG prod-grade where it already ships, the hosted tier
@@ -458,7 +458,7 @@ Firebase and Cloudflare Pages are retired: cp#1099, landing-page#84 **[D]**.
 | **W2** | cp | Edge metering: LB request logs → Logging sink → Pub/Sub → a control-plane-workers consumer that sums `responseSize` per host into `staticegress`; cap enforcement by host purge. A rollout-log GCP write. | none |
 | **W3** | cp | Every site on the edge: wildcard `*.sites.reliantlabs.dev` DNS → edge (cert `static-sites-wildcard` is already ACTIVE). The custom-domain loop issues Certificate Manager certs for static-site bindings, and `records.go` *suggests* the edge for them. | W2 (**OD7**) |
 | **W4** | forge | `OnBucket` default cache policy = Firebase's and hosted's (asset_dir immutable, rest `no-cache`) when the frontend declares no `cache_control` (`internal/deploytarget/staticsite.go` `uploadCmds`, schema doc). Add a test that `config.js` is never uploaded cacheable. | none |
-| **W5** | forge | Truthful docs until W3: `deploy/static-site`, `deploy/hosting` and the frontend-only `main.k.tmpl` say "CDN for hostnames the platform has moved to its edge". After W3, `forge domain ls` / `forge env status` report the serving path (edge vs ingress) from the control plane. | W3 for the second half |
+| **W5** | forge | Truthful docs until W3: `deploy/static-site`, `deploy/hosting` and the frontend-only `main.k.tmpl` say "CDN for hostnames the platform has moved to its edge". After W3, `forge cloud domain ls` / `forge env status` report the serving path (edge vs ingress) from the control plane. | W3 for the second half |
 | **W6** | cp | Extend the pin: `internal/staticorigin/serving_test.go:46-56` already asserts `config.js` and `version.json` are `no-cache` for one site shape. Add a `base_path` site, an asset dir at the root, and a legacy site with no `assetDir`. That keeps P9's runtime config (R2a) from ever being cached long. | none |
 
 Risks:
@@ -555,7 +555,7 @@ file goes **through that chat**.
 | W2 | cp | new worker consumer + `provision.sh` sink | — | G-now | metered bytes on the edge = the origin's for an uncached host |
 | W3 | cp | `internal/customdomain/records.go`, `internal/workers/custom_domain_converge`, DNS | W2 | after W2 | a customer site serves with `age`; the domain flow suggests the edge |
 | **W4** | forge | `internal/deploytarget/staticsite.go`, `kcl/schema.k` (OnBucket doc) | — | **G-now** | unit test: `index.html` and `config.js` uploaded `no-cache`, `asset_dir` immutable |
-| W5 | forge | skills text; later `forge domain ls` / `env status` | W3 (second half) | G-now (text) | skill text matches §4.1 |
+| W5 | forge | skills text; later `forge cloud domain ls` / `env status` | W3 (second half) | G-now (text) | skill text matches §4.1 |
 | W6 | cp | `internal/staticorigin/serving_test.go` | — | G-now | `task test:short -- ./internal/staticorigin/...` |
 | D1 | — | none: read-only measurement with a **sanctioned** role | owner sanction | — | `pg_database_size` per DB, recorded here |
 | **D2** | forge | `kcl/schema.k` (`OnCloudSQL` runtime on `ManagedDatabase`), doctor/preflight check | OD1 = A | G-now | render + doctor against a declared-vs-live fixture |

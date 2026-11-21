@@ -52,7 +52,7 @@ func addOrgProviderAccountThrough(t *testing.T, api *configv1.ApiServerConfig) e
 // Deps.OrgRollout directly, so without this a flipped default, a dropped
 // env-map entry or a dropped wiring would go unseen.
 func TestOrgProviderAccountsGateReachesTheService(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/org_provider_accounts_gate.k"
@@ -119,7 +119,7 @@ func TestOrgProviderAccountsGateIsOffByDefault(t *testing.T) {
 // default, in dev and demo, and even where org accounts are on; set, it loads
 // on. Binding a workspace and attributing a seat read nothing else.
 func TestOrgProviderWorkspaceSeatsGateReachesTheConfig(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/org_provider_accounts_gate.k"

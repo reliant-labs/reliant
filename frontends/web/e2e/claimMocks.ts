@@ -294,7 +294,7 @@ export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {
   );
   await page.route('**/controlplane.v1.DeployService/ListEnvironments', (route) =>
     json(route, {
-      environments: [{ id: 'env_sf_prod', name: 'prod', project: SITE.project, kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: hours(-72) }],
+      environments: [{ id: 'env_sf_prod', name: 'prod', project: SITE.project, lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: hours(-72) }],
     }),
   );
   await page.route('**/controlplane.v1.DeployService/GetStatus', (route) =>

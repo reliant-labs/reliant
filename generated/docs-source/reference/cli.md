@@ -508,6 +508,12 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant mcp list`](#reliant-mcp-list) | List the project's MCP servers and their status |
 | [`reliant mcp restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
 | [`reliant mcp tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+| [`reliant models`](#reliant-models) | List the models your chats and workflows can use, and your machines' local model servers |
+| [`reliant models endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`reliant models endpoint add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+| [`reliant models list`](#reliant-models-list) | List the models you can use |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -554,7 +560,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`reliant workflow wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`reliant workflow watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
-| [`reliant worktree`](#reliant-worktree) | Inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree`](#reliant-worktree) | List and archive workspaces; inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree archive`](#reliant-worktree-archive) | Archive a workspace, as the app's Archive does |
+| [`reliant worktree list`](#reliant-worktree-list) | List a project's workspaces (its worktrees in the app) |
 | [`reliant worktree reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
 | [`reliant worktree reclaim approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
 | [`reliant worktree reclaim decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
@@ -1082,6 +1090,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--attach <dir> links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .
+
 ```
 reliant daemon start [flags]
 ```
@@ -1091,6 +1107,7 @@ reliant daemon start [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool |
@@ -21837,6 +21854,162 @@ reliant mcp tools <server> [flags]
 
 ---
 
+## reliant models
+
+List the models your chats and workflows can use, and your machines' local model servers
+
+Lists the models your chats and workflow steps can run on, and manages the
+local model servers (Ollama, LM Studio, llama.cpp, vLLM, any OpenAI-compatible
+server) your machines look for.
+
+A local model's id is its name on the server plus @local, e.g.
+"qwen3:latest@local": use it as a workflow step's model id. Reliant's servers
+reach it through the machine whose daemon found it, so that machine must be
+online when the step runs. 'models list --local' shows each local model with the
+machine serving it.
+
+A machine looks for servers on localhost's well-known ports (Ollama 11434,
+LM Studio 1234, llama.cpp 8080, vLLM 8000) by itself. 'models endpoint add'
+adds one it would not find. Endpoints with an API key, or served from the
+internet, are added in the app: Settings -> AI providers -> Local & custom -> Add custom endpoint.
+
+```
+reliant models
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`list`](#reliant-models-list) | List the models you can use |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant models endpoint
+
+List, add and remove the local model servers your machines look for
+
+A machine looks for local model servers on localhost's well-known ports by
+itself. An endpoint is a server it would not find (another port, or another host
+the machine reaches, e.g. http://gpu-box.lan:8000/v1). It is kept in that
+machine's ~/.reliant/config.yaml (models.providers.local) and probed with the
+detected ones.
+
+```
+reliant models endpoint
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+
+---
+
+#### reliant models endpoint add
+
+Add a local model server a machine should look for
+
+Adds the OpenAI-compatible base URL of a model server, as the machine sees it
+(e.g. http://localhost:9000/v1 or http://gpu-box.lan:8000/v1), to the servers the
+machine probes. The machine probes it at once; its chat models are then listed
+by 'reliant models list --local' as <name>@local.
+
+--machine names the machine by id or name; with one machine it may be left out.
+The machine must be online: its current servers are read from it before the
+list is changed, so nothing added elsewhere is lost.
+
+```
+reliant models endpoint add <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+#### reliant models endpoint list
+
+List each machine's local model servers, and your custom endpoints
+
+Lists each machine's local model servers: the ones it detected and the ones
+added to it, with the chat models each serves or why the machine could not reach
+it. Your custom endpoints (added in the app) are listed after them.
+
+```
+reliant models endpoint list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--machine` | `string` | - | Only this machine, by id or name |
+
+---
+
+#### reliant models endpoint remove
+
+Stop a machine looking for a local model server you added
+
+Removes a base URL added with 'models endpoint add' (or Add endpoint in the
+app) from the machine's servers. A detected server cannot be removed: it is found
+again on its well-known port. A server a custom endpoint reaches through this
+machine is removed by deleting that endpoint in the app.
+
+```
+reliant models endpoint remove <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+### reliant models list
+
+List the models you can use
+
+Lists the models your chats and workflow steps can run on: those of every
+provider you connected, and the local models your machines serve.
+
+--local lists only the local models, with the machine (or configured endpoint)
+serving each, whether it is online, and the provider pin that keeps a workflow
+step on it. A model whose machine is offline is listed and cannot run until the
+machine is back.
+
+```
+reliant models list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
+| `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
+
+---
+
 ## reliant preview-url
 
 Print the shareable preview URL for a local port
@@ -22896,11 +23069,14 @@ that server. Either way it is an rlat_ access token.
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —
 reused if one already exists there, or created on the fly — so no manual
-project setup is needed. --project-id takes precedence when both are given.
+project setup is needed. A project new to the server has no workflows until
+its machine syncs them, so the run waits for that, up to --sync-wait.
+--project-id takes precedence when both are given.
 
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached
 or created on that machine, which is the one that holds it. With --project-id
 the project must already be checked out on that machine; otherwise the run
 is refused before it starts.
@@ -22933,6 +23109,7 @@ reliant workflow run <workflow-name> [flags]
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |
 | `--project-id` | `string` | - | Project ID (takes precedence over --project-path) |
 | `--project-path` | `string` | - | Project directory path; resolves (find-or-create) to a project ID when --project-id is absent |
+| `--sync-wait` | `duration` | `2m0s` | With --project-path, how long to wait for a machine to sync a new project's workflows before giving up (0: don't wait) |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
 | `--title` | `string` | - | Title for the run (default: "<workflow> · <first line of the message>") |
@@ -23312,29 +23489,37 @@ reliant workflow watch <execution-id> [flags]
 
 ## reliant worktree
 
-Inspect and restore the worktrees the daemon reclaims
+List and archive workspaces; inspect and restore the worktrees the daemon reclaims
 
-The daemon reclaims the disk of linked git worktrees nobody is using, on
-every machine it runs on: worktrees Reliant made and ones agents made with
-`git worktree add` alike. Before it deletes one it commits everything
-git can see of it (HEAD, the staged index, unstaged edits, untracked files,
-commits only its reflog reached) into a local ref of the repository,
-refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
-immediately before deleting them.
+'list' and 'archive' are the app's workspace list and its Archive action:
+each workspace is one row of the project's worktrees on the server.
 
-By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
-every worktree and records what it would reclaim, but captures and deletes
-nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
-after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
-holds is never reclaimed: after about five days idle it is proposed in the
-report, for a person to free by hand.
+The rest is this machine's worktree reclaim. The daemon can reclaim the disk
+of linked git worktrees nobody is using: worktrees Reliant made and ones
+agents made with `git worktree add` alike. Before it deletes one it commits
+everything git can see of it (HEAD, the staged index, unstaged edits,
+untracked files, commits only its reflog reached) into a local ref of the
+repository, refs/reliant/reclaimed/<key>/<time>, and checks that ref against
+the files immediately before deleting them.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
-default) or on. Every mode rides the storage reaper's schedule, which runs on
-managed machines, and on your own computer only with
-RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
-older worktree reap, which removes unlocked, clean, pushed worktrees idle for
-a day without capturing them first.
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (the default: it
+classifies every worktree and reports what it would reclaim, but captures and
+deletes nothing) or on. In mode on, a clean worktree whose HEAD is on a remote
+is reclaimed after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE); one with
+work only it holds is never reclaimed on its own: after about five days idle
+it is proposed in the report and the machine's Inbox item, for a person to
+approve or free by hand. Mode on runs on its own schedule; dry-run and off
+passes run where the storage reaper runs (RELIANT_STORAGE_REAPER: managed
+machines by default, your own computer only with RELIANT_STORAGE_REAPER=on),
+and there that schedule also runs the older worktree reap, which removes
+unlocked, clean, pushed worktrees idle for a day without capturing them first.
+'reclaim scan' runs a pass now, and 'reclaim scan --capture' captures what it
+would reclaim, so a restore can be tried, and deletes nothing.
+
+Reliant locks each of its workspaces' checkouts (`git worktree lock`, reason
+"reliant: worktree <id>"), so a plain `git worktree remove` refuses one:
+archive the workspace instead, or unlock it first (`git worktree unlock <path>`)
+or pass --force twice.
 
 ```
 reliant worktree
@@ -23344,9 +23529,74 @@ reliant worktree
 
 | Command | Description |
 |---------|-------------|
+| [`archive`](#reliant-worktree-archive) | Archive a workspace, as the app's Archive does |
+| [`list`](#reliant-worktree-list) | List a project's workspaces (its worktrees in the app) |
 | [`reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
 | [`reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
 | [`restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant worktree archive
+
+Archive a workspace, as the app's Archive does
+
+Archive one of the project's workspaces, named by its id or its name
+('reliant worktree list'), as the app's Archive does. Its chats keep their
+history. The machine that holds its checkout removes the directory later, only
+once it is clean, its work is pushed or merged, and nothing uses it; otherwise
+the directory is kept and listed in the Inbox. --delete-branch also deletes its
+local branch. The main checkout cannot be archived.
+
+A name is looked up in --project (by id, name or path), or in the project
+whose folder holds the current directory.
+
+An agent's shell is refused: an agent archives a workspace with its worktree
+tool, which refuses one a chat is working in.
+
+```
+reliant worktree archive <name|id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--delete-branch` | `bool` | - | also delete the workspace's local branch |
+| `--json` | `bool` | - | print the result as JSON |
+| `--project` | `string` | - | the project a name is looked up in, by id, name or path (default: the one holding the current directory) |
+
+---
+
+### reliant worktree list
+
+List a project's workspaces (its worktrees in the app)
+
+List the project's workspaces, as the app's workspace list does: the main
+checkout first, then the rest, most recently active first. --archived lists
+the archived ones instead, most recently archived first.
+
+--project names the project by id, name or path ('reliant project list');
+without it, the project whose folder holds the current directory.
+
+```
+reliant worktree list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--archived` | `bool` | - | list the archived workspaces instead |
+| `--json` | `bool` | - | print {"worktrees": [...]}, each in the API's JSON form |
+| `--project` | `string` | - | the project, by id, name or path (default: the one holding the current directory) |
 
 ---
 
@@ -23508,6 +23758,17 @@ Run one dry-run pass in this process: discover every linked worktree,
 classify it, and write the report and journal the daemon's passes write. It
 captures nothing and deletes nothing.
 
+--capture also captures each worktree the pass would reclaim (auto_safe) into
+its refs/reliant/reclaimed/... ref and verifies the capture against the files,
+exactly as a reclaim does before it deletes anything; it still deletes
+nothing, and the worktrees stay where they are. Each captured entry names its
+ref, so you can try a restore into a new directory:
+
+  reliant worktree restore <ref> --repo <repo> --to <new dir>
+
+A worktree with work only it holds is not captured: a reclaim captures one
+only after a person approves it.
+
 ```
 reliant worktree reclaim scan [flags]
 ```
@@ -23516,6 +23777,7 @@ reliant worktree reclaim scan [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--capture` | `bool` | - | also capture and verify each worktree the pass would reclaim, deleting nothing, so a restore can be tried |
 | `--json` | `bool` | - | print the report as JSON |
 | `--roots` | `string` | - | directories to walk, comma-separated path[:depth] (default: the daemon's) |
 | `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
@@ -23528,7 +23790,9 @@ List the captures of reclaimed worktrees
 
 List every capture (refs/reliant/reclaimed/...) in the repositories the
 reclaim journal names, or in --repo, newest first. A capture is kept until it
-is restored or deleted by hand; none expires.
+is restored or deleted by hand; none expires. The captures 'reclaim scan
+--capture' made are listed too, marked "kept in place": their worktrees were
+never removed.
 
 ```
 reliant worktree reclaimed [flags]
