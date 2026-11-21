@@ -125,11 +125,11 @@ describe("a no-row environment is §10 state 3, not a writable one", () => {
   });
 
   it("does not send users to the CLI to read a store, only to build an env", () => {
-    // The distinction the old copy got wrong: `forge secret set` is a WRITE
+    // The distinction the old copy got wrong: `forge env secret set` is a WRITE
     // instruction, and offering it here implied the value belongs somewhere
     // this console cannot see. The honest instruction is to build.
     for (const availability of ["not-ensured", "provider-unknown"] as const) {
-      expect(availabilityExplanation(availability) ?? "").not.toContain("forge secret set");
+      expect(availabilityExplanation(availability) ?? "").not.toContain("forge env secret set");
     }
   });
 });

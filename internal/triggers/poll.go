@@ -130,13 +130,25 @@ type PollCredentials interface {
 }
 
 // TriggerPoller runs polls. It is the PollTrigger activity.
+// PollDeliverySink durably records one already authenticated poll item.
+type PollDeliverySink interface {
+	RecordPolledDelivery(ctx context.Context, t *core.Trigger, provider, connectionID string, item PollItem, ev InboundEvent, receivedAt time.Time) error
+}
+
 type TriggerPoller struct {
+	inbox   PollDeliverySink
 	repo    PollRepo
 	pollers Pollers
 	intake  *Intake
 	creds   PollCredentials
 	pause   *AutoPause
 	now     func() time.Time
+}
+
+// WithDeliveryInbox records poll items before the registration cursor advances.
+func (p *TriggerPoller) WithDeliveryInbox(inbox PollDeliverySink) *TriggerPoller {
+	p.inbox = inbox
+	return p
 }
 
 // WithAutoPause lets the poller pause a trigger whose org's policy does not
@@ -275,7 +287,13 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 				logging.WarnContext(ctx, "polled item has no sender; dropped", "trigger_id", trigger.ID, "integration", cfg.Integration, "item_id", item.ID)
 				continue
 			}
-			if _, err := p.intake.Accept(ctx, trigger, pollEvent(trigger, cfg.Integration, conn, item), AcceptOptions{}); err != nil {
+			ev := pollEvent(trigger, cfg.Integration, conn, item)
+			if p.inbox != nil {
+				err = p.inbox.RecordPolledDelivery(ctx, trigger, cfg.Integration, conn.ID, item, ev, now)
+			} else {
+				_, err = p.intake.Accept(ctx, trigger, ev, AcceptOptions{})
+			}
+			if err != nil {
 				// Do not advance: the next poll re-lists, and what was
 				// already recorded dedupes.
 				return nil, fmt.Errorf("record polled item %s: %w", item.ID, err)

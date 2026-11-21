@@ -637,7 +637,7 @@ export function MobileChatList() {
           role="dialog"
           aria-modal="true"
           aria-label="Confirm archive"
-          className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50"
+          className="fixed inset-0 z-[9999] flex items-end justify-center bg-scrim"
           onClick={() => {
             if (!isArchiving) setConfirmingArchive(null);
           }}

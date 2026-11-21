@@ -146,7 +146,7 @@ export function RegisterEnvPanel({
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <dt className="text-2xs font-medium uppercase tracking-wide">{label}</dt>
+      <dt className="text-2xs font-medium">{label}</dt>
       <dd>{children}</dd>
     </div>
   );

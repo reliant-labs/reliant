@@ -72,11 +72,10 @@ func (s *Service) InstallServer(
 	// No server-side DOCKER_HOST probing needed.
 
 	if err := s.preflightMCPServer(ctx, checkout, name, internalConfig); err != nil {
-		logging.ErrorContext(ctx, "MCP server install failed",
+		logServerFailure(ctx, "MCP server install failed", err,
 			"operation", "install",
 			"server", name,
 			"phase", "preflight",
-			"error", err,
 		)
 		activity.Skip(ctx) // refused before any config was written: nothing was installed
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
@@ -124,11 +123,10 @@ func (s *Service) InstallServer(
 			logging.ErrorContext(ctx, "Failed to rollback stored MCP scope snapshot after skill bundle failure", "error", persistErr, "server", name)
 		}
 
-		logging.ErrorContext(ctx, "MCP server install failed",
+		logServerFailure(ctx, "MCP server install failed", bundleErr,
 			"operation", "install",
 			"server", name,
 			"phase", "skill_bundle",
-			"error", bundleErr,
 		)
 		message := "Skill bundle installation failed; MCP install rolled back."
 		if rollbackErr == nil && persistErr == nil {
@@ -152,11 +150,10 @@ func (s *Service) InstallServer(
 
 	if internalConfig.Enabled {
 		if err := s.mcpManagerFor(userID, checkout).AddProjectServer(startCtx, checkout.Path, name, internalConfig); err != nil {
-			logging.ErrorContext(ctx, "MCP server install failed",
+			logServerFailure(ctx, "MCP server install failed", err,
 				"operation", "install",
 				"server", name,
 				"phase", "startup",
-				"error", err,
 			)
 			return connect.NewResponse(&reliantv1.InstallServerResponse{
 				Success: false,

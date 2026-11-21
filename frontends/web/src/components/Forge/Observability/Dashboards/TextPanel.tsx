@@ -35,7 +35,7 @@ const COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className="my-1.5 border-l-2 border-border pl-3 text-ink-muted">{children}</blockquote>,
   h1: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold text-ink first:mt-0">{children}</h3>,
   h2: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold text-ink first:mt-0">{children}</h3>,
-  h3: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted first:mt-0">{children}</h4>,
+  h3: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-semibold text-ink-muted first:mt-0">{children}</h4>,
   h4: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-semibold text-ink first:mt-0">{children}</h4>,
   h5: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-semibold text-ink first:mt-0">{children}</h4>,
   h6: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-semibold text-ink first:mt-0">{children}</h4>,

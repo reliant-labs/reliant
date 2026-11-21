@@ -77,14 +77,14 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     title: "Secrets",
     body: "Check which environments have the credentials your app needs, without exposing their values. Open a name to inspect its versions and find missing configuration.",
     help: "Your agent can check for missing secrets by name without reading their values.",
-    command: "forge secret list --env prod",
+    command: "forge env secret list --env prod",
     target: tid("managed-secrets"),
   },
   domains: {
     title: "Domains",
     body: "See which web addresses reach your app and whether their certificates are ready. Open a domain to check what is still needed before visitors can use it.",
     help: "Your agent can inspect the required DNS records and verification status.",
-    command: "forge domain show <host> --env prod",
+    command: "forge cloud domain show <host> --env prod",
     target: tid("domain-row-shop.example.com"),
   },
   activity: {

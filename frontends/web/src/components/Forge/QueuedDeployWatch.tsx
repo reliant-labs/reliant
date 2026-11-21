@@ -15,13 +15,16 @@
 
 import { lazy, Suspense } from "react";
 
+import { orgFreePath } from "@/lib/paths/org";
 import { useQueuedDeployStore } from "@/store/queuedDeployStore";
 
 const QueuedDeployNotifier = lazy(() =>
   import("./QueuedDeployNotifier").then((module) => ({ default: module.QueuedDeployNotifier }))
 );
 
-export function isForgePath(pathname: string): boolean {
+export function isForgePath(routePathname: string): boolean {
+  // The console's org form (`/o/<org>/apps/<app>`) reads as `/forge/p/<app>`.
+  const pathname = orgFreePath(routePathname);
   return pathname === "/forge" || pathname.startsWith("/forge/");
 }
 
