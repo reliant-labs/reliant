@@ -42,7 +42,7 @@ export function ProjectMachines({ project }: { project: Project }) {
   return (
     <section aria-label={`${project.name} machines`} className="rounded-lg border border-border bg-background p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{project.name} · Machines</h3>
+        <h3 className="text-sm font-semibold">{project.name} · Agent sandboxes</h3>
         <div className="flex gap-2">
           <button className={button} onClick={() => setAttaching(true)}>Add machine · use a folder</button>
           {project.remote_url && <button className={button} onClick={() => { setCloning(true); setTarget(available[0]?.daemonId ?? null); setPath(""); }}>Clone onto a machine…</button>}

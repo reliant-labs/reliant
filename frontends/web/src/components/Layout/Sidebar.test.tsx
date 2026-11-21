@@ -293,7 +293,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
   });
 
-  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, then the chats full height", () => {
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {
     sessionStorage.clear();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onNavigate = vi.fn();

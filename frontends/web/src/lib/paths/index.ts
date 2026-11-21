@@ -236,7 +236,16 @@ export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
 }
 
-/** One machine's page in Settings › Machines. */
+/**
+ * Agent sandboxes: the machines page, Settings › Agent sandboxes (the UI's
+ * name for machines; the section id, routes and APIs keep "machines").
+ * `/machines` and `/o/<org>/machines` redirect here.
+ */
+export function sandboxesPath(): string {
+  return settingsPath("machines");
+}
+
+/** One machine's page in Settings › Agent sandboxes. */
 export function machineSettingsPath(machineId: string): string {
   return `/settings/machines/${seg(machineId)}`;
 }

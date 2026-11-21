@@ -72,7 +72,7 @@ import {
   useCurrentUserInvoices,
   useWalletOverview,
 } from "@/hooks/useCloudBillingQueries";
-import { projectsPath, settingsPath, usageBillingPath, withSearch } from "@/lib/paths";
+import { projectsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch } from "@/lib/paths";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 
 import { AreaShell } from "../Layout/AreaShell";
@@ -289,7 +289,7 @@ function OrgLevel({ query, orgId, range }: { query: UsageQuery; orgId: string; r
                   <>
                     {running !== undefined ? `running · ${sandboxes.kind === "amount" ? formatUsd(sandboxes.nanos) : amountCaption(sandboxes)}` : amountCaption(sandboxes)}
                     {" · "}
-                    <Link href={settingsPath("machines")} className={LINK}>
+                    <Link href={sandboxesPath()} className={LINK}>
                       Manage sandboxes ›
                     </Link>
                   </>

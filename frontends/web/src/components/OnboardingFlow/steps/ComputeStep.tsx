@@ -463,22 +463,22 @@ export function ComputeStep({
         <div className="space-y-1">
           <h2 className="text-sm font-medium text-foreground">
             {awaitingBundledDaemon
-              ? "Getting your machine ready…"
+              ? "Getting your sandbox ready…"
               : "Checking your setup…"}
           </h2>
           <p className="text-xs text-muted-foreground">
             {awaitingBundledDaemon
               ? "The desktop app brings its own. Almost done."
-              : "Looking for a machine you already connected."}
+              : "Looking for a sandbox you already connected."}
           </p>
         </div>
         <div className="mx-auto max-w-[420px] text-left">
           <ConnectWait
-            label={awaitingBundledDaemon ? "Waiting for the app's machine" : "Looking for your machines"}
+            label={awaitingBundledDaemon ? "Waiting for the app's sandbox" : "Looking for your sandboxes"}
             onRetry={() => refreshDaemons?.()}
             daemons={daemons}
             unreachable={registryUnreachable}
-            skip={{ label: "Choose a machine myself", onClick: () => setGaveUpWaiting(true) }}
+            skip={{ label: "Choose a sandbox myself", onClick: () => setGaveUpWaiting(true) }}
           />
         </div>
       </div>
@@ -530,7 +530,7 @@ export function ComputeStep({
     <div className="mx-auto w-full max-w-[560px] space-y-6">
       {/* ONE heading, and it is the question. There used to be two — a large
           "Where should Reliant run your code?" over a small uppercase "Choose
-          your machine" — asking the same thing twice at two sizes. It stays
+          your sandbox" — asking the same thing twice at two sizes. It stays
           put when the free row is picked: hiding it re-flowed the whole step
           under the user's click. */}
       <div className="space-y-1.5 text-center">
@@ -538,10 +538,10 @@ export function ComputeStep({
           id="compute-step-heading"
           className="text-xl font-semibold tracking-tight text-foreground"
         >
-          Choose your machine
+          Choose your agent sandbox
         </h2>
         <p className="text-sm text-muted-foreground">
-          Where Reliant runs your code. You can add more machines later.
+          Where Reliant runs your code. You can add more sandboxes later.
         </p>
       </div>
 
@@ -565,7 +565,7 @@ export function ComputeStep({
             PlanTiles, which would nest the priced rows in their own container:
             adjacent on screen, a separate list to a screen reader. It also
             keeps the free row independent of the plan catalog's loading and
-            empty states — it is the one machine that needs no catalog. The
+            empty states — it is the one sandbox that needs no catalog. The
             group is labelled by the heading above, which covers every row. */}
         <div
           role="group"
@@ -635,7 +635,7 @@ export function ComputeStep({
             >
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-foreground">
-                  Reliant Cloud machines
+                  Reliant Cloud sandboxes
                   {cheapestMonthlyCents !== null &&
                     ` · from ${formatPrice(cheapestMonthlyCents)}/mo`}
                 </span>
@@ -676,8 +676,8 @@ export function ComputeStep({
 
             - The coverage line says what a redeemed code did, where the price
               used to be (it is why one row now reads "Covered"), and names the
-              LIMIT the server enforces: a compute grant buys machine time on
-              the M machine only, and a user who picks another size on the
+              LIMIT the server enforces: a compute grant buys sandbox time on
+              the M sandbox only, and a user who picks another size on the
               strength of a coupon is refused at provisioning. S1 and S2 are
               smaller and still not covered, so the sentence says "other
               sizes", never "larger".
@@ -698,7 +698,7 @@ export function ComputeStep({
                 >
                   {grantedSecondsRemaining >= 60
                     ? `Your code covers ${formatMachineSeconds(grantedSecondsRemaining)}, one-time — no charge today.`
-                    : `Your code covers the ${coveredSizeLabel} machine — no charge today.`}{" "}
+                    : `Your code covers the ${coveredSizeLabel} sandbox — no charge today.`}{" "}
                   {coveredSize === "m"
                     ? "S1, S2 and the larger sizes need a monthly plan."
                     : "Other sizes need a monthly plan."}
@@ -744,7 +744,7 @@ export function ComputeStep({
         )}
 
         {/* Coupon redemption is offered to everyone who is choosing a hosted
-            machine — someone already entitled may still be holding a code,
+            sandbox — someone already entitled may still be holding a code,
             and hiding the field until they run out would mean redeeming it
             requires first spending down.
 
@@ -752,7 +752,7 @@ export function ComputeStep({
             weaker reason than the cloud CTA: that button contradicted the
             selection and destroyed it on click; this field does neither —
             redeeming leaves `showLocal` untouched. The argument is relevance:
-            a compute coupon buys machine time the user has just declined.
+            a compute coupon buys sandbox time the user has just declined.
 
             What makes this safe is not visible on this step: the field also
             accepts WALLET_CREDIT codes, so hiding it here could have removed
@@ -779,7 +779,7 @@ export function ComputeStep({
 
       {/* ── What to do next, at the BOTTOM of the step ────────────────────
 
-          Selecting "Use your own computer" is only half an answer: the machine
+          Selecting "Use your own computer" is only half an answer: the sandbox
           still has to be connected, and this is where that happens — after
           everything, because it is the consequence of choosing, not one of the
           choices. It reads as the click's result only because the hosted rows
@@ -794,7 +794,7 @@ export function ComputeStep({
           <Check className="mt-0.5 h-4 w-4 text-success" />
           <div>
             <h3 className="text-sm font-medium text-foreground">
-              Your machine is connected
+              Your sandbox is connected
             </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Continue to finish setting up.
@@ -831,7 +831,7 @@ export function ComputeStep({
             - own computer, connected    → "Continue"
             - own computer, not yet      → disabled "Waiting…" (it advances on
                                            its own when the machine connects)
-          "Continue with Large", not "Start my machine": this records a choice
+          "Continue with Large", not "Start my sandbox": this records a choice
           and moves on. Provisioning happens at the end of onboarding, and a
           label promising a start would be describing work that is not here. */}
       <StepFooterAction>
@@ -855,7 +855,7 @@ export function ComputeStep({
           <button type="button" onClick={chooseCloud} className={FOOTER_PRIMARY}>
             {selectedPlanLabel
               ? `Continue with ${selectedPlanLabel}`
-              : "Continue with a Reliant machine"}
+              : "Continue with a Reliant sandbox"}
           </button>
         ) : null}
       </StepFooterAction>
