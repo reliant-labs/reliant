@@ -113,6 +113,9 @@ type upgradeDrain struct {
 	// looked rather than on elapsed time. Set before the drain starts.
 	onPoll   func()
 	onReturn func()
+	// afterFunc arms the upgrade exit's backstop: time.AfterFunc when nil.
+	// A test replaces it to see the backstop armed, and to fire it at once.
+	afterFunc func(time.Duration, func())
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -380,13 +383,16 @@ func (u *upgradeDrain) upgradeExit() {
 		return
 	}
 	u.exited = true
-	stop, exit := u.stopRuntime, u.exit
+	stop, exit, afterFunc := u.stopRuntime, u.exit, u.afterFunc
 	u.mu.Unlock()
+	if afterFunc == nil {
+		afterFunc = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+	}
 	if stop != nil {
 		stop()
 	}
 	if exit != nil {
-		time.AfterFunc(backstop, func() {
+		afterFunc(backstop, func() {
 			logging.Error(logPrefix+" Shutdown for an upgrade exit did not finish — force-exiting", "backstop", backstop)
 			exit(UpgradeExitCode)
 		})

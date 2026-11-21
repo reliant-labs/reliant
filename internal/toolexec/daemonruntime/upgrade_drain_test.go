@@ -186,22 +186,33 @@ func TestDrainedDaemonNotRestartedMakesAnUpgradeExit(t *testing.T) {
 // upgrade exit's backstop (and daemon.go's 10s signal grace, which never arms
 // for a drain) neither stops nor exits the daemon. A stop of the runtime
 // mid-drain ends the drain quietly: a stop wins.
+//
+// The backstop is the only shutdown watchdog the drain could reach, and only
+// through upgradeExit, so the test makes its deadline immediate instead of
+// waiting it out: an armed backstop fires at once, synchronously, in the
+// goroutine that armed it. The drain loop's probe runs in that same goroutine,
+// so each pass it reports happens after anything the drain did before it. A
+// drain that armed the backstop (or stopped the runtime) at any point before
+// a pass is caught by the assertions after that pass, whatever the scheduler
+// did with wall time.
 func TestDrainIsNotBoundedByTheShutdownWatchdog(t *testing.T) {
 	d := managedTestDaemon(time.Hour, time.Hour)
-	d.upgrade.backstop = time.Millisecond
-	var stopped atomic.Bool
-	var exited atomic.Bool
+	var armed, stopped, exited atomic.Bool
+	d.upgrade.afterFunc = func(_ time.Duration, f func()) {
+		armed.Store(true)
+		f() // the backstop's deadline, reached now
+	}
 	d.armUpgrade(func() { stopped.Store(true) }, "", func(int) { exited.Store(true) })
 	d.results.start("running-1")
 	probe := probeDrain(d)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
-	// 50 passes at a 1ms poll put the drain well past the 1ms backstop with
-	// the drain goroutine demonstrably running: a drain wrongly bounded by
-	// it would have stopped or exited by now.
-	probe.waitForPolls(t, 50)
+	// Several passes of the drain loop with a running call: the drain is
+	// draining, and has neither armed the watchdog nor stopped or exited.
+	probe.waitForPolls(t, 3)
 	assert.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d))
+	assert.False(t, armed.Load(), "a drain must not arm the shutdown watchdog")
 	assert.False(t, stopped.Load())
 	assert.False(t, exited.Load())
 
@@ -209,8 +220,34 @@ func TestDrainIsNotBoundedByTheShutdownWatchdog(t *testing.T) {
 	// The drain has returned, so nothing later can turn the stop into an
 	// upgrade exit.
 	probe.waitForReturn(t)
+	assert.False(t, armed.Load(), "a stop during a drain does not arm the watchdog")
 	assert.False(t, d.upgrade.exitRequested(), "a stop during a drain is a stop, not an upgrade exit")
 	assert.False(t, exited.Load())
+}
+
+// The seam itself: the upgrade exit arms the backstop through afterFunc with
+// its configured duration, and the backstop force-exits with the upgrade exit
+// code. Without this, a drain test that never sees afterFunc called would pass
+// against an upgradeExit that bypassed it.
+func TestUpgradeExitArmsTheBackstopThroughTheSeam(t *testing.T) {
+	d := managedTestDaemon(time.Hour, time.Hour)
+	d.upgrade.backstop = 7 * time.Second
+	var armedFor time.Duration
+	d.upgrade.afterFunc = func(dur time.Duration, f func()) {
+		armedFor = dur
+		f()
+	}
+	exitCode := make(chan int, 1)
+	d.armUpgrade(func() {}, "", func(code int) { exitCode <- code })
+
+	d.upgrade.upgradeExit()
+	assert.Equal(t, 7*time.Second, armedFor)
+	select {
+	case code := <-exitCode:
+		assert.Equal(t, UpgradeExitCode, code)
+	default:
+		t.Fatal("the backstop did not force-exit")
+	}
 }
 
 // A person's machine is never blocked (D6): the daemon reports AWAITING_OWNER
