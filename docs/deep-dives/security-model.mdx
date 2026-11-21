@@ -39,7 +39,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    P["Org admin<br/>console or forge secret set"] -->|"write only<br/>step-up if protected"| STORE[("Hosted secret store<br/>per environment, versioned")]
+    P["Org admin<br/>console or forge env secret set"] -->|"write only<br/>step-up if protected"| STORE[("Hosted secret store<br/>per environment, versioned")]
     STORE -->|"at deploy, as env vars"| W["Your workload"]
     STORE -->|"one step attempt,<br/>if on the access list"| WK["Reliant worker"]
     WK -->|"written into the request header"| API["The API the secret belongs to"]
@@ -86,7 +86,7 @@ A service that serves end users and one that serves daemons or operators shouldn
 
 Handlers return `svcerr.Wrap(err)`, and an interceptor next to the handler applies the same mapping to anything a handler returns. An error your code built, like `svcerr.NotFound("order")`, reaches the client with its code and your text. An error your code never wrote, from a driver, an SDK or the standard library, becomes `CodeInternal` with the fixed message `internal server error`, and the original is kept as a cause that reaches the log. Context you add with `fmt.Errorf("… %w", err)` is for the operator and never reaches the client either. `svcerr` is an ordinary Go package, so a service that doesn't use the rest of forge can import it too.
 
-The one exception is a hand-built `*connect.Error`. It is a handler's explicit verdict and passes through as written, so `connect.NewError(code, err)` publishes `err.Error()`. [`forgeconv-handler-connect-error`](/forge/linting/rules-conventions#forgeconv-handler-connect-error) flags each one in a handler package, and `reliant forge fix connect-errors` rewrites the fixed-text ones. [The error path](/forge/concepts/middleware-and-request-path#the-error-path) covers reasons and error classes.
+The one exception is a hand-built `*connect.Error`. It is a handler's explicit verdict and passes through as written, so `connect.NewError(code, err)` publishes `err.Error()`. [`forgeconv-handler-connect-error`](/forge/linting/rules-conventions#forgeconv-handler-connect-error) flags each one in a handler package, and `reliant forge lint fix connect-errors` rewrites the fixed-text ones. [The error path](/forge/concepts/middleware-and-request-path#the-error-path) covers reasons and error classes.
 
 ### 5. The database role agents read through
 
@@ -94,7 +94,7 @@ A forge-managed Postgres has a read-only role, `forge_ro`, and `reliant forge db
 
 ### 6. Hosted secrets are write-only
 
-A hosted environment's secrets live in Reliant's managed store, one store per environment. You set a value in the console or with `reliant forge secret set --env prod NAME`, which reads the value from stdin so it never lands in shell history. Nothing reads it back: the credential Reliant's servers hold may read secret metadata but not secret data, so the storage layer refuses the request. Every write is a new version, and values reach workloads at deploy time as environment variables. Setting a secret needs the org admin role, or an automation token with `secret:write`.
+A hosted environment's secrets live in Reliant's managed store, one store per environment. You set a value in the console or with `reliant forge env secret set --env prod NAME`, which reads the value from stdin so it never lands in shell history. Nothing reads it back: the credential Reliant's servers hold may read secret metadata but not secret data, so the storage layer refuses the request. Every write is a new version, and values reach workloads at deploy time as environment variables. Setting a secret needs the org admin role, or an automation token with `secret:write`.
 
 An environment marked **protected** adds a step-up before any change. To set, delete, undelete or destroy a value, an admin requests a one-time code emailed to their verified address. The code is good for 10 minutes and 5 attempts, and opens a 15-minute window for that person in that environment. Listing secrets is never gated. An org automation token has no person behind it, so it can't change a protected environment at all. Every write, step-up and refused write leaves an audit row naming the actor, secret and version, never the value. Without the step-up machinery, a protected environment is read-only, not open. [Secrets](/hosting/secrets) is the reference, and [Manage production secrets per environment](/guides/hosting/manage-production-secrets) is the task guide.
 
@@ -102,7 +102,7 @@ An environment marked **protected** adds a step-up before any change. To set, de
 
 A workflow declares the secrets it needs and puts one in a credential slot: an `http/request@1` header such as `"Bearer {{ secrets.TRADER_KEY }}"`, or `credential: { secret: NAME }` on an integration action. Anywhere else, a secret reference is a validation error, and a `run` step never receives one, because a command can print its own environment. For one step attempt, the worker fetches the value through the control plane and writes it only into the outgoing request. It never becomes a step input, so it isn't in the run's state, its history, logs, spans, outputs or the UI. The request goes over HTTPS only, and redirects are followed only within the starting host.
 
-Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and [Call any API from a workflow without exposing the key](/guides/workflows/call-api-without-exposing-key) walks through one.
+Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge env secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and [Call any API from a workflow without exposing the key](/guides/workflows/call-api-without-exposing-key) walks through one.
 
 ### 8. One machine credential, closed scopes
 

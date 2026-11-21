@@ -42,7 +42,7 @@ import (
 // what a release stamped into pkg/config.BuildDefaults.
 //
 // The credentials file is forge's (forge/pkg/credentials), shared with
-// `forge login` and keyed by (server, client). A login to one server is never
+// `forge cloud login` and keyed by (server, client). A login to one server is never
 // presented to another.
 //
 // The persistent --server/--gateway flags are deliberately NOT bound to

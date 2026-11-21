@@ -28,7 +28,7 @@ import (
 // =============================================================================
 // ExchangeToken — a Reliant session becomes forge's control-plane credential.
 //
-// A user signed in to Reliant must not have to run `forge login` as well. The
+// A user signed in to Reliant must not have to run `forge cloud login` as well. The
 // session credential they already hold (a daemon's, or the CLI's) acts as them
 // everywhere in Reliant, but it must never be PRESENTED to the control plane's
 // deploy API: it is permanent, it can also connect as their daemon, and a

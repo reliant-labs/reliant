@@ -15,7 +15,7 @@ import { mockTransport } from "@/lib/test-utils";
 import { CliLoginsSection } from "../CliLoginsSection";
 
 /**
- * Settings › API tokens › CLI logins: a person sees each live `forge login`
+ * Settings › API tokens › CLI logins: a person sees each live `forge cloud login`
  * (never an ended one) and revokes one by its id; a refused list says so
  * rather than claiming there are none (reliant#1831).
  */

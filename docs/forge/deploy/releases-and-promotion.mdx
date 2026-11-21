@@ -116,7 +116,7 @@ Naming an environment in `after` is the opt-in, so a new project is never gated.
 
 Two more opt-in gates live on `delivery_policy`:
 
-- **`required_gates`** names checks a promotion must carry, each passed: `forge.RequiredGates {names = ["e2e"]}`. A deploy carries them with `--gate name=e2e,status=passed`. A missing gate is refused with exit 4, a failed one with exit 1. `forge gate record` attaches evidence to an existing promotion; without `required_gates`, evidence enforces nothing.
+- **`required_gates`** names checks a promotion must carry, each passed: `forge.RequiredGates {names = ["e2e"]}`. A deploy carries them with `--gate name=e2e,status=passed`. A missing gate is refused with exit 4, a failed one with exit 1. `forge release gate record` attaches evidence to an existing promotion; without `required_gates`, evidence enforces nothing.
 - **`approval_hook`** asks your approval system before the promotion is written, and anything but `approve` refuses it (exit 4). A hook that times out or answers nonsense counts as a deny, and `--yes` never answers for it. A `url` hook is asked by the control plane; an `argv` hook runs on your machine, so it is refused where there is a control plane.
 
 ### Rollback floors
@@ -136,7 +136,7 @@ Promotions are rows in an append-only ledger; moving prod back is one more row, 
 
 ### Delivery: from a recorded release to a running cluster
 
-Recording a release does not ship it. For a hosted environment, or a cluster registered with `forge cluster connect`, Flux run by Reliant converges the destination to the recorded bundle. For any other environment the same command applies the bundle from your machine. Either way `forge env deploy` waits until the release is live or says why not.
+Recording a release does not ship it. For a hosted environment, or a cluster registered with `forge cloud cluster connect`, Flux run by Reliant converges the destination to the recorded bundle. For any other environment the same command applies the bundle from your machine. Either way `forge env deploy` waits until the release is live or says why not.
 
 ![Part one of the delivery path. forge env deploy builds and packs the bundle, pushes it to the registry, Reliant records the release and checks the bundle, and the bundle is signed with your organization's key.](/images/forge/deploy/delivery-build.svg)
 
@@ -306,4 +306,4 @@ AT                    RELEASE        WHAT                   ROLLOUT       HEALTH
 - [Hosting on Reliant](/hosting/overview): what hosting runs and costs, and queued deploys
 - CLI: [`env build`](/reference/cli#reliant-forge-env-build), [`env deploy`](/reference/cli#reliant-forge-env-deploy), [`env floor`](/reference/cli#reliant-forge-env-floor), [`env releases`](/reference/cli#reliant-forge-env-releases), [`env status`](/reference/cli#reliant-forge-env-status), [`ledger where`](/reference/cli#reliant-forge-ledger-where), [`release record`](/reference/cli#reliant-forge-release-record), [`gate record`](/reference/cli#reliant-forge-gate-record), [`cloud token create`](/reference/cli#reliant-forge-cloud-token-create)
 
-Agents can run `forge skill load deploy` for the full reference.
+Agents can run `forge agent skill load deploy` for the full reference.

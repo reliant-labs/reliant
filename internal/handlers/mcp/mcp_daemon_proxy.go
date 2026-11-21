@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/logging"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -56,6 +57,30 @@ func (p *daemonMCPProxy) sendCommand(ctx context.Context, commandType string, pa
 type daemonReported string
 
 func (e daemonReported) Error() string { return string(e) }
+
+// isDaemonReported reports whether err carries the daemon's own report of a
+// failure on the user's machine.
+func isDaemonReported(err error) bool {
+	var reported daemonReported
+	return errors.As(err, &reported)
+}
+
+// logServerFailure logs a failure to bring up, or talk to, a user's MCP
+// server. The daemon's own report (daemonReported) is that server failing on
+// the user's machine — it exited before the handshake, closed the
+// connection, its package would not install — which the response already
+// tells the user, and only they can fix: a warning. At ERROR each one was an
+// issue (prod reliant-api-server be65adaa "MCP server \"tickets\" exited
+// before completing the handshake", 2026-11-20). Any other failure is ours
+// and stays an ERROR.
+func logServerFailure(ctx context.Context, msg string, err error, attrs ...any) {
+	attrs = append(attrs, "error", err)
+	if isDaemonReported(err) {
+		logging.WarnContext(ctx, msg, attrs...)
+		return
+	}
+	logging.ErrorContext(ctx, msg, attrs...)
+}
 
 // withDaemonText is msg followed by what the daemon said, when err carries it.
 func withDaemonText(msg string, err error) string {
