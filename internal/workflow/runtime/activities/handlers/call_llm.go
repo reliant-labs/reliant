@@ -619,6 +619,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 		TokenCount:        int(output.GetTokenCount()),
 		Cost:              output.GetCost(),
 		Model:             output.GetModel(),
+		ThinkingLevel:     output.GetThinkingLevel(),
 		ProviderAccountID: output.GetProviderAccountId(),
 		WorkflowID:        workflowID,
 		StepID:            rtx.StepID,
@@ -1676,6 +1677,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 		caps.CanLoad(tools.ToolWorktree),
 	)
+	if note := subAgentScratchNote(chat, rtx.Thread, rtx.SpawnDepth, projectPath != "" || worktreePath != ""); note != "" {
+		systemPrompts = append(systemPrompts, note)
+	}
 	if chat.NoMachine {
 		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
 	}
@@ -1952,6 +1956,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				// probe) no pending inbox: both agent loops exit on this.
 				CompactionThreshold: effectiveCompactionThreshold,
 				Model:               resolvedModelID,
+				ThinkingLevel:       string(resolved.ThinkingLevel),
 				MessageId:           streamState.messageID,
 				// Yielding without calling the provider IS a finished turn —
 				// the previous turn already had the last word. Saying "done"
@@ -2487,6 +2492,7 @@ streamLoop:
 		PendingInbox:        false,
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
+		ThinkingLevel:       string(resolved.ThinkingLevel),
 		ProviderAccountId:   accountID,
 		MessageId:           streamState.messageID,
 		LastStreamSeq:       streamState.streamSeq,

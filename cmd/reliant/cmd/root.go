@@ -102,8 +102,9 @@ Reliant server components.`,
 
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
-	machineCmd, githubCmd, providersCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd()
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd)
+	machineCmd, githubCmd, providersCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newChatCmd(), newIntegrationsCmd()
+	mcpCmd, modelsCmd := newMCPCmd(), newModelsCmd()
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd)
 	for _, c := range rootCommands(deps) {
 		root.AddCommand(c)
 	}
@@ -115,9 +116,13 @@ Reliant server components.`,
 	root.AddCommand(machineCmd)
 	root.AddCommand(githubCmd)
 	root.AddCommand(providersCmd)
+	root.AddCommand(mcpCmd)
+	root.AddCommand(integrationsCmd)
+	root.AddCommand(modelsCmd)
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
+	root.AddCommand(chatCmd)
 
 	// Commands whose files register themselves (registerCommand): `db`.
 	for _, f := range registeredCommands {
@@ -131,6 +136,8 @@ Reliant server components.`,
 // status when it fails, having printed the error to stderr. The status is
 // forge's own resolution (forgecli.ExitCode): `reliant forge …` verbs print the
 // same number as their --json document's exit_code, and any other error is 1.
+// A server's refusal of this CLI's version replaces whatever wrapped it with
+// the upgrade command, and exits upgradeRequiredExitCode (upgrade_required.go).
 //
 // `reliant forge …` in a project pinned to another forge is first handed to
 // that forge (handOffToPinnedForge); when it cannot be had, nothing runs.
@@ -141,6 +148,7 @@ func Execute() {
 		os.Exit(forgecli.ExitCode(err))
 	}
 	if err := root.Execute(); err != nil {
+		err = cliError(err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(forgecli.ExitCode(err))
 	}

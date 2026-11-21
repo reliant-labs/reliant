@@ -120,7 +120,9 @@ func IsProviderCreditExhaustion(err error) bool {
 
 // IsProviderPromptRefusal reports whether err is the provider refusing the
 // prompt under its usage policy: OpenAI's invalid_prompt, "your prompt was
-// flagged as potentially violating our usage policy". The content is the
+// flagged as potentially violating our usage policy", and its cyber_policy,
+// "this content was flagged for possible cybersecurity risk" (prod
+// reliant-temporal-worker c1ef7abd, 2026-11-20, logged as an ERROR). The content is the
 // user's; resending the same prompt is refused the same way, and only the user
 // can change it. Matched on the provider's own code and sentence, never on a
 // bare 400.
@@ -130,7 +132,9 @@ func IsProviderPromptRefusal(err error) bool {
 	}
 	lower := strings.ToLower(err.Error())
 	return strings.Contains(lower, `"code":"invalid_prompt"`) ||
-		strings.Contains(lower, "flagged as potentially violating our usage policy")
+		strings.Contains(lower, "flagged as potentially violating our usage policy") ||
+		strings.Contains(lower, `"code":"cyber_policy"`) ||
+		strings.Contains(lower, "flagged for possible cybersecurity risk")
 }
 
 func containsProviderCreditExhaustionSignal(lower string) bool {

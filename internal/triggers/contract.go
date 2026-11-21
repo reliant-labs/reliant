@@ -78,6 +78,11 @@ type TriggerPauser interface {
 // session. Implemented by *launch.Launcher.
 type Launcher interface {
 	Launch(ctx context.Context, ev launch.Event, spec launch.Spec) (*launch.Result, error)
+	// ResolveDefaultWorkflow names the workflow a launch for userID runs when
+	// it names none (reqWorkflow empty): the owner's default setting, else the
+	// system default. A trigger with no workflow is fired as that workflow, so
+	// the firer and the launch agree on what runs.
+	ResolveDefaultWorkflow(ctx context.Context, userID, reqWorkflow string) string
 }
 
 // ScheduleClient is the Temporal schedule surface the syncer uses. Satisfied

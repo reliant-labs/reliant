@@ -693,6 +693,10 @@ func (m *fakeMCPManagerRuntime) RestartProjectServer(ctx context.Context, projec
 	return m.AddProjectServer(ctx, projectPath, serverName, cfg)
 }
 
+func (m *fakeMCPManagerRuntime) StartProjectServerFromProjectConfig(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
+	return m.AddProjectServer(ctx, projectPath, serverName, cfg)
+}
+
 func (m *fakeMCPManagerRuntime) GetProjectClients(projectPath string) map[string]mcpclient.Client {
 	normalizedProjectPath := filepath.Clean(projectPath)
 	result := make(map[string]mcpclient.Client)
