@@ -49,7 +49,7 @@ describe("the hybrid nav's shape", () => {
       "deployments",
       "data",
       "storage",
-      "users",
+      "auth",
       "configure",
     ]);
   });
@@ -60,7 +60,7 @@ describe("the hybrid nav's shape", () => {
     expect(flattenIds(hybridNav.items, ctx)).not.toContain("security");
     const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
     try {
-      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "users", "security", "configure"]);
+      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "security", "configure"]);
       expect(flattenIds(hybridNav.items, ctx)).toContain("registered-advisories");
       // Not in Analytics: a Security row joins Security alone.
       const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
@@ -70,8 +70,8 @@ describe("the hybrid nav's shape", () => {
     }
   });
 
-  it("has Settings in the footer, and no footer Inbox", () => {
-    expect(hybridNav.footer.map((item) => item.id)).toEqual(["settings"]);
+  it("has Usage & billing and Settings in the footer, and no footer Inbox", () => {
+    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "settings"]);
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
@@ -86,10 +86,10 @@ describe("the hybrid nav's shape", () => {
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
   });
 
-  it("Configure is Secrets, Domains, Activity", () => {
+  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Usage, Activity", () => {
     const ctx = ctxAt(inboxPath());
     const configure = hybridNav.items.find((item) => item.id === "configure")!;
-    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "activity"]);
+    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "project-usage", "activity"]);
   });
 
   it("merges Services, Releases and Environments into Deployments, with Previews a URL of its own", () => {
@@ -137,10 +137,10 @@ describe("the hybrid nav's shape", () => {
     expect(hrefOf(observability, ctx)).toBe(`${obsOverviewPath("shopfront")}`);
   });
 
-  it("gives Agents its rows and Analytics its tabs", () => {
+  it("gives Agents a Connectors row and Analytics its tabs", () => {
     const ctx = ctxAt(inboxPath());
     const ids = flattenIds(hybridNav.items, ctx);
-    expect(ids).toEqual(expect.arrayContaining(["sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
+    expect(ids).toEqual(expect.arrayContaining(["connectors", "sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
     // AI providers lives in Settings only (U6e).
     expect(ids).not.toContain("ai-providers");
     const analytics = hybridNav.items.find((item) => item.id === "analytics")!;

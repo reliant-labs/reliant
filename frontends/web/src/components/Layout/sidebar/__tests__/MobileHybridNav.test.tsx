@@ -53,10 +53,10 @@ describe("the phone's nav", () => {
     renderAt(mobileInboxPath());
     expect(screen.getByTestId("nav-top")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
-    for (const id of ["agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "users", "configure"]) {
+    for (const id of ["agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "configure"]) {
       expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
     }
-    expect(screen.getByTestId("sidebar-settings-button")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-usage-billing")).toBeInTheDocument();
   });
 
   it("drills into Agents on the phone's chats, never the old nav, and its back header goes to the Overview", () => {

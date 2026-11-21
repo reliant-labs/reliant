@@ -18,6 +18,7 @@ import { useMemo } from "react";
 
 import Link from "@/components/forge-ui/link";
 import Tag from "@/components/forge-ui/tag";
+import { LearnLink } from "@/lib/learnLinks";
 import { useMetricCatalog, useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
 
@@ -103,7 +104,8 @@ export function EventsMetricsPage({ embedded = false }: { embedded?: boolean } =
         ) : custom.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-4 py-5 text-ui text-ink-muted">
             No product event in the last 7 days. Call <code className="font-mono text-code">track(&quot;signup&quot;)</code> in the app (forge&apos;s web runtime or{" "}
-            <code className="font-mono text-code">observe.Track</code> in Go) and each event appears here as <code className="font-mono text-code">product.signup</code>.
+            <code className="font-mono text-code">observe.Track</code> in Go) and each event appears here as <code className="font-mono text-code">product.signup</code>.{" "}
+            <LearnLink section="analytics" label="How product events work" className="align-baseline" />
           </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">

@@ -3,18 +3,16 @@
 /**
  * An app page before anything is deployed (U6b, owner 2026-11-20): every
  * project has the same nav, so a project with no deployed app opens the
- * same pages, and each says what it will show and how to get there, with ONE
- * action — a chat that deploys the project.
+ * same pages, and each says what it will show and how to get there: a chat
+ * that deploys the project, the Move to Forge workflow for an app that lives
+ * elsewhere, and the section's guide (EmptyState/ProjectEmptyCta.tsx, U6d).
  */
 
-import { useNavigate } from "@tanstack/react-router";
 import { Rocket } from "lucide-react";
 
-import { buttonClasses } from "@/components/forge-ui/button";
-import { homePath, projectChatsPath, withSearch } from "@/lib/paths";
-import { cn } from "@/lib/utils";
+import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 
-import { START_APP, START_REPO } from "../../Apps/appStart";
+import { learnSectionOf } from "./consoleLearn";
 import { consoleNavEntries } from "./consoleNavRegistry";
 import { PAGE_SUBTITLES } from "./groupedNav";
 import { OBS_NAV_LABELS, type ConsolePage } from "./paths";
@@ -37,7 +35,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "data":
       return { title: "Data", shows: PAGE_SUBTITLES.data };
     case "users":
-      return { title: "Users", shows: "Who can sign in to your app, and when they last did" };
+    case "auth":
+      return { title: "Auth", shows: "Who can sign in to your app, and how" };
     case "storage":
       return { title: "Storage", shows: "The files your app keeps in its buckets" };
     case "environments":
@@ -52,12 +51,19 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "services":
     case "service":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
+    case "usage":
+      return { title: "Usage", shows: PAGE_SUBTITLES.usage };
     case "events":
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "analytics":
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
+    case "vulnerabilities":
+    case "vulnerability":
+      return { title: "Vulnerabilities", shows: "The known vulnerabilities in what your app's releases ship" };
+    case "sboms":
+      return { title: "SBOMs", shows: "What each release artifact is made of, and its scan" };
     case "extension": {
       const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
       return { title: label, shows: `${label} for your app` };
@@ -70,32 +76,19 @@ function describe(page: ConsolePage): { title: string; shows: string } {
 }
 
 export function AppSectionEmptyState({ page, projectId, title: heading }: { page: ConsolePage; projectId: string | null; title?: string }) {
-  const navigate = useNavigate();
   const { title, shows } = describe(page);
-  // A chat that deploys this project's code; with no code here, one that builds an app.
-  const href = projectId ? withSearch(projectChatsPath(projectId), { start: START_REPO }) : withSearch(homePath(), { start: START_APP });
   return (
-    <div className="mx-auto flex max-w-[var(--form-max)] flex-col items-start gap-3 py-16" data-testid="app-section-empty">
-      <span className="flex size-9 items-center justify-center rounded-xl border border-border text-ink-muted">
-        <Rocket className="size-4" aria-hidden="true" />
-      </span>
-      <div>
-        <h1 className="text-section text-ink">{heading ?? `${title} appears once this project is deployed`}</h1>
-        <p className="mt-1 text-ui text-ink-muted">{shows}.</p>
-        <p className="mt-1 text-ui text-ink-muted">
-          Deploying puts the app on Reliant hosting with prod and staging; this page fills in with its first release.
-        </p>
-      </div>
-      <a
-        href={href}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-          event.preventDefault();
-          void navigate({ href });
-        }}
-        className={cn("no-color", buttonClasses({ variant: "primary", size: "sm" }))} data-testid="app-section-empty-deploy">
-        Deploy this project
-      </a>
-    </div>
+    <ProjectEmptyCta
+      testId="app-section-empty"
+      icon={<Rocket />}
+      headingLevel={1}
+      title={heading ?? `${title} appears once this project is deployed`}
+      projectId={projectId}
+      deploy="chat"
+      learn={learnSectionOf(page) ?? "overview"}
+    >
+      <p>{shows}.</p>
+      <p>Deploying puts the app on Reliant hosting with prod and staging; this page fills in with its first release. Already have an app somewhere else? Move it onto forge.</p>
+    </ProjectEmptyCta>
   );
 }

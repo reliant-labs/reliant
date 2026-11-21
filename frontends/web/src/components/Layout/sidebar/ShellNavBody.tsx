@@ -12,9 +12,7 @@ import { useMemo } from "react";
 import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../Forge/Console/groupedNav";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
-import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { hybridNav, type NavCtx } from "./navConfig";
-import { forgeOffNav } from "./navConfig/hybrid";
 import { NavRenderer, type NavigateOptions, type NavSlots } from "./NavRenderer";
 import type { ShellProject } from "./shellProject";
 
@@ -27,8 +25,6 @@ export interface ShellNavBodyProps {
 }
 
 export function ShellNavBody(props: ShellNavBodyProps) {
-  // The forge UI's off-switch (lib/forgeFeature.ts) takes the app pages out of the nav.
-  if (!isForgeUIEnabled()) return <NavBody {...props} shell={{ ...props.shell, app: null }} console={null} forgeUI={false} />;
   return props.shell.app ? <NavWithConsole app={props.shell.app} {...props} /> : <NavBody {...props} console={null} />;
 }
 
@@ -37,7 +33,7 @@ function NavWithConsole({ app, ...props }: ShellNavBodyProps & { app: string }) 
   return <NavBody {...props} console={model} />;
 }
 
-function NavBody({ shell, pathname, search, slots, onNavigate, console, forgeUI = true }: ShellNavBodyProps & { console: GroupedNavInput | null; forgeUI?: boolean }) {
+function NavBody({ shell, pathname, search, slots, onNavigate, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
   const ctx = useMemo<NavCtx>(
     () => ({
       pathname,
@@ -52,5 +48,5 @@ function NavBody({ shell, pathname, search, slots, onNavigate, console, forgeUI 
     }),
     [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console],
   );
-  return <NavRenderer config={forgeUI ? hybridNav : forgeOffNav} ctx={ctx} slots={slots} onNavigate={onNavigate} />;
+  return <NavRenderer config={hybridNav} ctx={ctx} slots={slots} onNavigate={onNavigate} />;
 }

@@ -55,6 +55,7 @@ import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
   ANALYTICS_TAB_LABELS,
+  AUTH_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -165,7 +166,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Data", { kind: "data" }, icon(Database)),
       row("Storage", { kind: "storage" }, icon(HardDrive)),
-      row("Users", { kind: "users" }, icon(Users)),
+      // Auth (U6d): Users and Sign-in tabs; the old Users page redirects to it.
+      row("Auth", { kind: "auth" }, icon(Users), { active: is("auth") || is("users") }),
       ...configureNavRows({ page, envs }, href),
     ],
     footer: [row("Activity", { kind: "activity" }, icon(Activity))],
@@ -262,6 +264,8 @@ export function consoleCrumbs(
       return [{ label: "Services" }];
     case "service":
       return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
     case "events":
       return [{ label: "Product analytics" }, { label: "Events & metrics" }];
     case "analytics":
@@ -270,6 +274,14 @@ export function consoleCrumbs(
       return [{ label: "Observability" }, { label: "Speed insights" }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
+    case "auth":
+      return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 

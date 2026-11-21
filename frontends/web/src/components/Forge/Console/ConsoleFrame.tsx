@@ -4,7 +4,8 @@
  * The console's frame INSIDE THE ONE SHELL (U6): no nav column — the app's
  * sections are rows of the shell's left nav, nested under the open app
  * (Layout/sidebar/AppsNavSection.tsx) — just a slim bar with the breadcrumb
- * and the ONE environment selector, over the page.
+ * and the ONE environment selector, over the page, with the page's Learn
+ * link (consoleLearn.ts) beside the selector.
  *
  * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
  * resolves to reliant's primary action colour; outside it, to reliant's muted
@@ -20,6 +21,9 @@ import type { ReactNode } from "react";
 import { PageMain, ShellPageHeader } from "@/components/Layout/shell/shellFrame";
 import { AppPageProjectPicker } from "@/components/Layout/sidebar/AppPageProjectPicker";
 
+import { LearnLink } from "@/lib/learnLinks";
+
+import { learnSectionOf } from "./consoleLearn";
 import { useConsoleNavExtras } from "./consoleNavExtras";
 import { ConsoleBreadcrumb, consoleCrumbs } from "./ConsoleShell";
 import { EnvScopeControl } from "./EnvScopeControl";
@@ -44,6 +48,8 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
   const long = envOrder ? [...scope.long].sort((a, b) => rank(a.name) - rank(b.name)) : scope.long;
   const own = consoleCrumbs(project, page, env, dashboardTitle);
   const crumbs = crumbsOverride?.(page, own) ?? own;
+  // Every console page names its guide in the bar (U6d), so no page has to.
+  const learn = learnSectionOf(page);
   // A page that opted out of the env scope (useConsoleNavModel.ts) gets no selector.
   const envScoped = useRouteUsesEnvScope();
 
@@ -53,6 +59,7 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
         testId="forge-console-header"
         actions={
           <>
+          {learn && <LearnLink section={learn} />}
           {envScoped && (
             <EnvScopeControl
               value={env}

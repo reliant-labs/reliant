@@ -85,9 +85,9 @@ import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
-import { homePath, onboardingPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
-import { isForgeShell } from "@/lib/shell";
-import { forgeBrandHomeTarget, routeRequiresOnboarding } from "./components/OnboardingFlow/onboardingGate";
+import { homePath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
+import { chatSetupNeeded, chatSetupPath } from "./components/OnboardingFlow/onboardingGate";
+import { useChatRouteRedirect } from "./components/OnboardingFlow/useChatSetup";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -120,6 +120,23 @@ function App() {
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();
+
+  // Who may use the chat routes yet (onboardingGate.ts, chatRouteAction): the
+  // home sends a person who cannot run a chat — not onboarded, or onboarded
+  // with no usable machine — to their projects; a project's chats send a
+  // person who has not onboarded through /onboarding and back. `/?plan=…`
+  // and `/?start=…` ask for a chat, so they still go to the wizard, search
+  // and all (onboardingSearchSchema accepts the same fields).
+  //
+  // Deliberately NOT gated on `isBackendReady` or `isWorkspaceRestoring`: a
+  // person on their way elsewhere has no workspace to restore, and waiting
+  // for ListProjects only leaves them on a spinner. The hook waits for the
+  // user record (and, at the home, the daemon list) instead, so it never
+  // bounces twice. `holding` is true while it is about to leave.
+  const { holding: chatRouteHolding, setup: chatSetupState } = useChatRouteRedirect();
+  // New chat (the shortcut) while chats cannot run: set them up instead.
+  const chatSetupRef = useRef(chatSetupState);
+  chatSetupRef.current = chatSetupState;
 
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
@@ -423,6 +440,12 @@ function App() {
   const keyboardHandlers = useMemo(
     () => ({
       onNewChat: () => {
+        // Chats cannot run yet: walk them through setting chats up instead.
+        const setup = chatSetupRef.current;
+        if (chatSetupNeeded(setup)) {
+          void navigate({ href: chatSetupPath(setup) });
+          return;
+        }
         // The new-chat view, in the filter's project, else the open chat's,
         // else the last one used (openNewChat).
         void openNewChat();
@@ -709,6 +732,7 @@ function App() {
       setShowFileBrowser,
       showSidebarTab,
       cycleProject,
+      navigate,
     ]
   );
 
@@ -1526,47 +1550,6 @@ function App() {
     );
   };
 
-  // Whether the user is mid-onboarding. The onboarding UI itself lives at
-  // /onboarding now (see OnboardingRoute); this flag exists only so we can
-  // bounce stray landings on / or /project/$id over there.
-  // Asked through the one rule (onboardingGate.ts) so this redirect and
-  // OnboardingGate agree on which routes onboarding guards; ModernApp's own
-  // routes (`/`, `/project/$id`) are chat routes, so today it always says yes.
-  const inOnboarding =
-    !isUserLoading &&
-    (!currentUser || !currentUser.onboardingCompleted) &&
-    routeRequiresOnboarding(location.pathname);
-  // On the forge brand the home sends a person who has not onboarded to their
-  // apps instead (forgeBrandHomeTarget); a project's chats still onboard them.
-  const notOnboardedHome = forgeBrandHomeTarget(location.pathname, isForgeShell());
-
-  // If we land here while the user still needs to onboard, redirect to the
-  // dedicated route. Preserve any incoming search (e.g. legacy /?plan=... or
-  // /?github_connected=true) — onboardingSearchSchema accepts the same
-  // fields, and OnboardingRoute will pick them up.
-  //
-  // We deliberately do NOT gate on `isBackendReady` or `isWorkspaceRestoring`:
-  // a mid-onboarding user has no projects to list and no workspace to restore,
-  // and waiting for ListProjects to complete (which can run several hundred
-  // ms to a couple seconds before the shared fetch inside fetchProjects
-  // resolves) just delays the redirect — leaving the user staring at a
-  // LoadingSpinner before the OnboardingPage / ComputeStep mounts and fires
-  // its own queries (ListDaemons, etc.). Gate only on `isUserLoading` so we
-  // don't bounce twice (once before `currentUser` arrives, once after).
-  useEffect(() => {
-    if (isUserLoading) return;
-    if (!inOnboarding) return;
-    if (notOnboardedHome) {
-      navigate({ to: notOnboardedHome, search: {}, replace: true });
-      return;
-    }
-    navigate({
-      to: onboardingPath(),
-      search: (prev: Record<string, unknown>) => prev,
-      replace: true,
-    });
-  }, [isUserLoading, inOnboarding, notOnboardedHome, navigate]);
-
   // GitHub OAuth return for app-shell triggers (GitHubSyncStatus, AddRepoModal).
   // /onboarding and /settings/git-connections handle their own returns in-route.
   // Here we just toast, refresh the credential cache, and strip the params so
@@ -1621,10 +1604,10 @@ function App() {
       return <LoadingSpinner />;
     }
 
-    // Mid-onboarding users get redirected to /onboarding by the effect above;
-    // show a spinner instead of the picker for the one render between
-    // currentUser arriving and the navigate landing.
-    if (inOnboarding) {
+    // A person on their way elsewhere (useChatRouteRedirect: their projects,
+    // or /onboarding) gets a spinner instead of the workspace for the render
+    // or two before the navigate lands, or while the home is still checking.
+    if (chatRouteHolding) {
       return <LoadingSpinner />;
     }
 
@@ -1798,7 +1781,7 @@ function App() {
     isBackendReady &&
     !isWorkspaceRestoring &&
     !isUserLoading &&
-    !inOnboarding;
+    !chatRouteHolding;
 
   // Contribute the workspace's shortcut handlers to the keyboard host — from
   // the moment the workspace can act on them (the same gate as the header:

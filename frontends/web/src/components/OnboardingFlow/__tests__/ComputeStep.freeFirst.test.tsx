@@ -112,7 +112,7 @@ describe("ComputeStep — your own computer leads on a computer", () => {
     renderStep();
 
     const toggle = screen.getByTestId("compute-cloud-toggle");
-    expect(toggle).toHaveTextContent("Reliant Cloud machines · from $20/mo");
+    expect(toggle).toHaveTextContent("Reliant Cloud sandboxes · from $20/mo");
     expect(toggle).toHaveTextContent(/paid/i);
     expect(toggle).toHaveTextContent(/keeps running after you close your laptop/i);
     expect(ownComputer().compareDocumentPosition(toggle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -157,7 +157,7 @@ describe("ComputeStep — your own computer leads on a computer", () => {
     expect(ownComputer()).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByTestId("compute-step-plans-unavailable")).toBeVisible();
     expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue with a Reliant machine" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue with a Reliant sandbox" }));
     expect(updatePlan).toHaveBeenCalledWith(expect.objectContaining({ compute: "cloud_paid" }));
     expect(screen.getByTestId("redeem-coupon")).toBeVisible();
   });

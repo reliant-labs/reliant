@@ -7,9 +7,9 @@
  *   Overview · Inbox (count) · Agents › ·
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
- *   Data · Storage · Users ·
- *   Security ▾ · Configure ▾ (Secrets, Domains, Activity)
- *   footer: Settings
+ *   Data · Storage · Auth ·
+ *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
+ *   footer: Usage & billing · Settings
  *
  * Only Agents and Observability drill in (their rows replace the nav, under a
  * "‹ Area" header, on their routes). Everything else is an accordion or a
@@ -21,6 +21,7 @@
 import {
   agentsArea,
   analyticsGroup,
+  auth,
   configureGroup,
   dashboards,
   data,
@@ -32,7 +33,6 @@ import {
   securityGroup,
   settingsSections,
   storage,
-  users,
 } from "./items";
 import type { NavConfig } from "./types";
 
@@ -47,21 +47,10 @@ export const hybridNav: NavConfig = {
     deploymentsGroup,
     data,
     storage,
-    users,
+    auth,
     securityGroup,
     configureGroup,
   ],
-  footer,
-  sectionPages: [settingsSections],
-};
-
-/**
- * The nav while the forge UI is turned off (Settings › Developer;
- * lib/forgeFeature.ts): no app page, since each one's route is behind
- * ForgeGate too. The project's Overview, the Inbox and Agents stay.
- */
-export const forgeOffNav: NavConfig = {
-  items: [overview, inbox, agentsArea],
   footer,
   sectionPages: [settingsSections],
 };

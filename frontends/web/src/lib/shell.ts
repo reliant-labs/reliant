@@ -53,8 +53,6 @@ export const DEFAULT_FORGE_APP_HOST = "forge.reliantlabs.io";
 /** The demo host when the runtime config names none. */
 export const DEFAULT_DEMO_APP_HOST = "demo.reliantlabs.io";
 
-/** Reliant's hosted origin when the runtime config names none (constants.ts DEFAULT_APP_URL). */
-const DEFAULT_RELIANT_APP_URL = "https://app.reliantlabs.io";
 
 /** localStorage key of the dev override. */
 export const SHELL_OVERRIDE_KEY = "reliant.shell";
@@ -101,24 +99,9 @@ export function demoAppHost(): string {
   return normalizeHost(configured) || DEFAULT_DEMO_APP_HOST;
 }
 
-/** The forge console's public origin, for Reliant's "Open Forge console" link. */
+/** The forge host's public origin, for a link into the app from outside it (the public demo's). */
 export function forgeAppOrigin(): string {
   return `https://${forgeAppHost()}`;
-}
-
-/** Reliant's public origin, for the forge shell's "Open in Reliant" link. */
-export function reliantAppOrigin(): string {
-  let configured = "";
-  try {
-    configured = loadConfig().APP_URL;
-  } catch {
-    // Fall back below.
-  }
-  const origin = configured.trim().replace(/\/$/, "");
-  // On the forge host a config naming the forge host itself would make the
-  // link loop back here; only another origin is a way to Reliant.
-  if (origin && normalizeHost(origin) !== forgeAppHost()) return origin;
-  return DEFAULT_RELIANT_APP_URL;
 }
 
 export interface ShellInputs {

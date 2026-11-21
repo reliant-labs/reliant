@@ -9,7 +9,9 @@
  *   left         the health KPIs (one card of four figures) and what needs
  *                attention, each item with the release it followed and the
  *                way back.
- *   rail         what changed: recent releases, then who uses the app (the
+ *   rail         what changed: recent releases; then the app's code (the
+ *                `about` slot: the Code card, Console/AppCodeCard.tsx); then
+ *                who uses the app (the
  *                Users card: accounts, and active, new and returning users
  *                over 7 days, read from the generated Overview dashboard's
  *                Users panels; hidden until there are users to show). It is
@@ -171,6 +173,12 @@ export interface OverviewHomeProps {
   summary?: OverviewSummaryLinks;
   /** The project's chats (U6c, the merged landing): waiting on the person, then the latest. In the rail, above the releases. */
   chats?: ReactNode;
+  /**
+   * The app's code (Console/AppCodeCard.tsx, U13): where it lives and which of
+   * the person's projects hold it. A card in the rail under the recent
+   * releases, and under the getting-started block before anything is deployed.
+   */
+  about?: ReactNode;
 }
 
 export interface OverviewSummaryLinks {
@@ -206,6 +214,7 @@ export function OverviewHome({
   domainsHref = "",
   summary,
   chats,
+  about,
 }: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
@@ -367,6 +376,11 @@ export function OverviewHome({
             </p>
           </GettingStarted>
         )}
+        {about && (
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2" data-testid="overview-about">
+            {about}
+          </div>
+        )}
       </div>
     );
   }
@@ -420,6 +434,7 @@ export function OverviewHome({
             <LandingCard testId="overview-card-releases">
               <RecentReleases project={project} envs={envs} hrefs={hrefs} />
             </LandingCard>
+            {about && <LandingCard testId="overview-card-code">{about}</LandingCard>}
             {summary.analytics && (
               <LandingCard testId="overview-card-analytics">
                 <OverviewAnalyticsBox scope={kpiScope} analyticsHref={summary.analytics} eventsHref={summary.events ?? summary.analytics} />
@@ -462,10 +477,11 @@ export function OverviewHome({
             </>
           )}
         </div>
-        {/* What changed, then who uses the app. */}
+        {/* The project's chats, what changed, the app's code, then who uses the app. */}
         <aside className="min-w-0 space-y-4" aria-label="Recent changes" data-testid="overview-rail">
           {chats}
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
+          {about}
           {!unrecorded && !extras.led && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
         </aside>
       </div>
