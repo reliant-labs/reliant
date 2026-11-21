@@ -10,39 +10,43 @@ from __future__ import annotations
 import posixpath
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "generated" / "docs-source" / "reference"
 TARGET_DIR = ROOT / "docs" / "reference"
 
+# The title and description of each page. These win over any frontmatter the
+# source generator wrote: they are the page's search-result title and snippet,
+# so they are written for a reader searching, and kept here in one place.
 PAGE_CONFIG = {
     "types": {
         "title": "Types Reference",
-        "description": "Reference documentation for workflow config types and output helper types",
+        "description": "Workflow config types (inject, project, thread, sub-workflow, save-message) and the output types nodes return: messages, thinking, tool calls and tool results.",
     },
     "scenario-schema": {
         "title": "Scenario Schema",
-        "description": "Reference documentation for workflow testing scenarios",
+        "description": "Schema for workflow test scenarios: simulated events, mocked tool calls, expectations, node targeting and a complete example for reliant scenario run.",
     },
     "nodes": {
         "title": "Node Types Reference",
-        "description": "Auto-generated API reference for workflow node type Input/Output schemas",
+        "description": "Every workflow node type, generated from the proto: what each node does and the input fields and output fields it reads and writes.",
     },
     "tools": {
         "title": "Tools Quick Reference",
-        "description": "Auto-generated quick reference for all tools (tags, names, descriptions)",
+        "description": "Every tool a Reliant agent can call, by tag: what it does, its parameters and when to use it. Generated from the live tool registry.",
     },
     "models": {
         "title": "Models Reference",
-        "description": "Available AI models and their capabilities",
+        "description": "The Claude, GPT and Gemini models Reliant supports: context windows, capabilities, model tags, and how to choose and configure a model per workflow.",
     },
     "cli": {
         "title": "CLI Reference",
-        "description": "Every reliant command, subcommand and flag",
+        "description": "Every reliant CLI command, subcommand and flag, generated from the command tree: daemons, workflows, triggers, machines, projects, worktrees, auth and forge.",
     },
     "workflow-schema": {
         "title": "Workflow Schema Reference",
-        "description": "Top-level workflow, edge, and edge-case schema reference",
+        "description": "Top-level workflow YAML schema: workflow fields, edges and edge cases, concurrency limits, checks, and the YAML-only syntax sugar.",
     },
 }
 
@@ -203,18 +207,25 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
 
         def protect(match: re.Match[str]) -> str:
             protected.append(match.group(0))
-            return f"__BRACKETED_OBJECT_ARRAY_{len(protected) - 1}__"
+            return f"__PROTECTED_CODE_SPAN_{len(protected) - 1}__"
 
         segment = bracketed_object_array_re.sub(protect, segment)
-        segment = brace_token_re.sub(lambda m: f"`{m.group(0)}`", segment)
+        # A brace token is protected too, so the placeholder pass below cannot
+        # wrap a `<name>` inside it a second time: nested backticks would close
+        # the code span early and leave `<name>` to parse as an unclosed tag.
+        segment = brace_token_re.sub(protect, segment)
         segment = angle_placeholder_re.sub(lambda m: f"`{m.group(0)}`", segment)
 
-        for idx, original in enumerate(protected):
-            segment = segment.replace(
-                f"__BRACKETED_OBJECT_ARRAY_{idx}__", f"`{original}`"
-            )
+        placeholder_re = re.compile(r"__PROTECTED_CODE_SPAN_(\d+)__")
 
-        return segment
+        def raw(text: str) -> str:
+            # A span protected inside another (an object array inside a brace
+            # token) is already in the outer span's code: restore it unwrapped.
+            return placeholder_re.sub(lambda m: raw(protected[int(m.group(1))]), text)
+
+        return placeholder_re.sub(
+            lambda m: f"`{raw(protected[int(m.group(1))])}`", segment
+        )
 
     lines = body.splitlines()
     out: list[str] = []
@@ -248,6 +259,48 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
     return "\n".join(out)
 
 
+# An opening quote is taken along, so a quoted URL that the autolink runs into
+# the closing quote of is wrapped whole: `"http://x:1"`, not "`http://x:1"`.
+BARE_URL_RE = re.compile(r"(?P<quote>[\"']?)(?P<url>https?://[^\s<>`|)]+)")
+
+
+def is_valid_url(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+        parts.port  # raises on a port that is not a number
+    except ValueError:
+        return False
+    return bool(parts.hostname)
+
+
+def code_invalid_bare_urls(body: str) -> str:
+    """Wrap a bare URL that is not a valid URL in backticks.
+
+    MDX turns a bare `https://…` in prose into a link (GFM autolink literal),
+    and Mintlify refuses the whole page when that link is not a valid URL:
+    CLI help placeholders such as `https://host[:port]`, or a URL that runs
+    into a closing quote. In code it is text, which is what such a URL is.
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        parts = line.split("`")
+        for idx in range(0, len(parts), 2):
+            parts[idx] = BARE_URL_RE.sub(
+                lambda m: m.group(0) if is_valid_url(m.group("url")) else f"`{m.group(0)}`",
+                parts[idx],
+            )
+        out.append("`".join(parts))
+    return "\n".join(out)
+
+
 def convert_body(body: str, slug: str) -> str:
     body = body.replace("\r\n", "\n")
     body = HTML_COMMENT_RE.sub("", body)
@@ -263,12 +316,45 @@ def convert_body(body: str, slug: str) -> str:
     body = ICON_RE.sub(lambda m: ICON_MAP.get(m.group(1), m.group(1)), body)
     body = fence_example_blocks(body)
     body = wrap_inline_mdx_sensitive_tokens(body)
+    body = code_invalid_bare_urls(body)
     if slug == "cli":
         body = escape_all_angles(body)
 
     # Normalize excess blank lines introduced by comment/frontmatter stripping.
     body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"
+    check_parses_as_mdx(body, slug)
     return body
+
+
+def check_parses_as_mdx(body: str, slug: str) -> None:
+    """Fail the generator, not Mintlify, on what makes Mintlify refuse a page.
+
+    The reference pages are generated from plain text and hold no JSX, so a tag
+    outside a code span is always a conversion bug: MDX parses it as an
+    unclosed element. A bare URL that is not a valid URL fails Mintlify's link
+    parsing. Either way the whole page (and `mint broken-links`) fails.
+    """
+    in_fence = False
+    for lineno, line in enumerate(body.splitlines(), 1):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        parts = line.split("`")
+        for idx in range(0, len(parts), 2):
+            for url in (m.group("url") for m in BARE_URL_RE.finditer(parts[idx])):
+                if not is_valid_url(url):
+                    raise ValueError(
+                        f"{slug}.mdx body line {lineno}: bare URL {url!r} is not a valid URL "
+                        f"and would fail Mintlify's link parsing: {line.strip()[:160]}"
+                    )
+            match = re.search(r"(?<!\\)<[A-Za-z/][^>]*>", parts[idx])
+            if match:
+                raise ValueError(
+                    f"{slug}.mdx body line {lineno}: {match.group(0)!r} is outside code "
+                    f"and would parse as an unclosed MDX tag: {line.strip()[:160]}"
+                )
 
 
 def generate_page(slug: str) -> None:
@@ -280,8 +366,8 @@ def generate_page(slug: str) -> None:
 
     raw = source_path.read_text()
     metadata, body = parse_frontmatter(raw)
-    title = metadata.get("title") or PAGE_CONFIG[slug]["title"]
-    description = metadata.get("description") or PAGE_CONFIG[slug]["description"]
+    title = PAGE_CONFIG[slug].get("title") or metadata.get("title")
+    description = PAGE_CONFIG[slug].get("description") or metadata.get("description")
     body = convert_body(body, slug)
 
     output = (

@@ -231,6 +231,46 @@ The skill ends Tier 1 with the commands that prove it works: `forge lint`, `forg
 
 A Go server that already has its own protos and handlers adopts in place with `forge project new --in-place --kind service`, one service per pull request, using `// forge:unmanaged`. That path is Tier 4, and `forge skill load migration` covers it.
 
+## Bring your own database, identity provider or telemetry backend
+
+Each of the three is a binding in an environment's KCL, so you can swap one per environment and keep the rest.
+
+### Your own database
+
+Point the app's `DATABASE_URL` at your Postgres instead of a `forge.ManagedDatabase`, and declare it as a `forge.ExternalDatabase` if you want `forge db query` to read it. [Managed Postgres](/hosting/managed-postgres#bring-your-own-database) has the steps. On Reliant hosting a workload's outbound traffic is limited to ports 80 and 443, so an outside Postgres on 5432 is reachable only from workloads on a cluster you operate.
+
+### Your own identity provider
+
+An environment that declares no `identity` takes its token issuer from its own `config.k`. In `deploy/kcl/<env>/main.k`, delete the `identity = idn.IDENTITY` line, then set the issuer on the API's config in `deploy/kcl/<env>/config.k`:
+
+```python
+app_config: config_gen.AppConfig = {
+    jwt_issuer = "https://your-tenant.us.auth0.com/"
+    jwt_audience = "https://api.example.com"
+}
+```
+
+That is a config change, not a code change, for any standards-compliant issuer (Auth0, Okta, Keycloak, a Zitadel you run, Supabase). The API discovers the issuer's signing keys from its `/.well-known/openid-configuration`; set `jwt_jwks_url` as well when discovery can't describe them. Keys are fetched at startup and refreshed in the background, and an API that can't reach the issuer at startup refuses to start rather than accepting nothing. Roles are read from the token's flat `roles` claim (or a Zitadel role map) unless `jwt_roles_claim` names another claim. A provider with its own claim shape, such as Clerk or Firebase, needs its validator chosen in `internal/app/auth.go`, which is yours. Keep one source per field: setting `JWT_ISSUER` or `OIDC_CLIENT_ID` on a workload in an environment that still declares `identity` fails the render. The frontend's sign-in must name the same issuer (`oidc_client_id` and `oidc_redirect_uri`); have your agent run `forge skill load auth/external-provider` for both halves.
+
+### Your own telemetry backend
+
+Where an environment's telemetry goes is the `destination` of its `forge.Observability`. The app keeps exporting OTLP to the endpoint forge gives it, and never learns the backend:
+
+```python
+observability = forge.Observability {
+    destination = forge.ObservabilityDestination {
+        endpoint = "https://otlp.example.com"
+        headers_secret = forge.ObservabilitySecretRef {name = "otlp", key = "OTLP_HEADERS"}
+    }
+}
+```
+
+- **Locally** (`forge env up`), the destination replaces the local ClickStack with a small forwarder. Its headers come from the secret store: `forge secret set --env dev OTLP_HEADERS` with a JSON object such as `{"authorization": "<key>"}` on stdin. The scaffolded `deploy/kcl/dev/main.k` has a commented `_destination` ready to fill in.
+- **On a cluster you operate**, forge renders a node agent (a DaemonSet in its own namespace) that forwards to the destination. The headers Secret must exist in that namespace, so the environment declares who provides it with a `forge.ExternalSecret` in `required_secrets`, and the deploy checks it.
+- **On Reliant hosting**, the endpoint is the platform's: hosted workloads report to [Reliant observability](/hosting/observability), and a `destination` there sets only the protocol and which signals are on.
+
+`forge skill load observability/destination` has every field, including sampling, retention and a token that renews without a restart.
+
 ## Turn features off
 
 Forge derives its subsystems from what is in the repository: `.proto` files turn on codegen, `db/migrations/` turns on migrations and the ORM, a frontend turns on the frontend tooling, a `forge.Gateway` in `deploy/kcl` turns on ingress, `internal/operators/<name>/` turns on operators. When a derived default is wrong for your project, pin it in `forge.yaml`:

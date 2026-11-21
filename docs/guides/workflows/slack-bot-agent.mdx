@@ -209,7 +209,7 @@ By the end of this guide, mentioning the Reliant bot in a Slack channel starts a
     reliant trigger activate --workflow slack-ask --no-machine
     ```
 
-    The activation listens through your default Slack connection; `--connection slack=<connection-id>` picks another. An event reaches it only through a connection to the workspace it came from.
+    The activation listens through your default Slack connection; `--connection slack=<connection-id>` picks another (`reliant integrations list --integration slack` prints the ids). An event reaches it only through a connection to the workspace it came from.
   </Step>
   <Step title="Mention the bot and verify the reply">
     Post `@Reliant what changed in Postgres 18 for async I/O?` in the channel. The message should get a 👀 reaction, then a reply in its thread. Each mention is a firing:

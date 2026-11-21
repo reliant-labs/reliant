@@ -410,7 +410,20 @@ authenticate and returns at once: it never prompts.
   command: make test
 ```
 
-The parameter is bound in `tools_config` on a `call_llm` node. `builtin://agent` takes only a list of `tools`, not `tools_config`, so a workflow that binds a tool parameter runs its own agent loop; the guide linked below has a complete one.
+The parameter is bound in `tools_config` on a `call_llm` node. A workflow that runs `builtin://agent` binds it with the agent's `tool_params` input, which the agent passes to its own `call_llm` as `tools_config.tools`:
+
+```yaml
+- id: fix
+  type: workflow
+  ref: builtin://agent
+  args:
+    max_turns: 40                             # ends the agent after 40 turns (0, the default, is no limit)
+    spawn_presets: []                         # a spawned sub-agent's tools are not bound
+    tool_params:
+      shell: {credentials: none}
+```
+
+The binding covers that agent's own tools. A sub-agent it spawns gets its preset's tools, unbound, so pass `spawn_presets: []` when the binding must hold for everything the agent does.
 
 On Linux, which every Reliant cloud machine runs, the command also starts in a sandbox: its own user,
 mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemon.json`,
