@@ -76,43 +76,43 @@ export const AgentMessageCard = memo(function AgentMessageCard({
     <div
       data-testid="agent-message-card"
       data-sender={fromRun ? "run" : "agent"}
-      className="message-content my-1 w-full min-w-0"
+      className="message-content w-full min-w-0"
     >
       <div className="min-w-0 text-muted-foreground">
-        <div className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-foreground/5">
+        <div className="flex min-h-7 min-w-0 items-center gap-1.5 text-ui touch:min-h-[44px]">
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded}
             title={expanded ? "Collapse message" : "Expand message"}
           >
-            <ChevronRight
-              className={cn("h-3 w-3 shrink-0 transition-transform", expanded && "rotate-90")}
-              aria-hidden
-            />
-            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span data-testid="agent-message-subject" className="min-w-0 truncate text-foreground">
+            <Icon className="size-4 shrink-0" aria-hidden />
+            <span data-testid="agent-message-subject" className="min-w-0 truncate">
               {subject || "Message"}
             </span>
+            <ChevronRight
+              className={cn("size-3.5 shrink-0 opacity-70 transition-transform", expanded && "rotate-90")}
+              aria-hidden
+            />
           </button>
           <span className="shrink-0">{fromRun ? "from run" : "from"}</span>
           {openSender ? (
             <button
               type="button"
               onClick={openSender}
-              className="min-w-0 max-w-[40%] truncate font-medium text-foreground hover:underline"
+              className="min-w-0 max-w-[40%] truncate text-foreground/80 hover:text-foreground hover:underline"
               title={`Open ${title}`}
             >
               {title}
             </button>
           ) : (
-            <span className="min-w-0 max-w-[40%] truncate font-medium text-foreground">{title}</span>
+            <span className="min-w-0 max-w-[40%] truncate text-foreground/80">{title}</span>
           )}
         </div>
         {expanded && body && (
-          <div data-testid="agent-message-body" className="min-w-0 border-t border-border/60 px-3 py-2 text-sm">
-            <MarkdownRenderer content={body} isUser={false} className="text-sm w-full" />
+          <div data-testid="agent-message-body" className="mb-3 ml-2 mt-1 min-w-0 border-l border-border-subtle pl-4">
+            <MarkdownRenderer content={body} isUser={false} className="w-full text-ui" />
           </div>
         )}
       </div>

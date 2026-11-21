@@ -22,6 +22,10 @@ declared in deploy/kcl/workloads.k:
     platforms as GoBuild variants: bin/reliant-cli-<goos>-<goarch>[.exe].
     Built by `forge env build release --target reliant-cli`; goreleaser and
     release.yml's build-backend still build what ships.
+  * reliant-desktop — the packaged desktop app for this machine's platform,
+    unpublished: electron/scripts/pack-desktop.js, the electron-builder call
+    release.yml's desktop jobs run. Its prerequisites (backend binaries, the
+    renderer, the build config) are listed beside it in workloads.k.
 
 WHAT SHIPS TODAY IS UNCHANGED. This env declares the builds; it publishes
 nothing on its own and no workflow calls it yet. The server image prod runs is
@@ -86,5 +90,6 @@ output = forge.render(dsi.only_in_dev("release", forge.Bundle {
     workloads = [
         _server_image
         _cli
+        wl.desktop_app
     ]
 }))

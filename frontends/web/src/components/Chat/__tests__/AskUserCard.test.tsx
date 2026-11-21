@@ -267,7 +267,7 @@ describe("AskUserCard once settled", () => {
     expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "true");
     expect(summary).toHaveAttribute("aria-expanded", "false");
     expect(summary).toHaveAccessibleName(/^Question answered: Which database\?.*SQLite$/);
-    expect(summary).toHaveClass("min-h-[44px]");
+    expect(summary).toHaveClass("touch:min-h-[44px]");
     // Collapsed means collapsed: no title, status line, or answer list.
     expect(screen.queryByText("Question answered")).toBeNull();
     expect(screen.queryByTestId("ask-user-answers")).toBeNull();

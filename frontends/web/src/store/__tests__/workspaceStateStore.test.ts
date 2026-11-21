@@ -477,7 +477,7 @@ describe('Default State Factories', () => {
         openViewers: [],
         activeViewerIndex: null,
         rightPanelState: {
-          fileBrowser: true,
+          fileBrowser: false,
         },
         rightSidebarTab: "files",
         terminalOpen: false,
@@ -568,6 +568,71 @@ describe('Persisted state migration', () => {
     const store = useWorkspaceStateStore.getState();
     expect(store.getWorktreeState('project-1', null).terminalOpen).toBe(false);
     expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
+  });
+});
+
+describe('Right panel closed by default (v8)', () => {
+  it('closes a right panel a v7 payload had open, once', async () => {
+    // Up to v7 the panel was open by default, so `true` is that default.
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 7,
+        state: {
+          version: 7,
+          lastProjectId: 'project-1',
+          leftSidebarExpanded: true,
+          projects: {
+            'project-1': {
+              lastWorktreeId: null,
+              activeView: 'chats',
+              worktrees: {
+                [MAIN_WORKTREE_KEY]: { ...createDefaultWorktreeState(), rightPanelState: { fileBrowser: true } },
+                'wt-1': { ...createDefaultWorktreeState(), rightPanelState: { fileBrowser: true } },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
+    expect(store.getWorktreeState('project-1', null).rightPanelState.fileBrowser).toBe(false);
+    expect(store.getWorktreeState('project-1', 'wt-1').rightPanelState.fileBrowser).toBe(false);
+    expect(store.getWorktreeState('project-2', null).rightPanelState.fileBrowser).toBe(false);
+  });
+
+  it('keeps a right panel the person opened under v8', async () => {
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 8,
+        state: {
+          version: 8,
+          lastProjectId: 'project-1',
+          leftSidebarExpanded: true,
+          projects: {
+            'project-1': {
+              lastWorktreeId: null,
+              activeView: 'chats',
+              worktrees: {
+                [MAIN_WORKTREE_KEY]: { ...createDefaultWorktreeState(), rightPanelState: { fileBrowser: true } },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', null).rightPanelState.fileBrowser).toBe(true);
   });
 });
 
