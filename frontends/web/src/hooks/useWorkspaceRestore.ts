@@ -20,6 +20,7 @@ import { useViewerStore } from "../store/viewerStore";
 import { useChatStore } from "../store/chatStore";
 import { resolveChat } from "../hooks/chat-queries";
 import { openChatInWorkspace } from "../lib/openChatInWorkspace";
+import { chatShellRouteOf, latestPathname, routeOwnsChat } from "../lib/chatRoute";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
 import { restoreLastWorktree } from "./worktree-actions";
@@ -143,8 +144,28 @@ export function useWorkspaceRestore(
       const chatNavStore = useChatNavigationStore.getState();
       const workspaceState = useWorkspaceStateStore.getState();
 
+      // Step 0: a chat's URL (`/c/<id>`) names the chat to open, not the one
+      // remembered: open it, which brings its project and workspace along,
+      // and restore the rest (viewers, terminal) for that workspace. A chat
+      // that is not there (the route shows it as not found) or another
+      // member's shared chat (no project of the person's) restores as usual,
+      // minus the chat: the route owns it (lib/chatRoute.ts).
+      const route = chatShellRouteOf(latestPathname());
+      let openedRouteChat = false;
+      if (route?.kind === "chat") {
+        const chat = await resolveChat(route.chatId);
+        if (chat && !chat.viewerAccess) {
+          try {
+            await openChatInWorkspace(chat, { openEntry: "deep_link" });
+            openedRouteChat = useProjectStore.getState().currentProject?.id === chat.projectId;
+          } catch (error) {
+            warnings.push(`Could not open the chat the URL names: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+
       // Step 1: Restore project (if not skipped)
-      if (!skipProjectRestore) {
+      if (!skipProjectRestore && !openedRouteChat) {
         // Attempt to restore last project (it loads the project list itself)
         const restored = await projectStore.restoreLastProject();
         // Get fresh state after restoration (the original projectStore reference is stale)
@@ -196,7 +217,7 @@ export function useWorkspaceRestore(
 
       // Step 2: Restore last worktree. It is fetched by id (or main alone), so
       // the project's full worktree list is never needed to start.
-      const worktreeRestored = await restoreLastWorktree(currentProject.id);
+      const worktreeRestored = openedRouteChat ? false : await restoreLastWorktree(currentProject.id);
       // Get fresh worktree state after restoration
       const restored = getCurrentWorktree();
       if (worktreeRestored && restored) {
@@ -233,8 +254,8 @@ export function useWorkspaceRestore(
         await useChatStore.getState().loadChats();
       }
 
-      // Restore active chat if one was saved
-      if (worktreeState.activeChatId) {
+      // Restore active chat if one was saved, unless the URL names the chat (or the new-chat view)
+      if (worktreeState.activeChatId && !routeOwnsChat()) {
         // Resolve, not just read the cache: an automation-launched chat is not
         // in the project list loadChats seeded, but it still exists — clearing
         // it as "no longer exists" would drop the user out of it on reload.
