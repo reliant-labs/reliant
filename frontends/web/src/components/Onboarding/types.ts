@@ -231,8 +231,9 @@ export interface Journey {
   finish?: (shell: TourShell) => RouteTarget | null;
   /**
    * How to reach this journey from a shell it doesn't run in: the end card's
-   * "Try the other journey" becomes this external link (e.g. the forge shell
-   * → "Try AI workflows in Reliant").
+   * "Try the other journey" becomes this link — an app path opens in place
+   * (the forge brand → the Workflows area), a URL in a new tab (the public
+   * demo → the app).
    */
   elsewhere?: { label: string; href: () => string };
   /**

@@ -217,7 +217,7 @@ describe("describeCloneError", () => {
     const err = new ConnectError(`daemon "cda8a89b-d15c-455d-a506-4c40335e4278" not found`, Code.NotFound);
     const message = describeCloneError(err, "default");
     expect(message).toContain("default no longer exists");
-    expect(message).toMatch(/choose another machine/i);
+    expect(message).toMatch(/choose another sandbox/i);
     expect(message).not.toContain("cda8a89b");
     expect(isCloneTargetGone(err)).toBe(true);
   });

@@ -47,12 +47,14 @@
 import { useMemo } from "react";
 import { AlertTriangle, ArrowLeft, ExternalLink, KeyRound, Lock, LockOpen, Plus } from "lucide-react";
 
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+
 /**
  * The tenant-facing secrets documentation. Declared here, beside its one use,
  * rather than in a shared constants module: it is a fact about this surface,
  * and a shared link table is where dead links go to hide.
  */
-const SECRETS_DOCS_URL = "https://docs.reliantlabs.io/features/secrets";
+const SECRETS_DOCS_URL = learnUrl("secrets");
 
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Status from "@/components/forge-ui/status";
@@ -80,6 +82,7 @@ import { SecretVersionHistory } from "./SecretVersionHistory";
 import { useNow } from "./useStepUpGate";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
+import { learnUrl } from "@/lib/learnLinks";
 
 export interface ManagedSecretsViewProps {
   env: string;
@@ -318,6 +321,7 @@ function StoreHeader({
           Add secret
         </button>
       )}
+      <ProjectEmptyCtaRow deploy="chat" learn="secrets" className="justify-center" testId="secrets-empty-cta" />
     </div>
   );
 }

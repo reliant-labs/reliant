@@ -5,6 +5,19 @@
  * shared project, machines with and without the code, and two pins (a
  * project and the app-only row) in the person's `sidebar.projects` setting.
  * Fabricated and neutral. Every timestamp is relative to FIXED_NOW.
+ *
+ * One catalog for every surface: the shared table answers it to all of them
+ * (the selector opens from any page). The Projects page and a project's page
+ * read it with the selector's pins, plus a second app with no code here
+ * (`ledger-worker`, cut from a subdirectory of another repo), so their
+ * "Apps without code here" section has two rows.
+ *
+ * shopfront records where it was deployed from (a code source), so the app
+ * console's Code card has a source to show. `appCodeCardFixtures` is the same
+ * catalog for the app-code-card surface alone: shopfront deployed from two
+ * repositories (the D5 warning), also held by the person's fork
+ * (`shopfront-experiments`, same name) and a teammate's project shared with
+ * the org.
  */
 import type { Fixtures } from '../rpc'
 import { baseFixtures, DAY, DOCS_PROJECT, HOUR, IDS, iso, MIN, PROJECT, USER } from './base'
@@ -24,9 +37,15 @@ const onLaptop = [{ daemonId: IDS.localDaemon, daemonName: 'alex-macbook', insta
 
 const p = (n: number) => `0000000${n}-0000-4000-8000-0000000000a${n}`
 
+/** A project with no app (`infra`): a project's own page, which a deployed project's id redirects past. */
+export const NO_APP_PROJECT_ID = p(2)
+
 /** The chat filter's three projects in its surfaces: shopfront, docs-site and mobile-api. */
 export const FILTER_PROJECT_IDS = [IDS.project, IDS.docsProject, p(1)]
 
+
+const SHOPFRONT_SOURCE = { remote: 'github.com/acme/shopfront', subpath: '', commit: 'a1b2c3d4e5f6a7b8c9d0', lastSeenAt: iso(3 * HOUR) }
+const SHOPFRONT = hosted('shopfront', { lastDeployedAt: iso(2 * HOUR), sources: [SHOPFRONT_SOURCE] })
 
 const CATALOG = {
   orgId: IDS.org,
@@ -36,8 +55,7 @@ const CATALOG = {
       project: { ...PROJECT, orgId: IDS.org },
       repos: [repo('r-shop', 'shopfront', 'github.com/acme/shopfront')],
       apps: [
-        { name: 'shopfront', repoId: 'r-shop', subpath: '', link: 'PROJECT_APP_LINK_SOURCE',
-          hosted: hosted('shopfront', { lastDeployedAt: iso(2 * HOUR) }) },
+        { name: 'shopfront', repoId: 'r-shop', subpath: '', link: 'PROJECT_APP_LINK_SOURCE', hosted: SHOPFRONT },
         { name: 'shopfront-admin', repoId: 'r-shop', subpath: 'admin', link: 'PROJECT_APP_LINK_NOT_HOSTED' },
       ],
       checkouts: onCloud,
@@ -98,6 +116,37 @@ export const projectCatalogFixtures: Fixtures = {
   'reliant.v1.ProjectService/ListProjectsWithApps': CATALOG,
 }
 
+/** shopfront deployed from two repositories, held by the person's fork and a teammate's shared project. */
+const TWO_REPOSITORIES = hosted('shopfront', {
+  lastDeployedAt: iso(2 * HOUR),
+  sources: [SHOPFRONT_SOURCE, { remote: 'github.com/alex/shopfront', subpath: 'apps/web', commit: '9f8e7d6c5b4a39281706', lastSeenAt: iso(2 * DAY) }],
+  warning:
+    'shopfront is deployed from two repositories: github.com/acme/shopfront and github.com/alex/shopfront. The next deploy from either replaces what the other shipped.',
+})
+const withTwoRepositories = <T extends { name: string }>(app: T) => (app.name === 'shopfront' && 'hosted' in app ? { ...app, hosted: TWO_REPOSITORIES } : app)
+
+/** For the app-code-card surface only: other surfaces keep the plain catalog. */
+export const appCodeCardFixtures: Fixtures = {
+  'reliant.v1.ProjectService/ListProjectsWithApps': {
+    ...CATALOG,
+    projects: [
+      ...CATALOG.projects.map((row) => ({ ...row, apps: row.apps.map(withTwoRepositories) })),
+      {
+        project: project(p(8), 'shopfront-experiments', iso(2 * DAY), { remoteUrl: 'https://github.com/alex/shopfront.git' }),
+        repos: [repo('r-exp', 'shopfront', 'github.com/alex/shopfront')],
+        apps: [{ name: 'shopfront', repoId: 'r-exp', subpath: 'apps/web', link: 'PROJECT_APP_LINK_NAME', hosted: TWO_REPOSITORIES }],
+        checkouts: onCloud,
+      },
+      {
+        project: project(p(7), 'shopfront', iso(DAY), { viewerAccess: true, userId: 'user-sam', path: '' }),
+        repos: [{ id: 'r-sam', name: 'shopfront', relativePath: '', remote: '' }],
+        apps: [{ name: 'shopfront', repoId: 'r-sam', subpath: '', link: 'PROJECT_APP_LINK_NAME', hosted: TWO_REPOSITORIES }],
+        checkouts: [],
+      },
+    ],
+  },
+}
+
 /** The person's settings with two pins: shopfront and the app-only status-page. */
 const PINS = { [IDS.org]: { pinned: [IDS.project, 'app:status-page'] } }
 const baseSettings = baseFixtures['reliant.v1.SettingsService/ListSettings'] as { settings: object[]; total: number }
@@ -111,4 +160,16 @@ export const selectorSurfaceFixtures: Fixtures = {
     ],
     total: baseSettings.total + 1,
   },
+}
+
+/** A second app with no code here, for the Projects page's own section. */
+const LEDGER_WORKER = hosted('ledger-worker', {
+  lastDeployedAt: iso(4 * DAY),
+  sources: [{ remote: 'github.com/acme/ledger', subpath: 'worker', commit: 'd00d123', lastSeenAt: iso(4 * DAY) }],
+})
+
+/** For the Projects page and a project's page: the selector's pins, and the catalog with LEDGER_WORKER. */
+export const projectsPageSurfaceFixtures: Fixtures = {
+  ...selectorSurfaceFixtures,
+  'reliant.v1.ProjectService/ListProjectsWithApps': { ...CATALOG, unlinkedApps: [...CATALOG.unlinkedApps, LEDGER_WORKER] },
 }
