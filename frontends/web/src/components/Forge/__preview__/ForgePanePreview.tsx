@@ -51,6 +51,7 @@ import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { ActivityPage } from "../Console/ActivityPage";
 import { ServicePage, ServicesPage } from "../Services/ServicesPages";
+import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
 import { AnalyticsPage } from "../Analytics/AnalyticsPage";
 import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
 import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
@@ -455,6 +456,7 @@ function buildRouter(path: string) {
     activity: ActivityPage,
     services: ServicesPage,
     service: ServicePage,
+    usage: ProjectUsagePage,
     events: EventsMetricsPage,
     analytics: AnalyticsPage,
     speedInsights: SpeedInsightsPage,

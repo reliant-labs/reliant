@@ -37,6 +37,8 @@ import { DataGrid } from "./DataGrid";
 import { findTable } from "./dataLinks-model";
 import { appDataTargets, identityDataLinksEnabled, parseAppDataSubject } from "./identityLinks-model";
 import Link from "@/components/forge-ui/link";
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 import { DataDenied, DataError, DataLoading, DataNote } from "./DataStates";
 import { patchSearch, type DataSearch } from "./dataUrl-model";
 import { RowPage } from "./RowPage";
@@ -119,7 +121,12 @@ function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) 
   }
   if (list.length === 0) {
     return (
-      <DataNote testId="data-no-databases" icon={<Database className="h-4 w-4" />} title={`${env.name} has no databases`}>
+      <DataNote
+        testId="data-no-databases"
+        icon={<Database className="h-4 w-4" />}
+        title={`${env.name} has no databases`}
+        actions={<ProjectEmptyCtaRow deploy={<DeployWithAgentButton env={env.name} />} learn="data" testId="data-empty-cta" />}
+      >
         <p>
           The browser shows the databases an environment declares: each <code className="font-mono text-ink">forge.ManagedDatabase</code> and{" "}
           <code className="font-mono text-ink">forge.ExternalDatabase</code> in its last recorded release. {env.name}&apos;s declares none.

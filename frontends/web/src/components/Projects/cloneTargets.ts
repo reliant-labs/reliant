@@ -193,7 +193,7 @@ export function cloneDescription({
 export function describeCloneError(err: unknown, machineName: string): string {
   if (err instanceof ConnectError) {
     if (err.code === Code.NotFound) {
-      return `${machineName} no longer exists — it may have been deleted. Choose another machine, or create one in Settings → Machines.`;
+      return `${machineName} no longer exists — it may have been deleted. Choose another sandbox, or create one in Settings → Agent sandboxes.`;
     }
     // The control plane's own message is already user-facing for these
     // ("no git credential found for provider github" → connect GitHub).

@@ -2,7 +2,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The org console's information architecture: Apps (the /apps list, with the
+ * The org console's information architecture: Apps (the apps list, with the
  * org's apps nested) and Observability › its views, every org link carrying
  * the org filters.
  */
@@ -25,14 +25,14 @@ describe("buildOrgNav", () => {
   it("nests each app under Apps, linking its console", () => {
     const apps = buildOrgNav({ page: OVERVIEW, apps: APPS }).items[0]!;
     expect(apps.children?.map((child) => [child.label, child.href])).toEqual([
-      ["All apps", "/apps"],
+      ["All apps", "/projects?show=apps"],
       ["api", "/forge/p/api"],
       ["shop", "/forge/p/shop"],
     ]);
   });
 
   it("nests no apps when the org has none", () => {
-    expect(buildOrgNav({ page: OVERVIEW, apps: [] }).items[0]!.children?.map((child) => child.href)).toEqual(["/apps"]);
+    expect(buildOrgNav({ page: OVERVIEW, apps: [] }).items[0]!.children?.map((child) => child.href)).toEqual(["/projects?show=apps"]);
   });
 
   it("encodes an app name in its path", () => {
@@ -119,8 +119,8 @@ describe("buildOrgNav", () => {
       expect(params.has("project")).toBe(false);
       expect(params.has("unrelated")).toBe(false);
     }
-    // /apps and each app's console are outside the org console: they take none of them.
-    expect(items[0]!.children?.map((child) => child.href)).toEqual(["/apps", "/forge/p/api", "/forge/p/shop"]);
+    // The apps list and each app's console are outside the org console: they take none of them.
+    expect(items[0]!.children?.map((child) => child.href)).toEqual(["/projects?show=apps", "/forge/p/api", "/forge/p/shop"]);
   });
 });
 

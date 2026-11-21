@@ -43,6 +43,7 @@ describe("buildGroupedConsoleNav", () => {
       ["Environments", "prod"],
       ["Secrets", ""],
       ["Domains", ""],
+      ["Usage", ""],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
   });

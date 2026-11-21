@@ -22,7 +22,7 @@ import { useProjectStore } from "@/store/projectStore";
 
 import { consolePath } from "../Forge/Console/paths";
 import { LiveLink } from "./appParts";
-import { appsPath } from "@/lib/paths";
+import { projectsHref } from "@/lib/paths";
 
 /** forge's exit status for a deploy queued on billing: it goes out once billing is set up. */
 const EXIT_QUEUED = 7;
@@ -96,7 +96,7 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
   const links = status.data ? appLinksOf(status.data.workloads) : [];
   const loading = !!app && (envs.isLoading || (!!env && status.isLoading));
 
-  const target = app ? consolePath(app, { kind: "overview" }) : appsPath();
+  const target = app ? consolePath(app, { kind: "overview" }) : projectsHref("apps");
   const Icon = deploy.queued ? Clock : Rocket;
 
   return (

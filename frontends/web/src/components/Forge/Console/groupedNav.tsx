@@ -16,7 +16,7 @@
  *   Releases
  *   Data · Users
  *   More tools        ▸     Logs · Metrics · Profiles · Service graph
- *   ── Configure            Environments › · Secrets · Domains
+ *   ── Configure            Environments › · Secrets · Domains · Usage
  *   footer                  Activity
  *
  * The same rows, IA and links as buildConsoleNav, regrouped: a reader who
@@ -25,7 +25,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -51,6 +51,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
   services: "Everything your app runs, live: status, instances, CPU, memory and requests",
+  usage: "What your app's hosting costs this month, per environment",
   events: "The product events and metrics your app sends",
   analytics: "Who your users are, what they do, and where they come from",
   "speed-insights": "How fast each page loads and responds for real visitors",
@@ -181,6 +182,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
       children: [obs("logs"), obs("metrics"), ...(profiles ? [obs("profiles")] : []), obs("graph")],
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
+    { ...row("Usage", { kind: "usage" }, icon(Receipt), page.kind === "usage"), section: "Configure" },
   ];
   return { items: withExtensions(items, input, href, lit), footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
 }

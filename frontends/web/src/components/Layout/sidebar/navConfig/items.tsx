@@ -17,7 +17,9 @@ import {
   BarChart3,
   Boxes,
   Inbox,
+  Plug,
   ShieldCheck,
+  CreditCard,
   Database,
   Gauge,
   Globe,
@@ -27,6 +29,7 @@ import {
   LayoutGrid,
   Layers,
   Rocket,
+  Receipt,
   Server,
   Settings,
   Tag,
@@ -36,7 +39,7 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
@@ -146,8 +149,10 @@ export const inbox: NavSlot = slot("inbox");
 /** Its href and match, for the slot's row and the tests. */
 export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
 export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
+/** What this project's hosting costs (the org's is Usage & billing, in the footer). */
+export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage" }, icon(Receipt), ["usage"]);
 
-/** Configure ▾: Secrets, Domains, Activity (Environments moved to Deployments, U6e). */
+/** Configure ▾: Secrets, Domains, Usage, Activity (Environments moved to Deployments, U6e). */
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
@@ -155,7 +160,7 @@ export const configureGroup: NavGroup = {
   icon: icon(Wrench),
   available: hasApp,
   // Activity (the audit log) stays its last row (owner): no page loses its nav entry.
-  children: [secrets, domains, activity],
+  children: [secrets, domains, projectUsage, activity],
 };
 
 // ── Security (U6d) ──────────────────────────────────────────────────────────
@@ -384,23 +389,34 @@ export const workflowsGroup: NavGroup = {
   ],
 };
 
-/** The machines agents run on (Settings › Machines), under Agents. */
+/** "Machines" in the UI is "Agent sandboxes" now (round 5); under Agents, "Sandboxes". */
 export const sandboxes: NavRow = {
   kind: "row",
   id: "sandboxes",
-  label: "Machines",
+  label: "Sandboxes",
   icon: icon(Server),
-  href: () => settingsPath("machines"),
-  match: (ctx) => isAtOrBelow(ctx.pathname, settingsPath("machines")),
+  href: () => sandboxesPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
 };
 
-/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the machines. */
+
+/** Connectors: integrations and MCP servers on one page (owner, U6d). */
+export const connectors: NavRow = {
+  kind: "row",
+  id: "connectors",
+  label: "Connectors",
+  icon: icon(Plug),
+  href: () => connectorsPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, connectorsPath()) || isAtOrBelow(ctx.pathname, connectorsPath("mcp")),
+};
+
+/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes, Connectors. */
 export const isAgentsRoute = (ctx: NavCtx): boolean =>
-  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, settingsPath("machines"));
+  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath()) || connectors.match!(ctx);
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, slot("chat-list")];
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
@@ -416,6 +432,15 @@ export const agentsArea: NavArea = {
 };
 
 // ── The footer ──────────────────────────────────────────────────────────────
+
+export const usageBilling: NavRow = {
+  kind: "row",
+  id: "usage-billing",
+  label: "Usage & billing",
+  icon: icon(CreditCard),
+  href: () => usageBillingPath(),
+  match: (ctx) => isAt(ctx.pathname, usageBillingPath()),
+};
 
 /**
  * One Settings entry as a row. A section with two entries (Settings → AI:
@@ -474,6 +499,6 @@ export const settingsSections: NavArea = {
   children: settingsChildren,
 };
 
-export const footer: readonly NavItem[] = [settings];
+export const footer: readonly NavItem[] = [usageBilling, settings];
 
 export const externalMark = <ArrowUpRight className="size-3.5" aria-hidden="true" />;
