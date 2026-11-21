@@ -37,6 +37,7 @@ import { ScanStateNote, VulnError, VulnNoneKnown, VulnNotScannedYet } from "./Vu
 import {
   activeFilterCount,
   deployedEnvs,
+  envVouchedClean,
   filtersOf,
   fixLabel,
   formatEpss,
@@ -162,10 +163,11 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
 
   return (
     <div className="space-y-3">
-      <ScopeCounts envs={deployed} />
+      <ScopeCounts envs={deployed} databaseStale={summary.database?.stale ?? false} />
       {untrusted.map(noteOf)}
       <VulnFilters search={search} onSearch={onSearch} releases={[...new Set(deployed.map((env) => env.releaseVersion))]} />
-      {list.isLoading ? (
+      {/* No answer for this view yet, or only the previous view's (a placeholder): an empty one says nothing. */}
+      {list.isPending || (list.isPlaceholderData && rows.length === 0) ? (
         <Card padding="none">
           <ObsLoadingRows testId="vuln-list-loading" />
         </Card>
@@ -226,8 +228,12 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
   );
 }
 
-/** Per environment in scope: its release and what its findings add up to. */
-function ScopeCounts({ envs }: { envs: EnvVulnSummary[] }) {
+/**
+ * Per environment in scope: its release and what its findings add up to. Zero
+ * findings reads as "no known vulnerabilities" only for an environment whose
+ * release is fully scanned against a current database.
+ */
+function ScopeCounts({ envs, databaseStale }: { envs: EnvVulnSummary[]; databaseStale: boolean }) {
   const now = Date.now();
   if (envs.length === 0) return null;
   return (
@@ -240,7 +246,15 @@ function ScopeCounts({ envs }: { envs: EnvVulnSummary[] }) {
             <li key={env.environmentId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm" data-testid={`vuln-env-${env.environmentName}`}>
               <span className="font-medium text-ink">{env.environmentName}</span>
               <span className="font-mono text-xs text-ink-muted">{env.releaseVersion}</span>
-              <span className="text-ink">{env.coverage.scanned === 0 ? "no findings yet" : total === 0 ? "no known vulnerabilities" : parts.join(" · ") || `${total} findings`}</span>
+              <span className="text-ink">
+                {env.coverage.scanned === 0
+                  ? "no findings yet"
+                  : total > 0
+                    ? parts.join(" · ") || `${total} findings`
+                    : envVouchedClean(env, databaseStale)
+                      ? "no known vulnerabilities"
+                      : "nothing found in what was scanned"}
+              </span>
               {env.kev > 0 && <Tag tone="danger">{env.kev} known exploited</Tag>}
               {env.fixable > 0 && <span className="text-xs text-ink-muted">{env.fixable} fixable</span>}
               {env.blocking > 0 && <span className="text-xs text-ink-muted">{env.blocking} blocking</span>}

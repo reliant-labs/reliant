@@ -178,6 +178,11 @@ function fullyScanned(env: EnvVulnSummary): boolean {
   return env.scanState === "scanned" && artifacts > 0 && withSbom === artifacts && scanned === artifacts;
 }
 
+/** Whether ONE environment's zero findings may be called clean: its release fully scanned, against a current database. */
+export function envVouchedClean(env: EnvVulnSummary, databaseStale = false): boolean {
+  return !databaseStale && fullyScanned(env);
+}
+
 /**
  * `databaseStale`: the database the newest scans used is past its freshness
  * bound (VulnSummary.database.stale). A stale database never vouches for a

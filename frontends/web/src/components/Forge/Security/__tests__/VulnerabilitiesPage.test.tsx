@@ -10,12 +10,24 @@
 
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
+import type { FindingPage } from "@/services/controlPlane/vulnerabilities/types";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
+
 import { FIXTURE_ENVS, FIXTURE_SCAN_ERROR, fixtureVulnerabilityApi } from "../fixtures";
 import { renderVulnerabilities } from "./securityTestUtils";
+
+// Off (no org scope) unless a test turns it on: a kept previous answer needs an org to be kept in.
+const controlPlane = vi.hoisted(() => ({ configured: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  get hasControlPlane() {
+    return controlPlane.configured;
+  },
+}));
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -165,6 +177,22 @@ describe("Vulnerabilities: unknown is never clean", () => {
     expect(await screen.findByTestId("vuln-none-in-scanned")).toHaveTextContent("not a clean bill");
     expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
   });
+
+  it("calls an environment with no findings clean only when its release is fully scanned", async () => {
+    const api = fixtureVulnerabilityApi("partial");
+    const real = api.getVulnerabilitySummary;
+    const zero = { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0 };
+    api.getVulnerabilitySummary = async (req, opts) => {
+      const summary = await real(req, opts);
+      return { ...summary, environments: summary.environments.map((env) => ({ ...env, counts: zero, kev: 0, fixable: 0, blocking: 0 })) };
+    };
+    api.listVulnerabilities = async () => ({ findings: [], nextPageToken: "", database: null });
+    renderVulnerabilities(api);
+    // staging: two of its three artifacts scanned, one with no SBOM.
+    expect(await screen.findByTestId("vuln-env-staging")).toHaveTextContent("nothing found in what was scanned");
+    expect(screen.getByTestId("vuln-env-staging")).not.toHaveTextContent("no known vulnerabilities");
+    expect(screen.getByTestId("vuln-env-prod")).toHaveTextContent("no known vulnerabilities");
+  });
 });
 
 describe("Vulnerabilities: a release named in the URL", () => {
@@ -178,6 +206,43 @@ describe("Vulnerabilities: a release named in the URL", () => {
   it("is clean only after a successful read whose every artifact was scanned", async () => {
     renderVulnerabilities(emptyList(fixtureVulnerabilityApi("clean")), { search: release });
     expect(await screen.findByTestId("vuln-none-known")).toHaveTextContent("Every artifact of release v1.4.0 has an SBOM");
+  });
+
+  it("never reads the previous view's empty findings, kept on screen while the release's load, as clean", async () => {
+    const api = emptyList(fixtureVulnerabilityApi("clean"));
+    const list = api.listVulnerabilities;
+    let finishReleaseList!: (page: FindingPage) => void;
+    const releaseList = vi.fn(() => new Promise<FindingPage>((resolve) => (finishReleaseList = resolve)));
+    api.listVulnerabilities = (req, opts) => (req.filters.releaseVersion ? releaseList() : list(req, opts));
+    // The URL release's own read (no environment) answers; only its findings are held.
+    const releaseReads: Promise<unknown>[] = [];
+    const releaseRead = api.getReleaseVulnerabilities;
+    api.getReleaseVulnerabilities = (req, opts) => {
+      const read = releaseRead(req, opts);
+      if (!req.environmentId) releaseReads.push(read);
+      return read;
+    };
+    const previousOrg = useActiveOrgStore.getState();
+    controlPlane.configured = true;
+    useActiveOrgStore.setState({ userId: "user", chosenId: "org-shop", effectiveId: "org-shop", resolved: true, failure: null });
+    try {
+      const view = renderVulnerabilities(api);
+      expect(await screen.findByTestId("vuln-none-known")).toHaveTextContent("prod's v1.4.0 and staging's v1.5.0");
+
+      view.go(release);
+      await waitFor(() => expect(releaseList).toHaveBeenCalledOnce());
+      await waitFor(() => expect(releaseReads).toHaveLength(1));
+      await act(() => Promise.all(releaseReads));
+      // The release is vouched for, but its findings have not answered: the empty rows on screen are the old view's.
+      expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
+      expect(screen.getByTestId("vuln-list-loading")).toBeInTheDocument();
+
+      act(() => finishReleaseList({ findings: [], nextPageToken: "", database: null }));
+      expect(await screen.findByTestId("vuln-none-known")).toHaveTextContent("Every artifact of release v1.4.0 has an SBOM");
+    } finally {
+      controlPlane.configured = false;
+      useActiveOrgStore.setState(previousOrg);
+    }
   });
 
   it("says nothing while the release read has not answered", async () => {
