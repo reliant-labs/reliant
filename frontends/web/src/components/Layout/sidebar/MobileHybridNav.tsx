@@ -24,6 +24,7 @@ import {
   inboxPath,
   mobileChatPath,
   mobileChatsPath,
+  mobileChatWorkflowPath,
   mobileHomePath,
   mobileInboxPath,
   mobileMachinesPath,
@@ -31,10 +32,13 @@ import {
   mobileRunsPath,
   mobileSearchPath,
   mobileSettingsPath,
+  mobileWorkflowPath,
   mobileWorkflowsPath,
   newChatPath,
+  runPath,
   runsPath,
   settingsPath,
+  workflowDetailPath,
   workflowLibraryPath,
 } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
@@ -54,12 +58,21 @@ export function desktopPathOfMobile(pathname: string): string {
   const chatPrefix = mobileChatPath("");
   if (path.startsWith(chatPrefix)) {
     const id = path.slice(chatPrefix.length).split("/")[0];
-    return id ? chatPath(encodedSegment(id)) : homePath();
+    if (!id) return homePath();
+    // A workflow chat's run (`/m/chats/<id>/workflow`) is the phone's run page: the desktop's run of that chat.
+    if (path === mobileChatWorkflowPath(encodedSegment(id))) return runPath(encodedSegment(id));
+    return chatPath(encodedSegment(id));
   }
   if (path === mobileHomePath() || path === mobileChatsPath()) return homePath();
   if (path === mobileNewChatPath()) return newChatPath();
   if (atOrBelow(path, mobileInboxPath())) return inboxPath();
   if (atOrBelow(path, mobileRunsPath())) return runsPath();
+  // One workflow's screen is that workflow's page in the Library; the catalog is the Library.
+  const workflowPrefix = mobileWorkflowPath("");
+  if (path.startsWith(workflowPrefix)) {
+    const name = path.slice(workflowPrefix.length).split("/")[0];
+    if (name) return workflowDetailPath(encodedSegment(name));
+  }
   if (atOrBelow(path, mobileWorkflowsPath())) return workflowLibraryPath();
   if (atOrBelow(path, mobileMachinesPath())) return settingsPath("machines");
   if (atOrBelow(path, mobileSettingsPath())) return settingsPath();
