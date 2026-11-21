@@ -145,7 +145,7 @@
 - [Hosted dashboards, alerts and issues](https://docs.reliantlabs.io/hosting/observability/dashboards-and-alerts.md): The dashboards forge generates, the default alerts, how errors are grouped into issues, and how source maps and session replay work on Reliant hosting
 - [Session timelines and replay for frontend errors](https://docs.reliantlabs.io/hosting/observability/session-timelines.md): See what a user did before a frontend error: browser sessions, text timelines for agents, and replay. Replay is opt-in, masked, and needs consent.
 - [Continuous profiling for Go services](https://docs.reliantlabs.io/hosting/observability/profiling.md): How forge samples CPU and heap profiles from your Go services, and how to read a flamegraph from the local stack or in the Reliant app.
-- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills and exit codes.
+- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/hosting/observability/agents.md): Run forge as an MCP server (forge agent mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills and exit codes.
 - [Observability billing & limits](https://docs.reliantlabs.io/hosting/observability-billing.md): Observability billing on Reliant hosting: the free monthly telemetry allowance, ingest pricing, spend caps, included retention and query fair-use limits.
 
 ## Guides
