@@ -159,6 +159,26 @@ service ObservabilityService {
     };
   }
 
+  // ExportPGOProfile returns the merged CPU call-edge profile of one or more
+  // services as a gzipped pprof that `go build -pgo=` accepts: what
+  // `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+  // from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+  // forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+  // local ClickStack would give. Max range 30 days. No data in the range is
+  // not an error: edge_count is 0 and pprof is a valid empty profile. A
+  // credential bound to one environment is refused (PermissionDenied): the
+  // aggregate is keyed by the environment name a workload reports, so the
+  // binding cannot be enforced. A profile larger than one response may carry
+  // is refused (ResourceExhausted), never truncated.
+  rpc ExportPGOProfile(ExportPGOProfileRequest) returns (ExportPGOProfileResponse) {
+    // A read: it exports what is stored and changes nothing.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
   // returns, forge's obsdash panel spec) and returns its data: a time series
   // per series x group for line panels, a value per series for number panels,
@@ -227,6 +247,21 @@ service ObservabilityService {
   // image / service.version changes over time, per environment in scope. Max
   // range 7 days.
   rpc GetWorkload(GetWorkloadRequest) returns (GetWorkloadResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetManagedDatabaseMetrics returns the health series of the org's managed
+  // Postgres databases (Reliant hosting's ManagedDatabase, a CloudNativePG
+  // cluster per database): connections (active, idle, max), transactions per
+  // second, cache hit ratio, the database instances' CPU and memory, and
+  // storage. The platform's node agent collects them from the database's own
+  // exporter and the kubelet, stamped with the tenant from the namespace the
+  // operator labelled, never from the data. Admission and scoping are every
+  // other read's (QueryScope). Max range 30 days.
+  rpc GetManagedDatabaseMetrics(GetManagedDatabaseMetricsRequest) returns (GetManagedDatabaseMetricsResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -1226,6 +1261,41 @@ message GetFlamegraphResponse {
   controlplane.v1.InstanceScope instance_scope = 7;
 }
 
+message ExportPGOProfileRequest {
+  // The org and the range (scope.time_range: from, to). As in
+  // GetFlamegraphRequest, scope.services, project and filters are not applied
+  // (the services are named below) and the profile carries no dev-instance
+  // narrowing; membership of scope.org_id is checked, and so are env_ids.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // OTEL service names (workload names) whose CPU profiles are merged into one
+  // profile: every workload that runs the binary.
+  repeated string services = 2 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 256
+  ];
+  // The forge environment NAME (deployment.environment.name), which the PGO
+  // aggregate is keyed by. "" = every environment.
+  string env = 3 [(buf.validate.field).string.max_len = 128];
+  // The forge project name (service.namespace), so two projects of one org
+  // that share a service or environment name do not mix. "" = any project.
+  string service_namespace = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message ExportPGOProfileResponse {
+  // gzipped pprof (forge profilequery.WritePGO): one sample per call edge,
+  // with provenance in the profile's comments.
+  bytes pprof = 1;
+  // Call edges in the profile; 0 when the range holds no data.
+  int32 edge_count = 2;
+  // CPU nanoseconds the edges carry, summed.
+  int64 total_weight = 3;
+  // The oldest and newest hours that contributed; unset when edge_count is 0.
+  google.protobuf.Timestamp oldest = 4;
+  google.protobuf.Timestamp newest = 5;
+}
+
 // === Attribute values (filter autocomplete) ===
 
 enum Signal {
@@ -1424,6 +1494,15 @@ message Workload {
   // console says "since at least ...").
   google.protobuf.Timestamp health_since = 21;
   bool health_since_known = 22;
+  // forge's role for the workload: "service", "worker", "operator", "job" or
+  // "cron", where kind is only the Kubernetes kind (a service, a worker and an
+  // operator are all Deployments). From the environment's recorded bundle
+  // (DeclaredWorkload.forge_kind: a forge Workload record's spec.kind, else the
+  // forge.dev/kind label forge stamps on what it renders), else the hosted
+  // deployment ledger's spec.kind. Empty when neither knows it (a deployment by
+  // an older forge, a hand-written manifest) and on a read narrowed to dev
+  // instances: fall back to kind.
+  string forge_kind = 23;
 }
 
 // WorkloadHealthChange is one transition of a workload's health, derived from
@@ -1529,6 +1608,22 @@ message WorkloadPod {
   // The latest Kubernetes Warning event naming this pod (BackOff, Unhealthy,
   // Evicted, ...) among the events GetWorkload returns. Unset when none.
   WorkloadEvent latest_warning = 11;
+  // The pod's own CPU (cores) and memory (working set, bytes) over the window:
+  // the sum of its containers'. latest sums the containers' latest samples;
+  // p95 sums the containers' p95s, an upper bound on the pod's own p95. limit
+  // and request are set only when every container reports one (a container
+  // without a limit leaves the pod unbounded), and the utilization ratios are
+  // derived from them. Unset, not zero, when no usage was read for the pod: an
+  // agent that reported none, or a read answered from the raw tables (one with
+  // attribute filters, narrowed to dev instances, or reaching back before the
+  // tenant's query rollups), which carry no per-pod usage yet.
+  ResourceUsage cpu = 12;
+  ResourceUsage memory = 13;
+  // The pod's containers, each with its own usage (cpu, memory as on
+  // Workload.containers, but this pod's alone), image, restarts in the window
+  // and last terminated reason. Ordered by container name; empty when no usage
+  // was read for the pod (see cpu).
+  repeated WorkloadContainer containers = 14;
 }
 
 enum WorkloadJobResult {
@@ -1674,6 +1769,58 @@ message WorkloadSeries {
   string unit = 4;
   // Utilization and usage: the worst replica per bucket. Restarts: the sum over
   // replicas of the growth within the bucket.
+  repeated TimePoint points = 5;
+}
+
+message GetManagedDatabaseMetricsRequest {
+  // Max range 30 days. Every environment in scope is returned separately.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // The ManagedDatabase name (the CloudNativePG cluster). Empty = every
+  // managed database in scope.
+  string database = 2 [(buf.validate.field).string.max_len = 256];
+  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
+  int32 step_seconds = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message GetManagedDatabaseMetricsResponse {
+  // One series per (environment, database, metric), ordered by environment,
+  // database, then metric. A metric with no data in scope has no series.
+  repeated ManagedDatabaseSeries series = 1;
+  int32 step_seconds = 2;
+  // True when the series cap (200) cut the result.
+  bool truncated = 3;
+}
+
+enum ManagedDatabaseMetric {
+  MANAGED_DATABASE_METRIC_UNSPECIFIED = 0;
+  // Client connections by state, summed over the instances and databases
+  // (cnpg_backends_total). Idle in transaction counts as neither.
+  MANAGED_DATABASE_METRIC_CONNECTIONS_ACTIVE = 1;
+  MANAGED_DATABASE_METRIC_CONNECTIONS_IDLE = 2;
+  // The server's max_connections setting (the highest instance's).
+  MANAGED_DATABASE_METRIC_CONNECTIONS_MAX = 3;
+  // Committed plus rolled back transactions per second.
+  MANAGED_DATABASE_METRIC_TPS = 4;
+  // Buffer cache hits over all block reads in the bucket, 0..1.
+  MANAGED_DATABASE_METRIC_CACHE_HIT_RATIO = 5;
+  // The Postgres containers of the database's instances: CPU in cores and
+  // memory working set in bytes.
+  MANAGED_DATABASE_METRIC_CPU_USAGE = 6;
+  MANAGED_DATABASE_METRIC_MEMORY_WORKING_SET = 7;
+  // The data volume (pgdata): bytes used and its capacity.
+  MANAGED_DATABASE_METRIC_STORAGE_USED = 8;
+  MANAGED_DATABASE_METRIC_STORAGE_CAPACITY = 9;
+  // The databases' own size (pg_database_size), summed.
+  MANAGED_DATABASE_METRIC_DATABASE_SIZE = 10;
+}
+
+message ManagedDatabaseSeries {
+  string env_id = 1;
+  // The ManagedDatabase name.
+  string database = 2;
+  ManagedDatabaseMetric metric = 3;
+  // UCUM: "{connection}", "{transaction}/s", "1", "{cpu}", "By".
+  string unit = 4;
   repeated TimePoint points = 5;
 }
 

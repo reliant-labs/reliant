@@ -1021,6 +1021,24 @@ message DeployArtifact {
   string variant = 9;
   // The pinned source. Set iff mode = "source", empty otherwise.
   DeploySource source = 10;
+
+  // BUILD EVIDENCE (forge#2326, forge#2377), mirroring forge's
+  // pkg/release.Artifact.InputsDigest / CarriedFrom. OCI only; empty for
+  // every other kind, from a forge that does not send them, and on a release
+  // cut before the ledger stored them — each of which forge reads as
+  // "rebuild". A variant image repeats its artifact's values on every row.
+  //
+  // EVIDENCE, NOT IDENTITY: neither takes part in whether a re-cut is the
+  // same release, so a retry carrying different values is still a retry and
+  // the release keeps the values first recorded.
+  //
+  // The fingerprint of the declared inputs of the build step that produced
+  // this image, a canonical sha256 digest. forge's next release compares its
+  // own fingerprint with it and reuses this image when they are equal.
+  string inputs_digest = 11;
+  // The release whose image this artifact reuses because its declared inputs
+  // were unchanged. Empty when this release's build produced the image.
+  string carried_from = 12;
 }
 
 // DeploySource pins an artifact to source rather than to built bytes: a
@@ -1665,7 +1683,7 @@ message DeployPromotion {
   reserved 20; // regression_acknowledged — #516
   reserved 21; // admitted_findings — #516
 
-  // Set when this row came from `forge ledger import` rather than from a
+  // Set when this row came from `forge release ledger import` rather than from a
   // promote: the source it was read out of, e.g.
   // "git:.forge/promotions/prod.jsonl@<blob sha>".
   //
@@ -2028,6 +2046,14 @@ message DeclaredWorkload {
   // Why spec_recorded is false. UNSPECIFIED when it is true, and from a
   // control plane that predates this field.
   DeclaredSpecGap spec_gap = 17;
+  // forge's role for the workload: "service", "worker", "operator", "job" or
+  // "cron". kind is the Kubernetes kind, which cannot tell a service, a worker
+  // and an operator apart (all Deployments). Read from a forge.dev Workload
+  // record's spec.kind, else the forge.dev/kind label forge stamps on the
+  // objects it renders (the pod template's, else the object's). Empty when the
+  // declaration carries neither: a bundle rendered by an older forge, a
+  // hand-written manifest, or a workload only the shape names.
+  string forge_kind = 18;
 }
 
 // DeclaredSpecGap is why a declared workload's spec is not recorded.

@@ -222,6 +222,93 @@ service IssuesService {
       idempotent: true
     };
   }
+
+  // DeclareMaintenanceWindow records planned maintenance ahead of time: a
+  // database restart, a migration, a failover drill. Errors whose events all
+  // fall inside the window are attributed to it by the issues worker: a new
+  // fingerprint seen only inside it is born IGNORED until the window ends, and a
+  // resolved issue is not reopened by events inside it. An error that outlives
+  // the window is regressed as usual. Server issues only.
+  //
+  // A window spans at most 24 hours and must not have ended; env_id unset
+  // covers every environment of the org. Triage: a person needs org
+  // membership, a machine credential obs:triage (and, when it is bound to an
+  // environment, that one, with env_id set to it).
+  rpc DeclareMaintenanceWindow(DeclareMaintenanceWindowRequest) returns (DeclareMaintenanceWindowResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "declare_maintenance"
+        target: {
+          kind: "maintenance_window"
+          id: "response.window.id"
+          label: "reason"
+        }
+        scope: "org_id"
+        detail: ["env_id", "reason"]
+      }
+    };
+  }
+
+  // ListMaintenanceWindows returns the org's maintenance windows that end at or
+  // after `since` (default: now), earliest first. A person needs org
+  // membership, a machine credential obs:read.
+  //
+  // forge:custom — a window is declared through DeclareMaintenanceWindow and
+  // never edited, and its table is the worker's (forge:no-entity).
+  rpc ListMaintenanceWindows(ListMaintenanceWindowsRequest) returns (ListMaintenanceWindowsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+}
+
+// MaintenanceWindow is planned maintenance an org declared.
+message MaintenanceWindow {
+  string id = 1;
+  string org_id = 2;
+  // Unset: every environment of the org.
+  string env_id = 3;
+  google.protobuf.Timestamp starts_at = 4;
+  google.protobuf.Timestamp ends_at = 5;
+  string reason = 6;
+  // Who declared it: a user id, or a machine credential's id.
+  string created_by = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message DeclareMaintenanceWindowRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // The environment the maintenance affects. Unset: every environment.
+  optional string env_id = 2 [(buf.validate.field).string.max_len = 128];
+  google.protobuf.Timestamp starts_at = 3 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp ends_at = 4 [(buf.validate.field).required = true];
+  // What is planned, for the people triaging: "reliant-pg availability patch".
+  string reason = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 500
+  ];
+}
+
+message DeclareMaintenanceWindowResponse {
+  MaintenanceWindow window = 1;
+}
+
+message ListMaintenanceWindowsRequest {
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Windows that end at or after this. Unset: now.
+  optional google.protobuf.Timestamp since = 2;
+}
+
+message ListMaintenanceWindowsResponse {
+  repeated MaintenanceWindow windows = 1;
 }
 
 // IssueTimeRange is a half-open range [start, end). Both ends are required when
