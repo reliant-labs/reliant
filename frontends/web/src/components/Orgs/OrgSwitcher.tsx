@@ -4,6 +4,8 @@ import { Building2, Check, ChevronDown, ChevronsUpDown, Plus } from "lucide-reac
 import { useRef, useState, type ReactNode } from "react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
+import type { PopoverTriggerProps } from "@/components/forge-ui/popover";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { useActiveOrg, useSetDefaultOrg } from "@/hooks/useOrgs";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
@@ -11,6 +13,8 @@ import type { MyOrg } from "@/services/controlPlane/orgs";
 
 import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel } from "../Layout/sidebar/primitives";
 import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
+import { OrgPlanBadge } from "./OrgPlanBadge";
+import { useOrgPlanLabel } from "./orgPlan";
 
 /**
  * Which org the app is acting in, a way to change it, and a way to make one.
@@ -28,13 +32,17 @@ import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
  *
  * `sidebar-top` is the same menu as the sidebar's top row (restyle §11.3):
  * the brand mark and the org's name, the whole row the trigger.
+ *
+ * `sidebar-header` is the one shell's top row (U6, owner; Vercel's team row):
+ * the org's avatar, its name (in full in a tooltip), its plan badge, and one
+ * ⇕, the whole row the trigger. The project switcher is its own row below.
  */
 export function OrgSwitcher({
   variant = "sidebar",
   fallback = null,
 }: {
   /** `sidebar-switcher`: the project shell's `[Org ▾] / [Project ▾]` row, the org half sized to its name. */
-  variant?: "sidebar" | "sidebar-top" | "sidebar-switcher" | "list";
+  variant?: "sidebar" | "sidebar-top" | "sidebar-switcher" | "sidebar-header" | "list";
   /** What to render with no org (no control plane, or a person in none). */
   fallback?: ReactNode;
 }) {
@@ -48,6 +56,7 @@ export function OrgSwitcher({
       onSelect={select}
       top={variant === "sidebar-top" || variant === "sidebar-switcher"}
       compact={variant === "sidebar-switcher"}
+      header={variant === "sidebar-header"}
     />
   );
 }
@@ -63,12 +72,14 @@ function SidebarOrgSwitcher({
   onSelect,
   top,
   compact = false,
+  header = false,
 }: {
   orgs: MyOrg[];
   active: MyOrg;
   onSelect: (id: string) => void;
   top: boolean;
   compact?: boolean;
+  header?: boolean;
 }) {
   const setDefault = useSetDefaultOrg();
   const [creating, setCreating] = useState(false);
@@ -121,7 +132,9 @@ function SidebarOrgSwitcher({
         menuClassName="min-w-[220px] max-w-[280px]"
         triggerClassName="w-full"
         trigger={(props) =>
-          top ? (
+          header ? (
+            <OrgHeaderTrigger {...props} org={active} />
+          ) : top ? (
             <button {...props} type="button" data-testid="org-switcher" className={cn(SIDEBAR_ORG_TRIGGER, compact && "w-auto max-w-full flex-none gap-1.5 px-1.5")}>
               {compact ? (
                 // Sized to the name (a flex-1 name would shrink-wrap to nothing beside the project);
@@ -158,6 +171,44 @@ function SidebarOrgSwitcher({
       />
       <CreateOrganizationDialog open={creating} onClose={() => setCreating(false)} />
     </>
+  );
+}
+
+/** The org's avatar: its initial, round (a person or team mark, where a project's is square). */
+export function OrgAvatar({ name, className }: { name: string; className?: string }) {
+  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? "?";
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="org-avatar"
+      className={cn("flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-meta font-semibold leading-none text-foreground", className)}
+    >
+      {initial}
+    </span>
+  );
+}
+
+/** The one shell's top row: avatar, name, plan, ⇕. The whole row opens the org menu. */
+function OrgHeaderTrigger({ org, ...props }: PopoverTriggerProps & { org: MyOrg }) {
+  const plan = useOrgPlanLabel(org.id);
+  return (
+    <button
+      {...props}
+      type="button"
+      data-testid="org-switcher"
+      data-variant="header"
+      aria-label={`Organization: ${org.name}${plan ? `, ${plan} plan` : ""}. Switch organization`}
+      className={cn(SIDEBAR_ORG_TRIGGER, "h-9 w-full gap-2 px-1.5")}
+    >
+      <OrgAvatar name={org.name} />
+      <Tooltip content={org.name} side="bottom" focusable={false} triggerClassName="flex min-w-0">
+        <span className="min-w-0 truncate font-semibold" data-testid="org-switcher-name">
+          {org.name}
+        </span>
+      </Tooltip>
+      {plan && <OrgPlanBadge label={plan} />}
+      <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </button>
   );
 }
 
