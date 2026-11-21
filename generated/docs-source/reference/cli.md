@@ -504,6 +504,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
 | [`reliant machine stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
+| [`reliant mcp`](#reliant-mcp) | Show a project's MCP servers and their tools, and restart one |
+| [`reliant mcp list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`reliant mcp restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`reliant mcp tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -21741,6 +21745,95 @@ Stop (suspend) a running machine
 ```
 reliant machine stop <name|id>
 ```
+
+---
+
+## reliant mcp
+
+Show a project's MCP servers and their tools, and restart one
+
+Shows the MCP servers a project's agents can use, as the machine holding the
+project runs them: each server's status, where it is configured, and the tools
+it offers. 'restart' restarts one.
+
+Servers are configured in mcp.json: ~/.reliant/mcp.json (every project),
+<project>/.reliant/mcp.json (the project, checked in) and
+<project>/.reliant.local/mcp.json (yours, not checked in). An edit is applied
+when an agent's next turn loads the project's servers, so a restart is needed
+only to recover a server that stopped working. Settings -> MCP servers in the app
+manages the same servers.
+
+--project names the project by id, name or path; the default is the current
+directory.
+
+```
+reliant mcp
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--project` | `string` | `.` | The project, by id, name or path |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant mcp list
+
+List the project's MCP servers and their status
+
+```
+reliant mcp list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+
+---
+
+### reliant mcp restart
+
+Restart an MCP server from its current config
+
+Restarts one MCP server on the machine holding the project, from the config
+that machine's mcp.json files declare now. Every chat in the project that uses
+the server gets the new process.
+
+```
+reliant mcp restart <server>
+```
+
+---
+
+### reliant mcp tools
+
+List the tools an MCP server offers the project's agents
+
+Lists the tools one MCP server offers the project's agents. An agent sees each
+as mcp__<server>__<tool>.
+
+```
+reliant mcp tools <server> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
 
 ---
 
