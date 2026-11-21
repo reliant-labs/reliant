@@ -4,8 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/services/controlPlane/config", () => ({ hasControlPlane: true }));
 
 import { SettingsNavigation, type SettingsSection } from "../SettingsNavigation";
+import type { SettingsTab } from "../../../routeSchemas";
 
-function renderNav(activeSection: SettingsSection, props: { isCollapsed?: boolean } = {}) {
+function renderNav(activeSection: SettingsSection, props: { isCollapsed?: boolean; activeTab?: SettingsTab } = {}) {
   const onSectionChange = vi.fn();
   const view = render(<SettingsNavigation activeSection={activeSection} onSectionChange={onSectionChange} {...props} />);
   return { ...view, onSectionChange };
@@ -20,8 +21,8 @@ describe("SettingsNavigation grouping", () => {
     const headings = screen.getAllByTestId(/^settings-group-/).map((el) => el.getAttribute("data-testid")?.replace("settings-group-", ""));
     expect(headings).toEqual(["Account", "AI", "Connections", "Machines & projects", "Preferences", "Advanced"]);
 
-    expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI accounts", "AI usage", "Privacy"]);
-    expect(labels("AI")).toEqual(["AI providers"]);
+    expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI usage", "Privacy"]);
+    expect(labels("AI")).toEqual(["Personal accounts", "Organization accounts", "Models & tools"]);
     expect(labels("Connections")).toEqual(["Integrations", "GitHub", "Tools (MCP)"]);
     expect(labels("Machines & projects")).toEqual(["Machines", "Projects"]);
     expect(labels("Preferences")).toEqual(["Appearance", "Chat & editor", "Notifications", "Keyboard shortcuts"]);
@@ -73,6 +74,28 @@ describe("SettingsNavigation grouping", () => {
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
     rerender(<SettingsNavigation activeSection="privacy" onSectionChange={onSectionChange} />);
     expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("keeps the AI entries' routes: Personal accounts and Models & tools are /settings/ai's tabs", () => {
+    const { onSectionChange } = renderNav("account");
+    const ai = within(group("AI"));
+    fireEvent.click(ai.getByRole("button", { name: "Personal accounts" }));
+    expect(onSectionChange).toHaveBeenLastCalledWith("ai");
+    fireEvent.click(ai.getByRole("button", { name: "Organization accounts" }));
+    expect(onSectionChange).toHaveBeenLastCalledWith("org-ai-accounts");
+    fireEvent.click(ai.getByRole("button", { name: "Models & tools" }));
+    expect(onSectionChange).toHaveBeenLastCalledWith("ai", "models");
+  });
+
+  it.each<[SettingsTab | undefined, string]>([
+    [undefined, "Personal accounts"],
+    ["providers", "Personal accounts"],
+    ["models", "Models & tools"],
+    ["local", "Models & tools"],
+  ])("on /settings/ai?tab=%s marks only %s current", (activeTab, label) => {
+    renderNav("ai", { activeTab });
+    const current = within(group("AI")).getAllByRole("button").filter((b) => b.getAttribute("aria-current") === "page");
+    expect(current.map((b) => b.getAttribute("aria-label"))).toEqual([label]);
   });
 
   it("keeps Machines and its route id in Machines & projects", () => {

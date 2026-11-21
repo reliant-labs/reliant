@@ -10,6 +10,8 @@ import (
 )
 
 // ListModelsByProvider returns all models for a specific provider
+//
+// forge:auth-unscoped-ok: the built-in model registry is the same for every caller; per-user endpoints are ModelEndpointService
 func (s *Service) ListModelsByProvider(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListModelsByProviderRequest],

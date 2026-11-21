@@ -11,56 +11,86 @@ interface CodeBlockProps {
 }
 
 /**
- * CodeBlock - A code block component with copy-to-clipboard functionality
- * Used by MarkdownRenderer for fenced code blocks
+ * A block longer than this many lines opens clipped (to `CLIPPED_BODY_CLASS`,
+ * about 16 lines) behind "Show all N lines": a long listing should not push
+ * the rest of the answer a screen away.
+ */
+export const LONG_CODE_BLOCK_LINES = 24;
+const CLIPPED_BODY_CLASS = 'max-h-[20rem]';
+
+/**
+ * CodeBlock - a fenced code block in an answer: a header with the language
+ * and a copy button, then the code. Used by MarkdownRenderer.
  */
 export function CodeBlock({ language, children, className }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const isMobile = useSurface() === 'mobile';
 
+  const textContent = extractTextContent(children);
+  const lineCount = textContent.replace(/\n$/, '').split('\n').length;
+  const isLong = lineCount > LONG_CODE_BLOCK_LINES;
+  const clipped = isLong && !showAll;
+
   const handleCopy = async () => {
-    // Extract text content from children
-    const textContent = extractTextContent(children);
-    
     try {
       await navigator.clipboard.writeText(textContent);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1500);
     } catch (error) {
       console.error('Failed to copy code:', error);
     }
   };
 
   return (
-    <div className="not-prose relative my-4 min-w-0 max-w-full w-full group/codeblock">
-        {/* Controls stay outside the horizontal scroller, so copy remains reachable. */}
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
-          <Tooltip content={copied ? 'Copied!' : 'Copy code'} side="bottom" delay={300} triggerClassName="inline-flex">
+    <div className="not-prose my-3 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card">
+      {/* Controls stay outside the horizontal scroller, so copy remains reachable. */}
+      <div
+        className={cn(
+          'flex items-center justify-between gap-2 border-b border-border-subtle pl-3 pr-1 text-meta text-muted-foreground',
+          isMobile ? 'h-11' : 'h-9',
+        )}
+      >
+        <span className="truncate">{language || 'code'}</span>
+        <Tooltip content={copied ? 'Copied' : 'Copy code'} side="bottom" delay={300} triggerClassName="inline-flex">
           <button
             onClick={handleCopy}
             type="button"
-            className={cn("flex items-center justify-center rounded bg-background text-foreground hover:bg-muted transition-opacity focus-visible:ring-2 focus-visible:ring-ring", isMobile ? "min-h-[44px] min-w-[44px]" : "h-6 w-6 opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100")}
-            aria-label={copied ? 'Copied!' : 'Copy code'}
+            className={cn(
+              'flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              isMobile ? 'min-h-[44px] min-w-[44px]' : 'size-7',
+            )}
+            aria-label={copied ? 'Copied' : 'Copy code'}
           >
             {copied ? (
-              <Check className="w-3.5 h-3.5 text-success-ink" />
+              <Check className="h-3.5 w-3.5 text-success-ink" />
             ) : (
-              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+              <Copy className="h-3.5 w-3.5" />
             )}
           </button>
-          </Tooltip>
-          {language && (
-            <span className="pointer-events-none flex items-center rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-xs text-muted-foreground font-mono">
-              {language}
-            </span>
-          )}
-        </div>
-      <pre tabIndex={isMobile ? 0 : undefined} aria-label={isMobile ? `${language || 'Code'} code block` : undefined}
-        className={cn("hljs relative w-full max-w-full overflow-x-auto rounded-md border border-border bg-[var(--code-bg)] text-[var(--code-fg)]", isMobile ? "whitespace-pre" : "whitespace-pre-wrap break-words")}>
-        <code className={cn(`language-${language || ''} block p-4 pr-20 text-sm leading-relaxed font-mono`, isMobile ? "pt-16 whitespace-pre" : "whitespace-pre-wrap break-words", className)}>
-          {children}
-        </code>
-      </pre>
+        </Tooltip>
+      </div>
+      <div className={cn('relative', clipped && cn(CLIPPED_BODY_CLASS, 'overflow-hidden'))}>
+        <pre tabIndex={isMobile ? 0 : undefined} aria-label={isMobile ? `${language || 'Code'} code block` : undefined}
+          className={cn("relative w-full max-w-full overflow-x-auto bg-transparent text-[var(--code-fg)]", isMobile ? "whitespace-pre" : "whitespace-pre-wrap break-words")}>
+          <code className={cn(`language-${language || ''} block px-4 py-3 font-mono text-code`, isMobile ? "whitespace-pre" : "whitespace-pre-wrap break-words", className)}>
+            {children}
+          </code>
+        </pre>
+        {clipped && (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-card" />
+        )}
+      </div>
+      {isLong && (
+        <button
+          type="button"
+          aria-expanded={showAll}
+          onClick={() => setShowAll((open) => !open)}
+          className="flex h-8 w-full items-center justify-center border-t border-border-subtle text-meta text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          {showAll ? 'Show less' : `Show all ${lineCount} lines`}
+        </button>
+      )}
     </div>
   );
 }

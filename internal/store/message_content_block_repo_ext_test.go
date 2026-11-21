@@ -270,6 +270,9 @@ func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
 	if err != nil || msg.Seq != 1 || msg.Model != nil || msg.ProviderAccountID == nil || *msg.ProviderAccountID != "acct-1" || !msg.CreatedAt.Equal(t0) {
 		t.Fatalf("a1 = %+v, %v", msg, err)
 	}
+	if msg.ThinkingLevel != nil {
+		t.Fatalf("a1 thinking level = %q, want NULL when none was recorded", *msg.ThinkingLevel)
+	}
 	blocks, err := store.ListContentBlocksForMessages(ctx, f.env.ORM, ids)
 	if err != nil || len(blocks) != 12 {
 		t.Fatalf("blocks = %d, %v; want 12", len(blocks), err)
@@ -286,6 +289,33 @@ func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
 	updates, err := store.ListChatUpdate(ctx, f.env.ORM, orm.WhereEq(store.ChatUpdateFieldChatID, f.chat), orm.WithOrderBy(store.ChatUpdateFieldSequenceNumber, orm.Asc))
 	if err != nil || len(updates) != 4 || updates[3].SequenceNumber != 4 || updates[3].UpdateType != db.UpdateTypeMessage || updates[3].EntityID != "a3" {
 		t.Fatalf("chat updates = %+v, %v", updates, err)
+	}
+}
+
+// TestSaveMessageAtomic_ThinkingLevel: the effective thinking level a turn ran
+// at is stored on the message through both layers; an empty one is NULL.
+func TestSaveMessageAtomic_ThinkingLevel(t *testing.T) {
+	f := newMsgFixture(t, "chat-atomic-thinking")
+	ctx := context.Background()
+	for id, level := range map[string]*string{"t-high": sp("high"), "t-empty": sp(""), "t-none": nil} {
+		w := atomicWrite(f, id, 1)
+		w.ThinkingLevel = level
+		if _, err := f.env.Repo.SaveMessageAtomic(ctx, w); err != nil {
+			t.Fatalf("save %s: %v", id, err)
+		}
+	}
+	for id, want := range map[string]any{"t-high": "high", "t-empty": nil, "t-none": nil} {
+		msg, err := f.env.Repo.GetMessage(ctx, id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		var got any
+		if msg.ThinkingLevel != nil {
+			got = *msg.ThinkingLevel
+		}
+		if got != want {
+			t.Fatalf("%s thinking level = %v, want %v", id, got, want)
+		}
 	}
 }
 
