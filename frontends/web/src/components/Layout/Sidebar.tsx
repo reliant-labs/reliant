@@ -1986,7 +1986,6 @@ function SidebarComponent({
               projects={projects}
               onAddProject={() => openAddProject()}
               onManageProjects={() => go(settingsPath("projects"))}
-              needsYouByProject={needsYouByProject}
               sortOrder={sortOrder}
               onSortChange={setSortOrder}
               viewMode={viewMode}
