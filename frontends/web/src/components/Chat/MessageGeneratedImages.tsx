@@ -22,10 +22,25 @@ import type { Attachment } from "../../types/chat";
 import { cn } from "../../lib/utils";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
+import { toolBaseName } from "../../lib/toolAction";
 
 interface MessageGeneratedImagesProps {
   attachments: Attachment[];
+  /** One line under the image(s): what the user is looking at. */
+  caption?: string;
   className?: string;
+}
+
+/** present_image: the agent showing the user an image file from the machine. */
+export function isPresentImageTool(toolName: string): boolean {
+  return toolBaseName(toolName).toLowerCase() === "present_image";
+}
+
+/** The caption a present_image call asked for, if any. */
+export function presentImageCaption(input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const caption = (input as { caption?: unknown }).caption;
+  return typeof caption === "string" && caption.trim() !== "" ? caption.trim() : undefined;
 }
 
 /**
@@ -37,6 +52,7 @@ const SINGLE_IMAGE_MAX = "max-w-sm";
 
 export function MessageGeneratedImages({
   attachments,
+  caption,
   className,
 }: MessageGeneratedImagesProps) {
   const [preview, setPreview] = useState<{
@@ -53,81 +69,92 @@ export function MessageGeneratedImages({
 
   const isSingle = images.length === 1;
 
+  const grid = (
+    <div
+      className={cn(
+        caption ? undefined : "my-2",
+        isSingle ? SINGLE_IMAGE_MAX : "grid grid-cols-2 gap-2",
+        caption ? undefined : className,
+      )}
+      data-testid="message-generated-images"
+    >
+      {images.map((attachment) => {
+        const blobUrl = blobUrls.get(attachment.id);
+        const hasFailed = failedIds.has(attachment.id);
+
+        if (hasFailed) {
+          return (
+            <div
+              key={attachment.id}
+              // aspect-video rather than a fixed height so the failed tile
+              // occupies the same box the image would have, and the
+              // transcript does not reflow if a retry later succeeds.
+              className="flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 text-muted-foreground"
+              role="img"
+              aria-label={`${attachment.filename} failed to load`}
+            >
+              <ImageOff className="h-5 w-5" aria-hidden="true" />
+              <span className="px-2 text-center text-2xs">
+                Could not load image
+              </span>
+            </div>
+          );
+        }
+
+        if (!blobUrl) {
+          return (
+            <div
+              key={attachment.id}
+              className="aspect-video animate-pulse rounded-lg border border-border bg-muted/40"
+              aria-label={`Loading ${attachment.filename}`}
+              aria-busy="true"
+            />
+          );
+        }
+
+        return (
+          <button
+            key={attachment.id}
+            type="button"
+            onClick={() =>
+              setPreview({ url: blobUrl, filename: attachment.filename })
+            }
+            // A button, not a div+onClick: click-to-expand has to be reachable
+            // by keyboard, and this is the only affordance for seeing the
+            // image at full size.
+            className={cn(
+              "group block overflow-hidden rounded-lg border border-border bg-muted/20",
+              "transition-opacity hover:opacity-90",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            )}
+            title={`${attachment.filename} — click to view full size`}
+          >
+            <img
+              src={blobUrl}
+              alt={attachment.filename}
+              // `contain` and an auto height: this is the artifact, so it must
+              // not be cropped the way a thumbnail can be.
+              className={cn(
+                "h-auto w-full object-contain",
+                !isSingle && "aspect-square",
+              )}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
-      <div
-        className={cn(
-          "my-2",
-          isSingle ? SINGLE_IMAGE_MAX : "grid grid-cols-2 gap-2",
-          className,
-        )}
-        data-testid="message-generated-images"
-      >
-        {images.map((attachment) => {
-          const blobUrl = blobUrls.get(attachment.id);
-          const hasFailed = failedIds.has(attachment.id);
-
-          if (hasFailed) {
-            return (
-              <div
-                key={attachment.id}
-                // aspect-video rather than a fixed height so the failed tile
-                // occupies the same box the image would have, and the
-                // transcript does not reflow if a retry later succeeds.
-                className="flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 text-muted-foreground"
-                role="img"
-                aria-label={`${attachment.filename} failed to load`}
-              >
-                <ImageOff className="h-5 w-5" aria-hidden="true" />
-                <span className="px-2 text-center text-2xs">
-                  Could not load image
-                </span>
-              </div>
-            );
-          }
-
-          if (!blobUrl) {
-            return (
-              <div
-                key={attachment.id}
-                className="aspect-video animate-pulse rounded-lg border border-border bg-muted/40"
-                aria-label={`Loading ${attachment.filename}`}
-                aria-busy="true"
-              />
-            );
-          }
-
-          return (
-            <button
-              key={attachment.id}
-              type="button"
-              onClick={() =>
-                setPreview({ url: blobUrl, filename: attachment.filename })
-              }
-              // A button, not a div+onClick: click-to-expand has to be reachable
-              // by keyboard, and this is the only affordance for seeing the
-              // image at full size.
-              className={cn(
-                "group block overflow-hidden rounded-lg border border-border bg-muted/20",
-                "transition-opacity hover:opacity-90",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              )}
-              title={`${attachment.filename} — click to view full size`}
-            >
-              <img
-                src={blobUrl}
-                alt={attachment.filename}
-                // `contain` and an auto height: this is the artifact, so it must
-                // not be cropped the way a thumbnail can be.
-                className={cn(
-                  "h-auto w-full object-contain",
-                  !isSingle && "aspect-square",
-                )}
-              />
-            </button>
-          );
-        })}
-      </div>
+      {caption ? (
+        <figure className={cn("my-2", isSingle && SINGLE_IMAGE_MAX, className)}>
+          {grid}
+          <figcaption className="mt-1 text-meta text-muted-foreground">{caption}</figcaption>
+        </figure>
+      ) : (
+        grid
+      )}
 
       {preview && (
         <ImagePreviewModal

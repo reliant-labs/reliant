@@ -26,7 +26,7 @@ import { ThoughtRow } from "./ThoughtRow";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
-import { MessageGeneratedImages } from "./MessageGeneratedImages";
+import { MessageGeneratedImages, isPresentImageTool, presentImageCaption } from "./MessageGeneratedImages";
 import { MessageGeneratedVideos, isVideoMimeType } from "./MessageGeneratedVideos";
 import { MessageTimestamp, useMessageBranching } from "./MessageChrome";
 import { viewerSafeMessage } from "../../lib/viewerResults";
@@ -793,13 +793,28 @@ function ChatMessageComponent({
     // Emitting them per-segment rather than once at the end of the
     // message keeps text -> image -> text ordering intact when a
     // turn generates an image and then keeps talking.
-    const runAttachments = runExecutions.flatMap((exec) => exec.result?.attachments ?? []);
+    //
+    // present_image is the agent showing the user a file on purpose, with an
+    // optional caption, so each of its calls is its own captioned set.
+    const presented = runExecutions.filter(
+      (exec) => isPresentImageTool(exec.call.name) && (exec.result?.attachments?.length ?? 0) > 0,
+    );
+    const runAttachments = runExecutions
+      .filter((exec) => !isPresentImageTool(exec.call.name))
+      .flatMap((exec) => exec.result?.attachments ?? []);
     const runVideos = runAttachments.filter((a) => isVideoMimeType(a.mimeType));
     const runImages = runAttachments.filter((a) => !isVideoMimeType(a.mimeType));
     const media = (
       <>
         {runImages.length > 0 && <MessageGeneratedImages attachments={runImages} />}
         {runVideos.length > 0 && <MessageGeneratedVideos attachments={runVideos} />}
+        {presented.map((exec) => (
+          <MessageGeneratedImages
+            key={`${keyBase}-presented-${exec.call.id}`}
+            attachments={exec.result?.attachments ?? []}
+            caption={presentImageCaption(exec.call.input)}
+          />
+        ))}
       </>
     );
 

@@ -21,7 +21,7 @@ func TestNeedsMachine_CoversToolsThatReachTheUsersDiskFromTheServer(t *testing.T
 		// daemon-placed
 		ShellToolName, ToolMetadataWriter, ToolProjectAnalyzer, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill, ToolCodeContext,
 		// any/server-placed, but the work is on the user's disk
-		ToolView, ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode, ToolSaveAttachment,
+		ToolView, ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode, ToolSaveAttachment, ToolPresentImage,
 		ToolComponentLibrary, ToolWorktree,
 		// every MCP tool: user-configured servers are always daemon-placed
 		"mcp__chrome-devtools__new_page", "mcp__serena__find_symbol",
