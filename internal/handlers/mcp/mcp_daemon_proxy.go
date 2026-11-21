@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/logging"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -56,6 +57,30 @@ func (p *daemonMCPProxy) sendCommand(ctx context.Context, commandType string, pa
 type daemonReported string
 
 func (e daemonReported) Error() string { return string(e) }
+
+// isDaemonReported reports whether err carries the daemon's own report of a
+// failure on the user's machine.
+func isDaemonReported(err error) bool {
+	var reported daemonReported
+	return errors.As(err, &reported)
+}
+
+// logServerFailure logs a failure to bring up, or talk to, a user's MCP
+// server. The daemon's own report (daemonReported) is that server failing on
+// the user's machine — it exited before the handshake, closed the
+// connection, its package would not install — which the response already
+// tells the user, and only they can fix: a warning. At ERROR each one was an
+// issue (prod reliant-api-server be65adaa "MCP server \"tickets\" exited
+// before completing the handshake", 2026-11-20). Any other failure is ours
+// and stays an ERROR.
+func logServerFailure(ctx context.Context, msg string, err error, attrs ...any) {
+	attrs = append(attrs, "error", err)
+	if isDaemonReported(err) {
+		logging.WarnContext(ctx, msg, attrs...)
+		return
+	}
+	logging.ErrorContext(ctx, msg, attrs...)
+}
 
 // withDaemonText is msg followed by what the daemon said, when err carries it.
 func withDaemonText(msg string, err error) string {
@@ -142,18 +167,26 @@ func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName 
 // --- mcpManagerRuntime interface ---
 
 func (p *daemonMCPProxy) AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
-	return p.manageServer(ctx, "add", projectPath, serverName, &cfg)
+	return p.manageServer(ctx, "add", projectPath, serverName, &cfg, false)
+}
+
+// StartProjectServerFromProjectConfig starts a server as the machine's own
+// copy of the project's MCP config declares it now, with cfg (this process's
+// synced copy, which trails an edit) used only by a machine that does not
+// know the server, or that predates the request.
+func (p *daemonMCPProxy) StartProjectServerFromProjectConfig(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
+	return p.manageServer(ctx, "add", projectPath, serverName, &cfg, true)
 }
 
 func (p *daemonMCPProxy) RemoveProjectServer(projectPath, serverName string) error {
-	return p.manageServer(context.Background(), "remove", projectPath, serverName, nil)
+	return p.manageServer(context.Background(), "remove", projectPath, serverName, nil, false)
 }
 
 func (p *daemonMCPProxy) RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
-	return p.manageServer(ctx, "restart", projectPath, serverName, &cfg)
+	return p.manageServer(ctx, "restart", projectPath, serverName, &cfg, false)
 }
 
-func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, serverName string, cfg *config.MCPServer) error {
+func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, serverName string, cfg *config.MCPServer, preferProjectConfig bool) error {
 	if p.onChange != nil {
 		defer p.onChange()
 	}
@@ -162,11 +195,14 @@ func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, 
 		ProjectPath string            `json:"project_path"`
 		ServerName  string            `json:"server_name"`
 		Config      *config.MCPServer `json:"config,omitempty"`
+		// PreferProjectConfig: see the daemon's mcpManageServerRequest.
+		PreferProjectConfig bool `json:"prefer_project_config,omitempty"`
 	}{
-		Action:      action,
-		ProjectPath: projectPath,
-		ServerName:  serverName,
-		Config:      cfg,
+		Action:              action,
+		ProjectPath:         projectPath,
+		ServerName:          serverName,
+		Config:              cfg,
+		PreferProjectConfig: preferProjectConfig,
 	}
 
 	respData, err := p.sendCommand(ctx, "mcp.manage_server", req, int32(mcpCommandTimeout.Milliseconds()))

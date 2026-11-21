@@ -104,17 +104,13 @@ service InboxService {
   // automation, or a new block on the same machine, has a new item_id and so
   // appears again. Unknown ids are rejected with INVALID_ARGUMENT.
   rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user inbox read state: hides items without resolving them"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user inbox read state: hides items without resolving them"}};
   }
 
   // RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
   // dismissed is a no-op.
   rpc RestoreInboxItem(RestoreInboxItemRequest) returns (RestoreInboxItemResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user inbox read state: undoes a dismiss"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user inbox read state: undoes a dismiss"}};
   }
 }
 

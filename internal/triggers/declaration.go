@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -124,6 +128,37 @@ func resolveTriggerWorkflow(ctx context.Context, workflows WorkflowResolver, t *
 type LaunchWorkflows struct {
 	Repo       launch.WorkflowResolver
 	CatalogPin string
+	// Pinner snapshots the catalog a firing decides against
+	// (FiringDefinition, db.Repo.PinProjectCatalog); nil pins through Repo
+	// when Repo can.
+	Pinner catalogPinner
+}
+
+// ForOneFire is w for the life of one fire: each catalog, draft and preset
+// its resolutions read is read once (launch.NewRequestResolver), the pinned
+// catalog snapshot included, while the fire still pins through w's store.
+// A fire resolves its workflow for the definition it records, the
+// declaration, the check and the capacity policy, all in one snapshot: prod's
+// FireTriggerEvent re-read that snapshot row 40 times in one activity (trace
+// 7f55dfed…, 2026-11-20).
+func (w LaunchWorkflows) ForOneFire() LaunchWorkflows {
+	if w.Repo == nil {
+		return w
+	}
+	if w.Pinner == nil {
+		w.Pinner, _ = w.Repo.(catalogPinner)
+	}
+	w.Repo = launch.NewRequestResolver(w.Repo)
+	return w
+}
+
+// oneFire is workflows for one fire (LaunchWorkflows.ForOneFire); any other
+// resolver is used as it is.
+func oneFire(workflows WorkflowResolver) WorkflowResolver {
+	if lw, ok := workflows.(LaunchWorkflows); ok {
+		return lw.ForOneFire()
+	}
+	return workflows
 }
 
 var _ MachineWorkflowResolver = LaunchWorkflows{}
@@ -377,6 +412,29 @@ func SeedPrompt(t *core.Trigger, decl *Declaration, scope triggerspec.Scope) (st
 	return rendered, nil
 }
 
+// LaunchPrompt is the user message a firing of t launches with: SeedPrompt,
+// or DefaultSeedPrompt when an activation of a declared trigger has neither
+// a message nor a prompt. Only a workflow that runs no agent may be activated
+// that way (WorkflowRunsAgent): a chain of run and action steps has nothing to
+// say to a model, but a launch needs a user message.
+func LaunchPrompt(t *core.Trigger, decl *Declaration, scope triggerspec.Scope) (string, error) {
+	prompt, err := SeedPrompt(t, decl, scope)
+	if err != nil || decl == nil || strings.TrimSpace(prompt) != "" {
+		return prompt, err
+	}
+	return DefaultSeedPrompt(t), nil
+}
+
+// DefaultSeedPrompt is the prompt of a run whose declared trigger and
+// activation both leave it unwritten: what started it, and nothing more.
+func DefaultSeedPrompt(t *core.Trigger) string {
+	name := t.Name
+	if t.WorkflowTrigger != nil && *t.WorkflowTrigger != "" {
+		name = *t.WorkflowTrigger
+	}
+	return fmt.Sprintf("Run %s: started by its trigger %q.", t.Workflow, name)
+}
+
 // FindDeclaredTrigger returns the trigger wf declares under name, or nil.
 func FindDeclaredTrigger(wf *reliantv1.Workflow, name string) *reliantv1.WorkflowTrigger {
 	for _, wt := range wf.GetTriggers() {
@@ -509,6 +567,11 @@ func activationFor(ctx context.Context, workflows WorkflowResolver, t *core.Trig
 	if workflows == nil {
 		return nil, errNoResolver
 	}
+	// Resolving and validating the workflow tree is mostly CPU, which a trace
+	// otherwise shows only as a gap between catalog reads.
+	ctx, span := otel.Tracer("reliant.triggers").Start(ctx, "triggers.activation",
+		trace.WithAttributes(attribute.String("trigger.id", t.ID), attribute.String("trigger.workflow", t.Workflow)))
+	defer span.End()
 	return ResolveDeclaration(ctx, workflows, t)
 }
 

@@ -20,6 +20,7 @@ The bot can read and post only where it is a member. Invite it from the channel 
 | `slack/user.lookup_by_email@1` | Find a workspace member by email |
 | `slack/conversations.list@1` | Channels the bot can see, with their ids |
 | `slack/conversations.history@1` | Recent messages in a channel, newest first. Thread replies are not included, only each thread's parent |
+| `slack/conversations.replies@1` | A thread: its parent message, then the replies, oldest first (`channel` and `ts` required). For the thread a mention came from, pass the event's `thread_ts` when it has one, else its `ts` |
 
 Channels are identified by id (like `C0123ABCD`), not by name; use `conversations.list` to find one. A message's `ts` identifies it, and replying in its thread means passing that value as `thread_ts`.
 

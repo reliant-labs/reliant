@@ -403,7 +403,7 @@ export function WalletAutoRechargeControl({
               {spentAgainstCeiling.spent} of {spentAgainstCeiling.cap}
             </span>
           </div>
-          <div className="h-2 rounded-full bg-background">
+          <div className="h-2 rounded-full bg-foreground/10">
             <div
               className={cn(
                 "h-2 rounded-full",

@@ -33,13 +33,8 @@ func defaultProbe() func(ctx context.Context) error {
 func start(ctx context.Context, path string) error {
 	cmd := exec.CommandContext(ctx, path)
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{Command: "forkwatch probe: " + path})
-	err := cmd.Start()
-	pid := 0
-	if err == nil {
-		pid = cmd.Process.Pid
-	}
-	tree.Started(pid) // releases the tree itself when pid is 0
-	if err != nil {
+	// Releases the tree itself when the command did not start.
+	if err := tree.Start(ctx, cmd); err != nil {
 		return err
 	}
 	_ = cmd.Wait() // it started; how it ended says nothing about the table

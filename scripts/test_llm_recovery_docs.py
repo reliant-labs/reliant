@@ -29,7 +29,7 @@ class LLMRecoveryDocsTest(unittest.TestCase):
 
     def test_recovery_distinguishes_proof_from_configuration(self):
         text = (DOCS / f"{GUIDE}.mdx").read_text()
-        for required in ("no outbound internet", "Never put a provider key in browser code", "stay blank", "forge login", "forge secret set --env prod OPENAI_API_KEY", 'forge.ManagedSecret {name = "OPENAI_API_KEY"}', "forge env deploy prod", "actual server-side request", "not** proof of a live claim"):
+        for required in ("no outbound internet", "Never put a provider key in browser code", "stay blank", "forge cloud login", "forge env secret set --env prod OPENAI_API_KEY", 'forge.ManagedSecret {name = "OPENAI_API_KEY"}', "forge env deploy prod", "actual server-side request", "not** proof of a live claim"):
             self.assertIn(required, text)
         entry = (DOCS / "forge/deploy-without-an-account.mdx").read_text()
         self.assertIn(f"](/{GUIDE})", entry)

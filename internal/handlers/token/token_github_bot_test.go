@@ -126,6 +126,72 @@ func TestGetGitHubBotToken_ActionsPassesThroughWhenNamed(t *testing.T) {
 	}
 }
 
+// checks passes through when named (the PR pipeline posts the pipeline/cp-merge
+// check run as the App, control-plane#3110); it is never in the default.
+func TestGetGitHubBotToken_ChecksPassesThroughWhenNamed(t *testing.T) {
+	cases := []struct {
+		name  string
+		perms map[string]string
+		want  map[string]string
+	}{
+		{"checks write", map[string]string{"checks": "write"}, map[string]string{"checks": "write"}},
+		{"checks read", map[string]string{"Checks": "Read"}, map[string]string{"checks": "read"}},
+		{"beside the defaults", map[string]string{"checks": "write", "pull_requests": "write"},
+			map[string]string{"checks": "write", "pull_requests": "write"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := &fakeBotTokens{tok: mintedBotToken()}
+			svc, authority := botSvc(t, src)
+			if _, err := svc.GetGitHubBotToken(context.Background(),
+				botReq(daemonBearer(t, authority), "acme", "api", tc.perms)); err != nil {
+				t.Fatal(err)
+			}
+			if len(src.got.Permissions) != len(tc.want) {
+				t.Fatalf("minted with %+v, want %+v", src.got.Permissions, tc.want)
+			}
+			for name, level := range tc.want {
+				if src.got.Permissions[name] != level {
+					t.Errorf("minted with %+v, want %+v", src.got.Permissions, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// An unknown permission is refused, and the refusal names the whole allowed set.
+func TestGetGitHubBotToken_UnknownPermissionNamesAllowedSet(t *testing.T) {
+	src := &fakeBotTokens{tok: mintedBotToken()}
+	svc, authority := botSvc(t, src)
+	_, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api",
+		map[string]string{"administration": "write"}))
+	wantCode(t, err, connect.CodeInvalidArgument, "")
+	const allowed = "(allowed: issues, pull_requests, contents, actions, checks)"
+	if !strings.Contains(err.Error(), allowed) {
+		t.Errorf("err = %v, want it to list %s", err, allowed)
+	}
+	if src.calls != 0 {
+		t.Error("minted a token for an unknown permission")
+	}
+}
+
+// controlPlaneInstallationPermissions mirrors installationPermissionNames in
+// control-plane internal/gitcredential/installation.go: the closed set
+// control-plane's minter accepts. Change it only when that file changes.
+var controlPlaneInstallationPermissions = map[string]bool{
+	"issues": true, "pull_requests": true, "contents": true, "checks": true, "actions": true,
+}
+
+// Every name this handler admits must be one control-plane mints, or a request
+// the handler accepts is refused upstream (statuses was, in review of #3030).
+func TestBotPermissionNamesAreASubsetOfControlPlanes(t *testing.T) {
+	for name := range botPermissionNames {
+		if !controlPlaneInstallationPermissions[name] {
+			t.Errorf("botPermissionNames admits %q, which control-plane's installationPermissionNames refuses", name)
+		}
+	}
+}
+
 func TestGetGitHubBotToken_InvalidRequestsMintNothing(t *testing.T) {
 	cases := map[string]*connect.Request[reliantv1.GetGitHubBotTokenRequest]{
 		"no owner":         botReq("", "", "api", nil),
@@ -133,6 +199,7 @@ func TestGetGitHubBotToken_InvalidRequestsMintNothing(t *testing.T) {
 		"path in repo":     botReq("", "acme", "api/../x", nil),
 		"dot repo":         botReq("", "acme", "..", nil),
 		"unknown perm":     botReq("", "acme", "api", map[string]string{"administration": "write"}),
+		"statuses":         botReq("", "acme", "api", map[string]string{"statuses": "write"}),
 		"admin level":      botReq("", "acme", "api", map[string]string{"contents": "admin"}),
 		"workflows (wide)": botReq("", "acme", "api", map[string]string{"workflows": "write"}),
 	}

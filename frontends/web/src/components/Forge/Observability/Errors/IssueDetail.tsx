@@ -424,7 +424,7 @@ function Frames({ frames }: { frames: IssueFrame[] }) {
           data-in-app={frame.inApp}
         >
           {frameText(frame)}
-          {!frame.inApp && <span className="ml-2 font-sans text-2xs uppercase tracking-wide">library</span>}
+          {!frame.inApp && <span className="ml-2 font-sans text-2xs">library</span>}
         </li>
       ))}
     </ol>

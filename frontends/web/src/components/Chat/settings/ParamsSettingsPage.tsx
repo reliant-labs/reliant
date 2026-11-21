@@ -164,7 +164,7 @@ export function ParamsSettingsPage({
                 <button
                   type="button"
                   onClick={() => toggleGroup(paramGroup.group)}
-                  className="mb-2 flex w-full items-center gap-2 rounded-xl px-1.5 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                  className="mb-2 flex w-full items-center gap-2 rounded-xl px-1.5 py-1 text-left text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
                 >
                   {isExpanded ? (
                     <ChevronDown className="h-3.5 w-3.5" />
@@ -177,7 +177,7 @@ export function ParamsSettingsPage({
                   </span>
                 </button>
               ) : (
-                <div className="mb-2 flex items-center justify-between px-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="mb-2 flex items-center justify-between px-1.5 text-xs font-semibold text-muted-foreground">
                   <span>{paramGroup.label}</span>
                   <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs text-primary-ink">
                     {paramGroup.params.length}

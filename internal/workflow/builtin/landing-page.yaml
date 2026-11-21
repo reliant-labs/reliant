@@ -183,7 +183,7 @@ nodes:
           will grow later (waitlist, checkout) — and the directory is empty and the user
           named no stack, build it as a forge static site instead: one static frontend,
           no backend, shipped to Reliant's hosted static hosting with environments and
-          releases from day one. Run `reliant forge skill load deploy/static-site` first
+          releases from day one. Run `reliant forge agent skill load deploy/static-site` first
           and follow it. Tell the user in one sentence that you are using forge
           (https://github.com/reliant-labs/forge) and what it gives them. A throwaway
           mockup stays a plain `index.html`.
@@ -216,7 +216,7 @@ nodes:
         locked from the content pass — do NOT re-litigate messaging. Judge how it LOOKS.
 
         Load the design discipline before reviewing — do not review from memory:
-        `reliant forge skill load frontend/design` (frontend-design). Judge against it.
+        `reliant forge agent skill load frontend/design` (frontend-design). Judge against it.
 
         **Pass if:**
         - The reviewer first inventories every route/page the implementation exposes
@@ -258,7 +258,7 @@ nodes:
 
           **Load the design discipline first — do not design from memory:**
           ```bash
-          reliant forge skill load frontend/design
+          reliant forge agent skill load frontend/design
           ```
           Follow it for every visual decision: declared type/color system, scale floors,
           restrained color, no hand-drawn SVGs. If this prompt disagrees with the skill,

@@ -1,5 +1,5 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
-// Service implementation; canonical pattern in `forge skill load service-layer`.
+// Service implementation; canonical pattern in `forge agent skill load service-layer`.
 package orgmove
 
 import (

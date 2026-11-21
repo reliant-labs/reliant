@@ -5,7 +5,7 @@ description: "The interceptor chain every RPC passes through: tracing, recovery,
 
 Every request a forge service answers passes through the same ordered stack of layers before it reaches your handler. The stack is built once, by one library function, from slots that each have a working default. You do not assemble it in `main`, and you cannot forget a layer by leaving a line out, which is the property that matters most when many agents are adding services to the same project.
 
-This page walks the request path in order, then the path an error takes on the way back, and ends with how to change or drop a layer. For where the chain is built and handed to the listener, see [Contracts and dependency injection](/forge/concepts/contracts-and-injection#where-the-wiring-lives). For where the logs, metrics and traces this chain produces end up, see [Observability](/forge/observability).
+This page walks the request path in order, then the path an error takes on the way back, and ends with how to change or drop a layer. For where the chain is built and handed to the listener, see [Contracts and dependency injection](/forge/concepts/contracts-and-injection#where-the-wiring-lives). For where the logs, metrics and traces this chain produces end up, see [Observability](/hosting/observability).
 
 ## The request path
 
@@ -134,7 +134,7 @@ The rule that makes this safe is about whose text is on the wire. A message the 
 
 Wrapping context follows the same rule. `fmt.Errorf("get customer %s from %s: %w", id, shard, err)` is context for the operator: it reaches the log, not the client. Text meant for the client goes in the constructor's argument, and `svcerr.WithCause(outer, cause)` attaches a server-only cause that decides nothing the client sees.
 
-The one exception is a `*connect.Error`, which is a handler's explicit verdict and passes through untouched. That makes `connect.NewError(code, err)` the way to publish `err.Error()` by accident, so `forgeconv-handler-connect-error` flags every one in a handler package and `forge fix connect-errors` rewrites the fixed-text ones.
+The one exception is a `*connect.Error`, which is a handler's explicit verdict and passes through untouched. That makes `connect.NewError(code, err)` the way to publish `err.Error()` by accident, so `forgeconv-handler-connect-error` flags every one in a handler package and `forge lint fix connect-errors` rewrites the fixed-text ones.
 
 ### Reasons, not message text
 

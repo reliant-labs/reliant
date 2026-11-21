@@ -91,7 +91,7 @@ for (const code of [1, 8]) {
     assert.match(ACTION, /if: always\(\) && steps\.deploy\.outputs\.promotion-id != ''/);
     const evidence = runBash(runLine(/name: Record the rollout as evidence/), dir, { ENV: "prod", PROMOTION_ID: outputsOf(dir)["promotion-id"] });
     assert.equal(evidence.status, 0, evidence.stderr);
-    assert.match(readFileSync(join(dir, "forge.log"), "utf8"), /^gate record prod --promotion promo-123 --from deploy\.json --name rollout$/m);
+    assert.match(readFileSync(join(dir, "forge.log"), "utf8"), /^release gate record prod --promotion promo-123 --from deploy\.json --name rollout$/m);
   });
 }
 
