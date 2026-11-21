@@ -18,39 +18,39 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
-// countingRepo is the real store, counting the reads a fire repeats when it
+// fireReadCountingRepo is the real store, counting the reads a fire repeats when it
 // resolves one workflow several times: the pinned catalog row (hundreds of
 // KB in prod, and an UPDATE … RETURNING that bumps last_used_at) and the
 // owner's preset lookups.
-type countingRepo struct {
+type fireReadCountingRepo struct {
 	*db.Repo
 	mu      sync.Mutex
 	pinned  map[string]int
 	presets int
 }
 
-func (r *countingRepo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error) {
+func (r *fireReadCountingRepo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error) {
 	r.mu.Lock()
 	r.pinned[pin]++
 	r.mu.Unlock()
 	return r.Repo.GetPinnedProjectCatalog(ctx, pin)
 }
 
-func (r *countingRepo) GetPresetBySlug(ctx context.Context, userID, slug string) (*db.Preset, error) {
+func (r *fireReadCountingRepo) GetPresetBySlug(ctx context.Context, userID, slug string) (*db.Preset, error) {
 	r.mu.Lock()
 	r.presets++
 	r.mu.Unlock()
 	return r.Repo.GetPresetBySlug(ctx, userID, slug)
 }
 
-func (r *countingRepo) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*db.Preset, error) {
+func (r *fireReadCountingRepo) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*db.Preset, error) {
 	r.mu.Lock()
 	r.presets++
 	r.mu.Unlock()
 	return r.Repo.GetPresetBySlugAndProject(ctx, userID, slug, projectID)
 }
 
-func (r *countingRepo) counts() (map[string]int, int) {
+func (r *fireReadCountingRepo) counts() (map[string]int, int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pinned := make(map[string]int, len(r.pinned))
@@ -121,9 +121,12 @@ func TestFireReadsItsPinnedCatalogOncePerSide(t *testing.T) {
 		t.Run(map[bool]string{false: "schedule", true: "inbound"}[inbound], func(t *testing.T) {
 			p := newProvenanceProject(t)
 			p.pushCatalog(t, 2000, map[string]string{"release": fanOutRelease, "child": provenanceChild})
-			now := time.Now().UTC()
+			// A fixed instant on the schedule's own slot (cron "0 9 * * *"):
+			// the worktree's timestamps, the event's occurrence and the fire's
+			// scheduled time read no clock, so no boundary can move them.
+			now := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
-			repo := &countingRepo{Repo: p.repo, pinned: map[string]int{}}
+			repo := &fireReadCountingRepo{Repo: p.repo, pinned: map[string]int{}}
 			starter := &pinRecordingStarter{}
 			launcher := launch.NewLauncher(repo, threads.NewService(p.repo), starter, noopRunRecorder{}, "test-q")
 			workflows := LaunchWorkflows{Repo: repo}
