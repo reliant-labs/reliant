@@ -182,6 +182,21 @@ func TestOrgPolicyProviders_FailoverNeverLandsOnAForbiddenProvider(t *testing.T)
 	}
 }
 
+// A manual lease is a model choice, not permission to bypass org policy.
+func TestOrgPolicyProviders_ManualFallbackStillChecksPolicy(t *testing.T) {
+	throughTheSeam(t)
+	withProvidersEnforcement(t, orgpolicy.EnforcementEnforce)
+	ctx := providersCtx(controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, "anthropic")
+	env := newRoutingEnv(t)
+	spec := orgCall("t1", true, env)
+	spec.Selector = models.ModelSelector{ID: "gpt-5.5@openai"} // the selector a manual lease hands to the resolver
+	_, err := resolveLLMCall(ctx, nil, spec)
+	refusal, ok := orgpolicy.RefusalOf(err)
+	require.True(t, ok, "want the policy's refusal, got %v", err)
+	assert.Equal(t, orgpolicy.ReasonProviderNotAllowed, refusal.Reason)
+	assert.Empty(t, env.built, "neither the forbidden provider nor the original provider was called")
+}
+
 // The driver build is the floor: an account that reached it around the seam
 // (here, a lookup that ignores the policy) is refused, never built.
 func TestOrgPolicyProviders_TheDriverBuildIsTheFloor(t *testing.T) {

@@ -75,7 +75,7 @@ An untraced pool opens no span per query, so a request's SQL is missing from its
 
 Every contract package generates a decorator (`NewInstrumented`) that opens a span per method. A `New(…)` used directly skips it, so the work under those methods is parentless in the trace. `--fix` rewrites the construction to `NewInstrumented`. The rule also flags a reference to a decorator that no longer exists because the package opted out with `forge:no-observe`.
 
-See [Observability](/forge/observability) for what the traces and logs look like once they are joined.
+See [Observability](/hosting/observability) for what the traces and logs look like once they are joined.
 
 ## Tests
 

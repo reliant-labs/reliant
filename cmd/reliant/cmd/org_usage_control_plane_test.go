@@ -26,7 +26,7 @@ import (
 // inject the price client directly, so without this a dropped env-map entry
 // would ship usage without estimates and nobody would see why.
 func TestOrgUsageControlPlaneReachesTheOrgUsageHandler(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/org_usage_control_plane.k"

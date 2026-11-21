@@ -41,9 +41,18 @@ Anything that is not plain create/read/update/delete is a custom RPC. Declare it
 
 ```protobuf
 service BillingService {
-  rpc IssueInvoice(IssueInvoiceRequest) returns (IssueInvoiceResponse);
+  rpc IssueInvoice(IssueInvoiceRequest) returns (IssueInvoiceResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "issue"
+        target: { kind: "invoice", id: "invoice_id" }
+      }
+    };
+  }
 }
 ```
+
+An RPC that changes something declares the `activity` event it records, or `forge lint` fails it (`forgeconv-activity-declared`). A name that starts with a read verb (`Get`, `List`, `Search`, ...) marks a read and needs none, and `activity: { none: "<why>" }` opts a mutation out. See [the rule](/forge/linting/rules-conventions#forgeconv-activity-declared).
 
 ```bash
 forge scaffold rpc billing IssueInvoice
@@ -95,7 +104,7 @@ Workers run inside the same `server` process as your services, locally and when 
 
 ## Configuration
 
-Settings are declared once, in `proto/<project>/config/v1/config.proto` (package `<project>.config.v1`), with their environment variable and default. `forge generate` turns them into a typed config your code receives, and per-environment values go in `deploy/kcl/<env>/`. A field marked `sensitive: true` becomes a secret reference with no place in git to paste a value; set it with [`forge secret set`](/forge/secrets).
+Settings are declared once, in `proto/<project>/config/v1/config.proto` (package `<project>.config.v1`), with their environment variable and default. `forge generate` turns them into a typed config your code receives, and per-environment values go in `deploy/kcl/<env>/`. A field marked `sensitive: true` becomes a secret reference with no place in git to paste a value; set it with [`forge env secret set`](/hosting/secrets).
 
 ## Related topics
 

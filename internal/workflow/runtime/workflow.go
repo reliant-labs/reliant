@@ -75,6 +75,10 @@ type WorkflowInput struct {
 	// omitempty keeps every run that does not probe byte-identical to a start
 	// recorded before this field existed.
 	GreenfieldProbe bool `json:"GreenfieldProbe,omitempty"`
+	// AttentionHandoff is internal checkpoint-CAN state, never a user input.
+	// It preserves the original actor/lease instead of renewing recovery on
+	// every history compaction. Absent for ordinary starts and human replies.
+	AttentionHandoff *AttentionHandoff `json:"attention_handoff,omitempty"`
 }
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
@@ -1081,6 +1085,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// no error and completes normally — that is the whole reason the verdict
 	// needs its own channel instead of being read off the lifecycle status.
 	runOutcome := ""
+	// The pointer is inherited by disconnected terminal cleanup contexts. It is
+	// armed only after a valid opt-in launch policy is resolved below.
+	attention := &runAttention{}
+	ctx = workflow.WithValue(ctx, attentionContextKey{}, attention)
 	// handlerDone stops the input-update handler (STEP 5.55) when the run
 	// exits; nil until that handler starts.
 	var handlerDone workflow.Channel
@@ -1112,7 +1120,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// the rows first, exactly as a self-resume does.
 		if endedUnattendedPause(retErr) &&
 			workflow.GetVersion(ctx, unattendedGiveUpUnpausesChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-			notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+			_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 		}
 		// A failed run gets its on_failure handler, once, before the run is
 		// reported failed. The run still fails: see on_failure.go.
@@ -1273,6 +1281,28 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Inject spawn_depth from ExecutionContext for depth-based spawn limiting
 	if input.ExecContext != nil && input.ExecContext.SpawnDepth > 0 {
 		input.Inputs["spawn_depth"] = input.ExecContext.SpawnDepth
+	}
+
+	// Attention correlation is frozen from finalized inputs, never re-evaluated
+	// at completion (a person may update inputs while the run is in flight).
+	if policy := wfWithPlaceholders.GetAttention(); policy != nil && parentWorkflowID == "" && IsLaunchRun(input.Inputs) && IsUnattended(input.Inputs) &&
+		workflow.GetVersion(ctx, attentionChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		key, keyErr := attentionKeyForRun(policy, input.Inputs, input.AttentionHandoff)
+		if keyErr != nil {
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "attention_input_error", keyErr.Error())
+			return nil, keyErr
+		}
+		attention.policy, attention.key = policy, key
+		attention.runID, attention.startedAt = info.WorkflowExecution.RunID, info.WorkflowStartTime
+		if handoff := input.AttentionHandoff; handoff != nil {
+			// Continue-as-new is still this recovery attempt, not a new owner.
+			// Its stored policy/key were validated by the preceding execution.
+			if handoff.RunID == "" || handoff.StartedAt.IsZero() || handoff.Policy == nil {
+				return nil, fmt.Errorf("invalid attention continuation identity")
+			}
+			attention.policy, attention.key = handoff.Policy, handoff.Key
+			attention.runID, attention.startedAt = handoff.RunID, handoff.StartedAt
+		}
 	}
 
 	// STEP 5.55: Set up signal handler and query handler NOW (after ApplyDefaults).
@@ -1501,7 +1531,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			LoopIteration:   loopIter,
 		}
 	}
-	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
+	if statusErr := notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts); statusErr != nil && attention.policy != nil {
+		// Do not let a repair run suppress attention without durable ownership.
+		return nil, fmt.Errorf("record attention owner: %w", statusErr)
+	}
 
 	// STEP 6.6: Preflight daemon check, for every run recorded since the check
 	// moved after "started" (see STEP 6.07).
@@ -1663,6 +1696,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// provider is exactly what the switched (or unbound) chat replaces.
 	childTracker.switchProvider = func(wakeCtx workflow.Context) {
 		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		if usageLimitWaiter.manualModel != "" {
+			// A banner click still being processed must not re-create the stay
+			// after the picker has changed the binding.
+			usageLimitWaiter.useModel, usageLimitWaiter.manualModel = "", ""
+			usageLimitWaiter.manualEpoch = 0
+		}
 		childTracker.resumeWholeChat(wakeCtx)
 	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
@@ -1735,7 +1774,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// PausedForMachine marks the chat so the api-server resumes it when
 		// the machine connects (internal/queueddelivery) — and only this pause:
 		// a user's own pause must stay paused.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, &workflowStatusOpts{PausedForMachine: true})
+		_ = notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, &workflowStatusOpts{PausedForMachine: true})
 
 		// Signal-based pause: arm the pause and block until resume.
 		// Mirrors the retry-exhaustion self-pause. We deliberately do NOT
@@ -1750,7 +1789,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// Resumed — update DB status back to running. The breaker's streak is
 		// NOT reset here: if the machine is still down, the next offline step
 		// re-pauses after a single round-trip; any daemon success resets it.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+		_ = notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 	})
 
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
@@ -2769,7 +2808,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 
 		// Wait for at least one step (activity or inline workflow) to complete
-		if len(runningSteps) > 0 || len(runningInlineWorkflows) > 0 {
+		// Unless this pass produced events of its own (a skipped node), which are
+		// routed first (routePendingFirst).
+		if (len(runningSteps) > 0 || len(runningInlineWorkflows) > 0) && !routePendingFirst(ctx, len(events)) {
 			completedSteps, completedInline := waitForAnyCompletion(ctx, runningSteps, runningInlineWorkflows)
 
 			// Check for pause signal after completion before processing results
@@ -2893,7 +2934,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 					// Update DB status to paused so the UI reflects it and SendMessage
 					// routes through the resume path instead of starting a new workflow.
-					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
+					_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
 
 					// Signal-based pause: arm the pause directly and block until resume.
 					// A pause on a provider-capacity failure is also released by a
@@ -2911,7 +2952,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					_ = workflow.Sleep(ctx, 0)
 
 					// Resumed! Update DB status back to running.
-					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+					_ = notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 
 					logger.Info("[Workflow Runtime] Resumed after pause, retrying step",
 						"stepID", running.StepID,
@@ -4093,7 +4134,7 @@ func prepareSpawnInline(
 
 	// Notify workflow status "started" for UI swim lane
 	// Thread and workflow already created by parent via initChildWorkflow/V2_CreateWorkflowWithThread
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
+	_ = notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
 		Title:               config.presetName,
 		ThreadTitle:         threadTitle,
 		Origin:              model.ThreadOriginSpawn,
@@ -4125,7 +4166,7 @@ func prepareSpawnInline(
 // (db.UpsertToolCallStatus pins the first outcome); the agent's card reads the
 // child row, which is what moves.
 func notifySpawnTerminal(ctx workflow.Context, chatID string, config *spawnChildWorkflowConfig, prep *spawnPrepResult, parentWorkflowID, status string) {
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
+	_ = notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
 		SpawnedByToolCallID: config.toolCallID,
 	})
 	if config.reportID != "" {
@@ -5583,9 +5624,10 @@ func workflowStatusActivityOptions(status string) workflow.ActivityOptions {
 
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
 // and tracks workflow hierarchy in the database.
-// This is a fire-and-forget notification - errors are logged but don't fail the workflow
-// opts can include agent info for UI swim lanes and fork metadata for context inheritance
-func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName, status, parentWorkflowID, thread string, opts *workflowStatusOpts) {
+// This is a fire-and-forget notification - errors are logged but don't fail the workflow;
+// the returned error matters only to callers that persist an attention transition
+// (the rest discard it with _ =). opts can include agent info for UI swim lanes and fork metadata for context inheritance
+func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName, status, parentWorkflowID, thread string, opts *workflowStatusOpts) error {
 	logger := workflow.GetLogger(ctx)
 
 	// If the workflow context is cancelled (e.g., during cleanup after cancellation),
@@ -5652,6 +5694,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 	}
 
+	if update := attentionForStatus(ctx, chatID, status, opts); update != nil {
+		input["attention"] = update
+	}
 	var result map[string]interface{}
 	// Use baseCtx (which may be disconnected) for the Get() call as well
 	err := workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input).Get(baseCtx, &result)
@@ -5675,6 +5720,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 			"status", status,
 			"workflowID", workflowID)
 	}
+	return err
 }
 
 // notifyWorkflowCheckpoint persists the workflow's position checkpoint: the
@@ -5925,7 +5971,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		notifyWorkflowPanic(cleanupCtx, chatID, workflowID, workflowName, thread, panicErr)
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+		_ = notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
 			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
 		return runFailureForPanic(retErr)
 	}
@@ -5947,8 +5993,18 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities (cancel pending approvals, etc.)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow was cancelled and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
-			&workflowStatusOpts{LaunchRun: launchRun})
+		if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
+			&workflowStatusOpts{LaunchRun: launchRun}); err != nil && attentionHandoff(ctx) != nil {
+			// The same backstop as normal completion's, below. The exhausted
+			// write rolled back this run's action_required and its cancelled
+			// lifecycle together. Ended CANCELED, the reconciler would repair
+			// the row to Cancelled, which the legacy failure projection does
+			// not count, and a key-only observer opened no incident and holds
+			// no lease to expire: the attention this policy promises would be
+			// lost for good. Ended FAILED, the reconciler repairs the row to
+			// Failed and the legacy projection shows the unfinished actor.
+			return fmt.Errorf("persist workflow attention terminal status: %w", err)
+		}
 		return nil
 	}
 
@@ -5977,7 +6033,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities for failed workflows
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+		_ = notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
 			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
 		return nil
 	}
@@ -6015,8 +6071,15 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	if runOutcome == model.OutcomeFailure {
 		outcomeNode = runOutcomeNode
 	}
-	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun})
+	if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun}); err != nil && attentionHandoff(ctx) != nil {
+		// Exhausting durable terminal bookkeeping is a real execution error,
+		// not a different verdict on the job. In particular, do not let the
+		// reconciler convert an unwritten semantic failure into a successful
+		// completed execution. Its existing failed-Temporal repair is the final
+		// backstop if the status/receipt transaction never committed.
+		return fmt.Errorf("persist workflow attention terminal status: %w", err)
+	}
 
 	// Last, so a wake that landed during the bookkeeping above counts too.
 	// Child runs are never signalled — every wake addresses the chat's root

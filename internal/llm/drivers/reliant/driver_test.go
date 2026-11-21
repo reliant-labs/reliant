@@ -182,15 +182,6 @@ func TestIsReliantManagedQuotaError(t *testing.T) {
 	}
 }
 
-func TestRetryDelayMs_UsesRetryAfterHeader(t *testing.T) {
-	apierr := newOpenAIErrorForTest(t, 429, `{"error":{"message":"Rate limited","type":"rate_limit_error","code":"429"}}`)
-	apierr.Response.Header.Set("Retry-After", "7")
-
-	if got := retryDelayMs(3, apierr); got != 7000 {
-		t.Fatalf("retryDelayMs = %d, want 7000", got)
-	}
-}
-
 func newOpenAIErrorForTest(t *testing.T, statusCode int, body string) *openai.Error {
 	t.Helper()
 

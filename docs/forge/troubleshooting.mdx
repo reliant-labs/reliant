@@ -1,5 +1,6 @@
 ---
-title: "Troubleshooting"
+title: "Forge troubleshooting: generate, lint, env up and deploy errors"
+sidebarTitle: "Troubleshooting"
 description: "What to check when a forge project does not generate, start, deploy or report as expected"
 ---
 
@@ -12,12 +13,12 @@ Forge's errors are written to be acted on: most say what was expected, what was 
 | What is running locally, on which port, and is it healthy? | `forge env status dev` |
 | Where is a service's output? | `.forge/logs/dev/<service>.log` |
 | What did the browser log? | `grep '\[browser:error\]' .forge/logs/dev/*.log` |
-| Did the last deploy make things worse? | `forge obs check <env> --wait` (see [Querying with forge obs](/forge/observability/forge-obs)) |
+| Did the last deploy make things worse? | `forge obs check <env> --wait` (see [Querying with forge obs](/hosting/observability/forge-obs)) |
 | Which RPCs does the binary actually serve? | `forge project introspect handlers` |
-| How do I call one by hand? | `forge api curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
+| How do I call one by hand? | `forge dev curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
 | What configuration does a workload get? | `forge env config dev --workload api` |
 | Which database is this project using? | `forge env config dev --json`, and read `DATABASE_URL` |
-| Is the project itself well-formed? | `forge doctor` |
+| Is the project itself well-formed? | `forge project doctor` |
 | What does a deployed environment run? | `forge env status <env>` |
 
 In development, the frontend forwards every `console` call, uncaught error and unhandled promise rejection to its dev server, so a crash that never calls `console` still lands in `.forge/logs/dev/frontend_<name>.log` with its stack.
@@ -40,12 +41,12 @@ Run `forge lint --quiet` to see only the failures, with the verdict on the last 
 - **More than one service in a proto file.** Split it: one service per file.
 - **A migration hazard.** `forge lint --migration-safety` names the statement (a `NOT NULL` column on a populated table, a volatile default) and the comment that opts out when you mean it.
 - **The frontend cannot be a static export.** `forge lint --static-export` names the dynamic route, server action or `cookies()` call, with the fix.
-- **A tool is missing.** Lint fails rather than skipping when `golangci-lint` or `buf` is unavailable; `forge tools install` installs the code generators.
+- **A tool is missing.** Lint fails rather than skipping when `golangci-lint` or `buf` is unavailable; `forge machine tools install` installs the code generators.
 
 ## `forge env up` does not come up
 
 - **A port is busy.** Each worktree of a project gets its own block of ports, so parallel checkouts do not collide. `forge env ps` lists every stack running on the machine, across projects; stop the one you meant with `forge env down <env>` from its directory.
-- **"air is not installed".** The API runs under air for hot reload. Install it (`go install github.com/air-verse/air@latest`) or run once with `forge env up dev -D host_runner=go-run`.
+- **"air is not on PATH and forge could not install it".** The API runs under air for hot reload. When air is missing, `forge env up` installs a pinned air into its own tool cache; if that fails, it runs the API under `go run` without hot reload and says so. Install air yourself (`go install github.com/air-verse/air@latest`) to get hot reload back.
 - **A service did not bind in time.** Startup includes compiling. On a slow machine, raise the wait with `--host-ready-timeout 5m`. A timeout is not a crash: the summary lists the pending ports and log files.
 - **The database is empty.** Seeding runs only on a fresh database where every table is empty. `forge db seed status` shows what is there; `forge db reset` drops, recreates, migrates and reseeds the dev database.
 - **Docker is not running.** Postgres, the dev identity provider and the observability stack run in Docker Compose.
@@ -61,20 +62,20 @@ Run `forge lint --quiet` to see only the failures, with the verdict on the last 
 | 3 | The environment moved since the plan was read | Someone else deployed. Look at `forge env status <env>` before deploying again. |
 | 4 | Another rollout is still in progress | Wait and retry, or `--supersede`. |
 | 5 | The plan was not confirmed | No terminal and no `--yes`. Nothing was deployed; add `--yes` (CI) or approve the printed plan. |
-| 7 | Queued on billing | Set up a compute plan; the deploy goes live by itself. See [Hosting on Reliant](/forge/hosting#queued-deploys). |
+| 7 | Queued on billing | Set up a compute plan; the deploy goes live by itself. See [Hosting on Reliant](/hosting/overview#queued-deploys). |
 | 8 | The wait ran out while the rollout was still progressing | Run `forge env status <env> --wait` to keep waiting; do not redeploy. |
 
 Other common causes:
 
-- **An unset secret.** A workload that declares a secret with no value cannot start. `forge secret list --env <env>` shows which are missing; set them with `forge secret set`.
+- **An unset secret.** A workload that declares a secret with no value cannot start. `forge env secret list --env <env>` shows which are missing; set them with `forge env secret set`.
 - **A workload hosting refuses.** Operators, cron-kind workloads, sidecars and volumes cannot run on shared hosting; the render names the workload and field. Bind it to a cluster you operate instead.
 - **A migration failed.** The deploy stops before any new pod serves and prints the command to read the migration's logs. Fix it with a new migration.
 - **"cannot authorize".** Your Reliant session lacks deploy permission. See [Forge sign-in](/forge/sign-in).
 
 ## Nothing shows up in Observability
 
-See [When nothing shows up](/forge/observability/where-it-goes#when-nothing-shows-up): local environments, a switched-off category, a frontend that sends nothing, alerts with no receiver and usage over the allowance.
+See [When nothing shows up](/hosting/observability/where-it-goes#when-nothing-shows-up): local environments, a switched-off category, a frontend that sends nothing, alerts with no receiver and usage over the allowance.
 
 ## Getting more detail
 
-`forge project audit` summarises the project's state, including drift between proto and schema and RPCs still returning `Unimplemented`. `forge debug start <service>` attaches the Delve debugger to a running service. Agents can load the `debug` skill, which covers forge's evidence sources in depth. If forge itself misbehaves, [send us feedback](/help/feedback) or report it on [GitHub](https://github.com/reliant-labs/forge/issues).
+`forge project audit` summarises the project's state, including drift between proto and schema and RPCs still returning `Unimplemented`. `forge dev debug start <service>` attaches the Delve debugger to a running service. Agents can load the `debug` skill, which covers forge's evidence sources in depth. If forge itself misbehaves, [send us feedback](/help/feedback) or report it on [GitHub](https://github.com/reliant-labs/forge/issues).

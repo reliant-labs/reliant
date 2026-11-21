@@ -1,11 +1,11 @@
 ---
 title: "Workflows from the terminal"
-description: "Validate and test a workflow next to your code, then run it, supervise it and put it on a schedule with reliant workflow"
+description: "Check a workflow next to your code with reliant workflow validate, lint and scenario run, then run and supervise it, and schedule it with reliant trigger"
 ---
 
 A project workflow is a YAML file in your repository's `.reliant/workflows/`, so it is natural to work on it where you work on the code: in an editor, with a terminal beside it. The `reliant workflow` commands support that loop in two halves.
 
-The first half needs **no sign-in, no machine and no network**: `validate`, `validate-tree`, `scenario`, `eval` and `list` read the files on disk and run the same checks and the same workflow engine the app uses. That makes them quick enough to run on every save and safe to run in CI. The second half talks to Reliant: `run` starts a workflow, and `watch`, `status`, `wait-for-gate`, `answer` and their siblings follow and steer it while it runs.
+The first half needs **no sign-in, no machine and no network**: `validate`, `validate-tree`, `lint`, `scenario`, `eval` and `list` read the files on disk and run the same checks and the same workflow engine the app uses. That makes them quick enough to run on every save and safe to run in CI. The second half talks to Reliant: `run` starts a workflow, and `watch`, `status`, `wait-for-gate`, `answer` and their siblings follow and steer it while it runs.
 
 This page walks through one small workflow from first draft to scheduled run. For the YAML format, see [Creating custom workflows](/workflows/custom-workflows). For the scenario file format, see [Testing workflows](/workflows/testing).
 
@@ -241,6 +241,8 @@ done
 `wait-for-gate` exits `3` while a gate is open, so the loop continues until the run finishes. `pause`, `resume` and `terminate` do what their names say. A paused run keeps its state and can be resumed later.
 
 ## Put it on a schedule
+
+There is no `reliant workflow schedule`. A schedule is a trigger, and you add one in either of two ways. A workflow can declare its own schedule in a `triggers:` block, which anyone can then turn on with `reliant trigger activate` (the app's **Enable** dialog as a command); [Schedules](/automations/schedules) shows the block. Or you create a schedule trigger from the terminal for a workflow that declares none.
 
 `reliant trigger create` runs a workflow on a cron or interval schedule, on a machine you name with `--daemon` (its ID or hostname). Scheduled runs are unattended, so the agent is told to decide and proceed instead of asking questions:
 

@@ -80,9 +80,9 @@ Three things in that output are worth knowing:
 
 - **References, not values.** The database URL appears as `databaseRef: {name: demo}` and the identity settings as `managedSecret` references. A rendered environment never contains a credential, so it is safe to print, diff and attach to a pull request.
 - **Probes are written out.** A service forge builds gets `/readyz` and `/healthz` on its `http` port, explicitly, on every runtime. The platform, the CLI and a human reading the record all see the same probe.
-- **The workload is restricted.** Hosting shares machines between customers, so it admits only what is safe there and refuses cron kinds, operators, RBAC, sidecars, volumes and pod overrides. [Hosting on Reliant](/forge/hosting#what-hosting-does-not-run) has the table, and the refusal at render names the workload and the field.
+- **The workload is restricted.** Hosting shares machines between customers, so it admits only what is safe there and refuses cron kinds, operators, RBAC, sidecars, volumes and pod overrides. [Hosting on Reliant](/hosting/overview#what-hosting-does-not-run) has the table, and the refusal at render names the workload and the field.
 
-The frontend is a **static site**: files behind the CDN, with no process. `runtimeConfig` is how one built bundle serves every environment, because the platform writes the site's `config.js` after each sync from this block, resolving `API_URL` to the right `api` workload. [Secrets](/forge/secrets) covers the write-only store, and [Custom domains](/forge/custom-domains) the hostname side.
+The frontend is a **static site**: files behind the CDN, with no process. `runtimeConfig` is how one built bundle serves every environment, because the platform writes the site's `config.js` after each sync from this block, resolving `API_URL` to the right `api` workload. [Secrets](/hosting/secrets) covers the write-only store, and [Custom domains](/hosting/custom-domains) the hostname side.
 
 ## On a cluster you operate
 
@@ -217,4 +217,4 @@ Gateway API objects (a `Gateway`, `HTTPRoute`, `GRPCRoute`) appear only when you
 
 ## Related topics
 
-[Environments](/forge/deploy/environments) explains the declarations these objects come from, and [Escape hatches](/forge/deploy/escape-hatches) covers changing any of them. [Releases and promotion](/forge/deploy/releases-and-promotion) shows how a render becomes a release and reaches a cluster. For hosted specifics, see [Hosting on Reliant](/forge/hosting).
+[Environments](/forge/deploy/environments) explains the declarations these objects come from, and [Escape hatches](/forge/deploy/escape-hatches) covers changing any of them. [Releases and promotion](/forge/deploy/releases-and-promotion) shows how a render becomes a release and reaches a cluster. For hosted specifics, see [Hosting on Reliant](/hosting/overview).

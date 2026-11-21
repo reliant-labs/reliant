@@ -25,7 +25,7 @@ import (
 // directly, so without this a dropped env-map entry, or the variable leaving
 // the api root's reach, would leave the switch documented and inert.
 func TestTranscriptKillSwitchReachesTheAPIServer(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/transcript_kill_switch.k"

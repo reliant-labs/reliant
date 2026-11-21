@@ -134,4 +134,9 @@ reliant_web_config: frontend_config_gen.ReliantWebConfig = {
     # /_otel entry forwards it to wherever `forge env up` decided this stack's
     # telemetry goes (main.k, TELEMETRY), or drops it when that is nowhere.
     otel_endpoint = "/_otel"
+    # What the onboarding's `reliant daemon start` command dials.
+    gateway_url = "http://localhost:${ports.gateway}"
+    # A plain-http local stack.
+    disable_tls = "true"
+    app_url = _web_origin
 }

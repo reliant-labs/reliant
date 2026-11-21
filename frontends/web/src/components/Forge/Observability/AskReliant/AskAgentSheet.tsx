@@ -219,7 +219,7 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
 
           {standalone && (
             <p className="text-xs text-ink-muted" data-testid="ask-agent-login">
-              Your agent needs a forge login: <code className="font-mono">forge login</code>, once per machine. Signed in to Reliant?{" "}
+              Your agent needs a forge login: <code className="font-mono">forge cloud login</code>, once per machine. Signed in to Reliant?{" "}
               <code className="font-mono">reliant forge …</code> uses your session.
             </p>
           )}

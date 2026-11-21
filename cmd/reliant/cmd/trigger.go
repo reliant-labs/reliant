@@ -72,6 +72,7 @@ proceed.`,
 		newTriggerEventsCmd(),
 		newTriggerActivateCmd(),
 		newTriggerDeactivateCmd(),
+		newTriggerRotateCmd(),
 	)
 	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 	return cmd
@@ -400,7 +401,8 @@ func newTriggerGetCmd() *cobra.Command {
 			if err != nil {
 				return conn.annotate(triggerLookupError(args[0], err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), trigger)
+			label := describeTriggerConnection(cmd.Context(), newConnectionServiceClient(conn), trigger)
+			printTriggerDetailWith(cmd.OutOrStdout(), trigger, label)
 			return nil
 		},
 	}
@@ -475,6 +477,52 @@ it started are real and still exist.`,
 				return conn.annotate(fmt.Errorf("deleting trigger: %w", err))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Deleted trigger %q (%s)\n", trigger.GetName(), trigger.GetId())
+			return nil
+		},
+	}
+}
+
+// newTriggerRotateCmd replaces a webhook trigger's token, as the app's Rotate
+// token does. It is refused in an agent's shell: a new token is a new way in,
+// and the person who will hand it to the sender runs it.
+func newTriggerRotateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rotate <id-or-name>",
+		PreRunE: refuseFromAgentShell,
+		Short:   "Replace a webhook trigger's token",
+		Long: `Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := resolveConnection(cmd)
+			if err != nil {
+				return err
+			}
+			client := newTriggerServiceClient(conn)
+			trigger, err := resolveTrigger(cmd.Context(), client, args[0])
+			if err != nil {
+				return conn.annotate(err)
+			}
+			resp, err := client.RotateWebhookToken(cmd.Context(),
+				connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: trigger.GetId()}))
+			if err != nil {
+				return conn.annotate(fmt.Errorf("rotating the token of trigger %q: %w", trigger.GetName(), err))
+			}
+			out := cmd.OutOrStdout()
+			rotated := resp.Msg.GetTrigger()
+			if rotated == nil {
+				rotated = trigger
+			}
+			if cred := resp.Msg.GetWebhook(); cred.GetToken() != "" {
+				fmt.Fprintf(out, "Rotated the token of trigger %q (%s); the old token no longer works.\n", rotated.GetName(), rotated.GetId())
+				printWebhookCredential(out, rotated.GetName(), rotated.GetId(), rotated.GetWebhookUrl(), cred)
+				return nil
+			}
+			fmt.Fprintf(out, "Rotated the token of trigger %q (%s). Reliant delivers to this webhook itself, so the new token went to its sender and there is nothing to configure.\n",
+				rotated.GetName(), rotated.GetId())
 			return nil
 		},
 	}
@@ -784,13 +832,26 @@ func printTriggerTable(out io.Writer, list []*reliantv1.Trigger) {
 }
 
 func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
+	printTriggerDetailWith(out, t, "")
+}
+
+// printTriggerDetailWith is printTriggerDetail with the connection described
+// as connection says (describeTriggerConnection); "" describes it from the
+// trigger alone.
+func printTriggerDetailWith(out io.Writer, t *reliantv1.Trigger, connection string) {
 	if t == nil {
 		return
+	}
+	if connection == "" {
+		connection = triggerConnectionLabel(t, nil)
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Name:\t%s\n", t.GetName())
 	fmt.Fprintf(w, "ID:\t%s\n", t.GetId())
 	fmt.Fprintf(w, "State:\t%s\n", triggerStateLabel(t))
+	if reason := pausedReasonLabel(t); reason != "" {
+		fmt.Fprintf(w, "Paused by Reliant:\t%s\n", reason)
+	}
 	fmt.Fprintf(w, "Health:\t%s\n", triggerHealthLabel(t))
 	if detail := t.GetHealth().GetLastFailureDetail(); detail != "" {
 		fmt.Fprintf(w, "Health detail:\t%s\n", detail)
@@ -802,6 +863,9 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
 	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
+	if connection != "" {
+		fmt.Fprintf(w, "Connection:\t%s\n", connection)
+	}
 	if org := t.GetOrgId(); org != "" {
 		fmt.Fprintf(w, "Organization:\t%s\n", org)
 		fmt.Fprintf(w, "Unattended funding:\t%s\n", unattendedFundingLabel(t.GetUnattendedFunding()))
@@ -817,6 +881,16 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 		fmt.Fprintf(w, "Timezone:\t%s\n", orDash(sched.GetTimezone()))
 		fmt.Fprintf(w, "Overlap:\t%s\n", overlapLabel(sched.GetOverlap()))
 		fmt.Fprintf(w, "Catchup window:\t%s\n", orDash(sched.GetCatchupWindow()))
+	}
+	if u := t.GetWebhookUrl(); u != "" && t.GetWebhook() != nil {
+		// The token is never readable again; rotate issues a new one.
+		fmt.Fprintf(w, "Webhook URL:\t%s (token: shown once at enable; `reliant trigger rotate` issues a new one)\n", u)
+	} else if u != "" {
+		// An integration whose provider the user points at Reliant per
+		// resource (Twilio's number webhook): no token of the trigger's.
+		fmt.Fprintf(w, "Webhook URL:\t%s\n", u)
+	} else if t.GetWebhookManaged() {
+		fmt.Fprintf(w, "Webhook URL:\tnone to configure: Reliant delivers to this webhook itself\n")
 	}
 	fmt.Fprintf(w, "Next fire:\t%s\n", orDash(t.GetNextFireAt()))
 	for group, name := range t.GetPresets() {
@@ -980,7 +1054,16 @@ func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrH
 	}
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no daemon with id or hostname %q", idOrHostname)
+		// Name the machines there are: no other command lists daemon ids
+		// with a plain login (TL-59).
+		var known []string
+		for _, d := range daemons {
+			known = append(known, fmt.Sprintf("%s  %s (%s)", d.GetDaemonId(), d.GetHostname(), d.GetDaemonType()))
+		}
+		if len(known) == 0 {
+			return "", fmt.Errorf("no daemon with id or hostname %q: you have no machines", idOrHostname)
+		}
+		return "", fmt.Errorf("no daemon with id or hostname %q; your machines:\n  %s", idOrHostname, strings.Join(known, "\n  "))
 	case 1:
 		return matches[0].GetDaemonId(), nil
 	default:
