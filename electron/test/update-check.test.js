@@ -256,6 +256,62 @@ test("forced update: a second request while it runs joins the first", async () =
   assert.equal(calls.installs, 1);
 });
 
+// main.js keeps the one updater state every window reads (get-update-status)
+// by folding each broadcast through nextUpdateState, the forced announcement
+// included. So the forced mark lives in the main process, not only in the
+// window that asked: a "not-available" from the feed, and a background
+// check's events after it, leave it forced, and a window that opens later
+// reads it forced. A retry checks the feed again rather than settling on the
+// previous check's "not-available".
+test("forced update: the main process's state stays forced, and a retry checks the feed again", async () => {
+  let state = null;
+  const broadcast = (event) => (state = nextUpdateState(state, event));
+  const feed = [UP_TO_DATE, AVAILABLE];
+  const calls = { checks: 0, downloads: 0, installs: 0 };
+  const run = createForcedUpdate({
+    getStatus: () => state,
+    isDownloading: () => false,
+    // What main.js's autoUpdater listeners broadcast for each check.
+    check: async () => {
+      calls.checks += 1;
+      broadcast({ type: "checking" });
+      const result = feed.shift();
+      broadcast(
+        result.isUpdateAvailable
+          ? { type: "available", version: result.updateInfo.version }
+          : { type: "not-available", version: result.updateInfo.version },
+      );
+      return result;
+    },
+    download: async () => {
+      calls.downloads += 1;
+      broadcast({ type: "downloaded", version: "1.14.0" });
+      return { success: true };
+    },
+    install: async () => {
+      calls.installs += 1;
+      return { success: true };
+    },
+    announce: (minVersion) => broadcast({ type: "forced", minVersion }),
+  });
+
+  assert.deepEqual(await run("1.9.0"), { outcome: "up-to-date" });
+  // The feed said nothing newer; the state a new window reads is still forced.
+  assert.equal(state.type, "not-available");
+  assert.equal(state.forced, true);
+  assert.equal(state.minVersion, "1.9.0");
+  // A background check's events after it do not unforce it either.
+  broadcast({ type: "checking" });
+  broadcast({ type: "not-available", version: "1.13.0" });
+  assert.equal(state.forced, true);
+
+  // Try again: the feed is asked again, and now has the release.
+  assert.deepEqual(await run("1.9.0"), { outcome: "installing" });
+  assert.deepEqual(calls, { checks: 2, downloads: 1, installs: 1 });
+  assert.equal(state.type, "downloaded");
+  assert.equal(state.forced, true);
+});
+
 test("cleanMinVersion passes a version token and nothing else", () => {
   assert.equal(cleanMinVersion("1.9.0"), "1.9.0");
   assert.equal(cleanMinVersion("1.9.0-dev+abc"), "1.9.0-dev+abc");
