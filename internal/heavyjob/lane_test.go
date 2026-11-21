@@ -172,7 +172,7 @@ func TestPrepareSetsTheExpressLane(t *testing.T) {
 }
 
 // The lane reaches the wrapper, which hands hostslot its own environment, and
-// through it the command, so a nested `forge slot run` asks for the same lane.
+// through it the command, so a nested `forge machine slot run` asks for the same lane.
 func TestExpressLaneReachesTheCommand(t *testing.T) {
 	g, _ := oneSlotGate(t)
 	run := func(job Job) string {

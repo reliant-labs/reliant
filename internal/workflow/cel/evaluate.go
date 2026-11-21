@@ -2,6 +2,7 @@ package wfcel
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -257,6 +258,38 @@ func ConvertToNative(v interface{}) interface{} {
 		for k, item := range val {
 			keyStr, _ := k.Value().(string)
 			result[keyStr] = ConvertToNative(item)
+		}
+		return result
+	default:
+		return convertTypedContainer(v)
+	}
+}
+
+// convertTypedContainer widens a typed Go slice or string-keyed map into
+// []interface{} / map[string]interface{}. A native function's result keeps
+// its Go type through Value(): regex.extractAll returns a []string, which
+// structpb.NewValue rejects ("proto: invalid type: []string"). []byte stays
+// as it is: CEL bytes are not a list. Anything else is returned unchanged.
+func convertTypedContainer(v interface{}) interface{} {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			return v
+		}
+		result := make([]interface{}, rv.Len())
+		for i := range result {
+			result[i] = ConvertToNative(rv.Index(i).Interface())
+		}
+		return result
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return v
+		}
+		result := make(map[string]interface{}, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			result[iter.Key().String()] = ConvertToNative(iter.Value().Interface())
 		}
 		return result
 	default:

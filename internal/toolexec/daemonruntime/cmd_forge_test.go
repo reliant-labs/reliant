@@ -382,7 +382,7 @@ func TestForgePerCommandArgs(t *testing.T) {
 		want    []string
 	}{
 		{"forge.env_verify", map[string]string{"env": "prod"}, []string{"env", "status", "prod", "--json"}},
-		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"secret", "list", "--env=dev", "--json"}},
+		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"env", "secret", "list", "--env=dev", "--json"}},
 		{"forge.env_status", map[string]string{"env": "dev"}, []string{"env", "status", "dev", "--json"}},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
@@ -806,14 +806,14 @@ func TestForgeUnsupportedReasonClassification(t *testing.T) {
 // cobraUnknownFlagStderr is the VERBATIM stderr of an installed forge v0.1.17
 // asked for a flag it does not have:
 //
-//	forge secret list dev --json   -> exit 1
+//	forge env secret list dev --json   -> exit 1
 //
 // Captured rather than paraphrased, because the two details that broke the
 // classifier are both absent from a paraphrase: cobra dumps the usage block
 // FIRST, and prefixes its complaint with "Error: ". A matcher written against
 // the idealized string "unknown flag: --json" matches neither.
 const cobraUnknownFlagStderr = `Usage:
-  forge secret list <environment> [flags]
+  forge env secret list <environment> [flags]
 
 Flags:
   -h, --help   help for list
@@ -867,7 +867,7 @@ func TestForgeUnsupportedReasonMatchesRealCobraStderr(t *testing.T) {
 }
 
 func TestForgeSecretListTooOldIsUnsupportedNotFailure(t *testing.T) {
-	// End-to-end for the reported bug: `forge secret list <env> --json`
+	// End-to-end for the reported bug: `forge env secret list <env> --json`
 	// against a forge that predates the flag must produce the structured
 	// unsupported outcome the UI already renders, not an error that the
 	// proxy dresses up as "could not reach your daemon".
@@ -923,7 +923,7 @@ func TestForgeOperationalFailureIsNotReclassifiedAsTooOld(t *testing.T) {
 }
 
 func TestForgeSecretListMissingValueVerdictStaysData(t *testing.T) {
-	// `forge secret list` exits 1 as a VERDICT when a declared secret has
+	// `forge env secret list` exits 1 as a VERDICT when a declared secret has
 	// no value. That is the answer to the question, not a failure, and the
 	// unsupported classifier must not intercept it — stdout carries a
 	// report, which is what distinguishes the two.

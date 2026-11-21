@@ -98,7 +98,7 @@ export function WorktreeSettings() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold text-muted-foreground">
               Cleanup defaults
             </h4>
             <CardInset padding="none" className="divide-y divide-border/60">

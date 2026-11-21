@@ -30,12 +30,13 @@ pin in control-plane would have to move in lockstep with go.mod's (that repo's
 pin-coherence checks), which is exactly the coupling a demo must not have.
 
 THE DOMAIN is a control-plane resource bound to this env's frontend, not spec
-(`forge domain bind demo.reliantlabs.io --env demo --target forge-demo`). The cutover
+(`forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo`). The cutover
 from control-plane's prod/reliant-web, its checks and its rollback:
 dev-docs/forge-demo-cutover.md.
 """
 
 import forge
+import ..dev_sign_in as dsi
 
 # What the bundle reads at RUNTIME (window.__FORGE_CONFIG__, src/lib/config_gen.ts).
 # No API URL, no auth mode, no keys: the demo has no backend and no sign-in.
@@ -72,7 +73,7 @@ _forge_demo = forge.Frontend {
     runtime = forge.OnHosted {}
 }
 
-output = forge.render(forge.Bundle {
+output = forge.render(dsi.only_in_dev("demo", forge.Bundle {
     project = "reliant"
     env = "demo"
     # Reliant cloud: needed by OnHosted.
@@ -80,4 +81,4 @@ output = forge.render(forge.Bundle {
     # The platform keeps replay events only for an env that opts in.
     observability = forge.Observability {}
     frontends = [_forge_demo]
-})
+}))

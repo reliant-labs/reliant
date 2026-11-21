@@ -128,7 +128,7 @@ export function TeamWorkspacesSection({ org, names }: TeamWorkspacesSectionProps
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {candidates.length === 0 ? (
           <p className="text-xs text-muted-foreground" data-testid="org-workspace-no-candidates">
-            To bind a workspace, first connect your own Claude Team or ChatGPT Business sign-in in Settings › AI providers.
+            To bind a workspace, first connect your own Claude Team or ChatGPT Business sign-in in Settings › AI › Personal accounts.
           </p>
         ) : (
           <>

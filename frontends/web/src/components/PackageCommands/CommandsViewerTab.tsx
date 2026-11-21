@@ -1123,7 +1123,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                 responsiveCtx.isCompact ? "w-3 h-3" : "w-3.5 h-3.5"
               )} />
               <span className={cn(
-                "font-medium text-green-600 dark:text-green-400 uppercase tracking-wider",
+                "font-medium text-green-600 dark:text-green-400",
                 responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 {responsiveCtx.isCompact ? "Run" : "Running"}
@@ -1175,7 +1175,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                 responsiveCtx.isCompact ? "w-3 h-3" : "w-3.5 h-3.5"
               )} />
               <span className={cn(
-                "font-medium text-muted-foreground uppercase tracking-wider",
+                "font-medium text-muted-foreground",
                 responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 Recent
@@ -1234,7 +1234,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                   responsiveCtx.isCompact ? "w-3 h-3" : "w-3.5 h-3.5"
                 )} />
                 <span className={cn(
-                  "font-medium text-muted-foreground uppercase tracking-wider",
+                  "font-medium text-muted-foreground",
                   responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {responsiveCtx.isCompact ? "Favs" : "Favorites"}
@@ -1302,7 +1302,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                 )}
                 <span className="text-muted-foreground">{packageTypeIcons[type]}</span>
                 <span className={cn(
-                  "font-medium text-muted-foreground uppercase tracking-wider",
+                  "font-medium text-muted-foreground",
                   responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {type}

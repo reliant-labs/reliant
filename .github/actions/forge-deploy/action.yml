@@ -122,7 +122,7 @@ runs:
       env:
         ENV: ${{ inputs.env }}
         PROMOTION_ID: ${{ steps.deploy.outputs.promotion-id }}
-      run: forge gate record "$ENV" --promotion "$PROMOTION_ID" --from deploy.json --name rollout
+      run: forge release gate record "$ENV" --promotion "$PROMOTION_ID" --from deploy.json --name rollout
 
     - name: Summary
       if: always()

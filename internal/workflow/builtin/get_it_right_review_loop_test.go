@@ -220,7 +220,7 @@ func TestToolNameExtractionIsNotVacuous(t *testing.T) {
 
 	t.Run("a tool word inside a longer phrase is not an order to use the tool", func(t *testing.T) {
 		// `skill` and `view` are both registered tools. Neither of these is naming one.
-		require.Empty(t, toolsNamedIn("run `reliant forge skill load frontend/design` first"),
+		require.Empty(t, toolsNamedIn("run `reliant forge agent skill load frontend/design` first"),
 			"a backticked shell command that happens to contain a tool word is not a tool order")
 		require.Empty(t, toolsNamedIn("the schema requires `live_url` and `pages_inspected`"),
 			"response-schema fields are not tools")

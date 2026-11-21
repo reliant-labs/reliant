@@ -170,6 +170,19 @@ func (g *emitter) schemaOf(f *fieldSpec, prefix string) any {
 	case "list":
 		m.set("type", "array")
 		m.set("items", ymap{{"$ref", prefix + f.Object + "_schema.yaml"}})
+	case "markers":
+		m.set("type", "array")
+		m.set("items", ymap{
+			{"type", "object"},
+			{"properties", ymap{
+				{"name", ymap{{"type", "string"}, {"description", "The marker's name: review-passed in <!-- review-passed sha=abc -->."}}},
+				{"attrs", ymap{
+					{"type", "object"},
+					{"additionalProperties", ymap{{"type", "string"}}},
+					{"description", "The marker's key=value pairs: {sha: abc}."},
+				}},
+			}},
+		})
 	}
 	if f.Description != "" {
 		m.set("description", f.Description)
@@ -337,6 +350,8 @@ func (g *emitter) readExpr(fn string, f *fieldSpec) string {
 		return g.objectName(fn, f) + "(" + src + ")"
 	case "list":
 		return fmt.Sprintf("objects(%s, max%s, %sObject)", src, title(f.Max), f.Object)
+	case "markers":
+		return "markers(text(" + src + "))"
 	}
 	panic("unreachable kind " + f.Kind)
 }
@@ -371,6 +386,8 @@ func (g *emitter) objectFunc(name string, fields fieldList, absentNull bool) {
 			cond = append(cond, fmt.Sprintf("\tif s := %s; s != \"\" {\n\t\tout[%s] = s\n\t}\n", expr, key))
 		case "integer":
 			cond = append(cond, fmt.Sprintf("\tif n := %s; n != nil {\n\t\tout[%s] = n\n\t}\n", expr, key))
+		case "markers":
+			cond = append(cond, fmt.Sprintf("\tif m := %s; len(m) > 0 {\n\t\tout[%s] = m\n\t}\n", expr, key))
 		case "object":
 			test := fmt.Sprintf("isObject(dig(v, %s))", pathLit(f.srcPath()))
 			if f.Require != "" {

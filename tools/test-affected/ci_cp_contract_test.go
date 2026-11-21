@@ -11,8 +11,8 @@ import (
 )
 
 // The vendored control-plane contract before merge (control-plane #2556):
-// `CI result`, the merge queue's one required check, runs
-// `task contract:controlplane:check` whenever the group changes
+// the merge queue's `Merge gate` job, whose result `CI result` (the one
+// required check) needs, runs `task contract:controlplane:check` whenever the group changes
 // proto-vendor/controlplane/, against a control-plane checkout at the commit
 // SOURCE names. It used to run only on the push to main, so a vendored,
 // unmerged control-plane commit merged and turned main red. These tests pin
@@ -21,15 +21,16 @@ import (
 const cpContractGated = "${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}"
 
 // cpContractSteps finds the detection step, the control-plane checkout and
-// the contract check in `CI result`, by what they do rather than their names.
-func cpContractSteps(t *testing.T) (steps []mqStep, detect, checkout, check, golangciWait int) {
+// the contract check in the merge gate, by what they do rather than their
+// names. That `CI result` needs the merge gate is TestMergeQueueGolangciGates'.
+func cpContractSteps(t *testing.T) (steps []mqStep, detect, checkout, check int) {
 	t.Helper()
 	wf := loadMergeQueue(t)
-	gate := wf.Jobs["ci-result"]
-	if gate == nil || gate.Name != "CI result" {
-		t.Fatalf("merge-queue.yml needs job ci-result named \"CI result\" (the ruleset's required check), has %v", sortedKeys(wf.Jobs))
+	gate := wf.Jobs["merge-gate"]
+	if gate == nil {
+		t.Fatalf("merge-queue.yml needs job merge-gate (whose result `CI result` needs), has %v", sortedKeys(wf.Jobs))
 	}
-	detect, checkout, check, golangciWait = -1, -1, -1, -1
+	detect, checkout, check = -1, -1, -1
 	for i, s := range gate.Steps {
 		switch {
 		case s.ID == "cp_contract":
@@ -38,27 +39,22 @@ func cpContractSteps(t *testing.T) (steps []mqStep, detect, checkout, check, gol
 			checkout = i
 		case strings.Contains(s.Run, "task contract:controlplane:check"):
 			check = i
-		case s.Name == golangciJobName+" passed":
-			golangciWait = i
 		}
 	}
 	if detect < 0 || checkout < 0 || check < 0 {
-		t.Fatalf("CI result needs a cp_contract detection step (%d), a control-plane checkout (%d) and `task contract:controlplane:check` (%d)", detect, checkout, check)
+		t.Fatalf("the merge gate needs a cp_contract detection step (%d), a control-plane checkout (%d) and `task contract:controlplane:check` (%d)", detect, checkout, check)
 	}
-	return gate.Steps, detect, checkout, check, golangciWait
+	return gate.Steps, detect, checkout, check
 }
 
-// TestMergeQueueChecksTheVendoredContract: in `CI result`, detection runs on
+// TestMergeQueueChecksTheVendoredContract: in the merge gate, detection runs on
 // every group, then the control-plane checkout at SOURCE and the contract
 // check run under one condition (the detection said the contract changed),
 // and the check is fatal: a failing check fails the required check.
 func TestMergeQueueChecksTheVendoredContract(t *testing.T) {
-	steps, detect, checkout, check, wait := cpContractSteps(t)
+	steps, detect, checkout, check := cpContractSteps(t)
 	if detect >= checkout || checkout >= check {
 		t.Errorf("order detect=%d checkout=%d check=%d: the check must read the checkout, which needs detection's sha", detect, checkout, check)
-	}
-	if wait >= 0 && check > wait {
-		t.Errorf("the contract check (step %d) runs after the golangci wait (step %d), which is skipped on a failed gate", check, wait)
 	}
 
 	d := steps[detect]
@@ -118,7 +114,7 @@ func TestMergeQueueContractDetection(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	steps, detect, _, _, _ := cpContractSteps(t)
+	steps, detect, _, _ := cpContractSteps(t)
 	script := steps[detect].Run
 	lanes := readRepo(t, "scripts/ci-lanes.sh")
 	const sha = "84617f5824df3dad673fd1a3aeb5a5a32a4f80c5"

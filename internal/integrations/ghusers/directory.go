@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
 
@@ -71,7 +72,7 @@ func New(deps Deps) Service {
 	}
 	client := deps.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, Transport: netguard.New().Transport()}
+		client = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 15 * time.Second, Base: netguard.New().Transport()})
 	}
 	return &Directory{tokens: deps.Tokens, base: base, client: client}
 }

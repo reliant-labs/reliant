@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/bedrock"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -40,10 +39,6 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 	clientOptions := []option.RequestOption{}
 	clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey),
 		option.WithMiddleware(ratelimit.Middleware("anthropic", ratelimit.ParseAnthropic)))
-
-	if opts.UseBedrock {
-		clientOptions = append(clientOptions, bedrock.WithLoadDefaultConfig(context.Background()))
-	}
 
 	return &AnthropicClient{
 		baseClient: newBase(opts, clientOptions),
