@@ -872,14 +872,10 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
-	err = cmd.Start()
+	err = tree.Start(deadline.Context(), cmd)
 	// The child holds its own copies of the sandbox's descriptors now.
 	credsandbox.Release(cmd)
-	if err != nil {
-		tree.Started(0)
-	}
 	if err == nil {
-		tree.Started(cmd.Process.Pid)
 		// Steer the kernel OOM killer toward the workload (and descendants,
 		// which inherit the score) rather than the daemon. No-op outside
 		// Linux; best-effort everywhere.

@@ -9,10 +9,13 @@
  */
 
 import { OrganizationUsageView } from "@/components/Forge/Observability/Dashboards/OrganizationUsageView";
+import { useRouteOrgIdOverride } from "@/lib/orgScope";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 export function ForgeUsagePage() {
-  const orgId = useActiveOrgStore((s) => s.effectiveId) ?? "";
+  const routeOrgId = useRouteOrgIdOverride();
+  const tabOrgId = useActiveOrgStore((s) => s.effectiveId);
+  const orgId = (routeOrgId === undefined ? tabOrgId : routeOrgId) ?? "";
   return (
     <div className="-mx-4 -mt-4 sm:-mx-6" data-testid="forge-usage-page">
       <OrganizationUsageView orgId={orgId} scope="forge" />
