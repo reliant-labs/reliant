@@ -1,0 +1,65 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * THE NAV (U6e): the owner's hybrid, round 2 (u6e-hybrid-round2-brief).
+ *
+ *   Find · switcher (the shell draws them above)
+ *   Overview · Inbox (count) · Agents › ·
+ *   Dashboards ▾ · Observability › · Analytics ▾ ·
+ *   Deployments ▾ (Releases, Environments, Previews) ·
+ *   Data · Storage · Users ·
+ *   Configure ▾ (Secrets, Domains, Activity)
+ *   footer: Settings
+ *
+ * Only Agents and Observability drill in (their rows replace the nav, under a
+ * "‹ Area" header, on their routes). Everything else is an accordion or a
+ * link. Settings is a plain link; on its pages its sections take the column.
+ * The desktop nav, the narrow window's drawer and the phone's drawer all
+ * draw this one config.
+ */
+
+import {
+  agentsArea,
+  analyticsGroup,
+  configureGroup,
+  dashboards,
+  data,
+  deploymentsGroup,
+  footer,
+  inbox,
+  observabilityArea,
+  overview,
+  settingsSections,
+  storage,
+  users,
+} from "./items";
+import type { NavConfig } from "./types";
+
+export const hybridNav: NavConfig = {
+  items: [
+    overview,
+    inbox,
+    agentsArea,
+    dashboards,
+    observabilityArea,
+    analyticsGroup,
+    deploymentsGroup,
+    data,
+    storage,
+    users,
+      configureGroup,
+  ],
+  footer,
+  sectionPages: [settingsSections],
+};
+
+/**
+ * The nav while the forge UI is turned off (Settings › Developer;
+ * lib/forgeFeature.ts): no app page, since each one's route is behind
+ * ForgeGate too. The project's Overview, the Inbox and Agents stay.
+ */
+export const forgeOffNav: NavConfig = {
+  items: [overview, inbox, agentsArea],
+  footer,
+  sectionPages: [settingsSections],
+};
