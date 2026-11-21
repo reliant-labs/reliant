@@ -277,5 +277,14 @@ declare global {
     RELIANT_CONFIG?: ReliantConfig;
     /** Only on the desktop find bar's own page (electron/src/find-bar-preload.js). */
     findBarAPI?: FindBarAPI;
+    /**
+     * The desktop app's versions (electron/src/preload.js desktopVersions),
+     * each present only when it looks like a version.
+     */
+    forgeDesktop?: {
+      readonly appVersion?: string;
+      readonly electronVersion?: string;
+      readonly chromiumVersion?: string;
+    };
   }
 }
