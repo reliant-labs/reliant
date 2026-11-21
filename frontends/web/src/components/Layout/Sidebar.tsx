@@ -99,7 +99,7 @@ import {
   SidebarSubRow,
   ChatSectionHeading,
 } from "./sidebar/primitives";
-import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
+import { OrgHeaderRow, ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
 import { useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
@@ -2078,9 +2078,9 @@ function SidebarComponent({
       data-context="left-sidebar"
       tabIndex={-1}
     >
-      {/* Find, at the very top (it opens the command palette); then the org and project switcher. */}
+      {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
+      <OrgHeaderRow />
       <FindBox />
-      {/* [Org ▾] / [Project ▾]: the org, and the project(s) every row below is about. */}
       <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
 
       {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}
