@@ -210,7 +210,10 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 // directory gone. A missing program or working directory is ENOENT too, but
 // leaves the cgroup in place.
 func (t *Tree) cgroupVanished(err error) bool {
-	if t == nil || t.dir == "" || !(errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENODEV)) {
+	if t == nil || t.dir == "" {
+		return false
+	}
+	if !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENODEV) {
 		return false
 	}
 	_, statErr := os.Stat(t.dir)
