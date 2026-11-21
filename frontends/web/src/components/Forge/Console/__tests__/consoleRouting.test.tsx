@@ -229,11 +229,12 @@ function renderAt(
     releases: probe("releases"),
     release: probe("release"),
     observabilityView: options.metrics ? MetricsExplorerPage : probe("observability-view"),
+    obsOverview: probe("obs-overview"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
-    users: probe("users"),
+    auth: probe("auth"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -241,6 +242,10 @@ function renderAt(
     activity: probe("activity"),
     services: probe("services"),
     service: probe("service"),
+    usage: probe("usage"),
+    events: probe("events"),
+    analytics: probe("analytics"),
+    speedInsights: probe("speed-insights"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -249,7 +254,7 @@ function renderAt(
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
-  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/projects", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
     routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
@@ -288,12 +293,12 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+  it("names no project, so lands on the apps (Projects) rather than guessing one", async () => {
     // The persisted last project used to be opened here; the list of every
     // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/apps");
+    await landsOn(router, "/projects", { show: "apps" });
     expect(await screen.findByTestId("apps")).toBeInTheDocument();
     expect(restoreLastProject).not.toHaveBeenCalled();
   });
@@ -470,9 +475,10 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
   });
 
-  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+  it("opens Observability's own Overview at /observability (U6e)", async () => {
     const router = renderAt("/forge/p/alpha/observability?env=e2e");
-    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "obs-overview");
+    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
   });
 
   it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {
@@ -527,6 +533,15 @@ describe("the environment scope", () => {
     );
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("routes Auth's tabs, and sends the old Users URL to Auth with its search", async () => {
+    const router = renderAt("/forge/p/alpha/auth/sign-in?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "auth");
+    await landsOn(router, "/forge/p/alpha/auth/sign-in", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
+    await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {

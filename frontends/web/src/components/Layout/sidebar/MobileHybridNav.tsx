@@ -41,6 +41,7 @@ import {
   newChatPath,
   runPath,
   runsPath,
+  sandboxesPath,
   settingsPath,
   workflowDetailPath,
   workflowLibraryPath,
@@ -78,7 +79,7 @@ export function desktopPathOfMobile(pathname: string): string {
     if (name) return workflowDetailPath(encodedSegment(name));
   }
   if (atOrBelow(path, mobileWorkflowsPath())) return workflowLibraryPath();
-  if (atOrBelow(path, mobileMachinesPath())) return settingsPath("machines");
+  if (atOrBelow(path, mobileMachinesPath())) return sandboxesPath();
   if (atOrBelow(path, mobileSettingsPath())) return settingsPath();
   return pathname;
 }

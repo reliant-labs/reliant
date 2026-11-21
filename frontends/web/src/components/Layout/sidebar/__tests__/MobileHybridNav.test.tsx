@@ -28,7 +28,7 @@ import {
   workflowLibraryPath,
 } from "@/lib/paths";
 
-import { consolePath } from "../../../Forge/Console/paths";
+import { consolePath, obsOverviewPath } from "../../../Forge/Console/paths";
 
 vi.mock("../shellProject", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../shellProject")>()),
@@ -91,10 +91,10 @@ describe("the phone's nav", () => {
     renderAt(mobileInboxPath());
     expect(screen.getByTestId("nav-top")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
-    for (const id of ["agents", "dashboards", "observability", "deployments", "data", "storage", "users", "configure"]) {
+    for (const id of ["agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "configure"]) {
       expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
     }
-    expect(screen.getByTestId("sidebar-settings-button")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-usage-billing")).toBeInTheDocument();
   });
 
   it("drills into Agents on the phone's chats, never the old nav, and its back header goes to the Overview", () => {
@@ -117,10 +117,10 @@ describe("the phone's nav", () => {
     expect(screen.getByTestId("mobile-nav-chats")).not.toHaveAttribute("aria-current");
   });
 
-  it("drills into Observability, landing on its first view, with the divider's rows showing", () => {
+  it("drills into Observability, landing on its Overview, with the divider's rows showing", () => {
     const onNavigate = renderAt(inboxPath());
     fireEvent.click(screen.getByTestId("nav-observability"));
-    expect(onNavigate).toHaveBeenLastCalledWith(expect.stringContaining(consolePath("shopfront", { kind: "obs-view", view: "graph" })), { drill: true });
+    expect(onNavigate).toHaveBeenLastCalledWith(expect.stringContaining(obsOverviewPath("shopfront")), { drill: true });
   });
 
   it("shows Observability's rows on one of its pages, and a destination is not a drill", () => {

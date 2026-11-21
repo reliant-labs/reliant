@@ -58,7 +58,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
     <button
       type="button"
       onClick={onCreate}
-      aria-label="Add machine"
+      aria-label="Add sandbox"
       className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-sm font-medium text-primary-ink active:bg-primary/10"
     >
       <Plus className="h-4 w-4" />
@@ -117,7 +117,7 @@ function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
 function DaemonListHeader({ onCreate }: { onCreate: () => void }) {
   return (
     <MobileScreenHeader
-      title="Machines"
+      title="Sandboxes"
       leading={<MobileMenuButton />}
       trailing={<NewMachineButton onCreate={onCreate} />}
     />
@@ -158,8 +158,8 @@ export function MobileDaemonList() {
         {header}
         <MobileEmptyState
           icon={Server}
-          title="No machines yet"
-          description="Machines run your agents. Start one here, then connect GitHub to clone repos onto it."
+          title="No agent sandboxes yet"
+          description="Agent sandboxes run your agents. Start one here, then connect GitHub to clone repos onto it."
           action={
             <button
               type="button"
@@ -167,7 +167,7 @@ export function MobileDaemonList() {
               className={MOBILE_PRIMARY_ACTION}
             >
               <Plus className="h-4 w-4" />
-              Add machine
+              Add sandbox
             </button>
           }
         />
