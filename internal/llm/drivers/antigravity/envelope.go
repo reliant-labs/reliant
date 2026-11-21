@@ -55,7 +55,6 @@ type (
 	blob                  = agywire.Blob
 	toolDecls             = agywire.ToolDecls
 	functionDeclaration   = agywire.FunctionDeclaration
-	schema                = agywire.Schema
 	toolConfig            = agywire.ToolConfig
 	functionCallingConfig = agywire.FunctionCallingConfig
 	generationConfig      = agywire.GenerationConfig

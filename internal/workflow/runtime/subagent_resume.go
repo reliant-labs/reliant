@@ -302,6 +302,7 @@ func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, t
 		ToolGrants:            tracker.toolGrantsHandoff(),
 		AmbientMemoryExcluded: tracker.ambientMemoryHandoff(),
 		ThreadInputs:          tracker.threadInputOverridesHandoff(),
+		RunStartedAtMs:        tracker.startedAtMs(),
 		// Unlike a late wake's fresh run, this continues the interrupted
 		// tree: it resumes the stopped agents and the parent's loop against
 		// the catalog they started with, not one pushed while they were

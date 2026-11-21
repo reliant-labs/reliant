@@ -3195,6 +3195,21 @@ func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
+// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
+func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
+	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
+}
+
+// HandledNodeFailure is a node of an ended run whose last attempt failed.
+type HandledNodeFailure = store.HandledNodeFailure
+
+// FirstHandledNodeFailure returns a node of the run, or of a run under it,
+// whose last attempt in run runID (since since, for an attempt that names no
+// run) failed, or nil (store.FirstHandledNodeFailure).
+func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
+	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
+}
+
 // SetWorkflowFailureDetail records why a run failed, on the run.
 func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
 	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
@@ -3636,6 +3651,15 @@ func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status strin
 		return fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
+}
+
+// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
+// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
+func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
