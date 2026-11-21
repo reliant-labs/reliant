@@ -239,7 +239,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(convMailIDs(rest), []string{"h-1"}) {
 		t.Fatalf("Claim(all) = %v, %v; want [h-1]", convMailIDs(rest), err)
 	}
-	if none, err := env.Repo.ClaimQueuedAgentMessagesForThread(ctx, "cl-child", "cl-chat", ""); err != nil || len(none) != 0 {
+	if none, err := store.ClaimQueuedAgentMessagesForThread(ctx, env.Repo.ORM(), "cl-child", "cl-chat", ""); err != nil || len(none) != 0 {
 		t.Fatalf("Repo.Claim(empty) = %v, %v", convMailIDs(none), err)
 	}
 	left, err := store.ListQueuedAgentMessagesForThread(ctx, env.ORM, "cl-child")

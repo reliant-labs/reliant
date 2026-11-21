@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestProjectConfigPushedAtAndScenariosColumn: the narrow reads return exactly
@@ -19,7 +20,7 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	if _, err := repo.GetProjectConfigPushedAt(ctx, "test-project"); !svcerr.IsNotFound(err) {
+	if _, err := store.GetProjectConfigPushedAt(ctx, repo.ORM(), "test-project"); !svcerr.IsNotFound(err) {
 		t.Fatalf("no record: pushed_at err = %v; want svcerr.NotFound", err)
 	}
 	if _, err := repo.GetProjectScenariosJSON(ctx, "test-project"); !svcerr.IsNotFound(err) {
@@ -36,7 +37,7 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	gotPushedAt, err := repo.GetProjectConfigPushedAt(ctx, "test-project")
+	gotPushedAt, err := store.GetProjectConfigPushedAt(ctx, repo.ORM(), "test-project")
 	if err != nil {
 		t.Fatalf("GetProjectConfigPushedAt: %v", err)
 	}

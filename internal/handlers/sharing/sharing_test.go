@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -48,7 +49,7 @@ func requireRefusal(t *testing.T, err error, code connect.Code, reason string) {
 
 func events(t *testing.T, f *viewertest.Fixture, kind core.ShareKind, id string) []*core.ShareEvent {
 	t.Helper()
-	ev, err := f.Repo.ListShareEvents(context.Background(), kind, id)
+	ev, err := store.ListShareEvents(context.Background(), f.Repo.ORM(), kind, id)
 	require.NoError(t, err)
 	return ev
 }

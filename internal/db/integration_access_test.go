@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Access-gated routing is a security boundary: an event about a repository
@@ -201,7 +202,7 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 	assert.True(t, ok)
 
 	require.NoError(t, repo.FinishIntegrationAccessRefresh(ctx, "alice", "github", now.Add(2*time.Second), assert.AnError))
-	state, err := repo.GetIntegrationAccessRefresh(ctx, "alice", "github")
+	state, err := store.GetIntegrationAccessRefresh(ctx, repo.ORM(), "alice", "github")
 	require.NoError(t, err)
 	assert.Equal(t, assert.AnError.Error(), state.LastError)
 	require.NotNil(t, state.RefreshedAt)
