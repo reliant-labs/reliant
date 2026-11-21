@@ -12,7 +12,9 @@
  *   rail         what changed: recent releases, then who uses the app (the
  *                Users card: accounts, and active, new and returning users
  *                over 7 days, read from the generated Overview dashboard's
- *                Users panels; hidden until there are users to show). It is
+ *                Users panels; hidden until there are users to show), then
+ *                the known vulnerabilities of what each environment runs (the
+ *                Vulnerabilities card, Security/VulnerabilitiesCard.tsx). It is
  *                kept as a column of its own rather than folded into the left.
  *   below        Services (long-running workloads, one tight row each:
  *                health, ready, release, requests, CPU and memory against
@@ -99,6 +101,7 @@ import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/Fro
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
 import { UsersCard } from "./UsersCard";
+import { VulnerabilitiesCard } from "../Security/VulnerabilitiesCard";
 import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
@@ -382,10 +385,13 @@ export function OverviewHome({
             </>
           )}
         </div>
-        {/* What changed, then who uses the app. */}
+        {/* What changed, then who uses the app, then what it runs that is known to be vulnerable. */}
         <aside className="min-w-0 space-y-10" aria-label="Recent changes" data-testid="overview-rail">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
           {!unrecorded && !extras.led && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
+          {!unrecorded && (
+            <VulnerabilitiesCard project={project} envName={all ? null : env} href={withSearch(consolePath(project, { kind: "vulnerabilities" }), { env })} />
+          )}
         </aside>
       </div>
 
