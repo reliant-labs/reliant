@@ -51,6 +51,7 @@ import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { ActivityPage } from "../Console/ActivityPage";
 import { ServicePage, ServicesPage } from "../Services/ServicesPages";
+import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
@@ -452,6 +453,7 @@ function buildRouter(path: string) {
     activity: ActivityPage,
     services: ServicesPage,
     service: ServicePage,
+    speedInsights: SpeedInsightsPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

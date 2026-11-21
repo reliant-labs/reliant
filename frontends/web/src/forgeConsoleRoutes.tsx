@@ -24,6 +24,7 @@
  *       /secrets, /domains, /activity
  *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
  *                                           (a database's name → /data, client-side: ServiceDetail)
+ *       /speed-insights                     web vitals per page (U6c)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -102,6 +103,8 @@ export interface ForgeConsoleComponents {
   services: RouteComponent
   /** One of them. */
   service: RouteComponent
+  /** Speed insights (U6c): web vitals per page. */
+  speedInsights: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -327,6 +330,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.service,
   })
+  const speedInsightsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'speed-insights',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.speedInsights,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -370,6 +379,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       activityRoute,
       servicesRoute,
       serviceRoute,
+      speedInsightsRoute,
     ]),
   ])
 }

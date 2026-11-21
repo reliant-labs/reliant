@@ -49,6 +49,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
   services: "Everything your app runs, live: status, instances, CPU, memory and requests",
+  "speed-insights": "How fast each page loads and responds for real visitors",
   storage: "Your app's object storage buckets: files, uploads and assets",
 };
 

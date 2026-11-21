@@ -32,6 +32,7 @@
  *                                             (`view=charts`: each workload's charts, U6e)
  *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
  *                                             database's name redirects to Data (U6e)
+ *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -165,7 +166,9 @@ export type ConsolePage =
   /** Everything the app runs, live: services, workers, jobs, the site and the database (Services/ServicesPage.tsx). */
   | { kind: "services" }
   /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
-  | { kind: "service"; name: string };
+  | { kind: "service"; name: string }
+  /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
+  | { kind: "speed-insights" };
 
 
 /**
@@ -237,6 +240,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/services`;
     case "service":
       return `${base}/services/${encodeURIComponent(page.name)}`;
+    case "speed-insights":
+      return `${base}/speed-insights`;
   }
 }
 
@@ -255,6 +260,7 @@ export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(ap
 export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
 /** Services' charts view (U6e): every workload's charts. */
 export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
+export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 
@@ -301,6 +307,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "secrets":
       case "domains":
       case "activity":
+      case "speed-insights":
         return sub ? null : { kind: section };
       default:
         return null;

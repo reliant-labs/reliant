@@ -112,6 +112,7 @@ describe("the hybrid nav's shape", () => {
       "obs-errors",
       "obs-alerts",
       "obs-traces",
+      "speed-insights",
       "obs-sessions",
     ]);
     // Drilling in lands on the Overview, not the Service graph.
@@ -148,6 +149,7 @@ describe("drill-in is derived from the route", () => {
     [newChatPath(), "agents"],
     [runsPath(), "agents"],
     [logs, "observability"],
+    [consolePath("shopfront", { kind: "speed-insights" }), "observability"],
     [orgPath({ kind: "obs-view", view: "traces" }), "observability"],
     [consolePath("shopfront", { kind: "obs-view", view: "dashboards" }), null],
     [inboxPath(), null],
@@ -178,7 +180,7 @@ describe("drill-in is derived from the route", () => {
     renderAt(consolePath("shopfront", { kind: "obs-view", view: "logs" }));
     expect(screen.getByText("Performance & issues")).toBeInTheDocument();
     expect(screen.queryByTestId("nav-performance")).toBeNull();
-    for (const id of ["obs-errors", "obs-alerts", "obs-traces", "obs-sessions"]) expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
+    for (const id of ["obs-errors", "obs-alerts", "obs-traces", "speed-insights", "obs-sessions"]) expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
   });
 
   it("is Observability's on its Overview page, with the Overview row lit", () => {

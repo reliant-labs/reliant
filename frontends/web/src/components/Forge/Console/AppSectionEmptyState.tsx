@@ -51,6 +51,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "services":
     case "service":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
+    case "speed-insights":
+      return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
     default:
       // A page kind this list does not name yet (main may add one before this
       // list learns it): a generic description, so a new kind still compiles.
