@@ -24,6 +24,21 @@
  *                                             factory and pages as Reliant
  *                                             (forgeConsoleRoutes.tsx)
  *   /                                         → /apps
+ *   /o/$org                                   an org URL (control-plane
+ *                                             docs/design/unified-shell-and-projects.md
+ *                                             §3), resolved like Reliant's
+ *                                             (orgRoutes.tsx)
+ *     /                                       → /o/$org/apps
+ *     _authenticated/_forgeShell
+ *       /apps, /sites, /usage                 the shell's pages, in the org
+ *     _authenticated/…/apps/$project/…,
+ *       /observability/…                      the console, in its org form
+ *     $                                       any other org page is
+ *                                             Reliant's: handed to the
+ *                                             Reliant host (OrgHandoff)
+ *
+ * This shell's own links keep today's paths until the one shell (U6); every
+ * org URL resolves here all the same, whatever web.org_routes says.
  *
  * Route IDS match routes.tsx where pages are shared — `/auth`, `/upgrade`,
  * `/auth/callback`, `/_authenticated/_forge/forge/p/$project/…` — because those
@@ -55,6 +70,9 @@ import { ModalLayer } from './components/Modals/ModalLayer'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { createOrgHandoffRoute, createOrgLayoutRoute } from './orgRoutes'
+import { inOrgOfPath } from './lib/paths/org'
+import { memberOnly, routeOrgScopeHooks } from './lib/routeOrg'
 import { forgeConsolePages } from './forgeConsolePages'
 import { getIsDev } from './lib/constants'
 import { lazyRoute } from './lib/lazyRoute'
@@ -123,6 +141,8 @@ export function buildForgeShellTree({
 }) {
   const rootRoute = createRootRoute({
     component: ForgeRootShell,
+    // The org scope moves when a navigation commits (lib/routeOrg.ts).
+    ...routeOrgScopeHooks,
     notFoundComponent: () => <Navigate to={appsPath()} search={{}} />,
     errorComponent: RouteErrorFallback,
   })
@@ -272,6 +292,42 @@ export function buildForgeShellTree({
   // shell IS the feature) — the pages themselves hide what needs a daemon.
   const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, forgeConsolePages)
 
+  // ── The org tree: every org URL resolves on this host too ──
+  const orgLayoutRoute = createOrgLayoutRoute(() => rootRoute, { Guard })
+  // The org's home is its Apps, as `/` is.
+  const orgIndexRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: '/',
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: inOrgOfPath(location.pathname, appsPath()), replace: true })
+    }),
+  })
+  const orgAuthenticatedRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    id: '_authenticated',
+    component: () => (
+      <Guard>
+        <Outlet />
+      </Guard>
+    ),
+  })
+  const orgShellLayoutRoute = createRoute({
+    getParentRoute: () => orgAuthenticatedRoute,
+    id: '_forgeShell',
+    component: () => <ForgeShellLayout />,
+  })
+  const orgAppsRoute = createRoute({ getParentRoute: () => orgShellLayoutRoute, path: '/apps', component: ForgeAppsPage })
+  const orgSitesRoute = createRoute({ getParentRoute: () => orgShellLayoutRoute, path: '/sites', component: ForgeSitesPage })
+  const orgUsageRoute = createRoute({ getParentRoute: () => orgShellLayoutRoute, path: '/usage', component: ForgeUsagePage })
+  const orgConsoleRoutes = createForgeConsoleRoutes(() => orgAuthenticatedRoute, forgeConsolePages, { form: 'org' })
+  // Every other org page (chats, the Inbox, Workflows) is Reliant's.
+  const orgElsewhereRoute = createOrgHandoffRoute(() => orgLayoutRoute, '$', 'reliant')
+  const orgRoutes = orgLayoutRoute.addChildren([
+    orgIndexRoute,
+    orgAuthenticatedRoute.addChildren([orgShellLayoutRoute.addChildren([orgAppsRoute, orgSitesRoute, orgUsageRoute]), orgConsoleRoutes]),
+    orgElsewhereRoute,
+  ])
+
   return rootRoute.addChildren([
     authRoute,
     oauthCallbackRoute,
@@ -285,6 +341,7 @@ export function buildForgeShellTree({
     forgeDemoRoute,
     demoRedirectRoute,
     indexRoute,
+    orgRoutes,
     ...extraRoutes(rootRoute),
     authenticatedLayoutRoute.addChildren([
       shellLayoutRoute.addChildren([appsRoute, sitesRoute, usageRoute, settingsRoute, settingsSectionRoute]),
