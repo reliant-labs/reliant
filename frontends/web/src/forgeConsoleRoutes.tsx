@@ -17,12 +17,13 @@
  *       /releases, /releases/$version
  *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
- *       /storage                            the storage browser (the scope's buckets)
- *       /data                               the data browser (the scope's databases)
+ *       /storage                            the storage browser (the scope's buckets; buckets only, U6e)
+ *       /data                               the database's home and the data browser (U6e)
  *       /users                              who can sign in to the scope (its managed identity)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
  *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
+ *                                           (a database's name → /data, client-side: ServiceDetail)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
