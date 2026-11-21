@@ -204,12 +204,21 @@ rows=() notes=() fail=0
 # Each phase is recorded in $L/expected BEFORE it launches and leaves its .row
 # only when it finishes, so a phase that was started and cut off (queued past a
 # timeout, cancelled, killed) has no row and fails the gate (gate-verify below).
+# A rise in the cgroup's oom_kill count while it ran goes to $L/<name>.oom:
+# gate-report marks a failed phase the kernel's OOM killer ended, which names
+# no failure in its log, as infrastructure (GATE-INFRA: oom, control-plane
+# #2862), so the merge queue re-runs it once rather than blaming the PR.
+cg_dir="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)"
+oom_kills() { awk '$1 == "oom_kill" { print $2 }' "$cg_dir/memory.events" 2>/dev/null || true; }
 phase() {
-  local n=$1 s e rc; shift
+  local n=$1 s e rc o0 o1; shift
   echo "$n" >>"$L/expected"
+  o0=$(oom_kills)
   s=$(date +%s)
   "$@" >"$L/$n.log" 2>&1; rc=$?
   e=$(date +%s)
+  o1=$(oom_kills)
+  case "$o0,$o1" in ,*|*,|*[!0-9,]*) ;; *) [ "$o1" -gt "$o0" ] && echo $((o1 - o0)) >"$L/$n.oom" ;; esac
   echo "$n $rc $((e - s)) $((s - t0))" >"$L/$n.row"
   return $rc
 }
@@ -615,8 +624,13 @@ fi
 # The peak memory of the gate's cgroup (cgroup v2 memory.peak, where the host
 # has it), so the summary shows how close a small host came to its limit: the
 # rollout check of the prewarm beside a generate running alone reads it.
-cg_peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)/memory.peak" 2>/dev/null || true)
-case "$cg_peak" in ''|*[!0-9]*) ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
+cg_peak=$(cat "$cg_dir/memory.peak" 2>/dev/null || true)
+case "$cg_peak" in ''|*[!0-9]*) cg_peak=0 ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
+# The limit that peak is judged against for GATE-INFRA: oom (gate-report): the
+# detected size above, or the gate's own cgroup's memory.max when smaller.
+mem_limit=$(( mem_kib * 1024 ))
+cg_own_max=$(cat "$cg_dir/memory.max" 2>/dev/null || echo max)
+case "$cg_own_max" in ''|max|*[!0-9]*) ;; *) [ "$cg_own_max" -lt "$mem_limit" ] && mem_limit=$cg_own_max ;; esac
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
 # A selected lane that never ran (queued for a slot, cancelled, timed out, tool
@@ -632,7 +646,7 @@ fi
 # ── summary ───────────────────────────────────────────────────────────────
 end=$(date +%s)
 {
-  go run ./tools/test-affected gate-report -dir "$L" -wall "$((end - t0))" || { echo 'GATE-HEALTH: report failed'; fail=1; }
+  go run ./tools/test-affected gate-report -dir "$L" -wall "$((end - t0))" -mem-peak "$cg_peak" -mem-limit "$mem_limit" || { echo 'GATE-HEALTH: report failed'; fail=1; }
   echo "### merge-gate: checks $([ "$fail" = 0 ] && echo PASSED || echo FAILED) (timing reported separately)"
   echo
   echo "| phase | result | seconds | started +s |"

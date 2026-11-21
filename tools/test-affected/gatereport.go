@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -60,6 +61,8 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 	dir := fs.String("dir", "", "gate log directory")
 	budgets := fs.String("budgets", "scripts/merge-gate-budgets.json", "budget contract")
 	wall := fs.Int("wall", 0, "in-slot wall seconds")
+	memPeak := fs.Int64("mem-peak", 0, "the gate cgroup's memory.peak in bytes (0: unknown)")
+	memLimit := fs.Int64("mem-limit", 0, "the gate's memory limit in bytes (0: unknown)")
 	if fs.Parse(args) != nil {
 		return 2
 	}
@@ -93,6 +96,8 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 		fmt.Fprintf(out, "!! GATE-HEALTH: wall %ds exceeds %ds; five-minute target NOT MET. Gate infrastructure/tiering regression, NOT PR blame.\n", *wall, limits.Wall)
 	}
 	rows, _ := filepath.Glob(filepath.Join(*dir, "*.row"))
+	var failed []string
+	unnamed := map[string]bool{}
 	for _, p := range rows {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -112,12 +117,72 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 		if rc != 0 {
 			logPath := filepath.Join(*dir, name+".log")
 			fmt.Fprintf(out, "failed phase: %s (rc %d); complete log: %s\n", name, rc, logPath)
+			failed = append(failed, name)
 			if tail := unnamedFailureTail(logPath); tail != "" {
+				unnamed[name] = true
 				fmt.Fprintf(out, "last lines of %s.log (it names no failure):\n%s", name, tail)
 			}
 		}
 	}
+	for _, m := range oomMarkers(len(failures) > 0, failed, unnamed, *memPeak, *memLimit, readOOMKills(*dir, failed)) {
+		fmt.Fprintln(out, m)
+	}
 	return 0
+}
+
+// oomPeakPercent is how close to the memory limit the gate's peak must come
+// for a failed phase that names no failure to count as killed for memory.
+const oomPeakPercent = 95
+
+// oomMarkers returns one "!! GATE-INFRA: oom <phase> (...)" line per failed
+// phase the runner's memory killed rather than the change: every failed phase
+// names no failure, and either the gate's cgroup peak reached oomPeakPercent
+// of its limit or the kernel's oom_kill count rose while that phase ran.
+// control-plane's pr-fix reads the marker from the job log and spends the one
+// automatic re-run per head on it instead of blaming the PR (control-plane
+// #2862), so it is all or nothing: a named failure anywhere, or a failed
+// phase that does not qualify, prints no marker at all. peak and limit are
+// bytes, 0 when unknown; oomKills is per phase.
+func oomMarkers(named bool, failed []string, unnamed map[string]bool, peak, limit int64, oomKills map[string]int64) []string {
+	if named || len(failed) == 0 {
+		return nil
+	}
+	nearLimit := peak > 0 && limit > 0 && peak*100 >= limit*oomPeakPercent
+	var out []string
+	for _, name := range failed {
+		if !unnamed[name] {
+			return nil
+		}
+		var why []string
+		if nearLimit {
+			why = append(why, fmt.Sprintf("memory peak %.1f GiB of %.1f GiB", float64(peak)/(1<<30), float64(limit)/(1<<30)))
+		}
+		if k := oomKills[name]; k > 0 {
+			why = append(why, fmt.Sprintf("%d oom_kill while it ran", k))
+		}
+		if len(why) == 0 {
+			return nil
+		}
+		out = append(out, fmt.Sprintf("!! GATE-INFRA: oom %s (%s; its log names no failure): the runner ran out of memory, NOT PR blame.", name, strings.Join(why, ", ")))
+	}
+	return out
+}
+
+// readOOMKills reads <dir>/<phase>.oom, the rise in the cgroup's
+// memory.events oom_kill count across that phase (merge-gate.sh's phase()),
+// for each named phase. A missing or unreadable file is no kill.
+func readOOMKills(dir string, phases []string) map[string]int64 {
+	kills := map[string]int64{}
+	for _, name := range phases {
+		b, err := os.ReadFile(filepath.Join(dir, name+".oom"))
+		if err != nil {
+			continue
+		}
+		if n, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil && n > 0 {
+			kills[name] = n
+		}
+	}
+	return kills
 }
 
 // unnamedFailureTail is the last failedLogTail non-empty lines of a failed

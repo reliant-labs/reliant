@@ -143,7 +143,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		return string(b)
 	}
 	merge, release := read("scripts/merge-gate.sh"), read("scripts/release-gate.sh")
-	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -web-full reached -p", "phase demo demo_build", "--optional-deps-guard", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
+	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -web-full reached -p", "phase demo demo_build", "--optional-deps-guard", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md", `-mem-peak "$cg_peak" -mem-limit "$mem_limit"`, `>"$L/$n.oom"`} {
 		if !strings.Contains(merge, s) {
 			t.Errorf("merge missing %s", s)
 		}
@@ -189,5 +189,83 @@ func TestGateReportNamesTypecheckErrorsAndTailsAnUnnamedFailure(t *testing.T) {
 	}
 	if n := strings.Count(s, "    setup line\n"); n != failedLogTail-1 {
 		t.Fatalf("tail must be %d lines, got %d setup lines: %s", failedLogTail, n, s)
+	}
+}
+
+// reliant#2778's merge group failed its test phase at a 14.6 GiB peak of a
+// 15 GiB runner with a log naming no failure: the OOM killer, not the PR. The
+// marker control-plane's pr-fix re-runs on (control-plane #2862) is printed
+// only when every failed phase is such a kill.
+func TestOOMMarkersOnlyForAnUnnamedFailureAtTheMemoryLimit(t *testing.T) {
+	const gib = int64(1) << 30
+	limit := 15 * gib
+	near := limit * 95 / 100
+	cases := []struct {
+		name    string
+		named   bool
+		failed  []string
+		unnamed []string
+		peak    int64
+		limit   int64
+		kills   map[string]int64
+		want    []string
+	}{
+		{name: "peak at the limit", failed: []string{"test"}, unnamed: []string{"test"}, peak: near, limit: limit,
+			want: []string{"!! GATE-INFRA: oom test (memory peak 14.2 GiB of 15.0 GiB; its log names no failure): the runner ran out of memory, NOT PR blame."}},
+		{name: "oom_kill rose", failed: []string{"test"}, unnamed: []string{"test"}, kills: map[string]int64{"test": 2},
+			want: []string{"!! GATE-INFRA: oom test (2 oom_kill while it ran; its log names no failure): the runner ran out of memory, NOT PR blame."}},
+		{name: "both", failed: []string{"test"}, unnamed: []string{"test"}, peak: limit, limit: limit, kills: map[string]int64{"test": 1},
+			want: []string{"!! GATE-INFRA: oom test (memory peak 15.0 GiB of 15.0 GiB, 1 oom_kill while it ran; its log names no failure): the runner ran out of memory, NOT PR blame."}},
+		{name: "peak just under the threshold", failed: []string{"test"}, unnamed: []string{"test"}, peak: near - 1, limit: limit},
+		{name: "unknown limit", failed: []string{"test"}, unnamed: []string{"test"}, peak: limit},
+		{name: "unknown peak", failed: []string{"test"}, unnamed: []string{"test"}, limit: limit},
+		{name: "the log names a failure", failed: []string{"test"}, peak: limit, limit: limit, kills: map[string]int64{"test": 1}},
+		{name: "a named failure elsewhere", named: true, failed: []string{"test"}, unnamed: []string{"test"}, peak: limit, limit: limit},
+		{name: "a second failed phase that is no oom", failed: []string{"lint", "test"}, unnamed: []string{"lint", "test"}, kills: map[string]int64{"test": 1}},
+		{name: "two killed phases", failed: []string{"build", "test"}, unnamed: []string{"build", "test"}, kills: map[string]int64{"build": 1, "test": 1},
+			want: []string{
+				"!! GATE-INFRA: oom build (1 oom_kill while it ran; its log names no failure): the runner ran out of memory, NOT PR blame.",
+				"!! GATE-INFRA: oom test (1 oom_kill while it ran; its log names no failure): the runner ran out of memory, NOT PR blame.",
+			}},
+		{name: "nothing failed", peak: limit, limit: limit},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			unnamed := map[string]bool{}
+			for _, n := range c.unnamed {
+				unnamed[n] = true
+			}
+			got := oomMarkers(c.named, c.failed, unnamed, c.peak, c.limit, c.kills)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("got %q\nwant %q", got, c.want)
+			}
+		})
+	}
+}
+
+// End to end through gate-report: the .oom file phase() writes and the memory
+// flags merge-gate.sh passes reach the marker; without them nothing changes.
+func TestGateReportMarksAnOOMKilledPhase(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.log"), []byte(strings.Repeat("ok  \texample/p\t1.2s\n", 5)+"signal: killed\n"), 0600)
+	os.WriteFile(filepath.Join(dir, "test.row"), []byte("test 1 805 30\n"), 0600)
+	os.WriteFile(filepath.Join(dir, "build.row"), []byte("build 0 40 0\n"), 0600)
+	budgets := filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")
+	report := func(args ...string) string {
+		var out bytes.Buffer
+		if rc := runGateReport(append([]string{"-dir", dir, "-wall", "10", "-budgets", budgets}, args...), &out, &out); rc != 0 {
+			t.Fatalf("rc %d: %s", rc, &out)
+		}
+		return out.String()
+	}
+	if s := report(); strings.Contains(s, "GATE-INFRA") || !strings.Contains(s, "last lines of test.log") {
+		t.Fatalf("no memory evidence must print no marker: %s", s)
+	}
+	if s := report("-mem-peak", "15676289024", "-mem-limit", "16106127360"); !strings.Contains(s, "!! GATE-INFRA: oom test (memory peak 14.6 GiB of 15.0 GiB;") {
+		t.Fatalf("a peak at 97%% of the limit must mark the phase: %s", s)
+	}
+	os.WriteFile(filepath.Join(dir, "test.oom"), []byte("1\n"), 0600)
+	if s := report(); !strings.Contains(s, "!! GATE-INFRA: oom test (1 oom_kill while it ran;") {
+		t.Fatalf("an oom_kill during the phase must mark it: %s", s)
 	}
 }
