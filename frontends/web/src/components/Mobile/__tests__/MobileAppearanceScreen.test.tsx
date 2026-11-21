@@ -19,7 +19,6 @@ vi.mock("../../../services/settingsSync", () => ({
     CHAT_FONT: "appearance.chat_font",
     EDITOR_FONT: "appearance.editor_font",
     FONT_SIZE: "appearance.font_size",
-    CHAT_TIMELINE_VARIANT: "appearance.chat_timeline_variant",
     WORKFLOW_VIEWER_DEFAULT_MODE: "appearance.workflow_viewer_default_mode",
     SPAWN_DISPLAY_MODE: "appearance.spawn_display_mode",
     SHOW_HIDDEN_FILES: "appearance.show_hidden_files",

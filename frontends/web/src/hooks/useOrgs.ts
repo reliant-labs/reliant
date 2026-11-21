@@ -12,6 +12,7 @@ import {
   type MyOrg,
   type MyOrgs,
 } from "@/services/controlPlane/orgs";
+import { switchTabOrg } from "@/lib/orgSwitch";
 import { chooseActiveOrg, isMachineCredentialUser, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
 
@@ -47,7 +48,10 @@ export interface ActiveOrg {
   error: Error | null;
   /** Re-read the membership list (a Retry after it failed). */
   refetch: () => void;
-  /** Act in `orgId` in this app (not the server-side default). */
+  /**
+   * Act in `orgId` in this app (not the server-side default). On an org page
+   * that is a navigation to the same page in it (lib/orgSwitch.ts).
+   */
   select: (orgId: string) => void;
 }
 
@@ -59,6 +63,14 @@ export function useActiveOrg(client?: QueryClient): ActiveOrg {
   const activeOrgId = data ? resolveActiveOrg(data, chosen) : null;
   const { refetch } = q;
   const refetchOrgs = useCallback(() => void refetch(), [refetch]);
+  const select = useCallback(
+    (orgId: string) => {
+      const org = data?.orgs.find((o) => o.id === orgId);
+      if (org) switchTabOrg(org);
+      else chooseActiveOrg(orgId);
+    },
+    [data],
+  );
   return {
     orgs: data?.orgs ?? [],
     active: data?.orgs.find((o) => o.id === activeOrgId) ?? null,
@@ -68,7 +80,7 @@ export function useActiveOrg(client?: QueryClient): ActiveOrg {
     isLoading: q.isLoading,
     error: q.error,
     refetch: refetchOrgs,
-    select: chooseActiveOrg,
+    select,
   };
 }
 

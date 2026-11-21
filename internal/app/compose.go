@@ -370,7 +370,6 @@ func (g *Graph) newIntegrationSettings() (*IntegrationSettings, error) {
 
 func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 	return NewProcessSettings(ProcessSettingsDeps{
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
 		LLM:          g.ServerProcessConfig.GetLlm(),
 		Preview:      g.ServerProcessConfig.GetPreview(),
 		Integrations: g.IntegrationSettings(),
@@ -614,6 +613,13 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 	return NewWorkflowEventRelay(WorkflowEventRelayDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+	})
+}
+
+func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
+	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
 	})
 }
 

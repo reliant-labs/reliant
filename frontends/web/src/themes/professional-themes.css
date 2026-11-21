@@ -57,7 +57,9 @@
  * light ramp, tinted to hue 240, with the same blue.
  */
 :root[data-color-scheme="reliant"] {
-  --background: 240 14% 98%;
+  /* ONE SURFACE (restyle v1): the page and a panel are the same white, told
+     apart by a visible line and whitespace, not by a second fill. */
+  --background: 240 0% 100%;
   --foreground: 240 10% 12%;
   --card: 240 0% 100%;
   --card-foreground: 240 10% 12%;
@@ -75,9 +77,10 @@
   --accent: 240 14% 95.5%;
   --accent-foreground: 240 10% 12%;
   --ring: 211 92% 46%;
-  --border: 240 14% 89.5%;
-  --border-subtle: 240 12% 93%;
-  --bubble: 240 12% 94%;
+  /* Fewer, firmer lines: ~1.45:1 on the page, ~1.15:1 for the quiet rule. */
+  --border: 240 10% 84.5%;
+  --border-subtle: 240 10% 91.5%;
+  --bubble: 240 12% 95%;
   --config-input-bg: 240 14% 97%;
   --config-input-border: 240 14% 83.5%;
   --tab-active: 211 92% 46%;
@@ -107,7 +110,9 @@
 .dark[data-color-scheme="reliant"] {
   --background: 240 20% 4.9%;
   --foreground: 240 5% 96%;
-  --card: 240 17% 8%;
+  /* ONE SURFACE (restyle v1): a panel is the page's own fill, edged by a
+     visible line. Popovers and menus stay raised. */
+  --card: 240 20% 4.9%;
   --card-foreground: 240 5% 96%;
   --popover: 240 13% 10.8%;
   --popover-foreground: 240 5% 96%;
@@ -123,8 +128,9 @@
   --accent: 240 11% 14%;
   --accent-foreground: 240 5% 96%;
   --ring: 208.5 100% 52.5%;
-  --border: 234 12% 16.5%;
-  --border-subtle: 240 12% 12.5%;
+  /* Fewer, firmer lines: ~1.5:1 on the page, ~1.2:1 for the quiet rule. */
+  --border: 236 9% 20%;
+  --border-subtle: 240 10% 12.5%;
   --bubble: 240 12% 13%;
   --config-input-bg: 240 18% 6.5%;
   --config-input-border: 234 9% 21%;

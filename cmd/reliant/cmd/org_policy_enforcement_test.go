@@ -73,7 +73,7 @@ func every(want orgpolicy.Enforcement) map[orgpolicy.Point]orgpolicy.Enforcement
 // repo's dev and demo envs, each is audit (count, never refuse or change);
 // flipped in KCL, it is enforce or off.
 func TestOrgPolicyEnforcementSwitchReachesTheProcess(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/org_policy_enforcement.k"

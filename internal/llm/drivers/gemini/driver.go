@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -33,6 +34,9 @@ import (
 type GeminiClient struct {
 	options llm.DriverOptions
 	client  *genai.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
@@ -441,79 +445,67 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 		return nil, fmt.Errorf("gemini chat creation returned nil")
 	}
 
-	attempts := 0
-	for {
-		attempts++
-		var toolCalls []message.ToolCall
-
-		var lastMsgParts []genai.Part
-		for _, part := range lastMsg.Parts {
-			lastMsgParts = append(lastMsgParts, *part)
-		}
-		resp, err := chat.SendMessage(ctx, lastMsgParts...)
-		// If there is an error we are going to see if we can retry the call
-		if err != nil {
-			retry, after, retryErr := g.shouldRetry(attempts, err)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				logging.WarnContext(ctx, fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
-			}
-			return nil, retryErr
-		}
-
-		content := ""
-
-		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-			for _, part := range resp.Candidates[0].Content.Parts {
-				switch {
-				case part.Text != "":
-					content = string(part.Text)
-				case part.FunctionCall != nil:
-					id := "call_" + uuid.New().String()
-					args, _ := json.Marshal(part.FunctionCall.Args)
-					toolCall := message.ToolCall{
-						ID:       id,
-						Name:     part.FunctionCall.Name,
-						Input:    string(args),
-						Type:     "function",
-						Finished: true,
-					}
-					// Capture thought signature if present (Gemini 3.x)
-					// Encode as base64 to preserve binary data through string storage
-					if len(part.ThoughtSignature) > 0 {
-						toolCall.ThoughtSignature = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
-					}
-					toolCalls = append(toolCalls, toolCall)
-				}
-			}
-		}
-
-		logging.DebugContext(ctx, "[GEMINI] Response received",
-			"contentLength", len(content),
-			"toolCallCount", len(toolCalls))
-		finishReason := message.FinishReasonEndTurn
-		if len(resp.Candidates) > 0 {
-			finishReason = g.finishReason(resp.Candidates[0].FinishReason)
-		}
-		if len(toolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
-
-		return &llm.DriverResponse{
-			Content:      content,
-			ToolCalls:    toolCalls,
-			Usage:        g.usage(resp),
-			FinishReason: finishReason,
-		}, nil
+	var lastMsgParts []genai.Part
+	for _, part := range lastMsg.Parts {
+		lastMsgParts = append(lastMsgParts, *part)
 	}
+	var resp *genai.GenerateContentResponse
+	if err := g.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var sendErr error
+		resp, sendErr = chat.SendMessage(ctx, lastMsgParts...)
+		if sendErr != nil {
+			return geminiFailure(sendErr), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
+		return nil, err
+	}
+	var toolCalls []message.ToolCall
+
+	content := ""
+
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			switch {
+			case part.Text != "":
+				content = string(part.Text)
+			case part.FunctionCall != nil:
+				id := "call_" + uuid.New().String()
+				args, _ := json.Marshal(part.FunctionCall.Args)
+				toolCall := message.ToolCall{
+					ID:       id,
+					Name:     part.FunctionCall.Name,
+					Input:    string(args),
+					Type:     "function",
+					Finished: true,
+				}
+				// Capture thought signature if present (Gemini 3.x)
+				// Encode as base64 to preserve binary data through string storage
+				if len(part.ThoughtSignature) > 0 {
+					toolCall.ThoughtSignature = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
+				}
+				toolCalls = append(toolCalls, toolCall)
+			}
+		}
+	}
+
+	logging.DebugContext(ctx, "[GEMINI] Response received",
+		"contentLength", len(content),
+		"toolCallCount", len(toolCalls))
+	finishReason := message.FinishReasonEndTurn
+	if len(resp.Candidates) > 0 {
+		finishReason = g.finishReason(resp.Candidates[0].FinishReason)
+	}
+	if len(toolCalls) > 0 {
+		finishReason = message.FinishReasonToolUse
+	}
+
+	return &llm.DriverResponse{
+		Content:      content,
+		ToolCalls:    toolCalls,
+		Usage:        g.usage(resp),
+		FinishReason: finishReason,
+	}, nil
 }
 
 func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
@@ -659,68 +651,45 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			return
 		}
 
-		// === ROBUSTNESS: Retry loop with proper error handling ===
-		attempts := 0
-		for {
-			attempts++
-			if attempts > 1 {
-				logging.DebugContext(ctx, "[GEMINI] Retry attempt", "attempt", attempts)
-			}
-
+		// The request retries through the shared ladder until the stream
+		// opens. Once a chunk has arrived, a failure is not retried here: its
+		// events already reached the consumer, and a second attempt would
+		// replay them. CallLLM's own retry owns a stream that broke mid-way.
+		var lastMsgParts []genai.Part
+		for _, part := range lastMsg.Parts {
+			lastMsgParts = append(lastMsgParts, *part)
+		}
+		emitCancelled := false
+		streamErr := g.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 			// Reset per-attempt state
 			currentContent = ""
 			toolCalls = []message.ToolCall{}
 			finalResp = nil
 			contentStarted = false
 
-			// Send message stream
-			var lastMsgParts []genai.Part
-			for _, part := range lastMsg.Parts {
-				lastMsgParts = append(lastMsgParts, *part)
+			err := g.processStreamResponses(ctx, chat, lastMsgParts, eventChan, &currentContent, &toolCalls, &finalResp, &contentStarted)
+			if err == nil || errors.Is(err, io.EOF) {
+				return ratelimit.Failure{}, true
 			}
-
-			streamErr := g.processStreamResponses(ctx, chat, lastMsgParts, eventChan, &currentContent, &toolCalls, &finalResp, &contentStarted)
-
-			// === ROBUSTNESS: Error recovery ===
-			if streamErr != nil {
-				if errors.Is(streamErr, io.EOF) {
-					// Normal EOF - stream completed
-					logging.DebugContext(ctx, "[GEMINI] Stream completed (EOF)")
-					break
-				}
-
-				// Check if we should retry
-				retry, after, retryErr := g.shouldRetry(attempts, streamErr)
-				if retryErr != nil {
-					logging.ErrorContext(ctx, "[GEMINI] Non-retriable error", "error", retryErr)
-					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-					return
-				}
-
-				if retry {
-					logging.WarnContext(ctx, "[GEMINI] Retriable error, backing off",
-						"attempt", attempts,
-						"maxRetries", models.MaxRetries,
-						"backoffMs", after)
-
-					select {
-					case <-ctx.Done():
-						logging.DebugContext(ctx, "[GEMINI] Context cancelled during retry backoff")
-						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-						return
-					case <-time.After(time.Duration(after) * time.Millisecond):
-						continue // Retry
-					}
-				}
-
-				// Not retriable, emit error and exit
+			if finalResp != nil {
+				return ratelimit.Failure{Err: err, Fatal: true}, false
+			}
+			return geminiFailure(err), false
+		}, func(wait llm.RetryWait) error {
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if streamErr != nil {
+			if !emitCancelled {
 				logging.ErrorContext(ctx, "[GEMINI] Stream error", "error", streamErr)
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
-				return
 			}
-
-			// Stream completed successfully
-			break
+			return
 		}
 
 		// Only emit ContentStop if we started content
@@ -875,38 +844,6 @@ func (g *GeminiClient) processStreamResponses(
 	return nil
 }
 
-func (g *GeminiClient) shouldRetry(attempts int, err error) (bool, int64, error) {
-	// Check if error is a rate limit error
-	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
-	}
-
-	// Gemini doesn't have a standard error type we can check against
-	// So we'll check the error message for rate limit indicators
-	if errors.Is(err, io.EOF) {
-		return false, 0, err
-	}
-
-	errMsg := err.Error()
-	// Check for common retryable error messages.
-	// Gemini can intermittently return INTERNAL/500 mid-stream.
-	// Also retry on 503/UNAVAILABLE (overloaded) errors - these are temporary service issues
-	isRateLimit := contains(errMsg, "rate limit", "quota exceeded", "too many requests")
-	isInternal := contains(errMsg, "Internal error encountered", "Status: INTERNAL")
-	isUnavailable := contains(errMsg, "Status: UNAVAILABLE", "503", "overloaded", "try again later")
-
-	if !isRateLimit && !isInternal && !isUnavailable {
-		return false, 0, err
-	}
-
-	// Calculate backoff with jitter
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs := backoffMs + jitterMs
-
-	return true, int64(retryMs), nil
-}
-
 // usage returns token usage from Gemini's response.
 // usage returns token usage from Gemini's response.
 // Gemini's TotalTokenCount is the total of prompt + response + tool tokens.
@@ -995,15 +932,6 @@ func convertToSchema(param *jsonschema.Schema) *genai.Schema {
 	}
 
 	return schema
-}
-
-func contains(s string, substrs ...string) bool {
-	for _, substr := range substrs {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(substr)) {
-			return true
-		}
-	}
-	return false
 }
 
 // buildThinkingConfig creates appropriate thinking configuration based on model version

@@ -1,12 +1,12 @@
 ---
 title: "Forge quick start: build and deploy a Go + React app"
 sidebarTitle: "Forge quick start"
-description: "From a prompt to a deployed URL: build an app with Reliant and Forge, run it locally, and ship it to Reliant hosting. No account? Deploy with forge env deploy prod --claimable"
+description: "Build a Go and React app with Reliant and Forge, run it locally and deploy it to a URL on Reliant hosting. No account needed with forge env deploy --claimable."
 ---
 
 This page takes you from an empty directory to an app running on a URL. There are two ways through it, and they end in the same place: ask a Reliant agent to do it, or run the commands yourself. The agent runs exactly the commands in the second half of this page, so reading it first also tells you what the agent is doing on your behalf.
 
-If you want to know what Forge is before you start, read the [overview](/forge/overview).
+If you want to know what Forge is before you start, read the [overview](/forge/overview). [Why Reliant](/getting-started/why-reliant) explains how Forge, hosting and Reliant's agents fit together, and what that lets an agent do.
 
 ## Option 1: start from a prompt
 
@@ -33,7 +33,7 @@ If you would rather do the steps yourself, or want to see what just happened, co
 
 Inside Reliant, Forge is built in: run it as `reliant forge …`. Agents' shells have it too, already signed in to your account. This page writes `forge` for short. Outside Reliant, install the standalone binary with `go install github.com/reliant-labs/forge/cmd/forge@latest`; deploying to Reliant hosting then needs the [sign-in](/forge/sign-in) that `reliant forge` handles for you.
 
-You need Go and Docker on the machine that runs the project, and Node.js if it has a frontend. If you are unsure what is missing, `forge doctor` checks the project and the tools it depends on and says how to fix what it finds.
+You need Go and Docker on the machine that runs the project, and Node.js if it has a frontend. If you are unsure what is missing, `forge project doctor` checks the project and the tools it depends on and says how to fix what it finds.
 
 ### Create a project
 
@@ -95,7 +95,7 @@ forge generate && forge lint && go build ./... && task test
 
 ### Deploy it
 
-A new project's `staging` and `prod` environments already point at [Reliant hosting](/forge/hosting), so there is nothing to configure first:
+A new project's `staging` and `prod` environments already point at [Reliant hosting](/hosting/overview), so there is nothing to configure first:
 
 ```bash
 forge env deploy staging
@@ -103,7 +103,7 @@ forge env deploy staging
 
 Forge builds your images and frontend, cuts an immutable release, prints a plan of what will change, and after you confirm deploys it and waits until it is healthy. Your service gets a managed Postgres, and every workload and site gets a generated hostname. Run from a script or an agent, with no terminal to answer the prompt, the command refuses rather than guess; add `--yes` to say "I read the plan".
 
-If your organization has no compute plan yet, the deploy is queued rather than refused. The command prints what it is waiting on and exits with code 7, and the deploy goes live by itself once billing is set up. Add `--wait` to block until then. [Hosting on Reliant](/forge/hosting) explains queued deploys, and the [pricing page](https://reliantlabs.io/pricing) lists current plans.
+If your organization has no compute plan yet, the deploy is queued rather than refused. The command prints what it is waiting on and exits with code 7, and the deploy goes live by itself once billing is set up. Add `--wait` to block until then. [Hosting on Reliant](/hosting/overview) explains queued deploys, and the [pricing page](https://reliantlabs.io/pricing) lists current plans.
 
 Then prove the release is good rather than assuming it:
 
@@ -111,7 +111,7 @@ Then prove the release is good rather than assuming it:
 forge obs check staging --wait
 ```
 
-It compares the minutes after the release with the minutes before it, and exits `0` when the release passed and `1` when it made things worse. An exit code of `2` means it could not tell, which is "not proven good", not a pass. [Observability](/forge/observability) covers what it reads.
+It compares the minutes after the release with the minutes before it, and exits `0` when the release passed and `1` when it made things worse. An exit code of `2` means it could not tell, which is "not proven good", not a pass. [Observability](/hosting/observability) covers what it reads.
 
 When staging looks right, promote the same release to prod without rebuilding anything:
 
@@ -119,7 +119,7 @@ When staging looks right, promote the same release to prod without rebuilding an
 forge env deploy prod --from staging
 ```
 
-Open **Apps** in the Reliant sidebar to find the URL of each environment, along with its releases, logs, traces, dashboards and alerts. To serve the app on a domain you own, see [Custom domains](/forge/custom-domains).
+Open **Apps** in the Reliant sidebar to find the URL of each environment, along with its releases, logs, traces, dashboards and alerts. To serve the app on a domain you own, see [Custom domains](/hosting/custom-domains).
 
 <Note>
 No account yet? `forge env deploy <env> --claimable` deploys without one, for an environment of a single static site or a single service with one database. Forge prints a live URL and a claim link to give to a person. Unless someone opens the link, the deploy goes offline after 72 hours; opening it signs them up for free and makes the deploy theirs. It is refused when you are already signed in. The steps, limits and exit codes are in [Deploy without an account](/forge/deploy-without-an-account).

@@ -6,8 +6,9 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 // screenshots: the visual half of the token bridge's contract (the textual
 // half is colorSchemeTokenContract.test.ts and forgeTokenBridge.test.tsx).
 //
-// It drives /forge-token-sandbox (components/forge-ui/ForgeTokenSandbox.tsx),
-// a dev-only harness: no backend, no session. Against CI's `vite preview` of
+// It drives /forge-token-sandbox
+// (components/DesignSandbox/forgeTokens/ForgeTokenSandbox.tsx), a dev-only
+// harness: no backend, no session. Against CI's `vite preview` of
 // a production build the route redirects to / and this suite skips.
 //
 // Eight captures per scheme × mode — 96 baselines in
@@ -20,15 +21,16 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 //             .forge-ui on a card and on the page background
 //   overlays  sidebar_layout, modal and confirmation_dialog, each pinned in
 //             a box
-//   r5        the R5 overlays (components/forge-ui/R5Sandbox.tsx), each
+//   r5        the R5 overlays
+//             (components/DesignSandbox/forgeTokens/R5Sandbox.tsx), each
 //             opened: r5-tooltip-hover (a disabled button's reason, hovered),
 //             r5-tooltip-focus (a toolbar button focused), r5-contextmenu (a
 //             file row right-clicked), r5-helppopover (a field's help open),
 //             r5-picker-single / r5-picker-multi (each picker opened)
 //   s2        the R5 S2 primitives as their call sites render them
-//             (components/forge-ui/S2Sandbox.tsx): s2-sites (switches, text
-//             fields), s2-menus (a row menu and a multi-select filter, each
-//             opened), s2-modal (a form dialog, as the viewport)
+//             (components/DesignSandbox/forgeTokens/S2Sandbox.tsx): s2-sites
+//             (switches, text fields), s2-menus (a row menu and a multi-select
+//             filter, each opened), s2-modal (a form dialog, as the viewport)
 //
 // An unbridged token renders as a transparent fill or inherited text, which
 // a baseline catches and a jsdom test cannot. When a change is MEANT to move

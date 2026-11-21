@@ -24,8 +24,9 @@ const testToken = "rlat_test"
 type fake struct {
 	mu sync.Mutex
 
-	authHeaders []string // Authorization of every request, in order
-	calls       []string // procedure of every request, in order
+	authHeaders []string      // Authorization of every request, in order
+	calls       []string      // procedure of every request, in order
+	headers     []http.Header // headers of every request, in order
 
 	startRun     func(*reliantv1.StartRunRequest) (*reliantv1.StartRunResponse, error)
 	getRun       func(*reliantv1.GetRunRequest) (*reliantv1.GetRunResponse, error)
@@ -205,6 +206,7 @@ func (f *fake) start(t *testing.T, opts ...Option) (*Client, *httptest.Server) {
 		f.mu.Lock()
 		f.authHeaders = append(f.authHeaders, r.Header.Get("Authorization"))
 		f.calls = append(f.calls, r.URL.Path)
+		f.headers = append(f.headers, r.Header.Clone())
 		f.mu.Unlock()
 		mux.ServeHTTP(w, r)
 	}))

@@ -119,7 +119,7 @@ export function FreeDiskSpaceDialog({ isOpen, onClose, daemonId, machineLabel, v
             )}
             {clearable.length > 0 ? (
               <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <legend className="mb-1 text-xs font-semibold text-muted-foreground">
                   Safe to clear
                 </legend>
                 {clearable.map((c) => (
@@ -136,7 +136,7 @@ export function FreeDiskSpaceDialog({ isOpen, onClose, daemonId, machineLabel, v
             )}
             {leftAlone.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h4 className="text-xs font-semibold text-muted-foreground">
                   Not cleared from here
                 </h4>
                 <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto" aria-label="Not cleared from here">

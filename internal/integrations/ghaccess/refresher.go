@@ -75,7 +75,7 @@ func New(store Store, tokens TokenSource, opts Options) *Refresher {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second, Transport: netguard.New().Transport()}
+		client = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second, Base: netguard.New().Transport()})
 	}
 	logger := opts.Logger
 	if logger == nil {

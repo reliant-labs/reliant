@@ -1,9 +1,10 @@
 ---
-title: "Environments"
+title: "Multi-environment deploys: dev, staging and prod from day one"
+sidebarTitle: "Environments"
 description: "How a forge project declares where it runs: workloads declared once, bound to a runtime per environment, and the commands that show you what an environment is"
 ---
 
-A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/forge/hosting). The environments are written in KCL, a typed configuration language, and they split one question in two: *what runs* is declared once, and *where it runs* is chosen per environment.
+A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/hosting/overview). The environments are written in KCL, a typed configuration language, and they split one question in two: *what runs* is declared once, and *where it runs* is chosen per environment.
 
 That split is what keeps `dev` and `prod` from drifting, and it is what makes the rest of this section possible. An agent that wants to know what `prod` does reads one short file, and a person who wants to move one service to their own cluster edits one line.
 
@@ -43,7 +44,7 @@ _workloads = [
 | `forge.OnHost` | A process on your machine | `forge env up` runs it with `go run`, `air` (hot reload), a built binary, or `delve`. No image is built. |
 | `forge.OnCompose` | A service in `docker-compose.yml` | `docker compose up` for that service. |
 | `forge.OnCluster` | A Kubernetes cluster you operate | Renders Deployments, Services and the other objects shown in [What gets deployed](/forge/deploy/what-gets-deployed), and applies them to the kubectl context you name. |
-| `forge.OnHosted` | [Reliant hosting](/forge/hosting) | Publishes the workload; the platform renders and runs it under a restricted profile. |
+| `forge.OnHosted` | [Reliant hosting](/hosting/overview) | Publishes the workload; the platform renders and runs it under a restricted profile. |
 | `forge.BuildOnly` | Nowhere | Builds and ships the artifact (a CLI, an image others pull) and never runs it. |
 
 Frontends bind the same way, with runtimes for a dev server, hosted static hosting, your own bucket (`forge.OnBucket`) or Firebase (`forge.OnFirebase`).
@@ -73,10 +74,10 @@ The dangerous per-environment values (a cluster context, a namespace, a bucket) 
 An environment that keeps a control plane (hosted workloads, or a hosted database) but binds some workloads to your own cluster registers that cluster once, so the control plane can converge deploys into it:
 
 ```bash
-forge cluster connect acme-prod --context gke_acme_us-central1_prod --env prod
+forge cloud cluster connect acme-prod --context gke_acme_us-central1_prod --env prod
 ```
 
-Forge uses your own kubectl context to create a dedicated ServiceAccount in the cluster and the least-privilege RBAC the platform's apply needs, then uploads that account's token write-only. The control plane authenticates as that ServiceAccount and nothing else, on any Kubernetes distribution, with no cloud identity of ours trusted in your project. Re-running the command with the same name updates the cluster, so rotating the token or fixing an endpoint is the same command again, and `forge cluster disconnect` revokes it. There is no `--auth` choice and no IAM grant for you to run. Name the cluster in the environment's `ClusterTarget` with `connected_cluster = "acme-prod"`; the render refuses an unconnected one and names the command.
+Forge uses your own kubectl context to create a dedicated ServiceAccount in the cluster and the least-privilege RBAC the platform's apply needs, then uploads that account's token write-only. The control plane authenticates as that ServiceAccount and nothing else, on any Kubernetes distribution, with no cloud identity of ours trusted in your project. Re-running the command with the same name updates the cluster, so rotating the token or fixing an endpoint is the same command again, and `forge cloud cluster disconnect` revokes it. There is no `--auth` choice and no IAM grant for you to run. Name the cluster in the environment's `ClusterTarget` with `connected_cluster = "acme-prod"`; the render refuses an unconnected one and names the command.
 
 The control plane dials the address you registered, over HTTPS. forge takes it from your kubectl context; pass `--address <https-url>` (and `--ca-file <pem>` if the CA is not in your kubeconfig) to register a different one. That address must be public (port 443 or 6443). Private, VPC and link-local addresses are refused for ordinary organizations, so a cluster reachable only on a private network cannot be a connect target. An environment with no control plane at all does not connect anything: see [Self-hosted delivery](/forge/deploy/self-hosted-delivery).
 
@@ -145,4 +146,4 @@ Never stop a stack by pattern-killing processes. `forge env down <env>` stops on
 
 ## Related topics
 
-[What gets deployed](/forge/deploy/what-gets-deployed) shows the objects these bindings produce. [Releases and promotion](/forge/deploy/releases-and-promotion) covers what `forge env deploy` does with them. [Escape hatches](/forge/deploy/escape-hatches) covers everything the defaults do not. Agents can run `forge skill load deploy` for the full reference.
+[What gets deployed](/forge/deploy/what-gets-deployed) shows the objects these bindings produce. [Releases and promotion](/forge/deploy/releases-and-promotion) covers what `forge env deploy` does with them. [Escape hatches](/forge/deploy/escape-hatches) covers everything the defaults do not. Agents can run `forge agent skill load deploy` for the full reference.

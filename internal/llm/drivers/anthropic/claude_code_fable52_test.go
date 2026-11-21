@@ -38,6 +38,13 @@ func fable52Opts() llm.DriverOptions {
 	}
 }
 
+// fable52OptsAt is fable52Opts against the endpoint at baseURL.
+func fable52OptsAt(baseURL string) llm.DriverOptions {
+	opts := fable52Opts()
+	opts.BaseURL = baseURL
+	return opts
+}
+
 // cliVersionAtLeast compares dotted numeric versions ("2.1.321" >= "2.1.290").
 // A malformed version is never at least the floor.
 func cliVersionAtLeast(got, floor string) bool {
@@ -247,7 +254,6 @@ var billingCCVersion = regexp.MustCompile(`cc_version=([0-9.]+)\.([0-9a-f]{3});`
 // shape against a local contract, not against the live API.
 func TestClaudeCodeFable52_WireClearsVersionFloor(t *testing.T) {
 	srv := newVersionFloorServer(t)
-	t.Setenv("ANTHROPIC_BASE_URL", srv.url())
 
 	const firstUserText = "Fix the failing build in internal/llm please"
 	turn := []message.Message{
@@ -260,13 +266,13 @@ func TestClaudeCodeFable52_WireClearsVersionFloor(t *testing.T) {
 		claudeCodeProfiles[apiModelFable52] = profileOpus55
 		t.Cleanup(func() { claudeCodeProfiles[apiModelFable52] = profileFable52 })
 
-		_, err := NewClaudeCodeClient(fable52Opts()).SendMessages(context.Background(), nil, turn, nil)
+		_, err := NewClaudeCodeClient(fable52OptsAt(srv.url())).SendMessages(context.Background(), nil, turn, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "Claude Code 2.1.280 requires >=2.1.290")
 	})
 
 	t.Run("the fable-5.2 profile is accepted, coherently", func(t *testing.T) {
-		resp, err := NewClaudeCodeClient(fable52Opts()).SendMessages(context.Background(), nil, turn, nil)
+		resp, err := NewClaudeCodeClient(fable52OptsAt(srv.url())).SendMessages(context.Background(), nil, turn, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ok", resp.Content)
 

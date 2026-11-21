@@ -646,7 +646,7 @@ declares, say, `KUBECONFIG_DATA`, with the control plane materializing it
 into the pod, as the workspace reconciler already does with `GIT_TOKEN`.
 
 - **Pro:** declarative and reviewable (the forge philosophy), reuses an
-  existing store and the `forge secret set` UX, and keeps values out of git.
+  existing store and the `forge env secret set` UX, and keeps values out of git.
 - **Con:**
   1. It distributes the **long-lived root secret** to every process on the
      daemon. Even the best variant, an `env up`-style pull into memory,

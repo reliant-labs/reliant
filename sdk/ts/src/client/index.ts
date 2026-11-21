@@ -8,6 +8,8 @@ export { createReliantClient, type ReliantClient, type ReliantClientOptions } fr
 export { staticTokenProvider, type AuthTokenProvider } from "./auth.js";
 export { resolveTransport, sdkInterceptors, serviceClient, type ReliantTransportOptions } from "./transport.js";
 export { noopLogger, type Logger } from "./logger.js";
+export { SDK_VERSION, RELIANT_CLIENT_HEADER, SDK_CLIENT_ID } from "./version.js";
+export { UpgradeRequiredError, isUpgradeRequired } from "./upgrade.js";
 
 export {
   ReconnectingStream,

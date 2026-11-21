@@ -3,8 +3,8 @@
 # the project kind are derived from what exists in the repo (db/migrations,
 # frontends/, deploy/kcl, internal/operators, ...), not configured here.
 # Add a section (ci, lint, contracts, ...) only to override a default
-# (`forge skill load architecture` documents the schema;
-# `forge skill list` indexes the per-topic skills, e.g. `auth`).
+# (`forge agent skill load architecture` documents the schema;
+# `forge agent skill list` indexes the per-topic skills, e.g. `auth`).
 #
 # reliant adopts forge in place, one concern per PR
 # (research/forge-migration/PLAN.md). Every proto service is a forge handler
@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.7.1-0.20261118104051-4e92ea2af8ca
+forge_version: v1.8.1-0.20261119155832-982c391f6293
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
