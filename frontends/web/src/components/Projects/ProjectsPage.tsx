@@ -25,6 +25,9 @@ import { AppsBody } from "../Apps/AppsPage";
 import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
 import { useStartBuildingApp } from "../Apps/startBuilding";
 import { SitesList } from "../ForgeShell/ForgeSitesPage";
+import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
+import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { AreaShell } from "../Layout/AreaShell";
 import { useShellSeveral } from "../Layout/sidebar/shellProject";
 
@@ -57,6 +60,9 @@ export function ProjectsBody() {
       search: (prev: Record<string, unknown>) => ({ ...prev, show: next === "all" ? undefined : next }),
       replace: true,
     } as never);
+  // A person who cannot run a chat yet lands here (the daemonless home, U6):
+  // the way to set chats up leads the page.
+  const setup = useChatSetup();
   // The apps list's own action, in the page's header now that the page heads the list.
   const startBuilding = useStartBuildingApp();
 
@@ -96,6 +102,9 @@ export function ProjectsBody() {
         }
         className="mb-0"
       />
+      {chatSetupNeeded(setup) && (
+        <SetUpChatsCard setup={setup} variant="page" onNavigate={(href) => void navigate({ href })} />
+      )}
       <Tabs tabs={FILTERS} activeTab={filter} onChange={(id) => setFilter(id as ProjectsFilter)} ariaLabel="Show" />
       {filter === "sites" ? <SitesList header={false} /> : <AppsBody header={false} />}
       {filter === "all" && <CodeProjects />}
