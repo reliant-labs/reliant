@@ -53,6 +53,12 @@ type ExecutionContext struct {
 	// nil means use default daemon resolution (local → cloud → wake).
 	DaemonSelector *DaemonSelectorValue
 
+	// WorkflowPlacement is where the workflow-level `daemon: {pool:}` or
+	// labels-only selector was placed (run_placement.go), once per run. It
+	// rides the root's context across continue-as-new, so a successor routes
+	// to the same machine without asking again. nil: not placed.
+	WorkflowPlacement *RunPlacement `json:",omitempty"`
+
 	// Loop context - set when executing inside a loop
 	// nil if not in a loop
 	Loop *ExecLoopContext
@@ -99,6 +105,15 @@ type DaemonSelectorValue struct {
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Pool names one of the owner's machine pools. The run (or node) is
+	// placed on a member once (see NeedsPlacement); exclusive with the rest.
+	Pool string `json:"pool,omitempty"`
+	// Placed marks the machine a pool placement chose (RunPlacement.selector):
+	// the run wakes it, and checks its requirements on it, as a machine of
+	// its own rather than the run's inherited one. In-memory only: it is
+	// rebuilt from the placement on replay, and a context serialized without
+	// it routes to the same machine.
+	Placed bool `json:"-"`
 	// Session marks the chat's pin (session_daemon_id) rather than a
 	// selector the workflow or node configures. A pin can go stale while the
 	// run lives (its chat moves to the workspace's machine); configured
@@ -195,7 +210,17 @@ func ResolveDaemonSelectorProto(ds *reliantv1.DaemonSelectorProto) *DaemonSelect
 		Name:   ds.GetName(),
 		Type:   ds.GetType(),
 		Labels: ds.GetLabels(),
+		Pool:   ds.GetPool(),
 	}
+}
+
+// NeedsPlacement reports whether this selector is placed once on a machine
+// (run_placement.go) rather than routed by as it is: only an explicit pool.
+// Labels, alone or beside an id, name or type, keep their v1 meaning — a
+// per-call filter on the labels connected daemons advertise — and are never
+// placed.
+func (ds *DaemonSelectorValue) NeedsPlacement() bool {
+	return ds != nil && ds.Pool != ""
 }
 
 // ResolveCelDaemonSelector evaluates a CelDaemonSelector and returns a DaemonSelectorValue.
@@ -260,6 +285,9 @@ func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, erro
 		}
 		if typ, ok := v["type"].(string); ok {
 			ds.Type = typ
+		}
+		if pool, ok := v["pool"].(string); ok {
+			ds.Pool = pool
 		}
 		if labels, ok := v["labels"].(map[string]interface{}); ok {
 			ds.Labels = make(map[string]string)
@@ -404,6 +432,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		ParentThread:         ctx.ParentThread,
 		ProjectPath:          ctx.ProjectPath,
 		DaemonSelector:       ctx.DaemonSelector,
+		WorkflowPlacement:    ctx.WorkflowPlacement,
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
 		CatalogPin:           ctx.CatalogPin,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,

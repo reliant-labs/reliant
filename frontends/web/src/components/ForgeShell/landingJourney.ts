@@ -1,30 +1,54 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * What the forge shell does with the journey the landing page carried
+ * What the forge brand (lib/shell.ts) does with the journey the landing page carried
  * (`?journey=forge|workflows`, held through sign-in by lib/landingAttribution.ts).
  *
  *   forge      starts the forge journey. The demo console is public, so a
  *              signed-out visitor is taken straight to it rather than to
  *              sign-in; a signed-in one starts it on arrival, or after
  *              signing in when they came in through the sign-in page.
- *   workflows  is offered as a link to Reliant: workflows need a daemon and
- *              chats, which this shell does not have, so that journey never
- *              runs here (its `shells` exclude forge).
+ *   workflows  is offered as a link to Reliant: that journey's `shells`
+ *              exclude forge (Onboarding/journeys/workflows.tsx), so it never
+ *              runs on the forge brand.
  *
- * The decision is split from ForgeLandingJourney so the auth guard can make
- * the same call: it must hold its sign-in redirect for exactly the visitor
- * the journey is about to take to the demo, or the two navigations race.
+ * The decision is split from ForgeLandingJourney so the auth guard
+ * (AuthGuard, on the forge brand) can make the same call: it must hold its
+ * sign-in redirect for exactly the visitor the journey is about to take to
+ * the demo, or the two navigations race.
  */
 
 import { isJourneyAvailable } from "@/components/Onboarding/journeys/registry";
 import type { JourneyId } from "@/components/Onboarding/tourParam";
 import { readLandingJourney } from "@/lib/landingAttribution";
 
-import type { ForgeAuthDecision } from "./ForgeAuthGuard";
+/**
+ * The ids of the layout routes whose AuthGuard asks for sign-in (routes.tsx):
+ * `_authenticated` (every app page but the chats) and `_app` (the chat home
+ * and a project's chats). Read org-free (orgFreeRouteId), so the org tree's
+ * twins match too.
+ */
+export const GUARDED_ROUTE_IDS: readonly string[] = ["/_authenticated", "/_app"];
 
-/** The id of the layout route ForgeAuthGuard renders (forgeShellRoutes.tsx `_authenticated`). */
-export const GUARDED_ROUTE_ID = "/_authenticated";
+/** What the sign-in guard does for an auth state, as far as the journey is concerned. */
+export type LandingAuthDecision = "wait" | "sign-in" | "verify-email" | "allow";
+
+interface GuardUser {
+  is_anonymous?: boolean;
+  email_confirmed_at?: string | null;
+}
+
+/**
+ * What AuthGuard (requireAuth, requireEmailVerification) does for this auth
+ * state. Pure. An anonymous session (a claim in flight) is let through, as the
+ * guard does; an email account must have confirmed its address.
+ */
+export function landingAuthDecision(state: { initialized: boolean; loading: boolean; user: GuardUser | null }): LandingAuthDecision {
+  if (!state.initialized || state.loading) return "wait";
+  if (!state.user) return "sign-in";
+  if (!state.user.is_anonymous && !state.user.email_confirmed_at) return "verify-email";
+  return "allow";
+}
 
 export type LandingJourneyAction =
   /** Nothing held. */
@@ -43,9 +67,9 @@ export interface LandingJourneyInputs {
   forgeAvailable: boolean;
   /** On the public demo console. */
   onDemo: boolean;
-  /** On a page behind ForgeAuthGuard. */
+  /** On a page behind the sign-in guard (GUARDED_ROUTE_IDS). */
   guarded: boolean;
-  auth: ForgeAuthDecision;
+  auth: LandingAuthDecision;
 }
 
 /** What to do with the held journey here and now. Pure. */

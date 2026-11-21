@@ -7,8 +7,8 @@
  * The registry keeps the build on the attachment lease, so it exists only
  * while the daemon is attached. A machine that is not attached says nothing
  * (null): "unknown build" there would read as a fault in a machine that is
- * merely asleep. An attached daemon that reported no build — one that predates
- * the report, or an unstamped binary — is "unknown build".
+ * merely asleep. An attached daemon that reported no build (an unstamped
+ * binary) is "unknown build".
  */
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";

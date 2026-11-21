@@ -126,7 +126,8 @@ type Service interface {
 	// owner's own resume gates (ownership, workspace limit, funding).
 	//
 	// resumed reports whether this call started the wake. A control plane
-	// without the door (404, or Unimplemented), or an adapter with no
+	// without the door (404, or Unimplemented: machine lifecycle is not
+	// configured on that deployment), or an adapter with no
 	// identity to sign with, answers toolexec.ErrRunResumeUnsupported. Other
 	// refusals are a *RunResumeError carrying the control plane's
 	// client-safe message.
@@ -172,8 +173,7 @@ type Service interface {
 	// touch, for the move preview: the source org's secret access, the
 	// hosted project the project deploys as, whether the target can pay and
 	// which machines are in it. It checks the actor as Prepare does and
-	// writes nothing. Errors as the steps above; a control plane that
-	// predates it is ErrProjectOrgMoveUnsupported.
+	// writes nothing. Errors as the steps above.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 
 	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
@@ -204,6 +204,15 @@ type Service interface {
 	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
 	// control-plane's code (unavailable: no catalog could be read).
 	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
+
+	// ListHostedApps is an org's apps — its hosted projects, one per forge
+	// name deployed in it — with where each was deployed from
+	// (DeployService.ListApps), read as the caller: jwt is their own bearer,
+	// so control-plane's deploy:read decides what they may see. orgID "" is
+	// the caller's default org there. ErrHostedAppsDenied when the caller may
+	// not read the org's apps (or the bearer is refused); any other error is
+	// the control plane being unreachable or failing.
+	ListHostedApps(ctx context.Context, jwt, orgID string) ([]HostedApp, error)
 }
 
 // Deps configures the adapter.

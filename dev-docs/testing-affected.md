@@ -24,7 +24,7 @@ before a release: `dev-docs/merge-and-release-gates.md`.
 |---|---|---|
 | Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
-| electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
+| electron | `pnpm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `task generate:check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**` (not its hand-written `_test.go` files, which forge never reads), every generated file (`*_gen.go`, `*_gen.ts`, `*_gen_test.go`, ...), `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 | docs-generate | `task generate:docs:check`, second (in a heavy slot): every docs generator (`Taskfile.yml`'s `generate:docs`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
 | web-demo | `WEB_BUILD_TARGET=demo npx vite build` in `frontends/web/` (the forge demo bundle; its `vite-plugin-demo-bundle.ts` guard fails on a Reliant-only module in it) | a changed file in the demo bundle's import graph (`WebGraph.Demo`, below), the demo build's own inputs (`demoBuildInputs` in `rules.go`: `vite.config.ts`, `vite-plugin-*.ts`, `demo.html`), or a FULL web lane |
@@ -121,7 +121,10 @@ a lockfile, the vite or tsconfig config. The plan still lists, in `web.tests`,
 the vitest files the diff's own web modules reach (at the merge gate's two-edge
 cut). The merge gate runs exactly those (`run -web-full reached`), beside
 `tsc -b` over every web source; the whole suite (1033 files, ~20 min on a
-loaded host) stays in the release gate.
+loaded host) stays in the release gate. In the merge queue the selected files,
+scoped or FULL, run in the `vitest` job's four shards (`run -web-shard <i>/4`,
+`scripts/vitest-shard.sh`) instead of on the gate's runner
+(merge-and-release-gates.md, "The merge queue's vitest files, in four shards").
 
 **Why this and not the alternatives** (decided 2026-11-13):
 
@@ -171,17 +174,18 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | a deleted web module | the vitest files that still reach it (the graph resolves specifiers against the base tree's files too); its importers changed too and select their own |
 | anything else | **everything: full** |
 
-**npm lockfiles.** Every lane tests against the `node_modules` already on disk,
-so none of them notices a lockfile `npm ci` would reject. When a diff changes a
-`package.json` or `package-lock.json` of an npm project (`npmProjects` in
-`tools/test-affected/plan.go`: the root, `frontends/web`, `electron`,
-`tools/protoc-gen-es`), the runner first runs
-`npm ci --dry-run --ignore-scripts` there (~10s; it validates the lockfile
-against the manifest and touches nothing), provided a lane that installs from
-that project is enabled. #1343 shipped a lockfile every fresh install rejected
-("Missing: zone.js from lock file") with every local test green. The gates and
-CI install with plain `npm ci` for the same reason: an `npm ci || npm install` fallback
-repaired the drift on the runner and hid it.
+**Lockfiles.** Every lane tests against the `node_modules` already on disk,
+so none of them notices a lockfile a frozen install would reject. When a diff
+changes a `package.json`, `pnpm-lock.yaml` or `pnpm-workspace.yaml` of a Node
+project (`npmProjects` in `tools/test-affected/plan.go`: the root,
+`frontends/web`, `electron`, `tools/protoc-gen-es`, all pnpm), the runner first
+runs `pnpm install --frozen-lockfile --lockfile-only --ignore-scripts` there
+(~3s; it validates the lockfile against the manifest and writes nothing),
+provided a lane that installs from that project is enabled. #1343 shipped a
+lockfile every fresh install rejected ("Missing: zone.js from lock file") with
+every local test green. The gates and CI install with a plain frozen install
+for the same reason: an `npm ci || npm install` fallback repaired the drift on
+the runner and hid it.
 
 ## How the selection works, and where it errs
 

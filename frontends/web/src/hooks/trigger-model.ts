@@ -174,7 +174,7 @@ export interface ResolvedSender {
   displayName: string;
 }
 
-/** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
+/** TriggerHealthStatus; UNSPECIFIED (the proto default) reads as unknown. */
 export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "needs_setup" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
@@ -258,7 +258,7 @@ export interface Trigger {
   /**
    * Which AI accounts its runs may spend (org-provider-accounts §11.3):
    * "orgOnly" the organization's alone, "any" its owner's own accounts too. A
-   * trigger of no org, and a server that predates the field, read "any".
+   * trigger of no org, and one with the field unset, read "any".
    */
   unattendedFunding: UnattendedFundingKey;
 }

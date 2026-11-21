@@ -62,9 +62,9 @@ func (*outdatedDaemonRouter) SendDaemonCommand(context.Context, string, string, 
 }
 
 // A daemon that predates the guard would serve ~/.ssh/id_rsa, so the server
-// shows nothing outside the workspace from it (FailedPrecondition: update the
-// daemon), while the workspace's own files still open.
-func TestFileSystemProxy_OutdatedDaemonViewsOnlyTheWorkspace(t *testing.T) {
+// shows nothing from it, inside the workspace or out: FailedPrecondition,
+// naming the fix (update the daemon).
+func TestFileSystemProxy_OutdatedDaemonViewsNothing(t *testing.T) {
 	repo, projectID, base := seedFSProxyProject(t)
 	outside := filepath.Join(t.TempDir(), "id_rsa")
 	require.NoError(t, os.WriteFile(filepath.Join(base, "README.md"), []byte("hi\n"), 0o644))
@@ -80,10 +80,11 @@ func TestFileSystemProxy_OutdatedDaemonViewsOnlyTheWorkspace(t *testing.T) {
 		return err
 	}
 	for name, call := range map[string]func(string) error{"GetFileContent": content, "GetFileMetadata": metadata} {
-		err := call(outside)
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s(%s) from an outdated daemon: %v", name, outside, err)
-		assert.NoError(t, call("README.md"), "%s of a workspace file from an outdated daemon", name)
-		assert.NoError(t, call(filepath.Join(base, "README.md")), "%s of an absolute workspace path from an outdated daemon", name)
+		for _, p := range []string{outside, "README.md", filepath.Join(base, "README.md")} {
+			err := call(p)
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s(%s) from an outdated daemon: %v", name, p, err)
+			assert.ErrorContains(t, err, "update it", "%s(%s) must name the fix", name, p)
+		}
 	}
 }
 

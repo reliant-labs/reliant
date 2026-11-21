@@ -112,11 +112,25 @@ describe('shouldRedirectToMobile', () => {
 })
 
 describe('mobilePathFor', () => {
+  it('carries an id over as the desktop path had it, and a return path in URLSearchParams bytes', () => {
+    expect(mobilePathFor('/workflows/runs/a%2Fb')).toBe('/m/chats/a%2Fb')
+    expect(mobilePathFor('/workflows/runs/a%252Fb')).toBe('/m/chats/a%252Fb')
+    expect(mobilePathFor('/workflows/automations/t%3A1')).toBe('/m/automations/t%3A1')
+    expect(mobilePathFor('/settings/billing', '?returnTo=%2Fclaim%3Fapp%3Dshop%26x%3D1%23rcl')).toBe(
+      `/m/settings?${new URLSearchParams({ section: 'billing', returnTo: '/claim?app=shop&x=1#rcl' })}`,
+    )
+  })
+
   it('sends a desktop link to its mobile twin, not always the chat list', () => {
     expect(mobilePathFor('/inbox')).toBe('/m/inbox')
     expect(mobilePathFor('/inbox/')).toBe('/m/inbox')
     // A run is a chat.
     expect(mobilePathFor('/workflows/runs/chat_123')).toBe('/m/chats/chat_123')
+    // A chat, a thread of it (the phone picks threads in its own sheet), a draft; either URL form.
+    expect(mobilePathFor('/c/chat_123')).toBe('/m/chats/chat_123')
+    expect(mobilePathFor('/o/acme/c/chat_123/t/thread_9')).toBe('/m/chats/chat_123')
+    expect(mobilePathFor('/c/a%2Fb')).toBe('/m/chats/a%2Fb')
+    expect(mobilePathFor('/o/acme/new')).toBe('/m/new')
     expect(mobilePathFor('/workflows')).toBe('/m/workflows')
     expect(mobilePathFor('/workflows/library')).toBe('/m/workflows')
     // A workflow's page — where an automation link lands — is its viewer.

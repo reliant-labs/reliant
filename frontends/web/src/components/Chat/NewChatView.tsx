@@ -74,6 +74,7 @@ import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
 import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
 import { useNewChatMachineStore } from "../../store/newChatMachineStore";
+import { patchNewChatUrl } from "../../lib/chatRoute";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -481,6 +482,8 @@ export function NewChatView({
   // the main checkout, which every machine has.
   const handleMachineChange = (next: ChatMachineChoice) => {
     setMachineChoice(next);
+    // On `/new`, the URL keeps the pick across a refresh (lib/chatRoute.ts).
+    patchNewChatUrl({ machine: next || undefined });
     if (choiceLeavesWorkspace(next, resolvedMachine.lockedBy)) {
       void handleWorkspaceSelect(mainWorktree?.id ?? null);
     }

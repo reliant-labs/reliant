@@ -1,12 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * `/forge/demo` as a route either shell mounts: Reliant under its
- * authenticated layout (routes.tsx), the forge shell (forge.reliantlabs.io)
- * on its root, public, with `/demo` redirecting to it (buildForgeShellTree).
+ * `/forge/demo` as a route the app's tree mounts on its root, public, with
+ * `/demo` redirecting to it (routes.tsx, on both hosts).
  *
  * The page itself (DemoConsole) is its own lazy chunk, fixtures included, so
- * neither shell pays for it until it is opened.
+ * nobody pays for it until it is opened.
  */
 
 import { createRoute, redirect, type AnyRoute } from "@tanstack/react-router";

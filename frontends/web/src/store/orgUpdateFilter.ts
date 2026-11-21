@@ -16,8 +16,8 @@ export interface OrgLookup {
  * the app (which shows one org at a time) leaves it out.
  *
  * The stream delivers every org the person is in; it names the org it decided
- * each update by (`org_id`). An update from a server that predates the field
- * is judged by the chat or project it names, as far as the app holds them
+ * each update by (`org_id`). An update without it (one stored before the field
+ * existed, replayed from the log) is judged by the chat or project it names, as far as the app holds them
  * (Chat.org_id, Project.org_id). An update about nothing of an org (a daemon
  * signal), or one whose org is unknown, is kept: every handler it reaches
  * patches only what the app already shows, or asks the server again, and the

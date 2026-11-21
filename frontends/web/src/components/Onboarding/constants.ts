@@ -123,10 +123,8 @@ export const TOUR_SETTINGS_KEYS = {
   /** Some journey (or the picker) was finished or skipped; also the retired single tour's flag. */
   COMPLETED: "onboarding.completed",
   SKIPPED_ALL: "onboarding.skipped_all",
-  // CURRENT_STEP is intentionally absent: the URL (?tour=<journey>:<step>) is
-  // the source of truth for the active step. tourStore.loadState()
-  // best-effort deletes the stale row so old installs don't carry it forever.
-  CURRENT_STEP: "onboarding.current_step",
+  // No current-step key: the URL (?tour=<journey>:<step>) is the source of
+  // truth for the active step.
   /** `<journey>:<step>` keys (bare step ids from the retired tour may remain). */
   COMPLETED_STEPS: "onboarding.completed_steps",
   SKIPPED_STEPS: "onboarding.skipped_steps",

@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/retry"
 )
 
 const (
@@ -31,7 +33,7 @@ func submitWithRetry(ctx context.Context, baseDelay time.Duration, submit func(c
 		select {
 		case <-ctx.Done():
 			return Job{}, ctx.Err()
-		case <-time.After(baseDelay * time.Duration(1<<(attempt-1))):
+		case <-time.After(retry.Backoff{Initial: baseDelay}.Delay(attempt)):
 		}
 	}
 }

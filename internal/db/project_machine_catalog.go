@@ -185,30 +185,6 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 	return stored, nil
 }
 
-// ProjectMachineRepoStates reads the git state each machine's synced files of
-// a project were read from, keyed by daemon id; a machine whose daemon has not
-// reported one is absent.
-func (r *Repo) ProjectMachineRepoStates(ctx context.Context, projectID string) (map[string][]config.SyncedRepoState, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	rows, err := store.ListProjectMachineRepoStates(ctx, r.ORM(), projectID)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string][]config.SyncedRepoState{}
-	for _, row := range rows {
-		states, err := config.ParseSyncedRepoStates(row.RepoStatesJSON)
-		if err != nil {
-			return nil, err
-		}
-		if len(states) > 0 {
-			out[row.DaemonID] = states
-		}
-	}
-	return out, nil
-}
-
 // projectFilesUnion is the union of every machine's skills, repo memories and
 // scenarios of a project (config.UnionSkills).
 func (r *Repo) projectFilesUnion(ctx context.Context, projectID string) (store.ProjectConfigUnion, error) {
@@ -276,14 +252,6 @@ func (r *Repo) GetProjectMachineConfigRecord(ctx context.Context, projectID, dae
 		RuntimeType:          row.RuntimeType,
 		PushedAt:             row.PushedAt,
 	}, true, nil
-}
-
-// ProjectMachineCatalogs reads every machine's catalog of a project.
-func (r *Repo) ProjectMachineCatalogs(ctx context.Context, projectID string) ([]config.MachineCatalog, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return r.projectMachineCatalogs(ctx, projectID)
 }
 
 func (r *Repo) projectMachineCatalogs(ctx context.Context, projectID string) ([]config.MachineCatalog, error) {

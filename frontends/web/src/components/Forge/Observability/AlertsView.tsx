@@ -136,7 +136,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
               {count[id] ? (
                 <span
                   className={cn(
-                    "rounded-full px-1.5 text-2xs tabular-nums",
+                    "rounded-full px-1.5 text-meta tabular-nums",
                     id === "firing" ? "bg-danger-surface text-danger-ink" : "bg-border/60 text-ink-muted"
                   )}
                 >
@@ -282,7 +282,7 @@ const SEVERITY_TONE: Record<string, string> = {
 export function SeverityChip({ severity }: { severity: string }) {
   if (!severity) return null;
   return (
-    <span className={cn("rounded px-1.5 py-px text-2xs font-medium uppercase tracking-wide ring-1 ring-inset", SEVERITY_TONE[severity] ?? SEVERITY_TONE.info)}>
+    <span className={cn("rounded px-1.5 py-px text-meta font-medium ring-1 ring-inset", SEVERITY_TONE[severity] ?? SEVERITY_TONE.info)}>
       {severity}
     </span>
   );
@@ -292,7 +292,7 @@ function SourceChip({ rule }: { rule: DeclaredAlertRule | undefined }) {
   if (!rule) return null;
   return (
     <span
-      className="rounded border border-border px-1.5 py-px text-2xs text-ink-muted"
+      className="rounded border border-border px-1.5 py-px text-meta text-ink-muted"
       title={rule.source === "user" ? "Declared by your project (forge.AlertRule)" : `forge default "${rule.defaultId}", tuned in forge.Alerts.defaults`}
       data-testid="obs-rule-source"
     >
@@ -307,7 +307,7 @@ function LabelChips({ labels, skip = [] }: { labels: Record<string, string>; ski
   return (
     <span className="flex flex-wrap gap-1">
       {keys.map((k) => (
-        <span key={k} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-2xs text-ink-muted ring-1 ring-inset ring-border/60">
+        <span key={k} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-meta text-ink-muted ring-1 ring-inset ring-border/60">
           {k}=<span className="text-ink">{labels[k]}</span>
         </span>
       ))}
@@ -699,7 +699,7 @@ function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[]
           )}
         </div>
         <div>
-          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>
+          <h4 className="mb-1 text-xs font-medium text-ink-muted">Query</h4>
           {platform ? (
             <p className="text-xs text-ink-muted" data-testid="obs-rule-platform">
               {platform.off ? "Disabled in this environment. " : ""}Reliant raises this alert from its own records (
@@ -707,10 +707,10 @@ function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[]
             </p>
           ) : (
             <>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-meta text-ink">
                 {rule.expr}
               </pre>
-              <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+              <p className="mt-1 text-meta text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
             </>
           )}
         </div>
@@ -762,7 +762,7 @@ function CodeSnippet({ snippet }: { snippet: RuleAsCode }) {
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
-      <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-2xs leading-relaxed text-ink" tabIndex={0}>
+      <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-meta leading-relaxed text-ink" tabIndex={0}>
         {snippet.kcl}
       </pre>
     </div>

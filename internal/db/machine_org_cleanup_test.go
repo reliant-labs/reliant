@@ -438,7 +438,7 @@ func TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack(t *testing.T) 
 	require.True(t, gone)
 
 	assert.Equal(t, []string{"deploy.yaml"}, paths(), "the other org's machine's workflows are still in the project's config")
-	catalogs, err := p.repo.ProjectMachineCatalogs(ctx, p.projectID)
+	catalogs, err := p.repo.projectMachineCatalogs(ctx, p.projectID)
 	require.NoError(t, err)
 	require.Len(t, catalogs, 1)
 	assert.Equal(t, other, catalogs[0].DaemonID)

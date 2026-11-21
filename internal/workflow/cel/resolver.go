@@ -569,6 +569,9 @@ func toDaemonSelector(v interface{}, path string) (*reliantv1.DaemonSelectorProt
 		if typ, ok := val["type"].(string); ok {
 			ds.Type = typ
 		}
+		if pool, ok := val["pool"].(string); ok {
+			ds.Pool = pool
+		}
 		if labels, ok := val["labels"].(map[string]interface{}); ok {
 			ds.Labels = make(map[string]string)
 			for k, lv := range labels {

@@ -11,7 +11,7 @@ import (
 // The rest of this package's forge tests pin the argv each handler builds
 // against a literal. A literal only proves the handler is self-consistent; it
 // cannot notice forge changing underneath it. That is exactly how
-// `forge secret list <env> --json` survived forge moving the env to a required
+// `forge env secret list <env> --json` survived forge moving the env to a required
 // --env flag: every test stayed green while the rebuilt daemon's real
 // invocation would have been rejected.
 //
@@ -178,8 +178,8 @@ func TestForgeDaemonArgvParsesAgainstEmbeddedForge(t *testing.T) {
 // pre-fix argv must FAIL the same parse, or the test above could never have
 // caught the regression it exists for.
 func TestEmbeddedForgeRejectsPositionalSecretEnv(t *testing.T) {
-	if _, err := parseAgainstEmbeddedForge([]string{"secret", "list", "dev", "--json"}); err == nil {
-		t.Fatal("embedded forge accepted `secret list dev --json`; the argv guard cannot detect a positional-env regression")
+	if _, err := parseAgainstEmbeddedForge([]string{"env", "secret", "list", "dev", "--json"}); err == nil {
+		t.Fatal("embedded forge accepted `env secret list dev --json`; the argv guard cannot detect a positional-env regression")
 	}
 }
 
@@ -191,7 +191,7 @@ func TestForgeSecretListPinsEnvFlag(t *testing.T) {
 	if _, err := handle(t, "forge.secret_list", forgeSecretListRequest{ProjectPath: dir, Env: "--json"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"secret", "list", "--env=--json", "--json"}
+	want := []string{"env", "secret", "list", "--env=--json", "--json"}
 	if strings.Join(call.Args, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args:\n got %q\nwant %q", call.Args, want)
 	}

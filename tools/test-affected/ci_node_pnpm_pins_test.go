@@ -28,8 +28,8 @@ import (
 // application test runs.
 
 // nodeManifests are the package.json files whose engines.node a dev install
-// is held to: the root (an npm project whose postinstall runs pnpm in
-// frontends/web) and frontends/web itself.
+// is held to: the root (whose postinstall runs pnpm in frontends/web and
+// electron) and frontends/web itself.
 var nodeManifests = []string{"package.json", "frontends/web/package.json"}
 
 type nodeManifest struct {
@@ -319,8 +319,22 @@ func TestPnpmPinAgrees(t *testing.T) {
 
 	// pnpm 12 records the pinned pnpm in a leading lockfile document once
 	// package.json pins it; a frozen install fails when the two disagree.
-	if got := lockfilePnpm(t); got != version {
+	if got := lockfilePnpm(t, "frontends/web/pnpm-lock.yaml"); got != version {
 		t.Errorf("frontends/web/pnpm-lock.yaml records packageManagerDependencies pnpm %q, want %s: run `pnpm install --lockfile-only` in frontends/web", got, version)
+	}
+
+	// The other pnpm projects, each its own workspace root, pin the same pnpm
+	// in package.json and their lockfile, as does the root's own lockfile.
+	for _, dir := range []string{".", "electron", "tools/protoc-gen-es"} {
+		if dir != "." {
+			if pm := readManifest(t, path.Join(dir, "package.json")).PackageManager; pm != rootPM {
+				t.Errorf("%s/package.json packageManager = %q, want the root's %q", dir, pm, rootPM)
+			}
+		}
+		lock := path.Join(dir, "pnpm-lock.yaml")
+		if got := lockfilePnpm(t, lock); got != version {
+			t.Errorf("%s records packageManagerDependencies pnpm %q, want %s: run `pnpm install --lockfile-only` in %s", lock, got, version, dir)
+		}
 	}
 
 	setups := map[string][]ciStep{setupDir + "/action.yml": setupActionSteps(t)}
@@ -350,9 +364,9 @@ func TestPnpmPinAgrees(t *testing.T) {
 	}
 }
 
-// lockfilePnpm returns the pnpm version frontends/web/pnpm-lock.yaml's
+// lockfilePnpm returns the pnpm version the lockfile rel's
 // packageManagerDependencies records, or "" when it records none.
-func lockfilePnpm(t *testing.T) string {
+func lockfilePnpm(t *testing.T, rel string) string {
 	t.Helper()
 	type pmDoc struct {
 		Importers map[string]struct {
@@ -362,7 +376,7 @@ func lockfilePnpm(t *testing.T) string {
 			} `yaml:"packageManagerDependencies"`
 		} `yaml:"importers"`
 	}
-	dec := yaml.NewDecoder(bytes.NewReader(readRepo(t, "frontends/web/pnpm-lock.yaml")))
+	dec := yaml.NewDecoder(bytes.NewReader(readRepo(t, rel)))
 	for {
 		var d pmDoc
 		err := dec.Decode(&d)
@@ -370,11 +384,11 @@ func lockfilePnpm(t *testing.T) string {
 			return ""
 		}
 		if err != nil {
-			t.Fatalf("parse frontends/web/pnpm-lock.yaml: %v", err)
+			t.Fatalf("parse %s: %v", rel, err)
 		}
 		if p, ok := d.Importers["."].PackageManagerDependencies["pnpm"]; ok {
 			if p.Specifier != p.Version {
-				t.Errorf("pnpm-lock.yaml pins pnpm specifier %q but resolved %q", p.Specifier, p.Version)
+				t.Errorf("%s pins pnpm specifier %q but resolved %q", rel, p.Specifier, p.Version)
 			}
 			return p.Version
 		}

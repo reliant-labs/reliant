@@ -43,7 +43,6 @@
       (function(){
         try{
           // Load and apply theme mode (light/dark) from localStorage before React hydration
-          // Check both the canonical key and legacy key for backwards compatibility
           var savedTheme = localStorage.getItem('appearance.theme');
           if (savedTheme === 'dark') {
             document.documentElement.classList.add('dark');

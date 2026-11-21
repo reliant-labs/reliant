@@ -17,6 +17,8 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `inbox-firings-rollout.md` — post-deploy ListInbox latency check for reliant#2736's bounded Inbox reads and `idx_chats_daemon_blocked`, its failure criteria, and the application rollback (the index stays).
 - `chat-list-live-index-rollout.md` — post-deploy check that reliant#2945's `idx_chats_user_live_last_active` built valid and ListChats adopts it, the fix-forward for a failed build, and the application rollback (the index stays).
 - `machine-plan-change-rollout.md` — the machine plan change's live check, and how to stop confirmations and reconcile Stripe if it misbehaves.
+- `pr-records.md` — PR records: webhook-fed pull request state with head-bound checks (the PR-pipeline primitive): data model, event transitions, API, reconciliation, the shadow and flip plan, and the owner decisions.
+- `workflow-checks-rollout.md` — post-release smoke check of the GitHub check runs a workflow's `check:` block writes (pass, fail, refused before launch), how to stop the writes, and how to conclude checks left queued or in progress.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
 - `backlog.md` — product proposals and deferred designs moved out of the issue tracker (2026-11-04), each under its original issue number.
 - `human-only-approvals-verification.md` — post-deploy check that real app sessions and OAuth-client tokens classify correctly for human-only approvals.

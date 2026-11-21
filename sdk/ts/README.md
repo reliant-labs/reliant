@@ -38,6 +38,13 @@ the `WakeSource` (online/visibility signals; the default listens on `window`
 when there is one), and any extra interceptors (upgrade prompts, error
 reporting).
 
+Every call on a transport the SDK builds names it in
+`Reliant-Client: sdk-ts/<SDK_VERSION>`. A transport you pass as `transport` is
+yours, identity included: build its chain on `sdkInterceptors()`, or set your
+own client id. A server that no longer supports the version refuses the call;
+`isUpgradeRequired(err)` says so, and `UpgradeRequiredError.from(err)` gives the
+minimum version and how to upgrade.
+
 ### Tool bodies on demand
 
 A long agent chat is mostly tool inputs and outputs. `toolBodies: "stub"` (on
@@ -62,9 +69,9 @@ Bodies stay out of `ChatState` (a finished call's body never changes: cache
 them yourself, per block id). The reducer keeps what it holds: a stub never
 displaces a body it has, by block id, in a message or in `toolResults`, and a
 body always replaces a stub, so a reconnect does not blank a call watched live.
-The default is `"full"`, what every client has always had; a server that
-predates the option sends full bodies, so act on each block's `bodyElided`,
-never on the mode asked for.
+The default is `"full"`, what every client has always had; a server may still
+send full bodies, so act on each block's `bodyElided`, never on the mode asked
+for.
 
 ### Peer dependencies
 

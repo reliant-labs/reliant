@@ -137,7 +137,7 @@ func TestEmittedDataConformsToTheDeclaredSchema(t *testing.T) {
 	for _, typ := range types {
 		var undeclared []string
 		for p := range producedBy[typ] {
-			if !declaredBy[typ][p] {
+			if !declares(declaredBy[typ], p) {
 				undeclared = append(undeclared, p)
 			}
 		}
@@ -151,7 +151,7 @@ func TestEmittedDataConformsToTheDeclaredSchema(t *testing.T) {
 		for p := range declaredBy[typ] {
 			covered := false
 			for other := range declaredBy {
-				if declaredBy[other][p] && producedBy[other][p] {
+				if declaredBy[other][p] && produces(producedBy[other], p) {
 					covered = true
 					break
 				}
@@ -205,4 +205,33 @@ func collectSchemaPaths(prefix string, schema map[string]any, out map[string]boo
 	if items, ok := schema["items"].(map[string]any); ok {
 		collectSchemaPaths(prefix+"[]", items, out)
 	}
+	// A map (additionalProperties: <schema>) declares every key: "<path>.*".
+	if _, ok := schema["additionalProperties"].(map[string]any); ok {
+		out[prefix+".*"] = true
+	}
+}
+
+// declares reports whether a schema's paths declare the emitted path p: as
+// itself, or as a key of a map ("<parent>.*").
+func declares(declared map[string]bool, p string) bool {
+	if declared[p] {
+		return true
+	}
+	i := strings.LastIndex(p, ".")
+	return i >= 0 && declared[p[:i]+".*"]
+}
+
+// produces reports whether the emitted paths include the declared path p; a
+// map's "<path>.*" is produced by any key of it.
+func produces(produced map[string]bool, p string) bool {
+	parent, isMap := strings.CutSuffix(p, ".*")
+	if !isMap {
+		return produced[p]
+	}
+	for q := range produced {
+		if i := strings.LastIndex(q, "."); i >= 0 && q[:i] == parent {
+			return true
+		}
+	}
+	return false
 }

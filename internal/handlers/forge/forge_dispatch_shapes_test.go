@@ -14,12 +14,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// A dispatch failure reaches forge in two shapes: daemoncmd's today
-// (daemonerr.DispatchConnectError, the router's text in the message) and
-// daemonerr.Error's (the router's text withheld, the daemon's kept). A timed-out
-// cluster read must read as UNREACHABLE in both, so it is recognised by the
-// router's sentinel and the dispatch's code, never by "nats: timeout" — text
-// daemonerr.Error removes.
+// A dispatch failure reaches forge as daemoncmd builds it, with daemonerr.Error
+// (the router's text withheld, the daemon's kept). A timed-out cluster read must
+// read as UNREACHABLE, so it is recognised by the router's sentinel and the
+// dispatch's code, never by "nats: timeout" — text daemonerr.Error removes.
 func TestIsForgeClusterReadTimeout_AcrossDispatchShapes(t *testing.T) {
 	natsTimeout := fmt.Errorf("daemon command forge.env_verify via NATS failed: %w: %w", toolexec.ErrDaemonTimeout, nats.ErrTimeout)
 	forgeTimedOut := toolexec.DaemonReportedFailure("forge.env_verify", "forge command timed out: run forge: context deadline exceeded")
@@ -27,8 +25,7 @@ func TestIsForgeClusterReadTimeout_AcrossDispatchShapes(t *testing.T) {
 	missingDir := toolexec.DaemonReportedFailure("forge.env_verify", "forge project dir does not exist: /gone")
 
 	shapes := map[string]func(error) error{
-		"DispatchConnectError": func(err error) error { return daemonerr.DispatchConnectError("forge.env_verify", err) },
-		"daemonerr.Error":      func(err error) error { return daemonerr.Error("daemon command forge.env_verify", err) },
+		"daemonerr.Error": func(err error) error { return daemonerr.Error("daemon command forge.env_verify", err) },
 	}
 	for shape, dispatch := range shapes {
 		t.Run(shape, func(t *testing.T) {

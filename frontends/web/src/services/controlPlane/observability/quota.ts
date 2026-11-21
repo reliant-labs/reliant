@@ -13,9 +13,8 @@
  * quota, and when does it end" and never matches prose.
  *
  * ResourceExhausted is not always the quota: the console's in-flight cap and
- * the scan caps use the same code. Only an error carrying the reason, the
- * detail, or (from a control plane that predates them) the quota message is a
- * quota error; the others must not pause the console.
+ * the scan caps use the same code. Only an error carrying the reason or the
+ * detail is a quota error; the others must not pause the console.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -96,9 +95,7 @@ export function quotaOf(error: unknown, nowMs: number = Date.now()): QuotaExhaus
     };
   }
 
-  const reason = errorReason(error);
-  // A control plane from before the detail carried only the message.
-  if (reason !== QUOTA_REASON && !soft && !/query quota/i.test(error.rawMessage)) return null;
+  if (errorReason(error) !== QUOTA_REASON && !soft) return null;
   return {
     limit: "unknown",
     lane: "",

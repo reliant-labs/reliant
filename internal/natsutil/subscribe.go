@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/forge/pkg/retry"
 
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -155,11 +156,7 @@ type subscribeConfig struct {
 
 // delay is the wait after the n-th refusal (n from 0): initial·2ⁿ, capped.
 func (c *subscribeConfig) delay(n int) time.Duration {
-	d := c.initial
-	for i := 0; i < n && d < c.max; i++ {
-		d *= 2
-	}
-	return min(d, c.max)
+	return retry.Backoff{Initial: c.initial, Max: c.max}.Delay(n + 1)
 }
 
 // clock is the time source of the backoff, injectable for tests.

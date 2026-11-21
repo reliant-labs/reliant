@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,7 +140,7 @@ func TestUpsertToolCallIsIdempotent(t *testing.T) {
 	require.NotNil(t, got.CompletedAt)
 
 	// Still exactly one row for the chat, not two.
-	all, err := repo.ListToolCallsByChat(ctx, f.chatID)
+	all, err := store.ListToolCallsByChat(ctx, repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 }
@@ -322,7 +323,7 @@ func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
 		require.NoError(t, repo.UpsertToolCall(ctx, call))
 	}
 
-	calls, err := repo.ListToolCallsByChat(ctx, f.chatID)
+	calls, err := store.ListToolCallsByChat(ctx, repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 3)
 	require.Equal(t, "first", calls[0].ToolName)

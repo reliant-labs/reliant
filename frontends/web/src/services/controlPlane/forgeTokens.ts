@@ -161,7 +161,7 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     id: "sourcemaps",
     title: "Source maps",
     description:
-      "An organization token, not yours: it acts as no one, carries no other scope, and needs the admin role. It can only upload source maps (forge frontend sourcemaps push).",
+      "An organization token, not yours: it acts as no one, carries no other scope, and needs the admin role. It can only upload source maps (forge ui sourcemaps push).",
     scopes: [{ scope: "sourcemaps:write", label: "Upload a frontend's source maps, and nothing else" }],
   },
 ];

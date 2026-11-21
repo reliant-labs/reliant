@@ -12,7 +12,7 @@
 #       google.golang.org/protobuf / connectrpc.com/connect the code links
 #       against, and the binary is built by the module's toolchain.
 #   protoc-gen-es
-#       tools/protoc-gen-es/package.json (+ package-lock.json). The alias
+#       tools/protoc-gen-es/package.json (+ pnpm-lock.yaml). The alias
 #       directory names the version, so this path is the pin.
 #
 # They used to be `remote:` plugins on the Buf Schema Registry, which

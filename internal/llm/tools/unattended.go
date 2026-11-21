@@ -60,6 +60,12 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't define or delete machine pools",
 	},
 	{
+		// A change decides what the user's own users see. Named, it still
+		// only drafts, previews and reduces exposure (change_tools.go).
+		withholds: toolNamed(ToolManageChange),
+		reason:    "unattended runs can't launch, ramp or roll out Forge Changes",
+	},
+	{
 		// A connection proposal is a card a person completes in the
 		// connection dialog; with nobody attending it could only wait.
 		withholds: toolNamed(ToolProposeConnection),

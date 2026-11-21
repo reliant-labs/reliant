@@ -70,6 +70,9 @@ let screen: () => React.ReactNode = () => null;
 vi.mock("@tanstack/react-router", () => ({
   Outlet: () => <>{screen()}</>,
   useNavigate: () => vi.fn(),
+  // The onboarding redirect asks which route this is (onboardingGate.ts).
+  useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
+    select({ location: { pathname: "/m/chats" } }),
 }));
 
 vi.mock("@/hooks/useOnboardingQueries", () => ({

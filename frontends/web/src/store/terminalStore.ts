@@ -557,18 +557,27 @@ export const useTerminalStore = create(
         activeSessionId: state.activeSessionId,
         activeSessionPerWorktree: state.activeSessionPerWorktree,
       }),
-      // Rehydrate
-      onRehydrateStorage: () => (state) => {
-        if (state?.sessions) {
-          // Convert createdAt strings back to Date objects after rehydration
-          // persistableSessions also drops daemonSessionId from anything
-          // stored before it stopped being persisted.
-          state.sessions = persistableSessions(state.sessions).map(session => ({
+      // Rehydrate. What was saved is untrusted: a session written before
+      // partialize stripped connection-scoped fields still carries the
+      // daemonSessionId/daemonId/machineName of a connection that is gone, and
+      // restoring them would address a dead PTY on the wrong machine. So strip
+      // them here, on the way IN, and revive createdAt (JSON has no Date).
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<PersistedTerminalState>;
+        if (!Array.isArray(saved.sessions)) return { ...current, ...saved, sessions: current.sessions };
+        return {
+          ...current,
+          ...saved,
+          sessions: persistableSessions(saved.sessions).map((session) => ({
             ...session,
             createdAt: session.createdAt instanceof Date
               ? session.createdAt
-              : new Date(session.createdAt as string | number)
-          }));
+              : new Date(session.createdAt as string | number),
+          })),
+        };
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state?.sessions) {
           logger.info('[TerminalStore] Rehydrated sessions', {
             count: state.sessions.length,
             sessionIds: state.sessions.map(s => s.id)

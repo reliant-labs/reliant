@@ -64,7 +64,7 @@
       "w": 6,
       "h": 4,
       "config": {
-        "name": "Page views",
+        "name": "Page loads",
         "source": "Traces",
         "displayType": "number",
         "select": [

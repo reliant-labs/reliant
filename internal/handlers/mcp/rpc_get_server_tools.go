@@ -59,6 +59,12 @@ func (s *Service) GetServerTools(
 	// the request's own budget.
 	tools, err := s.mcpProxy(userID, checkout).listTools(ctx, checkout.Path, name)
 	if err != nil {
+		if isDaemonReported(err) {
+			// The server itself failed on the user's machine (it closed the
+			// connection, never finished its handshake): its state, which
+			// only the user can fix, not a fault of ours (prod a629f936).
+			return nil, svcerr.WithCause(svcerr.FailedPrecondition(withDaemonText("failed to list tools", err)), err)
+		}
 		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to list tools", err)))
 	}
 

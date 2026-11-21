@@ -2353,12 +2353,21 @@ message GetReleaseHealthResponse {
   // The thresholds actually applied, and where each came from.
   repeated EffectiveThreshold thresholds = 12;
   // Finding codes this server could not check (no alert state, no issue
-  // reader), so a PASS is not read as covering them.
+  // reader), so a PASS is not read as covering them. "alert_baseline" means
+  // the alert history before the promotion could not be read, so every alert
+  // that opened after it counted, including one that was already flapping.
   repeated string not_evaluated = 13;
   // Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
   // so it answers for the whole scope even when scope.instance_ids or
   // instance_users is set (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 14;
+  // Alerts that opened at or after the promotion and still fire, but that the
+  // same alert (rule and identifying labels) also fired at least
+  // alert_baseline_min_firings times in the baseline_window before it: they
+  // were flapping before this release, so their alert_firing findings are warn
+  // and say why in unattributed. Never listed in firing_alerts too. Empty from
+  // an older server, which counted every alert.
+  repeated ReleaseAlertRef baseline_alerts = 15;
 }
 
 // ReleasePromotionRef names the promotion a health check judged.
@@ -2388,7 +2397,9 @@ message ReleasePromotionRef {
 }
 
 // ServiceHealthDelta is one service's before and after, over weighted server
-// spans (tail sampling is corrected for, so the rates are not inflated).
+// spans (tail sampling is corrected for, so the rates are not inflated), and
+// a frontend's browser telemetry beside them or alone (forge
+// pkg/releasehealth Combine).
 message ServiceHealthDelta {
   string service = 1;
   ServiceWindowStats before = 2;
@@ -2396,6 +2407,15 @@ message ServiceHealthDelta {
   // The fraction (0..1) of after-window traffic served by the judged version:
   // rollout and canary progress.
   double version_share = 4;
+  // What before and after were measured from: "spans" (the service's own
+  // server spans) or "browser" (a frontend that sent no server span, judged on
+  // its browser telemetry alone; before and after are empty). An older server
+  // leaves it empty, which means "spans".
+  string signal = 5;
+  // The frontend's own browser telemetry (RUM) over both windows, judged
+  // beside the server figures or alone. Unset when the service sent none, and
+  // from an older server, which never read it.
+  BrowserHealthDelta browser = 6;
 }
 
 message ServiceWindowStats {
@@ -2406,11 +2426,40 @@ message ServiceWindowStats {
   double p99_ms = 5;
 }
 
+// BrowserHealthDelta is one frontend's browser figures before and after.
+// Comparative findings on them need min_requests page views in both windows.
+message BrowserHealthDelta {
+  BrowserWindowStats before = 1;
+  BrowserWindowStats after = 2;
+}
+
+// BrowserWindowStats are one frontend's browser figures over one window
+// (forge pkg/obsquery Overview.BrowserRED): browser spans are never sampled,
+// so these are plain counts.
+message BrowserWindowStats {
+  // Full page loads and client-side route changes.
+  int64 page_views = 1;
+  // Full page loads alone.
+  int64 page_loads = 2;
+  // JavaScript errors: spans of the errors or record-exception scope with an
+  // error status.
+  int64 js_errors = 3;
+  // The page's own fetch and XHR requests, and those that got a 5xx or no
+  // answer.
+  int64 requests = 4;
+  int64 failed_requests = 5;
+  // p95 of the full page loads, 0 when there was none.
+  double page_load_p95_ms = 6;
+}
+
 message ReleaseAlertRef {
   string rule = 1;
   string fingerprint = 2;
   google.protobuf.Timestamp firing_at = 3;
   map<string, string> labels = 4;
+  // How many times the same alert fired in the baseline window before the
+  // promotion. Set only on baseline_alerts.
+  int32 baseline_firings = 5;
 }
 
 // WorkloadFinding is a restart or OOM kill during the after window.
@@ -2439,6 +2488,14 @@ enum ReleaseFindingCode {
   RELEASE_FINDING_CODE_REGRESSED_ISSUE = 4;
   RELEASE_FINDING_CODE_ALERT_FIRING = 5;
   RELEASE_FINDING_CODE_WORKLOAD_RESTARTS = 6;
+  // A frontend's JavaScript errors per page view rose by more than
+  // max_error_rate_increase.
+  RELEASE_FINDING_CODE_BROWSER_ERRORS = 7;
+  // The share of a frontend's own fetch/XHR requests that failed rose by more
+  // than max_error_rate_increase.
+  RELEASE_FINDING_CODE_BROWSER_FAILED_REQUESTS = 8;
+  // A frontend's p95 page load grew by more than max_p95_ratio.
+  RELEASE_FINDING_CODE_BROWSER_PAGE_LOAD = 9;
 }
 
 message ReleaseFinding {
@@ -2453,6 +2510,11 @@ message ReleaseFinding {
   string policy = 5;
   // One line a person or an agent can act on.
   string message = 6;
+  // Why the finding is not counted against the judged release, when it is not
+  // (its policy is then warn): the release served too little of the traffic,
+  // or the alert was already flapping before the promotion. Empty for a
+  // finding that is the release's, and from an older server.
+  string unattributed = 7;
 }
 
 message EffectiveThreshold {
@@ -2589,4 +2651,14 @@ message EnvUserActivity {
   repeated string clients = 9;
   // How new was counted: "signups" or "first_seen".
   string new_rule = 10;
+  // The moment from which current's new tells a new user from a returning
+  // one (forge obsquery EnvUserActivity.NewDecidedFrom): with new_rule
+  // "signups", the environment's earliest retained sign-up. When it falls
+  // inside the current window, new and returning are counted only from it,
+  // and a reader labels them "since <new_decided_from>". Unset when the
+  // window holds no rows.
+  google.protobuf.Timestamp new_decided_from = 11;
+  // new_decided_from for previous (the window of the range's length before
+  // the current one).
+  google.protobuf.Timestamp previous_new_decided_from = 12;
 }

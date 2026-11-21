@@ -4,6 +4,8 @@ package queueddelivery
 import (
 	"sync"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/retry"
 )
 
 // Redelivery bounds. A delivered run that finds its machine and reads the
@@ -76,9 +78,5 @@ func (b *redeliveryBackoff) delivered(chatID string, now time.Time) {
 
 // redeliveryHold is how long after the count-th delivery the next one waits.
 func redeliveryHold(count int) time.Duration {
-	hold := redeliveryBase
-	for i := 1; i < count && hold < redeliveryMax; i++ {
-		hold *= 2
-	}
-	return min(hold, redeliveryMax)
+	return retry.Backoff{Initial: redeliveryBase, Max: redeliveryMax}.Delay(count)
 }

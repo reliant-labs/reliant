@@ -29,9 +29,8 @@ func (r *levelRecorder) WithAttrs([]slog.Attr) slog.Handler { return r }
 func (r *levelRecorder) WithGroup(string) slog.Handler      { return r }
 
 // The other prod lines of reliant#2429: forge.topology answered through
-// daemoncmd.Dispatch (DispatchConnectError) logged ERROR twice per refusal,
-// once in daemoncmd's component chain and once at the RPC edge. Handlers on
-// Error's path did the same. A refusal while the daemon finalizes a
+// daemoncmd.Dispatch logged ERROR twice per refusal, once in daemoncmd's
+// component chain and once at the RPC edge. A refusal while the daemon finalizes a
 // worktree's recovery logs at INFO in both layers, its code unchanged; a
 // genuine daemon failure stays an ERROR in both.
 func TestRecoveryRefusalLogsBelowErrorInEveryLayer(t *testing.T) {
@@ -43,32 +42,26 @@ func TestRecoveryRefusalLogsBelowErrorInEveryLayer(t *testing.T) {
 		"genuine failure":     {text: "forge topology: exit status 2: panic: nil map", wantLevel: slog.LevelError},
 	} {
 		reported := toolexec.DaemonReportedFailure("forge.topology", tc.text)
-		for mapping, mapped := range map[string]error{
-			"DispatchConnectError": DispatchConnectError("forge.topology", reported),
-			"Error":                Error("daemon command forge.topology", reported),
-		} {
-			t.Run(name+"/"+mapping, func(t *testing.T) {
-				assert.Equal(t, connect.CodeUnavailable, svcerr.Code(mapped), "the wire code is unchanged")
-				assert.Contains(t, mapped.Error(), tc.text)
+		mapped := Error("daemon command forge.topology", reported)
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(mapped), "the wire code is unchanged")
+			assert.Contains(t, mapped.Error(), tc.text)
 
-				// The component chain forge generates for daemoncmd: no
-				// project classifier.
-				component := &levelRecorder{}
-				_ = observe.LogMiddleware(slog.New(component), slog.LevelDebug).WrapComponent(context.Background(),
-					"daemoncmd.Dispatch", func(context.Context) error { return mapped })
+			// The component chain forge generates for daemoncmd: no
+			// project classifier.
+			component := &levelRecorder{}
+			_ = observe.LogMiddleware(slog.New(component), slog.LevelDebug).WrapComponent(context.Background(),
+				"daemoncmd.Dispatch", func(context.Context) error { return mapped })
 
-				// The RPC edge, as internal/grpc/user_chain.go wires it.
-				edge := &levelRecorder{}
-				handler := observe.LoggingInterceptor(slog.New(edge), observe.WithErrorClassifier(errclass.Library)).WrapUnary(
-					func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, mapped })
-				_, err := handler(context.Background(), connect.NewRequest(&emptypb.Empty{}))
-				require.Error(t, err)
+			// The RPC edge, as internal/grpc/user_chain.go wires it.
+			edge := &levelRecorder{}
+			handler := observe.LoggingInterceptor(slog.New(edge), observe.WithErrorClassifier(errclass.Library)).WrapUnary(
+				func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, mapped })
+			_, err := handler(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+			require.Error(t, err)
 
-				assert.Equal(t, []slog.Level{tc.wantLevel}, edge.levels, "rpc failed")
-				if mapping == "DispatchConnectError" {
-					assert.Equal(t, []slog.Level{tc.wantLevel}, component.levels, "daemoncmd.Dispatch")
-				}
-			})
-		}
+			assert.Equal(t, []slog.Level{tc.wantLevel}, edge.levels, "rpc failed")
+			assert.Equal(t, []slog.Level{tc.wantLevel}, component.levels, "daemoncmd.Dispatch")
+		})
 	}
 }

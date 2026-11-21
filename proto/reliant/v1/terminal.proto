@@ -16,7 +16,9 @@ service TerminalService {
 
   // CloseSession closes a specific terminal session
   rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {
-    option (forge.v1.method) = {activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}};
+    option (forge.v1.method) = {
+      activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}
+    };
   }
 }
 
