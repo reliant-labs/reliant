@@ -276,6 +276,17 @@ after generate only links and runs. In the merge queue generate averaged 313s
 and test 281s, one after the other, on 8 of 16 runs (2026-11-05/06).
 `MG_MEM_GIB=<n>` overrides the detected size.
 
+The two vite builds are deferred on the same small host. The forge demo bundle
+(`demo`) peaks at ~9 GB RSS and the renderer's release bundle (`webbuild`) at
+~12 GB, each on its own (reliant#2935 merged with main, 2026-11-21). Beside
+test, `tsc -b` and lint, the demo build alone took the queue's gate to
+14.6 GiB of the runner's 16 GiB; with the release build too, the runner lost
+its agent on four queue entries in a row (#2935 and #3009, two each), which
+the queue reports as `CI result` cancelled at its 30-minute timeout, often
+with no log. So under `MG_GEN_ALONE_GIB` they run after every other phase has
+finished, one at a time (`run_bundles`): slower in wall time, but never
+beside anything. A bigger host still runs them beside the rest.
+
 **Rollout check for the prewarm (reliant#2308).** It was estimated, not
 measured, so after it merges read the first 5 merge-queue runs (`merge-queue.yml`)
 whose summary carries the note `forge generate ran before the other phases,
