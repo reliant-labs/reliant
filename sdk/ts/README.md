@@ -38,6 +38,13 @@ the `WakeSource` (online/visibility signals; the default listens on `window`
 when there is one), and any extra interceptors (upgrade prompts, error
 reporting).
 
+Every call on a transport the SDK builds names it in
+`Reliant-Client: sdk-ts/<SDK_VERSION>`. A transport you pass as `transport` is
+yours, identity included: build its chain on `sdkInterceptors()`, or set your
+own client id. A server that no longer supports the version refuses the call;
+`isUpgradeRequired(err)` says so, and `UpgradeRequiredError.from(err)` gives the
+minimum version and how to upgrade.
+
 ### Tool bodies on demand
 
 A long agent chat is mostly tool inputs and outputs. `toolBodies: "stub"` (on

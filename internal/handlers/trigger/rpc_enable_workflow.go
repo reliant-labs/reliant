@@ -55,6 +55,9 @@ func (s *Service) EnableWorkflow(
 	req *connect.Request[reliantv1.EnableWorkflowRequest],
 ) (*connect.Response[reliantv1.EnableWorkflowResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Every declared trigger refreshes its owner's access in phase 1 and
+	// again in phase 2; one refresh per owner and integration serves them all.
+	ctx = withAccessRefreshMemo(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.Workflow) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
@@ -266,7 +269,10 @@ func (s *Service) existingActivationStep(
 	if err := s.refreshTriggerAccess(ctx, row); err != nil {
 		return nil, err
 	}
-	if sameActivationSettings(row, existing) && existing.Enabled {
+	// A new signing secret is a change to write, though no column of the row
+	// holds it.
+	same := sameActivationSettings(row, existing) && def.WebhookHmacSecret == nil
+	if same && existing.Enabled {
 		return nil, nil
 	}
 	warnings, err := s.checkReachability(ctx, userID, wf, wt, msg, row)
@@ -274,7 +280,7 @@ func (s *Service) existingActivationStep(
 		return nil, err
 	}
 	warnings = append(warnings, s.ownerIdentityWarnings(ctx, wt, row)...)
-	if sameActivationSettings(row, existing) {
+	if same {
 		return &enableStep{name: name, existing: existing, warnings: warnings}, nil
 	}
 	return &enableStep{name: name, existing: existing, def: def, warnings: warnings}, nil
@@ -386,13 +392,29 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	enabled := true
 	def := step.def
 	def.Enabled = &enabled
+	// A new signing secret replaces the sealed one, which no row restore
+	// brings back: keep it so the undo can.
+	restore := func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) }
+	if def.WebhookHmacSecret != nil {
+		creds, err := s.deps.Repo.GetTriggerWebhookCredentials(ctx, prev.ID)
+		if err != nil {
+			return triggerDBError("get webhook credentials", err)
+		}
+		prevSecret := creds.SecretSealed
+		restore = func(ctx context.Context) error {
+			if err := s.restoreActivation(ctx, &prev); err != nil {
+				return err
+			}
+			return s.deps.Repo.SetTriggerWebhookSecret(ctx, prev.ID, prevSecret)
+		}
+	}
 	resp, err := s.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def}))
 	if err != nil {
 		// UpdateTrigger writes the row before it converges, so a failure
 		// can leave the new settings stored; put the old ones back.
 		undoCtx, cancel := enableUndoContext(ctx)
 		defer cancel()
-		if revertErr := s.restoreActivation(undoCtx, &prev); revertErr != nil {
+		if revertErr := restore(undoCtx); revertErr != nil {
 			// The restore can fail after it wrote, or before: the row may hold
 			// either settings, and is running if it is on.
 			if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, prev.ID); getErr != nil || cur.Enabled {
@@ -405,7 +427,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 		}
 		return err
 	}
-	*undo = append(*undo, func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) })
+	*undo = append(*undo, restore)
 	result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED
 	if !prev.Enabled {
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
@@ -537,6 +559,14 @@ func (s *Service) workflowActivationDefinition(
 		}
 		if override.Message != nil {
 			def.Message = *override.Message
+		}
+		if override.WebhookHmacSecret != nil {
+			// A secret for a trigger that verifies no signature would be
+			// sealed and never read: refuse it rather than store it.
+			if wt.GetWebhook().GetHmac() == nil {
+				return nil, svcerr.InvalidArgument(fmt.Sprintf("trigger %q does not verify signatures (its webhook declares no hmac:), so it takes no webhook_hmac_secret", wt.GetName()))
+			}
+			def.WebhookHmacSecret = override.WebhookHmacSecret
 		}
 		for k, v := range override.Params {
 			params[k] = v

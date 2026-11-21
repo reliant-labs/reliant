@@ -68,8 +68,8 @@ func (s *Service) runCanBeWoken(ctx context.Context, chat *db.Chat) bool {
 // every thread blocked on a provider — parked on a usage limit, stopped on a
 // provider failure, or holding the run in a self-pause for one — re-evaluates
 // its routing and goes on, as one action for the whole chat. useModel, when
-// set, is a "<model>@<driver>" the waits may continue on instead (a provider
-// the user just switched the chat to, or "Use <model> now").
+// set, hints at the "<model>@<driver>" the picker just switched the chat to.
+// It does not override a provider pin.
 //
 // Addressed to the workflow's latest run, so it reaches a run a resume has
 // just reset. why is for the log.
@@ -146,7 +146,8 @@ func (s *Service) RetryUsageLimitWait(
 			return nil, err
 		}
 	}
-	if err := s.wakeChat(ctx, chat, useModel, "retry now"); err != nil {
+	sig := v2.CapacityWakeSignal{UseModel: useModel, ManualFallback: useModel != ""}
+	if err := s.sendWake(ctx, chat, sig, "retry now"); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to wake the run"))
 	}
 	return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: true}), nil

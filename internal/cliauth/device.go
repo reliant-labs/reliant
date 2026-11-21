@@ -60,6 +60,9 @@ type DeviceLogin struct {
 	// Sleep waits between polls; nil uses a context-aware timer. Tests
 	// replace it so a poll loop costs no wall clock.
 	Sleep func(context.Context, time.Duration) error
+	// ExpiresIn, when positive, asks for a token that lives that long
+	// (ExpiresInParam); see Login.ExpiresIn.
+	ExpiresIn time.Duration
 }
 
 type deviceAuthorization struct {
@@ -124,6 +127,9 @@ func (l DeviceLogin) Run(ctx context.Context) (credentials.Credential, error) {
 		"device":    {l.Name},
 		"hostname":  {l.Hostname},
 		"platform":  {l.Platform},
+	}
+	if v := expiresInValue(l.ExpiresIn); v != "" {
+		form.Set(ExpiresInParam, v)
 	}
 	var auth deviceAuthorization
 	status, err := postForm(ctx, client, endpoint, form, &auth)

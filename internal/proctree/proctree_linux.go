@@ -204,6 +204,36 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	t.dir, t.fd = dir, fd
 }
 
+// cgroupVanished reports whether err, from starting the tree's command, is
+// the kernel refusing the clone into the tree's cgroup because the cgroup was
+// removed: ENOENT for a removed cgroup, ENODEV for one dying, and the cgroup
+// directory gone. A missing program or working directory is ENOENT too, but
+// leaves the cgroup in place.
+func (t *Tree) cgroupVanished(err error) bool {
+	if t == nil || t.dir == "" {
+		return false
+	}
+	if !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENODEV) {
+		return false
+	}
+	_, statErr := os.Stat(t.dir)
+	return errors.Is(statErr, os.ErrNotExist)
+}
+
+// recreateCgroup gives the tree a new cgroup, under a new name, in place of
+// the one that vanished before its command started (cgroupVanished). One that
+// cannot be made leaves the command uncgrouped, as Prepare does.
+func (t *Tree) recreateCgroup(cmd *exec.Cmd, err error) {
+	gone := t.dir
+	t.closeFD()
+	t.dir = ""
+	cmd.SysProcAttr.UseCgroupFD, cmd.SysProcAttr.CgroupFD = false, 0
+	t.l.drop(gone)
+	t.prepareCgroup(cmd, cgroupSeq.Add(1))
+	logging.Warn("proctree: a command's cgroup was removed before the command started in it; starting it again in a new one",
+		"chat_id", t.owner.ChatID, "command", t.owner.Command, "removed", gone, "cgroup", t.dir, "error", err)
+}
+
 // The command cgroups of the trees prepared and not yet released, which every
 // sweep of this process's empty command cgroups leaves alone: a tree's cgroup
 // is empty from Prepare until its command starts in it, and a start into a

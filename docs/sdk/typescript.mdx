@@ -19,7 +19,7 @@ npm pack          # produces reliantlabs-sdk-0.1.0.tgz to install in your app
 
 The package declares four peer dependencies, which your app provides: `@bufbuild/protobuf`, `@connectrpc/connect`, `@opentelemetry/api` and `@reliantlabs/forge-web-runtime`. You also need a Connect transport for your environment, such as `createConnectTransport` from `@connectrpc/connect-web` in a browser. It requires Node 22 or newer to build.
 
-Its only entry point is `@reliantlabs/sdk/client`. There are no React hooks yet; you bind the client to your framework yourself, as shown below.
+It has two entry points: `@reliantlabs/sdk/client`, the framework-free client this page covers, and `@reliantlabs/sdk/react`, which wraps it in React hooks (`useReliantClient`, `useChat`, `useChatSession`, `useApprovals`, `useApprovalActions`). With another framework, you bind the client yourself, as shown below.
 
 ## Where the token comes from
 

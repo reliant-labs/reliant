@@ -44,6 +44,13 @@ export const SETTINGS_KEYS = {
   SPAWN_DISPLAY_MODE: "appearance.spawnDisplayMode",
 
   // Chat timeline display settings
+  /**
+   * @deprecated The retired "Chat density" setting (compact, card, minimal).
+   * The chat has one look now, and this client never reads the key: every
+   * stored value, and none, renders the same. It stays here, synced as the
+   * opaque string it always was, so an older desktop build (which carries its
+   * own bundle) can still read and write it. Remove it only in a major.
+   */
   CHAT_TIMELINE_VARIANT: "appearance.chatTimelineVariant",
   CHAT_THREAD_MODE: "appearance.chatThreadMode",
   
