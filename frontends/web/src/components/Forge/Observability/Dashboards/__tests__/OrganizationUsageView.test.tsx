@@ -141,14 +141,18 @@ describe("OrganizationUsageView", () => {
     expect(panel).not.toHaveTextContent("$");
   });
 
-  it("says the purpose breakdown is unavailable, not zero, when the usage service is missing or fails", () => {
+  it("says plainly when the purpose breakdown is not available or could not load", () => {
     purposeState.value = { status: "not-deployed" };
     view();
     expect(screen.getByTestId("usage-llm-purpose-state")).toHaveTextContent("Not available from this server yet");
     cleanup();
     purposeState.value = { status: "error" };
     view();
-    expect(screen.getByTestId("usage-llm-purpose-state")).toHaveTextContent("unknown, not zero");
+    const state = screen.getByTestId("usage-llm-purpose-state");
+    expect(state).toHaveTextContent("Couldn't load your calls by purpose.");
+    expect(state).not.toHaveTextContent("not zero");
+    within(state).getByRole("button", { name: "Try again" }).click();
+    expect(purposeState.refresh).toHaveBeenCalled();
   });
 
   it("never turns an absent figure into zero", async () => {
@@ -184,16 +188,66 @@ describe("OrganizationUsageView", () => {
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
 
-  it("shows a failed read as unknown, not zero, and recovers on refresh", async () => {
+  it("shows a failed read in plain words, and recovers on refresh", async () => {
     const user = userEvent.setup();
     listUsage.mockRejectedValue(new ConnectError("internal detail", Code.Unavailable));
     view();
     expect(await screen.findAllByTestId("panel-unavailable")).not.toHaveLength(0);
-    expect(screen.getAllByTestId("panel-unavailable")[0]).toHaveTextContent("unknown, not zero");
+    expect(within(screen.getByTestId("usage-period-to-date")).getByTestId("panel-unavailable")).toHaveTextContent("Couldn't load month-to-date usage.");
     expect(screen.queryByText(/internal detail/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/not zero/)).not.toBeInTheDocument();
     listUsage.mockImplementation(async (req: OrganizationUsageRequest) => respond(req));
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(await tile("managed_llm")).toHaveTextContent("$20.00");
+  });
+
+  it("recovers a panel that could not load with its own Try again", async () => {
+    const user = userEvent.setup();
+    getSummary.mockRejectedValueOnce(new ConnectError("internal detail", Code.Unavailable));
+    view();
+    const credit = await screen.findByTestId("usage-credit");
+    await within(credit).findByText("Couldn't load credit.");
+    await user.click(within(credit).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(credit).toHaveTextContent("-$2.50"));
+  });
+
+  it("never shows another organization's answer, nor says anything about one: it asks again", async () => {
+    getSummary.mockReset().mockResolvedValueOnce({ ...organizationCostFixture(), orgId: "org-someone-else" }).mockResolvedValue(organizationCostFixture());
+    listUsage.mockImplementationOnce(async (req: OrganizationUsageRequest) => ({ ...respond(req), orgId: "" }));
+    view();
+    const credit = await screen.findByTestId("usage-credit");
+    await waitFor(() => expect(credit).toHaveTextContent("-$2.50"));
+    expect(getSummary).toHaveBeenCalledTimes(2);
+    expect(getSummary.mock.calls.every(([org]) => org === ORG)).toBe(true);
+    expect(await tile("managed_llm")).toHaveTextContent("$20.00");
+    expect(document.body).not.toHaveTextContent(/different organization|does not match/i);
+  });
+
+  it("retries each fresh fetch once even when it repeats a previously seen foreign org", async () => {
+    const user = userEvent.setup();
+    const own = organizationCostFixture();
+    const foreign = { ...own, orgId: "org-someone-else" };
+    getSummary.mockReset().mockResolvedValueOnce(foreign).mockResolvedValueOnce(foreign).mockResolvedValueOnce(foreign).mockResolvedValueOnce(own);
+    view();
+    const credit = await screen.findByTestId("usage-credit");
+    await within(credit).findByText("Couldn't load credit.");
+    expect(getSummary).toHaveBeenCalledTimes(2);
+    expect(credit).not.toHaveTextContent("$");
+
+    await user.click(within(credit).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(credit).toHaveTextContent("-$2.50"));
+    expect(getSummary).toHaveBeenCalledTimes(4);
+    expect(getSummary.mock.calls.every(([org]) => org === ORG)).toBe(true);
+  });
+
+  it("says only that a panel could not load when every answer names another organization", async () => {
+    getSummary.mockReset().mockResolvedValue({ ...organizationCostFixture(), orgId: "org-someone-else" });
+    view();
+    const credit = await screen.findByTestId("usage-credit");
+    await within(credit).findByText("Couldn't load credit.");
+    expect(credit).not.toHaveTextContent("$");
+    expect(screen.getByTestId("usage-allowances")).toHaveTextContent("Couldn't load allowances.");
+    expect(document.body).not.toHaveTextContent(/different organization|does not match|org-someone-else/i);
   });
 
   it("refuses to show anything without billing:read, including what was cached before", async () => {

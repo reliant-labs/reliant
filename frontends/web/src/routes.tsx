@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { followActiveOrg } from './components/Orgs/followActiveOrg'
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
@@ -15,6 +15,10 @@ import { createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
+import { createOrgHandoffRoute, createOrgLayoutRoute } from './orgRoutes'
+import { routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
+import { mobileHandoffAllowed } from './lib/mobileRedirect'
+import { forwardIntoOrg } from './lib/orgRouting'
 import {
   appsSearchSchema,
   authSearchSchema,
@@ -269,6 +273,10 @@ const App = lazyRoute(() => import('./App'), 'default')
 // harmless (same value) and keeps it self-contained for tests and embeds.
 function RootShell() {
   const { pathname, search } = useRouterState({ select: (s) => s.location });
+  // The path of the page on screen (the committed matches) and its org scope,
+  // which move together (lib/routeOrg.ts): the phone hand-off below reads them.
+  const committedPathname = useRouterState({ select: (s) => s.matches[s.matches.length - 1]?.pathname ?? null });
+  const routeOrgScope = useRouteOrgScope((s) => s.scope);
   const navigate = useNavigate();
 
   // Phones get the mobile surface. Without this the `/m/*` routes are
@@ -289,12 +297,16 @@ function RootShell() {
         : new URLSearchParams(
             search as Record<string, string>,
           ).toString();
+    // An org page hands off only once a member org's page has committed (its
+    // org is then the tab's, which the mobile tree reads until U15): never
+    // from a "no access" page, and never before the org is known.
+    if (!mobileHandoffAllowed({ pathname, committedPathname, routeOrgScope })) return;
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
       navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
-  }, [pathname, search, navigate]);
+  }, [pathname, search, navigate, committedPathname, routeOrgScope]);
 
   // Keyboard shortcuts are app-global too, for the same reason: the host here
   // owns the one dispatcher, the desktop menu bridge and the command palette
@@ -333,6 +345,12 @@ function RootShell() {
 
 const rootRoute = createRootRoute({
   component: RootShell,
+  // The org scope moves when a navigation commits (lib/routeOrg.ts).
+  ...routeOrgScopeHooks,
+  // With the flag web.org_routes on, an org-scoped page's org-less path (`/`,
+  // `/inbox`, an old bookmark) redirects into the tab's org (lib/orgRouting.ts,
+  // the table in lib/paths/legacy.ts). Off: a no-op.
+  beforeLoad: ({ location }) => forwardIntoOrg(location),
   // Keep `?tour=` across navigations that don't name it (retainTourParam).
   // The root has no search schema, so its middleware type is `{}`-shaped.
   search: { middlewares: [retainTourParam as never] },
@@ -409,7 +427,7 @@ const oauthConsentRoute = createRoute({
   ),
 })
 
-// CLI login consent (`forge login`, `reliant auth login`). The control plane's
+// CLI login consent (`forge cloud login`, `reliant auth login`). The control plane's
 // /oauth/authorize validates the CLI's PKCE request and sends the browser here,
 // because this app holds the end-user session. Root-level and unguarded for the
 // same reason as /oauth/consent: the page signs the user in itself and must
@@ -447,16 +465,20 @@ const proxyAuthRoute = createRoute({
 // useSearch({ from: '/_app' }) and that id collapses if we nest it here).
 // Reset-password and verify-email have different gating, so they stay as
 // direct children of rootRoute.
-const authenticatedLayoutRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  id: '_authenticated',
-  component: () => (
+function AuthenticatedLayout() {
+  return (
     <AuthGuard requireAuth={true} requireEmailVerification={true} returnHere>
       <OnboardingGate>
         <Outlet />
       </OnboardingGate>
     </AuthGuard>
-  ),
+  )
+}
+
+const authenticatedLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: '_authenticated',
+  component: AuthenticatedLayout,
 })
 
 const resetPasswordRoute = createRoute({
@@ -526,31 +548,19 @@ const acceptInviteRoute = createRoute({
 //
 // Kept as a direct child of rootRoute (not nested under _authenticated) so its
 // full id remains '/_app' — call sites use useSearch({ from: '/_app' }).
+function AppLayout() {
+  return (
+    <AuthGuard requireAuth={true} requireEmailVerification={true}>
+      <Outlet />
+    </AuthGuard>
+  )
+}
+
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
-  component: () => (
-    <AuthGuard requireAuth={true} requireEmailVerification={true}>
-      <Outlet />
-    </AuthGuard>
-  ),
-})
-
-const indexRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/',
-  component: App,
-})
-
-// Project routes — the URL carries the sidebar's project filter.
-// `/project/$projectId` shows one project (App reads the param via useParams
-// and calls setProjectFilter); `/` shows every project. `/project` (no id)
-// redirects to `/`.
-const projectRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: 'project/$projectId',
-  component: App,
+  component: AppLayout,
 })
 
 const projectRootRedirectRoute = createRoute({
@@ -722,50 +732,6 @@ const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLay
   page: SettingsPage,
 })
 
-// The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
-// /workflow/new                → the New workflow dialog; Create makes the
-//                                draft (static segment, takes precedence over
-//                                the dynamic one below)
-// /workflow/$workflowName      → opens a named workflow. workflowName is the
-//                                full identifier — e.g. `builtin://get-it-right`
-//                                or a user workflow's name. URL-encoding is
-//                                handled by tanstack-router.
-// The bare /workflow (the old hub) is a redirect, below.
-const workflowNewRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/workflow/new',
-  validateSearch: workflowSearchSchema,
-  component: () => <WorkflowPage isNew />,
-})
-
-const workflowBuilderRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/workflow/$workflowName',
-  validateSearch: workflowSearchSchema,
-  component: () => <WorkflowPage />,
-})
-
-// The Workflows area — Workflows and Runs — and the redirects from
-// the paths it replaced. Defined in workflowsAreaRoutes.tsx so the route tests
-// mount the same definitions.
-const workflowsAreaRoutes = createWorkflowsAreaRoutes(() => authenticatedLayoutRoute, {
-  layout: WorkflowsLayout,
-  library: WorkflowsListPage,
-  workflowDetail: WorkflowDetailPage,
-  runs: RunsPage,
-  runDetail: RunDetailPage,
-  automationRedirect: AutomationRedirectPage,
-})
-
-// Inbox: everything waiting on the user, across every chat and project
-// (research/WORKFLOW_UI.md §8). Top-level, not under Workflows: interactive
-// chats awaiting an answer belong in it too (§14.1 decisions 1 and 2).
-const inboxRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/inbox',
-  component: InboxPage,
-})
-
 // ── forge UI (experimental, gated) ───────────────────────────────────────────
 //
 // Every forge route goes through ForgeGate. Hiding the sidebar entry is NOT enough
@@ -801,7 +767,9 @@ function gated(Component: RouteComponent): RouteComponent {
   }
 }
 
-const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, {
+
+
+const forgeConsolePageComponents = {
   layout: ForgeLayout,
   console: gated(ConsoleLayout),
   overview: gated(ForgeConsoleOverviewPage),
@@ -825,7 +793,143 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   legacyEnv: gated(ForgeLegacyEnvRoute),
   legacyDomains: gated(ForgeLegacyDomainsRoute),
   legacyCommand: gated(ForgeLegacyCommandRoute),
+}
+
+// ── The org-scoped pages, mounted twice ─────────────────────────────────────
+//
+// Every org-scoped page is mounted at its org-less path (today's) AND under
+// the `/o/$org` layout (control-plane docs/design/unified-shell-and-projects.md
+// §3), from this one factory so the two can never drift. The org tree is
+// mounted whatever the flag `web.org_routes` says (D12): the flag only picks
+// which form the links name (lib/paths/org.ts) and whether an org-less path
+// redirects into the tab's org (the root's beforeLoad). Pages that read their
+// params or search do so without a route id (`strict: false`), so the same
+// page serves both trees.
+//
+//   form 'legacy'   /, /project/$projectId, /workflow/…, /workflows/… (and
+//                   their retired paths), /inbox, /apps, /forge/…
+//   form 'org'      /o/$org, /o/$org/project/$projectId, /o/$org/workflow/…,
+//                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/apps,
+//                   /o/$org/apps/$project/… (the console),
+//                   /o/$org/observability/…, /o/$org/forge (the console's entry)
+function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
+  appParent: () => TApp,
+  authParent: () => TAuth,
+  form: 'legacy' | 'org',
+) {
+  // The chat home: every project's chats.
+  const indexRoute = createRoute({
+    getParentRoute: appParent,
+    path: '/',
+    component: App,
+  })
+
+  // Project routes — the URL carries the sidebar's project filter.
+  // `/project/$projectId` shows one project (App reads the param via useParams
+  // and calls setProjectFilter); `/` shows every project. `/project` (no id)
+  // redirects to `/`.
+  const projectRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'project/$projectId',
+    component: App,
+  })
+
+  // The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
+  // /workflow/new                → the New workflow dialog; Create makes the
+  //                                draft (static segment, takes precedence over
+  //                                the dynamic one below)
+  // /workflow/$workflowName      → opens a named workflow. workflowName is the
+  //                                full identifier — e.g. `builtin://get-it-right`
+  //                                or a user workflow's name. URL-encoding is
+  //                                handled by tanstack-router.
+  // The bare /workflow (the old hub) is a redirect (workflowsAreaRoutes.tsx).
+  const workflowNewRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/workflow/new',
+    validateSearch: workflowSearchSchema,
+    component: () => <WorkflowPage isNew />,
+  })
+
+  const workflowBuilderRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/workflow/$workflowName',
+    validateSearch: workflowSearchSchema,
+    component: () => <WorkflowPage />,
+  })
+
+  // The Workflows area — Workflows and Runs — and, in today's form, the
+  // redirects from the paths it replaced. Defined in workflowsAreaRoutes.tsx so
+  // the route tests mount the same definitions.
+  const workflowsAreaRoutes = createWorkflowsAreaRoutes(authParent, {
+    layout: WorkflowsLayout,
+    library: WorkflowsListPage,
+    workflowDetail: WorkflowDetailPage,
+    runs: RunsPage,
+    runDetail: RunDetailPage,
+    automationRedirect: AutomationRedirectPage,
+  }, { retiredPaths: form === 'legacy' })
+
+  // Inbox: everything waiting on the user, across every chat and project
+  // (research/WORKFLOW_UI.md §8). Top-level, not under Workflows: interactive
+  // chats awaiting an answer belong in it too (§14.1 decisions 1 and 2).
+  const inboxRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/inbox',
+    component: InboxPage,
+  })
+
+  // Apps: everything the user has built and deployed, with its live links
+  // (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
+  // /forge, land here. Behind ForgeGate like every forge surface: it is the way
+  // into the console, and the Developer off-switch has to turn it off too.
+  const appsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/apps',
+    validateSearch: appsSearchSchema,
+    component: gated(AppsPage),
+  })
+
+  const forgeConsoleRoutes = createForgeConsoleRoutes(authParent, forgeConsolePageComponents, { form })
+
+  return {
+    app: [indexRoute, projectRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute] as const,
+  }
+}
+
+const legacyOrgScopedRoutes = createOrgScopedRoutes(() => appLayoutRoute, () => authenticatedLayoutRoute, 'legacy')
+
+// The org tree: `/o/$org` resolves the org before any page in it renders
+// (orgRoutes.tsx), then the same two layouts as the org-less tree, with the
+// same guards, and the same pages.
+const orgLayoutRoute = createOrgLayoutRoute(() => rootRoute, {
+  Guard: ({ children }) => (
+    <AuthGuard requireAuth={true} requireEmailVerification={true} returnHere>
+      {children}
+    </AuthGuard>
+  ),
 })
+
+const orgAuthenticatedLayoutRoute = createRoute({
+  getParentRoute: () => orgLayoutRoute,
+  id: '_authenticated',
+  component: AuthenticatedLayout,
+})
+
+const orgAppLayoutRoute = createRoute({
+  getParentRoute: () => orgLayoutRoute,
+  id: '_app',
+  validateSearch: indexSearchSchema,
+  component: AppLayout,
+})
+
+const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => orgAuthenticatedLayoutRoute, 'org')
+
+// The forge host's org pages, which this tree does not serve: handed to the
+// forge host (OrgHandoff), so `/o/<org>/sites` and `/o/<org>/usage` resolve
+// here too. Rendered only in a member org.
+const orgSitesHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/sites', 'forge')
+const orgUsageHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/usage', 'forge')
 
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
@@ -833,16 +937,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 // without the conditional. /onboarding owns: reset-onboarding signal, GitHub
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
-// Apps: everything the user has built and deployed, with its live links
-// (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
-// /forge, land here. Behind ForgeGate like every forge surface: it is the way
-// into the console, and the Developer off-switch has to turn it off too.
-const appsRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/apps',
-  validateSearch: appsSearchSchema,
-  component: gated(AppsPage),
-})
 
 // The forge demo console: the console and its Observability views on fixture
 // data, with no daemon, chat or control-plane call (components/Forge/Demo). The
@@ -1020,7 +1114,8 @@ const mobileIndexRoute = createRoute({
   component: () => <Navigate to={mobileChatsPath()} />,
 })
 
-const routeTree = rootRoute.addChildren([
+/** The production route tree; tests mount it with a router of their own (test/orgRouteHarness.ts). */
+export const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
@@ -1071,17 +1166,18 @@ const routeTree = rootRoute.addChildren([
     ]),
     onboardingRoute,
     forgeDemoRoute,
-    forgeConsoleRoutes,
     settingsRoute,
     ...settingsConnectorRoutes,
     ...settingsSectionRoutes,
-    workflowNewRoute,
-    workflowBuilderRoute,
-    ...workflowsAreaRoutes,
-    inboxRoute,
-    appsRoute,
+    ...legacyOrgScopedRoutes.authenticated,
   ]),
-  appLayoutRoute.addChildren([indexRoute, projectRoute]),
+  appLayoutRoute.addChildren([...legacyOrgScopedRoutes.app]),
+  orgLayoutRoute.addChildren([
+    orgAuthenticatedLayoutRoute.addChildren([...orgOrgScopedRoutes.authenticated]),
+    orgAppLayoutRoute.addChildren([...orgOrgScopedRoutes.app]),
+    orgSitesHandoffRoute,
+    orgUsageHandoffRoute,
+  ]),
 ])
 
 export const router = createRouter({

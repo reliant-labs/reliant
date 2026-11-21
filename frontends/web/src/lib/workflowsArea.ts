@@ -19,11 +19,14 @@
  * route tree to find out.
  */
 
-import { automationPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
+import { automationPath, automationsPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
+import { orgFreePath } from "./paths/org";
 
 // The constants below are the area's paths as a pathname is MATCHED against
 // them (which tab, is this a workflow page). A link builds its target with
-// lib/paths instead, which is where the org segment (U3) goes.
+// lib/paths instead, which is where the org segment goes. The matchers below
+// read a pathname in its org-less form (orgFreePath), so `/o/<org>/workflows/…`
+// is the same page as `/workflows/…`.
 export const WORKFLOWS_AREA_PATH = "/workflows";
 /** The Workflows tab's list; a workflow's page is `${this}/<ref>`. */
 export const WORKFLOWS_LIBRARY_PATH = "/workflows/library";
@@ -61,21 +64,23 @@ function isAtOrBelow(pathname: string, path: string): boolean {
 
 /** Which tab a pathname belongs to; null outside the area. */
 export function workflowsTabForPath(pathname: string): WorkflowsTab | null {
-  return WORKFLOWS_TABS.find((tab) => isAtOrBelow(pathname, tab.path))?.key ?? null;
+  const path = orgFreePath(pathname);
+  return WORKFLOWS_TABS.find((tab) => isAtOrBelow(path, tab.path))?.key ?? null;
 }
 
 /** A tab's detail page (`/workflows/runs/<id>`), as opposed to its list. */
 export function isWorkflowsDetailPath(pathname: string): boolean {
-  return WORKFLOWS_TABS.some((tab) => pathname.startsWith(`${tab.path}/`));
+  const path = orgFreePath(pathname);
+  return WORKFLOWS_TABS.some((tab) => path.startsWith(`${tab.path}/`));
 }
 
 export function isWorkflowsAreaPath(pathname: string): boolean {
-  return isAtOrBelow(pathname, WORKFLOWS_AREA_PATH);
+  return isAtOrBelow(orgFreePath(pathname), WORKFLOWS_AREA_PATH);
 }
 
 /** The builder: `/workflow/$workflowName` and `/workflow/new`. Unchanged by the merge. */
 export function isWorkflowBuilderPath(pathname: string): boolean {
-  return pathname.startsWith("/workflow/");
+  return orgFreePath(pathname).startsWith("/workflow/");
 }
 
 /**
@@ -100,13 +105,20 @@ export function isWorkflowSurfacePath(pathname: string): boolean {
  *                                 → the automation redirect, which looks the
  *                                   trigger up and opens its workflow's page
  *                                   (automationRedirectPath)
+ *
+ * The retired paths are MATCHED as literals; every destination is built by
+ * lib/paths, with the rest of the retired path (an id, as the URL carried
+ * it) appended byte for byte. A destination that names a run or an
+ * automation keeps today's org-less form (`{ org: null }`): its own org
+ * decides where it opens (the resolver, U4), not the tab's.
  */
 export function legacyWorkflowsPath(pathname: string): string | null {
   if (pathname === "/workflow") return workflowLibraryPath();
-  if (isAtOrBelow(pathname, "/runs")) return `/workflows${pathname}`;
+  if (pathname === "/runs") return runsPath();
+  if (pathname.startsWith("/runs/")) return `${runsPath({ org: null })}${pathname.slice("/runs".length)}`;
   if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return onWorkflowsHref();
   // /workflows/automations/<id> is the resolving redirect itself.
-  if (pathname.startsWith("/automations/")) return `/workflows${pathname}`;
+  if (pathname.startsWith("/automations/")) return `${automationsPath({ org: null })}${pathname.slice("/automations".length)}`;
   return null;
 }
 

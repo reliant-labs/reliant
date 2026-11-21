@@ -10,6 +10,8 @@ import (
 )
 
 // ListTools returns all available tools
+//
+// forge:auth-unscoped-ok: the tool registry is built into the binary and the same for every caller
 func (s *Service) ListTools(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListToolsRequest],

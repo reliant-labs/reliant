@@ -38,7 +38,7 @@ export function ForgeConnectorsSection() {
           <p className="text-xs text-muted-foreground mt-1">
             Applications that read your forge monitoring and releases over MCP. Add{" "}
             <span className="font-mono">{FORGE_MCP_URL}</span>{" "}
-            as a custom connector in Claude, ChatGPT, VS Code or Cursor and sign in; `forge skill
+            as a custom connector in Claude, ChatGPT, VS Code or Cursor and sign in; `forge agent skill
             load connect` has the steps.
           </p>
         </div>

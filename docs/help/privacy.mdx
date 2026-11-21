@@ -57,7 +57,7 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Counts of each text model request (tokens, model, provider, time) | No | Yes, as a [usage record](#model-usage-records), whichever key or login you use | No |
 
 <Warning>
-Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/features/secrets). If a key has been exposed, rotate it.
+Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/hosting/secrets). If a key has been exposed, rotate it.
 </Warning>
 
 ### Local daemon vs. cloud machine

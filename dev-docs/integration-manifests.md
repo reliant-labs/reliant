@@ -187,6 +187,7 @@ The envelope (`repository`, `installation_id`, `sender`, `action` attributes; `a
 | `strings` | a list of strings, at most `caps.list_items` |
 | `object` | `object: <name>` (a shared object) or inline `fields:`; `omit_empty: true` drops it when the source is not an object |
 | `list` | `object: <name>` per element, at most `max: <caps.lists key>` |
+| `markers` | the `<!-- name key=value ... -->` markers of the text at `from:`, read from the whole text before any cap, as `[{name, attrs: {key: value}}]`: at most 16, in order, none from a code block or span (`webhook/github/markers.go` has the grammar); `omit_empty: true` leaves out an empty list |
 
 `optional: <why>` on a field excuses it from existing in every event's upstream
 definition (a pull request in a review event is slimmer than a full one); it must

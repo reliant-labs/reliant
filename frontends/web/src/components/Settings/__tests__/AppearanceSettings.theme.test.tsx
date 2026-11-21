@@ -25,7 +25,6 @@ vi.mock("../../../services/settingsSync", () => ({
     CHAT_FONT: "appearance.chatFont",
     EDITOR_FONT: "appearance.editorFont",
     FONT_SIZE: "appearance.fontSize",
-    CHAT_TIMELINE_VARIANT: "appearance.chatTimelineVariant",
     COLOR_SCHEME: "appearance.colorScheme",
   },
 }));
@@ -53,5 +52,19 @@ describe("Appearance → Theme", () => {
     expect(dark).toHaveFocus();
     expect(mocks.setSetting).toHaveBeenCalledWith("appearance.theme", "dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+});
+
+describe("Appearance → chat", () => {
+  it("keeps Simplified/Detailed as the chat's only switch: Chat density is retired", async () => {
+    // An older desktop build may have stored any of the retired values; this
+    // page neither offers them nor rewrites the key.
+    mocks.stored["appearance.chatTimelineVariant"] = "card";
+    render(<AppearanceSettings />);
+    expect(await screen.findByRole("radiogroup", { name: "Chat thread" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Chat density" })).toBeNull();
+    expect(screen.queryByText("Chat density")).toBeNull();
+    expect(mocks.setSetting).not.toHaveBeenCalledWith("appearance.chatTimelineVariant", expect.anything());
+    expect(mocks.stored["appearance.chatTimelineVariant"]).toBe("card");
   });
 });

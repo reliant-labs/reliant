@@ -98,6 +98,8 @@ func machineCode(err error) (connect.Code, bool) {
 		return connect.CodeFailedPrecondition, true
 	case toolexec.IsDaemonTimeout(err):
 		return connect.CodeDeadlineExceeded, true
+	case toolexec.IsRecoveryFinalizing(err):
+		return connect.CodeUnavailable, true
 	default:
 		return 0, false
 	}
@@ -114,6 +116,9 @@ func machineCode(err error) (connect.Code, bool) {
 // does to err — it becomes the cause, and a cause's reason is not the
 // client's (forge svcerr) — so it is re-stamped on the result explicitly.
 func machineReason(code connect.Code, err error) string {
+	if toolexec.IsRecoveryFinalizing(err) {
+		return errreason.WorktreeRecovering
+	}
 	if reason := svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader); reason != "" {
 		return reason
 	}
@@ -141,6 +146,13 @@ func machineReason(code connect.Code, err error) string {
 //     waking laptop's poll Internal and logged ERROR (prod, 2026-11-17);
 //   - no machine at all (toolexec.ErrNoDaemon) is FailedPrecondition: waiting
 //     cannot produce a machine the user has not connected;
+//   - refusing new work in a worktree for a moment, while it finalizes that
+//     worktree's recovery (toolexec.ErrRecoveryFinalizing), is the same
+//     Unavailable user error, with the worktree_recovering reason and the
+//     daemon's own words. Nothing ran, and every caller retries. Handlers
+//     that map the rest of a daemon's failures to Internal (ListProcesses,
+//     the file proxy) answered it Internal, and the web reported each poll
+//     as a bug (prod issues 1ada7020, 591b1445, 2026-11-20);
 //   - connected but too busy to answer before the deadline
 //     (toolexec.ErrDaemonTimeout) is DeadlineExceeded: retryable, and still a
 //     server condition — forge logs it at WARN, visible but never a page.
@@ -164,6 +176,11 @@ func MachineState(doing string, err error) (error, bool) {
 		return nil, false
 	}
 	msg := prefixed(doing, svcerr.ToConnect(err).Message())
+	if toolexec.IsRecoveryFinalizing(err) {
+		// The refusal is the daemon's own words, which the router's error
+		// carries as a reported failure, not as its message.
+		msg = prefixed(doing, daemonText(err))
+	}
 	var kind error
 	switch code {
 	case connect.CodeUnavailable:

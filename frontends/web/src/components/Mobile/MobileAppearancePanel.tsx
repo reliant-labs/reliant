@@ -3,7 +3,7 @@
  *
  * Reads and writes the exact same `settingsSync` keys as desktop
  * `AppearanceSettings` (`THEME`, `FONT`, `EDITOR_FONT`, `FONT_SIZE`,
- * `CHAT_TIMELINE_VARIANT`, `CHAT_THREAD_MODE`, `WORKFLOW_VIEWER_DEFAULT_MODE`,
+ * `CHAT_THREAD_MODE`, `WORKFLOW_VIEWER_DEFAULT_MODE`,
  * `SPAWN_DISPLAY_MODE` via `SpawnDisplaySettings`) plus `useUIStore`'s
  * `showHiddenFiles`, so a change here is the same persisted preference
  * desktop shows — only the control shape (rows/sheets vs. selects/grids)
@@ -46,7 +46,6 @@ import {
 } from "./MobileSettingsRow";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
-type ChatTimelineVariant = "compact" | "card" | "minimal";
 
 const FONT_OPTIONS = [
   { value: "default", label: "Geist (Default)" },
@@ -71,12 +70,6 @@ const FONT_SIZE_OPTIONS: Array<{ value: FontSize; label: string }> = [
   { value: "md", label: "Medium" },
   { value: "lg", label: "Large" },
   { value: "xl", label: "Extra Large" },
-];
-
-const CHAT_TIMELINE_OPTIONS: Array<{ value: ChatTimelineVariant; label: string }> = [
-  { value: "compact", label: "Compact" },
-  { value: "card", label: "Card" },
-  { value: "minimal", label: "Minimal" },
 ];
 
 const CHAT_THREAD_OPTIONS: Array<{ value: ChatThreadModePreference; label: string }> = [
@@ -110,7 +103,6 @@ export function MobileAppearancePanel() {
   const [editorFont, setEditorFont] = useState<string>("default");
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
-  const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [chatThreadMode, setChatThreadMode] = useState<ChatThreadModePreference>(DEFAULT_CHAT_THREAD_MODE);
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<"inline" | "side">("side");
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
@@ -140,7 +132,6 @@ export function MobileAppearancePanel() {
       setEditorFont(savedEditorFont);
       setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
-      setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setChatThreadMode(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE)));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
@@ -202,13 +193,6 @@ export function MobileAppearancePanel() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (persistPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant)) {
-      window.dispatchEvent(new CustomEvent("appearance-updated"));
-    }
-  }, [chatTimelineVariant, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
     // Unset already means the default; don't write it just for opening the page.
     if (chatThreadMode === DEFAULT_CHAT_THREAD_MODE && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
     if (persistPref(SETTINGS_KEYS.CHAT_THREAD_MODE, chatThreadMode)) {
@@ -255,7 +239,7 @@ export function MobileAppearancePanel() {
       />
 
       <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Fonts
         </h3>
         <button
@@ -265,7 +249,6 @@ export function MobileAppearancePanel() {
             setUseCodeFont(false);
             setEditorFont("default");
             setFontSize("md");
-            setChatTimelineVariant("compact");
             setWorkflowViewerDefaultMode("side");
           }}
           className="flex min-h-[44px] items-center text-xs text-muted-foreground underline active:text-foreground"
@@ -306,16 +289,6 @@ export function MobileAppearancePanel() {
           description: FONT_SIZE_MAP[o.value],
         }))}
         onChange={(v) => setFontSize(v as FontSize)}
-      />
-
-      <MobileSettingsSectionTitle
-        title="Chat timeline density"
-        description="How messages are spaced and grouped in the timeline."
-      />
-      <MobileSegmentedRow
-        value={chatTimelineVariant}
-        onChange={(v) => setChatTimelineVariant(v as ChatTimelineVariant)}
-        options={CHAT_TIMELINE_OPTIONS}
       />
 
       <MobileSettingsSectionTitle

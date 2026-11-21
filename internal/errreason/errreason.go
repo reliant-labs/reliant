@@ -31,6 +31,11 @@ const (
 	// NoDaemon: no machine exists for the request at all
 	// (toolexec.ErrNoDaemon). FailedPrecondition; nothing to wait for.
 	NoDaemon = "no_daemon"
+	// WorktreeRecovering: the machine refused new work in a worktree for a
+	// moment, while it finalizes that worktree's recovery
+	// (toolexec.ErrRecoveryFinalizing). Unavailable; nothing ran, retry
+	// shortly. Not a connecting reason: the machine is up.
+	WorktreeRecovering = "worktree_recovering"
 
 	// ChatNotStarted: SendMessage on a chat whose root run has not started.
 	// FailedPrecondition; the client calls StartChat.
@@ -38,7 +43,7 @@ const (
 	// RunNoListeningAgent: input to a live run in which no agent is running
 	// right now (a workflow between its agent steps). FailedPrecondition;
 	// nothing was queued. SignalRun reports it as delivered=false with this
-	// value in NotDeliveredHeader instead.
+	// value in not_delivered_reason (and NotDeliveredHeader) instead.
 	RunNoListeningAgent = "run_no_listening_agent"
 	// RunRecipientAmbiguous: input to a run with several agents running in
 	// parallel that names none of them. FailedPrecondition; the message lists
@@ -70,9 +75,22 @@ const (
 	// control-plane credential, or this server issues none. Signing in fixes
 	// it, unless the server has no control plane at all.
 	NoControlPlaneCredential = "no_control_plane_credential"
+
+	// UpgradeRequired: the client named in the Reliant-Client header is older
+	// than the minimum this server supports. FailedPrecondition, with a
+	// google.rpc.ErrorInfo detail (reason UPGRADE_REQUIRED, domain
+	// reliantlabs.io) whose metadata carries client_kind, client_version,
+	// min_version, upgrade_url and upgrade_command. Retrying cannot help;
+	// the client upgrades.
+	UpgradeRequired = "upgrade_required"
 )
 
 // NotDeliveredHeader is the response header SignalRun sets, beside
 // delivered=false, to say why a live run did not take the message: one of the
 // reasons above (RunNoListeningAgent). Absent for a run that was not live.
+//
+// New readers use SignalRunResponse.not_delivered_reason, which carries the
+// same value; the header is deprecated for them. SignalRun keeps setting it
+// for clients that predate the field, and a reader falls back to it only
+// against a server that sends no field.
 const NotDeliveredHeader = "X-Reliant-Not-Delivered-Reason"

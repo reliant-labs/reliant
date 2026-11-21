@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   section: "account",
+  search: {} as Record<string, unknown>,
   pathname: "/settings/account",
   isElectron: false,
   isMac: false,
@@ -13,7 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
   useParams: () => ({ section: state.section }),
-  useSearch: () => ({}),
+  useSearch: () => state.search,
   useLocation: () => ({ pathname: state.pathname }),
 }));
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
@@ -44,6 +45,7 @@ let resize: ResizeObserverCallback;
 beforeEach(() => {
   state.navigate.mockReset();
   state.section = "account";
+  state.search = {};
   state.pathname = "/settings/account";
   state.isElectron = false;
   state.isMac = false;
@@ -84,7 +86,7 @@ describe("settings navigation chrome", () => {
     expect(container.innerHTML).not.toContain("min-w-[500px]");
     fireEvent.click(exit);
     expect(state.navigate).toHaveBeenCalledWith({ to: "/", search: {} });
-    expect(screen.getByRole("button", { name: "AI providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Personal accounts" })).toBeInTheDocument();
     const switcher = screen.getByRole("button", { name: "Switch organization" });
     expect(switcher).toBeInTheDocument();
     expect(switcher.parentElement?.className).toContain("w-full");
@@ -103,6 +105,36 @@ describe("settings navigation chrome", () => {
       fireEvent.keyDown(target, { key: "ArrowDown" });
     }
     expect(state.navigate).not.toHaveBeenCalled();
+  });
+
+  it("walks the AI group's entries with the arrows, tab included: Personal accounts, Organization accounts, Models & tools", async () => {
+    state.section = "ai";
+    const view = render(<SettingsPage />);
+    await screen.findByTestId("settings-content");
+    const personal = screen.getByRole("button", { name: "Personal accounts" });
+    expect(personal).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Models & tools" })).not.toHaveAttribute("aria-current");
+
+    personal.focus();
+    fireEvent.keyDown(personal, { key: "ArrowDown" });
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: "/settings/org-ai-accounts" });
+
+    state.section = "org-ai-accounts";
+    view.rerender(<SettingsPage />);
+    const org = screen.getByRole("button", { name: "Organization accounts" });
+    org.focus();
+    fireEvent.keyDown(org, { key: "ArrowDown" });
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: "/settings/ai", search: { tab: "models" } });
+
+    // ?tab=local is Models & tools too: the arrow up goes back to Organization accounts.
+    state.section = "ai";
+    state.search = { tab: "local" };
+    view.rerender(<SettingsPage />);
+    const models = screen.getByRole("button", { name: "Models & tools" });
+    expect(models).toHaveAttribute("aria-current", "page");
+    models.focus();
+    fireEvent.keyDown(models, { key: "ArrowUp" });
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: "/settings/org-ai-accounts" });
   });
 
   it("uses the URL section on rerender (including browser history changes)", async () => {

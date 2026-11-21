@@ -308,6 +308,10 @@ nodes:
               ? 'continue' : 'pass'}}
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
+        # The reviewer's whole verdict, every field its response schema
+        # required (a caller's extended schema included, e.g. forge-one-shot's
+        # inspection_evidence), so a caller can show what the review saw.
+        review_response: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response : {}}}"
         has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : (has(nodes.review_checkpoint) && has(nodes.review_checkpoint.has_feedback) ? nodes.review_checkpoint.has_feedback : false)}}"
         # What the human actually typed when they unblocked a `stuck`. The next
         # iteration's reviewer is the one being answered, so it gets the words
@@ -556,6 +560,7 @@ outputs:
   eval_strategy: "{{nodes.attempt.eval_strategy}}"
   review_grade: "{{nodes.attempt.review_grade}}"
   review_feedback: "{{nodes.attempt.review_feedback}}"
+  review_response: "{{nodes.attempt.review_response}}"
   lint_exit: "{{nodes.attempt.lint_exit}}"
   test_exit: "{{nodes.attempt.test_exit}}"
   build_exit: "{{nodes.attempt.build_exit}}"
