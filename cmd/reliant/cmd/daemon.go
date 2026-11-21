@@ -726,7 +726,7 @@ func daemonStartFailure(err error, useToken bool, conn *connection) (failure err
 //
 // The URL is the --grpc-url flag, else the credential's gateway, else a local
 // gateway on --port; grpc:// and grpcs:// are normalized first because the TLS
-// inference below keys off the scheme (`forge cluster urls` prints grpc://).
+// inference below keys off the scheme (`forge dev cluster urls` prints grpc://).
 // TLS mode is the explicit flag, else TLS when a cert and key are given (which
 // also points an unflagged URL at the local TLS listener), else TLS for an
 // https:// URL, else h2c.

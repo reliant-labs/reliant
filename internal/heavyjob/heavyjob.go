@@ -10,7 +10,7 @@
 // unslotted `go build ./...` or `go test ./...` on every core, and every one of
 // those jobs slowed down (reclaim, not CPU, is what past a handful of jobs
 // costs). Forge already has the primitive — host-wide heavy slots
-// (forge/pkg/hostslot), held by `forge generate`, `forge lint`, `forge slot
+// (forge/pkg/hostslot), held by `forge generate`, `forge lint`, `forge machine slot
 // run` and the gate's heavy checks — but only forge's own lanes used it.
 //
 // What. A Gate decides whether a command is heavy (a short, explicit
@@ -27,9 +27,9 @@
 // group dies, with no bookkeeping in the daemon. The wrapper marks itself a
 // subtree holder and passes FORGE_SLOT_HELD to the command, so anything the
 // command runs that wants a slot of its own — `forge generate`, `make test`
-// under `forge slot run` — runs at once instead of queueing behind its own
+// under `forge machine slot run` — runs at once instead of queueing behind its own
 // parent (which, with every slot held by such parents, would deadlock). Each
-// command also appears in `forge slot status` under its own pid and command
+// command also appears in `forge machine slot status` under its own pid and command
 // line, not as N anonymous holds by the daemon.
 //
 // Light commands never wait: they are not rewritten at all.

@@ -19,12 +19,12 @@ The bug used here: `ListProducts` counts in-stock products with a typo, `in_stok
 
 <Steps>
   <Step title="Give the agent the tools">
-    In a Reliant chat there is nothing to set up: the agent's shell already has `reliant forge`, signed in. Ask it to start with `reliant forge skill load debug`, which sets the read-only order this guide follows.
+    In a Reliant chat there is nothing to set up: the agent's shell already has `reliant forge`, signed in. Ask it to start with `reliant forge agent skill load debug`, which sets the read-only order this guide follows.
 
     In Claude Code or Cursor, add two MCP servers. The local one carries the repo tools (skills, `shapes`, `lint`); the hosted Reliant Forge connector carries the telemetry tools (`obs_status`, `obs_issues`, `obs_issue`, `obs_logs`, `obs_traces`, `obs_check`) after you sign in:
 
     ```bash terminal
-    claude mcp add forge -- npx -y @reliantlabs/forge mcp
+    claude mcp add forge -- npx -y @reliantlabs/forge agent mcp
     claude mcp add --transport http reliant-forge https://api.reliantapi.com/forge/mcp
     ```
 

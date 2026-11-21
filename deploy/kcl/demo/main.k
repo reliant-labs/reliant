@@ -30,7 +30,7 @@ pin in control-plane would have to move in lockstep with go.mod's (that repo's
 pin-coherence checks), which is exactly the coupling a demo must not have.
 
 THE DOMAIN is a control-plane resource bound to this env's frontend, not spec
-(`forge domain bind demo.reliantlabs.io --env demo --target forge-demo`). The cutover
+(`forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo`). The cutover
 from control-plane's prod/reliant-web, its checks and its rollback:
 dev-docs/forge-demo-cutover.md.
 """

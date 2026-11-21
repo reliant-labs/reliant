@@ -38,7 +38,7 @@ func shadowFor(t *testing.T, snapshot Snapshot, key SkillKey, loser skillscore.S
 // `forge generate` renders forge's own skills into .claude/skills, which
 // discovery picks up at ScopeClaude (priority 7) while the forge-embedded
 // originals are ScopeForge (priority 10) — so the generated render wins, and it
-// carries a banner telling the reader that `forge skill load` prints the
+// carries a banner telling the reader that `forge agent skill load` prints the
 // authoritative copy "when the two differ". Nothing anywhere said the two
 // existed, let alone whether they differed.
 //
