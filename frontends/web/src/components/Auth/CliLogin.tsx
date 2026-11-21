@@ -223,7 +223,7 @@ export function CliLogin() {
           )}
           {requested.length > 0 && (
             <div className="space-y-2 pt-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">It asks to</p>
+              <p className="text-xs text-muted-foreground">It asks to</p>
               <ul className="space-y-1.5" data-testid="cli-login-scopes">
                 {requested.map((scope) => (
                   <li key={scope} className="text-sm flex items-start gap-2">

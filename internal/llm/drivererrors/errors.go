@@ -23,6 +23,29 @@ var ErrEmptyInput = fmt.Errorf("llm request has no input")
 // and never reaches Sentry, whichever error wraps it.
 var ErrNoServableProvider = svcerr.WithClass(errors.New("no servable provider"), svcerr.ClassUser)
 
+// ErrStreamEndedEarly matches a stream that closed cleanly — no transport
+// error — before the provider sent the event that terminates a response
+// (`response.completed` / `response.incomplete` / `response.failed` on the
+// Responses API).
+//
+// The stream guards in internal/llm (idle, content stall, progress, first
+// token) all fire on a stream that stays OPEN without progress. This is the
+// opposite fault: the stream ends, but too soon. A proxy or load
+// balancer that closes an HTTP/2 stream mid-response does exactly that, and
+// the SSE reader sees an orderly EOF. Treating that as a finished turn ended
+// the run as a success with half-streamed text, and dropped any tool call
+// whose arguments were still arriving. Codex CLI raises "stream closed before
+// response.completed" for the same condition and retries it with backoff
+// (codex-rs codex-api/src/sse/responses.rs); so do opencode and hermes.
+//
+// The runtime's classifiers (runtime.classifyError, activities.ClassifyError)
+// recognise it by identity, before any text rule, and retry it; it lives here,
+// in a leaf package, because internal/llm imports the workflow runtime and the
+// runtime cannot import it back. It is still phrased to read as transient
+// ("network"), so a copy that lost its identity is retried too. Drivers wrap it
+// with what was missing.
+var ErrStreamEndedEarly = errors.New("llm stream ended early: the provider closed the stream before its terminal event (a network or proxy cut the response short)")
+
 // EmptyInputError describes a request that could not be sent because message
 // conversion produced no input items.
 type EmptyInputError struct {

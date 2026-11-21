@@ -288,6 +288,9 @@ func issueCommentCreatedDataComment(v any) map[string]any {
 		"author_association": text(dig(v, "author_association")),
 		"created_at":         text(dig(v, "created_at")),
 	}
+	if m := markers(text(dig(v, "body"))); len(m) > 0 {
+		out["markers"] = m
+	}
 	return out
 }
 
@@ -618,6 +621,9 @@ func pullRequestReviewCommentCreatedDataComment(v any) map[string]any {
 		"pull_request_review_id": num(dig(v, "pull_request_review_id")),
 		"created_at":             text(dig(v, "created_at")),
 	}
+	if m := markers(text(dig(v, "body"))); len(m) > 0 {
+		out["markers"] = m
+	}
 	if n := num(dig(v, "line")); n != nil {
 		out["line"] = n
 	}
@@ -688,6 +694,9 @@ func pullRequestReviewSubmittedDataReview(v any) map[string]any {
 		"commit_id":          text(dig(v, "commit_id")),
 		"submitted_at":       text(dig(v, "submitted_at")),
 		"author_association": text(dig(v, "author_association")),
+	}
+	if m := markers(text(dig(v, "body"))); len(m) > 0 {
+		out["markers"] = m
 	}
 	return out
 }

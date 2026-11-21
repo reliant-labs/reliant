@@ -69,9 +69,9 @@ type SealedProviderAccount struct {
 
 // ProviderAccountCredential is one credential write: the account's identity, its metadata, and
 // its secrets already sealed. On an insert an empty string (or nil ciphertext, or a zero
-// ExpiresAt) is NULL. On a rewrite an empty metadata string, a nil Refresh or IDToken and an
-// empty LegacySource keep what the row holds — a re-consent that omits a refresh token must not
-// erase the one held — while Secret and ExpiresAt are always written.
+// ExpiresAt) is NULL. On a rewrite an empty metadata string and a nil Refresh or IDToken keep
+// what the row holds — a re-consent that omits a refresh token must not erase the one held —
+// while Secret and ExpiresAt are always written.
 type ProviderAccountCredential struct {
 	AuthKind                                                   core.AuthKind
 	IdentityKey                                                string
@@ -79,15 +79,12 @@ type ProviderAccountCredential struct {
 	Plan, PlanRaw, KeyHint, Scope                              string
 	Secret, Refresh, IDToken                                   []byte
 	ExpiresAt                                                  time.Time
-	LegacySource                                               string
 	UpdatedAt                                                  time.Time
 }
 
-// providerAccountSealedColumns stay on disk for a metadata read; legacy_source is read only by
-// the legacy copy (ProviderAccountLegacySource).
+// providerAccountSealedColumns stay on disk for a metadata read.
 var providerAccountSealedColumns = []string{
-	ProviderAccountFieldSecretSealed, ProviderAccountFieldRefreshSealed,
-	ProviderAccountFieldIDTokenSealed, ProviderAccountFieldLegacySource,
+	ProviderAccountFieldSecretSealed, ProviderAccountFieldRefreshSealed, ProviderAccountFieldIDTokenSealed,
 }
 
 // providerAccountMetaColumns is what a write returns: every column core.ProviderAccount carries.
@@ -279,25 +276,6 @@ func LockOwnerProviderAccount(ctx context.Context, db orm.Context, owner core.Ac
 	return a, err
 }
 
-// LockLegacyMirror locks the first (by priority) of the user's accounts of provider that the
-// legacy copy made from source; nil when there is none.
-func LockLegacyMirror(ctx context.Context, db orm.Context, userID, provider, source string) (*core.ProviderAccount, error) {
-	return lockProviderAccount(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("user_id = ?", userID).Where("provider = ?", provider).Where("legacy_source = ?", source).
-			Order("priority").Limit(1)
-	})
-}
-
-// ProviderAccountLegacySource returns the legacy table the account was copied from, or nil for
-// an account connected natively.
-func ProviderAccountLegacySource(ctx context.Context, db orm.Context, accountID string) (*string, error) {
-	row, err := GetProviderAccountByID(ctx, db, accountID)
-	if err != nil {
-		return nil, err
-	}
-	return row.LegacySource, nil
-}
-
 // NextProviderAccountPriority is the priority a new account of provider takes: after the last.
 func NextProviderAccountPriority(ctx context.Context, db orm.Context, userID, provider string) (int, error) {
 	var n int
@@ -329,7 +307,7 @@ func InsertProviderAccount(ctx context.Context, db orm.Context, id string, own P
 		OrganizationID: acctNullText(c.OrganizationID), OrganizationName: acctNullText(c.OrganizationName),
 		Plan: acctNullText(c.Plan), PlanRaw: acctNullText(c.PlanRaw), KeyHint: acctNullText(c.KeyHint),
 		Priority: int32(priority), SecretSealed: c.Secret, RefreshSealed: c.Refresh, IDTokenSealed: c.IDToken,
-		ExpiresAt: acctNullTime(c.ExpiresAt), Scope: acctNullText(c.Scope), LegacySource: acctNullText(c.LegacySource),
+		ExpiresAt: acctNullTime(c.ExpiresAt), Scope: acctNullText(c.Scope),
 		CreatedAt: createdAt.UTC(), UpdatedAt: c.UpdatedAt.UTC(),
 	}
 	if own.Owner.IsOrg() {
@@ -367,14 +345,13 @@ func RewriteProviderAccountCredential(ctx context.Context, db orm.Context, userI
 			scope = COALESCE(?15, scope),
 			needs_reauth_at = NULL,
 			needs_reauth_reason = NULL,
-			legacy_source = COALESCE(?16, legacy_source),
-			updated_at = ?17
+			updated_at = ?16
 		WHERE id = ?0 AND user_id = ?1
 		RETURNING `+providerAccountMetaColumns,
 		accountID, userID, c.IdentityKey, string(c.AuthKind), acctNullText(c.Email), acctNullText(c.ExternalAccountID),
 		acctNullText(c.OrganizationID), acctNullText(c.OrganizationName), acctNullText(c.Plan), acctNullText(c.PlanRaw),
 		acctNullText(c.KeyHint), c.Secret, c.Refresh, c.IDToken, acctNullTime(c.ExpiresAt), acctNullText(c.Scope),
-		acctNullText(c.LegacySource), c.UpdatedAt.UTC()).Scan(ctx, &row)
+		c.UpdatedAt.UTC()).Scan(ctx, &row)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}

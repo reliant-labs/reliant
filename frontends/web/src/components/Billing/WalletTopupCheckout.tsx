@@ -179,7 +179,7 @@ export function WalletTopupCheckout({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Pay with card
         </h3>
         <TopupPaymentForm
@@ -194,7 +194,7 @@ export function WalletTopupCheckout({
       </section>
 
       <section className="space-y-2 border-t border-border pt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">

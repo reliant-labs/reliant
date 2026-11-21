@@ -68,6 +68,13 @@ func NewInbound(store Store, intake Intake, registry *Registry, v Vault, publicU
 	return in
 }
 
+// WithDeliveryInbox makes both receivers persist authenticated receipts first.
+func (in *Inbound) WithDeliveryInbox(store ReceiptStore) *Inbound {
+	in.hooks.opts.Inbox = store
+	in.events.opts.Inbox = store
+	return in
+}
+
 // WithConnectionSecrets lets the app-level receiver verify deliveries that
 // are signed with a per-connection secret (Twilio's Auth Token). Without it,
 // such providers answer 503.

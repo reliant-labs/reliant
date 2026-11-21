@@ -163,7 +163,7 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
 
   return (
     <div className="fixed inset-0 z-[60] flex justify-end" data-testid="panel-drawer" data-mode={mode}>
-      <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={onCancel} />
+      <div className="absolute inset-0 bg-scrim" aria-hidden="true" onClick={onCancel} />
       <aside
         {...escape}
         role="dialog"
