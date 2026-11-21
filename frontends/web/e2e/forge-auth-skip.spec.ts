@@ -3,7 +3,10 @@ import { expect, test, type Route } from '@playwright/test';
 // forge.reliantlabs.io/auth, signed out, "Skip for now": the guest session it
 // mints must land on the Apps page. It used to bounce / → /apps → / and stop
 // on a blank page with no console error (the forge root's <Navigate> did not
-// redirect a second visit to `/`).
+// redirect a second visit to `/`). The forge host now mounts the app's one
+// route tree (routes.tsx, U6): a guest has not onboarded, so the forge
+// brand's home sends them to /apps (OnboardingFlow/onboardingGate.ts,
+// forgeBrandHomeTarget) on every visit.
 
 const LOADED = { timeout: 20_000 };
 const json = (route: Route, body: unknown) =>
@@ -54,11 +57,11 @@ test('"Skip for now" on the forge host lands a signed-out visitor on /apps, not 
   await page.getByRole('button', { name: /skip for now/i }).click();
 
   await expect(page).toHaveURL(/\/apps$/, LOADED);
-  await expect(page.getByTestId('forge-shell-layout')).toBeVisible(LOADED);
+  await expect(page.getByTestId('apps-page')).toBeVisible(LOADED);
   // Settled, not passing through: still here, still rendered.
   await page.waitForTimeout(1500);
   await expect(page).toHaveURL(/\/apps$/);
-  await expect(page.getByTestId('forge-shell-layout')).toBeVisible();
+  await expect(page.getByTestId('apps-page')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -75,6 +78,6 @@ test('revisiting / on the forge host always ends on /apps', async ({ page }) => 
       (globalThis as unknown as { __RELIANT_ROUTER: { navigate: (o: { to: string }) => Promise<void> } }).__RELIANT_ROUTER.navigate({ to: '/' }),
     );
     await expect(page).toHaveURL(/\/apps$/, LOADED);
-    await expect(page.getByTestId('forge-shell-layout')).toBeVisible(LOADED);
+    await expect(page.getByTestId('apps-page')).toBeVisible(LOADED);
   }
 });

@@ -54,7 +54,9 @@ service ConnectionService {
   // the request's Origin (which must be one this deployment serves), or a
   // desktop app's loopback_redirect.
   rpc StartOAuth(StartOAuthRequest) returns (StartOAuthResponse) {
-    option (forge.v1.method) = {activity: {none: "OAuth handshake in flight: nothing is stored until CompleteOAuth records the connection"}};
+    option (forge.v1.method) = {
+      activity: {none: "OAuth handshake in flight: nothing is stored until CompleteOAuth records the connection"}
+    };
   }
 
   // CompleteOAuth finishes a flow with the code and state the callback
@@ -76,7 +78,9 @@ service ConnectionService {
   // TestConnection runs the integration's probe against the live credential
   // and records the account label it identifies.
   rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse) {
-    option (forge.v1.method) = {activity: {none: "probes the live credential; refreshing the account label it detects is bookkeeping, not a change a person made"}};
+    option (forge.v1.method) = {
+      activity: {none: "probes the live credential; refreshing the account label it detects is bookkeeping, not a change a person made"}
+    };
   }
 
   rpc RenameConnection(RenameConnectionRequest) returns (RenameConnectionResponse) {

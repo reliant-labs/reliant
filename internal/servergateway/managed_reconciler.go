@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/reliant-labs/forge/pkg/retry"
 
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -70,6 +71,10 @@ type ManagedDaemonReconciler struct {
 	mu        sync.Mutex
 	lastSnap  time.Time
 	lastCount int
+
+	// clock paces createConsumerWithRetry's backoff. Nil (always, in
+	// production) is the system clock; tests set a retrytest.Clock.
+	clock retry.Clock
 }
 
 // NewManagedDaemonReconciler constructs a reconciler bound to the given
@@ -128,39 +133,28 @@ func (r *ManagedDaemonReconciler) createConsumerWithRetry(
 	ctx context.Context,
 	create func(context.Context) (jetstream.Consumer, error),
 ) (jetstream.Consumer, error) {
-	backoff := consumerCreateRetryInitial
-	logged := false
-	for {
-		consumer, err := create(ctx)
-		if err == nil {
-			return consumer, nil
-		}
-		if !isStreamNotFound(err) {
-			// Non-retryable: surface immediately.
-			return nil, err
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		if !logged {
-			logging.InfoContext(ctx, reconcilerLogPrefix+
-				" DAEMON_STATE stream not found yet — waiting for control plane to create it; retrying consumer creation")
-			logged = true
-		}
-		timer := time.NewTimer(backoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-		if backoff < consumerCreateRetryMax {
-			backoff *= 2
-			if backoff > consumerCreateRetryMax {
-				backoff = consumerCreateRetryMax
+	consumer, err := retry.DoValue(ctx, retry.Policy{
+		Backoff: retry.Backoff{Initial: consumerCreateRetryInitial, Max: consumerCreateRetryMax},
+		// Anything else is non-retryable: surface immediately.
+		Retryable: isStreamNotFound,
+		OnRetry: func(ctx context.Context, a retry.Attempt) error {
+			if a.Number == 1 {
+				logging.InfoContext(ctx, reconcilerLogPrefix+
+					" DAEMON_STATE stream not found yet — waiting for control plane to create it; retrying consumer creation")
 			}
+			return nil
+		},
+		Clock: r.clock,
+		Name:  "create DAEMON_STATE consumer",
+	}, create)
+	if err != nil {
+		if isStreamNotFound(err) && ctx.Err() != nil {
+			// Still waiting for the stream when ctx ended: report the ctx.
+			return nil, ctx.Err()
 		}
+		return nil, err
 	}
+	return consumer, nil
 }
 
 // isStreamNotFound reports whether err indicates the target stream does not

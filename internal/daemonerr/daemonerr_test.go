@@ -52,16 +52,13 @@ func TestIsOutdated(t *testing.T) {
 // that is not a defect; Unavailable invites a retry that cannot succeed until
 // the machine is updated.
 func TestOutdatedDaemonMapsToFailedPrecondition(t *testing.T) {
-	got := DispatchConnectError("auth.open_oauth_helper", outdatedDaemonErr())
+	got := Error("daemon command auth.open_oauth_helper", outdatedDaemonErr())
 
-	if code := connect.CodeOf(got); code != connect.CodeFailedPrecondition {
+	if code := svcerr.Code(got); code != connect.CodeFailedPrecondition {
 		t.Errorf("code = %v, want %v", code, connect.CodeFailedPrecondition)
 	}
-	if code := connect.CodeOf(got); code == connect.CodeInternal {
-		t.Error("version skew still reports as internal, the code users saw")
-	}
 
-	msg := got.Error()
+	msg := svcerr.ToConnect(got).Message()
 	if !strings.Contains(msg, "older version") {
 		t.Errorf("message lost the actionable cause: %q", msg)
 	}
@@ -77,14 +74,14 @@ func TestOutdatedDaemonMapsToFailedPrecondition(t *testing.T) {
 
 // Other failure classes must keep the codes they had.
 func TestNonSkewDispatchErrorsKeepTheirCodes(t *testing.T) {
-	notFound := DispatchConnectError("pkg.list_commands",
+	notFound := Error("daemon command pkg.list_commands",
 		errors.New("working dir does not exist: /daemon/workspace/gone"))
-	if code := connect.CodeOf(notFound); code != connect.CodeNotFound {
+	if code := svcerr.Code(notFound); code != connect.CodeNotFound {
 		t.Errorf("missing dir: code = %v, want %v", code, connect.CodeNotFound)
 	}
 
-	unavailable := DispatchConnectError("pkg.list_commands", errors.New("no daemon connected"))
-	if code := connect.CodeOf(unavailable); code != connect.CodeUnavailable {
+	unavailable := Error("daemon command pkg.list_commands", errors.New("no daemon connected"))
+	if code := svcerr.Code(unavailable); code != connect.CodeUnavailable {
 		t.Errorf("daemon pending: code = %v, want %v", code, connect.CodeUnavailable)
 	}
 }
@@ -101,15 +98,12 @@ func TestDaemonReportedMissingPathIsNotFoundAndUserClass(t *testing.T) {
 		if c := svcerr.Classify(report); c != svcerr.ClassUser {
 			t.Errorf("%v: raw router error class = %v, want user", report, c)
 		}
-		cerr := DispatchConnectError("forge.topology", report)
-		if code := connect.CodeOf(cerr); code != connect.CodeNotFound {
-			t.Errorf("%v: DispatchConnectError code = %v, want NotFound", report, code)
-		}
-		if c := svcerr.Classify(cerr); c != svcerr.ClassUser {
-			t.Errorf("%v: DispatchConnectError class = %v, want user", report, c)
-		}
-		if code := svcerr.Code(Error("daemon command forge.topology", report)); code != connect.CodeNotFound {
+		mapped := Error("daemon command forge.topology", report)
+		if code := svcerr.Code(mapped); code != connect.CodeNotFound {
 			t.Errorf("%v: Error code = %v, want NotFound", report, code)
+		}
+		if c := svcerr.Classify(mapped); c != svcerr.ClassUser {
+			t.Errorf("%v: Error class = %v, want user", report, c)
 		}
 	}
 }
@@ -122,8 +116,8 @@ func TestDaemonReportedOtherFailuresStayServerClass(t *testing.T) {
 		toolexec.DaemonReportedFailure("search.grep", "fork/exec /usr/bin/rg: no such file or directory"),
 		toolexec.DaemonReportedFailure("forge.topology", "forge command failed: exit status 1"),
 	} {
-		cerr := DispatchConnectError("x", report)
-		if code := connect.CodeOf(cerr); code != connect.CodeUnavailable {
+		cerr := Error("daemon command x", report)
+		if code := svcerr.Code(cerr); code != connect.CodeUnavailable {
 			t.Errorf("%v: code = %v, want Unavailable", report, code)
 		}
 		if c := svcerr.Classify(cerr); c != svcerr.ClassServer {

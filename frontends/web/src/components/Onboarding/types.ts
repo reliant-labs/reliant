@@ -40,6 +40,8 @@ export interface RouteTarget {
 export interface JourneyRoute {
   /** Pathname prefix the step needs, e.g. "/workflows/library" or "/workflow/". */
   path: string;
+  /** Other pathname prefixes the step's page is also at (the chat shell is at `/project/…`, `/c/…` and `/new`). */
+  alsoAt?: readonly string[];
   /**
    * Where to go: static, or built from the journey context (a slug a
    * previous step recorded). Its `search` is merged into the current search

@@ -4,7 +4,7 @@
  * A heartbeat whose health disagrees with the cached daemon list re-reads the
  * list, so a machine that stops being able to start processes (or recovers)
  * shows it at once rather than a poll later (reliant#1919). A heartbeat with
- * no health — from a gateway that predates it — changes nothing.
+ * no health changes nothing.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

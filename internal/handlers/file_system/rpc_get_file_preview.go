@@ -83,7 +83,7 @@ func (s *Service) GetFilePreview(
 		}
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, bin.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(bin.ViewerGuarded); err != nil {
 		return nil, err
 	}
 	content, err := base64.StdEncoding.DecodeString(bin.Data)

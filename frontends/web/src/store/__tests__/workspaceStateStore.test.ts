@@ -569,6 +569,49 @@ describe('Persisted state migration', () => {
     expect(store.getWorktreeState('project-1', null).terminalOpen).toBe(false);
     expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
   });
+
+  it('keeps a v1 payload and reads defaults for the fields it predates', async () => {
+    // No leftSidebarExpanded, expandedLoops or workflow viewer fields: the
+    // readers default them rather than a migration step filling them in.
+    const {
+      expandedLoops: _loops,
+      workflowViewerOpen: _open,
+      workflowViewerMode: _mode,
+      workflowLayoutDirection: _direction,
+      ...v1Worktree
+    } = createDefaultWorktreeState();
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 1,
+        state: {
+          lastProjectId: 'project-1',
+          projects: {
+            'project-1': {
+              lastWorktreeId: null,
+              activeView: 'chats',
+              worktrees: {
+                [MAIN_WORKTREE_KEY]: { ...v1Worktree, activeChatId: 'chat-1', chatQueue: ['chat-1'] },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
+    expect(store.lastProjectId).toBe('project-1');
+    expect(store.leftSidebarExpanded).toBe(true);
+    expect(store.getWorktreeState('project-1', null).activeChatId).toBe('chat-1');
+    expect(store.getExpandedLoops('project-1', null, 'wf')).toEqual([]);
+    expect(store.getWorkflowViewerOpen('project-1', null, 'chat-1')).toBe(false);
+    expect(store.getWorkflowViewerMode('project-1', null, 'chat-1')).toBeNull();
+    expect(store.getWorkflowLayoutDirection('project-1', null, 'wf')).toBe('horizontal');
+  });
 });
 
 describe('Right panel closed by default (v8)', () => {

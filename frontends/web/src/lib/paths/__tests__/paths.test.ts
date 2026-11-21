@@ -45,6 +45,15 @@ const ROWS: Record<string, Row> = {
   // Always the org form: a way into one of the person's orgs by name (the org routes are always mounted).
   orgHomePath: { build: () => paths.orgHomePath("acme"), url: "/o/acme", template: "/o/$org", params: { org: "acme" } },
   projectPath: { build: () => paths.projectPath("p-1"), url: "/project/p-1", template: "/project/$projectId", params: { projectId: "p-1" } },
+  // New in U5 (R1–R3): no URL before them, so their org-less form is the one they were born with.
+  chatPath: { build: () => paths.chatPath("c-1"), url: "/c/c-1", template: "/c/$chatId", params: { chatId: "c-1" } },
+  threadPath: {
+    build: () => paths.threadPath("c-1", "t-1"),
+    url: "/c/c-1/t/t-1",
+    template: "/c/$chatId/t/$threadId",
+    params: { chatId: "c-1", threadId: "t-1" },
+  },
+  newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
   appsPath: { build: () => paths.appsPath(), url: "/apps", template: "/apps" },
   sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
@@ -81,12 +90,6 @@ const ROWS: Record<string, Row> = {
     url: "/settings/org-ai-accounts",
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
-  },
-  forgeSettingsPath: {
-    build: () => paths.forgeSettingsPath("members"),
-    url: "/settings/members",
-    template: "/settings/$section",
-    params: { section: "members" },
   },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
@@ -167,6 +170,9 @@ const ROWS: Record<string, Row> = {
 const ORG_URLS: Record<string, string> = {
   homePath: "/o/acme",
   projectPath: "/o/acme/project/p-1",
+  chatPath: "/o/acme/c/c-1",
+  threadPath: "/o/acme/c/c-1/t/t-1",
+  newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
   appsPath: "/o/acme/apps",
   sitesPath: "/o/acme/sites",
@@ -190,6 +196,9 @@ const ORG_URLS: Record<string, string> = {
 /** Builders that take an id, with the template the old call sites passed it to. */
 const ID_BUILDERS: [string, (id: string) => string, string, string][] = [
   ["projectPath", paths.projectPath, "/project/$projectId", "projectId"],
+  ["chatPath", paths.chatPath, "/c/$chatId", "chatId"],
+  ["threadPath(thread)", (id) => paths.threadPath("c-1", id), "/c/c-1/t/$threadId", "threadId"],
+  ["threadPath(chat)", (id) => paths.threadPath(id, "t-1"), "/c/$chatId/t/t-1", "chatId"],
   ["workflowDetailPath", paths.workflowDetailPath, "/workflows/library/$workflowRef", "workflowRef"],
   ["runPath", paths.runPath, "/workflows/runs/$runId", "runId"],
   ["automationPath", paths.automationPath, "/workflows/automations/$triggerId", "triggerId"],
@@ -281,7 +290,7 @@ describe.each([
   });
 
   it.each(ID_BUILDERS)("%s encodes an awkward id as the router encodes a param", (name, build, template, param) => {
-    const inOrg = orgScoped(name);
+    const inOrg = orgScoped(name.replace(/\(.*$/, ""));
     expect(hrefOf({ to: build(AWKWARD) })).toBe(
       hrefOf({ to: inOrg ? orgTemplateOf(template) : template, params: { [param]: AWKWARD, ...(inOrg ? { org: "acme" } : {}) } }),
     );
@@ -341,10 +350,11 @@ describe("the org segment", () => {
       expect(paths.inboxPath()).toBe("/inbox");
     });
 
-    it("keeps today's paths on the forge host, whose tree has no org pages until U6", () => {
+    it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/apps");
-      expect(consoleBase("shop")).toBe("/forge/p/shop");
+      expect(paths.appsPath()).toBe("/o/acme/apps");
+      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 
     it("never changes a path that is not org-scoped", () => {
@@ -372,6 +382,9 @@ describe("the org segment", () => {
     ["/o/acme", "/o/side"],
     ["/o/acme/inbox", "/o/side/inbox"],
     ["/o/acme/project/p-1", "/o/side"],
+    ["/o/acme/c/c-1", "/o/side"],
+    ["/o/acme/c/c-1/t/t-1", "/o/side"],
+    ["/o/acme/new", "/o/side/new"],
     ["/o/acme/apps", "/o/side/apps"],
     ["/o/acme/apps/shop/releases/v1", "/o/side/apps"],
     ["/o/acme/observability/logs", "/o/side/observability/logs"],

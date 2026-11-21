@@ -11,17 +11,20 @@ import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
-import { createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
-import { createOrgHandoffRoute, createOrgLayoutRoute } from './orgRoutes'
+import { createOrgLayoutRoute } from './orgRoutes'
 import { routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
 import { mobileHandoffAllowed } from './lib/mobileRedirect'
-import { forwardIntoOrg } from './lib/orgRouting'
+import { forwardIntoOrg, type LocationLike } from './lib/orgRouting'
+import type { OrgRouteState } from './lib/routeOrg'
 import {
   appsSearchSchema,
   authSearchSchema,
+  chatViewSearchSchema,
+  newChatSearchSchema,
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
@@ -36,6 +39,7 @@ import {
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { lazyRoute } from './lib/lazyRoute'
 import { watchRoutedChatOpens } from './lib/routedChatOpen'
+import { listenForOpenRouteLinks } from './lib/openRouteLink'
 import { AuthGuard } from './components/AuthGuard'
 import { OnboardingGate } from './components/OnboardingFlow/OnboardingGate'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -51,7 +55,39 @@ import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
 import { PageVisitTracker } from './components/PageVisitTracker'
+import { JourneyTour } from './components/Onboarding/JourneyTour'
+import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
+import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
+import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
+import { isForgeShell } from './lib/shell'
 import { homePath, mobileChatsPath } from '@/lib/paths'
+
+// ─── One router, two brands ─────────────────────────────────────────────────
+//
+// Both hosts mount THIS tree (components/App.tsx): app.reliantlabs.io and
+// forge.reliantlabs.io serve the same routes, guards and pages. The host is
+// only a brand (lib/shell.ts, getShell / isForgeShell), and the forge brand
+// differs in exactly these places, all in this file unless named:
+//
+//   - the root carries `data-shell="forge"` (RootShell);
+//   - the first page_visited event carries the landing handoff (forgeEntry,
+//     taken below, before the router exists, because the sign-in redirect
+//     replaces the URL it arrived on);
+//   - the tour runs as the forge shell's, with progress in localStorage
+//     (bootForgeTour, below), and the root mounts JourneyTour and
+//     ForgeLandingJourney in place of Reliant's OnboardingWizard;
+//   - AuthGuard holds sign-in for a visitor the landing journey is taking to
+//     the public demo (components/AuthGuard.tsx);
+//   - the home sends a person who has not onboarded to their apps rather
+//     than to the wizard (OnboardingFlow/onboardingGate.ts,
+//     forgeBrandHomeTarget);
+//   - telemetry reports as `forge-web` (lib/telemetry.ts), and the brand mark
+//     is ForgeBrand (the nav, AuthLayout).
+//
+// Brand is fixed for the page load, so it is read once, here.
+const forgeBrand = isForgeShell()
+const forgeEntry = forgeBrand ? captureForgeEntry() : undefined
+if (forgeBrand) bootForgeTour()
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -153,6 +189,10 @@ const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
 const AppsPage = lazyRoute(
   () => import('./components/Apps/AppsPage'), 'AppsPage')
+const SitesPage = lazyRoute(
+  () => import('./components/ForgeShell/ForgeSitesPage'), 'SitesPage')
+const UsagePage = lazyRoute(
+  () => import('./components/ForgeShell/ForgeUsagePage'), 'UsagePage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -324,10 +364,10 @@ function RootShell() {
   // for every authenticated desktop route. It decides where it is live itself
   // (signed in, desktop surface, an app route — never /auth, /onboarding or
   // /m/*); ModernApp and the workflow builder contribute their handlers to it.
-  return (
-    <SurfaceProvider surface={surfaceForPath(pathname)}>
+  const shell = (
+    <>
       <ActiveOrgBinding onSwitch={followActiveOrg} />
-      <PageVisitTracker />
+      <PageVisitTracker firstVisitProps={forgeEntry} />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>
@@ -348,11 +388,35 @@ function RootShell() {
       <GlobalUpdateHandler />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
-      <OnboardingWizard />
+      {forgeBrand ? (
+        // The journeys (Onboarding/JOURNEYS.md) at the root, signed in or not,
+        // so a step follows the visitor between the public demo and the
+        // signed-in pages; and the journey the landing page carried. The
+        // OnboardingWizard's checklist is Reliant's chat setup, and it shows
+        // no tour to a signed-out visitor.
+        <>
+          <JourneyTour />
+          <ForgeLandingJourney />
+        </>
+      ) : (
+        <OnboardingWizard />
+      )}
       {/* A deploy this session saw queued on billing goes out while the user
           is usually elsewhere (billing, a chat): the watch lives here, and
           loads its forge code only while it has something to watch. */}
       <QueuedDeployWatch pathname={pathname} />
+    </>
+  );
+
+  return (
+    <SurfaceProvider surface={surfaceForPath(pathname)}>
+      {forgeBrand ? (
+        <div data-shell="forge" data-pathname={pathname} className="contents">
+          {shell}
+        </div>
+      ) : (
+        shell
+      )}
     </SurfaceProvider>
   );
 }
@@ -469,10 +533,11 @@ const proxyAuthRoute = createRoute({
 })
 
 // Pathless layout route that gates the settings + workflow group on auth +
-// email verification, and every app route in it on finished onboarding
-// (OnboardingGate; the exemptions — /onboarding, /settings, /m, … — are in
-// OnboardingFlow/onboardingGate.ts). A signed-out deep link keeps where it was
-// going across sign-in (returnHere), and the gate across the wizard.
+// email verification, and its chat routes (the phone's, `/m/chats…`) on
+// finished onboarding (OnboardingGate; which routes is
+// OnboardingFlow/onboardingGate.ts — every other page here works for a person
+// with no machine). A signed-out deep link keeps where it was going across
+// sign-in (returnHere), and the gate across the wizard.
 // Avoids re-declaring <AuthGuard requireAuth requireEmailVerification>
 // on every one of those routes. The `_app` layout below has its own AuthGuard
 // (kept separate so its full route id remains '/_app' — production code uses
@@ -563,8 +628,9 @@ const acceptInviteRoute = createRoute({
 // Kept as a direct child of rootRoute (not nested under _authenticated) so its
 // full id remains '/_app' — call sites use useSearch({ from: '/_app' }).
 function AppLayout() {
+  // returnHere: a signed-out chat link (`/c/<id>`) comes back to its chat after sign-in.
   return (
-    <AuthGuard requireAuth={true} requireEmailVerification={true}>
+    <AuthGuard requireAuth={true} requireEmailVerification={true} returnHere>
       <Outlet />
     </AuthGuard>
   )
@@ -825,10 +891,13 @@ const forgeConsolePageComponents = {
 // params or search do so without a route id (`strict: false`), so the same
 // page serves both trees.
 //
-//   form 'legacy'   /, /project/$projectId, /workflow/…, /workflows/… (and
-//                   their retired paths), /inbox, /apps, /forge/…
-//   form 'org'      /o/$org, /o/$org/project/$projectId, /o/$org/workflow/…,
+//   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
+//                   /workflow/…, /workflows/… (and their retired paths),
+//                   /inbox, /apps, /forge/…
+//   form 'org'      /o/$org, /o/$org/project/$projectId,
+//                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/apps,
+//                   /o/$org/sites, /o/$org/usage,
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
 function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
@@ -850,6 +919,39 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectRoute = createRoute({
     getParentRoute: appParent,
     path: 'project/$projectId',
+    component: App,
+  })
+
+  // A chat, one of its threads in full view, and the new-chat view (R1–R3 of
+  // the design's §9): the chat shell open on what the URL names — the stores
+  // follow it (hooks/useChatRoute.ts). The same component as the home above,
+  // with no options that change how the router wraps it, so moving between
+  // chats (or from the home to a chat) never remounts the shell. The loader
+  // finds the chat and its org: a chat in another org redirects there, an
+  // unknown one is the shell's not-found page (lib/chatRouteResolve.ts).
+  // Loaded on demand like the screens above: the entry chunk stays free of the chat client.
+  const chatLoader = async ({ params, location, context }: { params: { chatId: string }; location: LocationLike; context: unknown }) => {
+    const { resolveChatRoute } = await import('./lib/chatRouteResolve')
+    return resolveChatRoute(params.chatId, location, { orgRoute: (context as { orgRoute?: OrgRouteState }).orgRoute })
+  }
+  const chatRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'c/$chatId',
+    validateSearch: chatViewSearchSchema,
+    loader: chatLoader,
+    component: App,
+  })
+  const threadRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'c/$chatId/t/$threadId',
+    validateSearch: chatViewSearchSchema,
+    loader: chatLoader,
+    component: App,
+  })
+  const newChatRoute = createRoute({
+    getParentRoute: appParent,
+    path: 'new',
+    validateSearch: newChatSearchSchema,
     component: App,
   })
 
@@ -908,11 +1010,28 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: gated(AppsPage),
   })
 
+  // Sites: every static site the org hosts, and its domains
+  // (ForgeShell/ForgeSitesPage.tsx). Usage: the org's spend on what forge
+  // provisions (ForgeShell/ForgeUsagePage.tsx). Both were the forge host's
+  // own pages until one router served both hosts (U6); now every host serves
+  // them, in both forms. Not behind ForgeGate: neither reaches a write path.
+  const sitesRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/sites',
+    component: SitesPage,
+  })
+
+  const usageRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/usage',
+    component: UsagePage,
+  })
+
   const forgeConsoleRoutes = createForgeConsoleRoutes(authParent, forgeConsolePageComponents, { form })
 
   return {
-    app: [indexRoute, projectRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute] as const,
+    app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute] as const,
   }
 }
 
@@ -944,12 +1063,6 @@ const orgAppLayoutRoute = createRoute({
 
 const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => orgAuthenticatedLayoutRoute, 'org')
 
-// The forge host's org pages, which this tree does not serve: handed to the
-// forge host (OrgHandoff), so `/o/<org>/sites` and `/o/<org>/usage` resolve
-// here too. Rendered only in a member org.
-const orgSitesHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/sites', 'forge')
-const orgUsageHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/usage', 'forge')
-
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
 // no URL, no deep-link, no way to navigate between onboarding and the app
@@ -959,10 +1072,13 @@ const orgUsageHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/usage
 
 // The forge demo console: the console and its Observability views on fixture
 // data, with no daemon, chat or control-plane call (components/Forge/Demo). The
-// forge journey walks it. Signed in here; the forge shell mounts the same route
-// publicly. Not behind ForgeGate: it reads nothing of the user's, and the
-// journey picker offers it to everyone.
-const forgeDemoRoute = createForgeDemoRoute(() => authenticatedLayoutRoute)
+// forge journey walks it. Public, at the root and outside every guard: it
+// reads nothing of the person's, the journey picker offers it to everyone, and
+// the landing page's `?journey=forge` takes a signed-out visitor straight to
+// it (ForgeShell/ForgeLandingJourney). `/demo`, a landing link's short form,
+// points at it. Not behind ForgeGate for the same reason.
+const forgeDemoRoute = createForgeDemoRoute(() => rootRoute)
+const forgeDemoRedirectRoute = createForgeDemoRedirectRoute(() => rootRoute)
 
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
@@ -981,9 +1097,10 @@ const onboardingRoute = createRoute({
 //
 // Gated by `authenticatedLayoutRoute` for the same reason the desktop app is.
 // Note there is no mobile *setup* onboarding: a user who has not completed
-// onboarding is redirected to `/onboarding` (see MobileShell), which is the
-// existing responsive flow — the guided *tour* is what mobile skips, because
-// it spotlights desktop chrome by DOM selector.
+// onboarding is redirected from the chat screens to `/onboarding` (see
+// MobileShell, OnboardingFlow/onboardingGate.ts), which is the existing
+// responsive flow — the guided *tour* is what mobile skips, because it
+// spotlights desktop chrome by DOM selector.
 const mobileLayoutRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   id: '_mobile',
@@ -1133,7 +1250,11 @@ const mobileIndexRoute = createRoute({
   component: () => <Navigate to={mobileChatsPath()} />,
 })
 
-/** The production route tree; tests mount it with a router of their own (test/orgRouteHarness.ts). */
+/**
+ * The production route tree, on both hosts (the forge host's brand is decided
+ * at the top of this file); tests mount it with a router of their own
+ * (test/orgRouteHarness.ts).
+ */
 export const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
@@ -1164,6 +1285,8 @@ export const routeTree = rootRoute.addChildren([
   forgeMetricsPreviewRoute,
   projectRootRedirectRoute,
   mobileIndexRoute,
+  forgeDemoRoute,
+  forgeDemoRedirectRoute,
   authenticatedLayoutRoute.addChildren([
     mobileLayoutRoute.addChildren([
       mobileChatsLayoutRoute.addChildren([mobileChatsRoute, mobileChatRoute]),
@@ -1184,7 +1307,6 @@ export const routeTree = rootRoute.addChildren([
       mobileDiagnosticsRoute,
     ]),
     onboardingRoute,
-    forgeDemoRoute,
     settingsRoute,
     ...settingsConnectorRoutes,
     ...settingsSectionRoutes,
@@ -1194,8 +1316,6 @@ export const routeTree = rootRoute.addChildren([
   orgLayoutRoute.addChildren([
     orgAuthenticatedLayoutRoute.addChildren([...orgOrgScopedRoutes.authenticated]),
     orgAppLayoutRoute.addChildren([...orgOrgScopedRoutes.app]),
-    orgSitesHandoffRoute,
-    orgUsageHandoffRoute,
   ]),
 ])
 
@@ -1217,6 +1337,10 @@ watchRoutedChatOpens(router, (pathname) => {
   const { foundRoute, routeParams } = router.getMatchedRoutes(pathname)
   return foundRoute?.id === mobileChatRoute.id ? routeParams.chatId : undefined
 })
+
+// The desktop app's `reliant://open?url=` links (a chat, from the web's "Open
+// in desktop") navigate this router (lib/openRouteLink).
+listenForOpenRouteLinks(router)
 
 // Register the router on globalThis so non-React modules (e.g. projectStore)
 // can drive URL changes without importing this file. Static-importing the

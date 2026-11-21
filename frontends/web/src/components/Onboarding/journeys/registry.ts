@@ -9,8 +9,8 @@
  * declared id is recognised, applicable or not.
  *
  * The forge journey is built in. The workflows journey is REGISTERED by the
- * shells that run Reliant code (journeys/catalog.ts, imported by routes.tsx
- * and forgeShellRoutes.tsx): its content pulls in Reliant's workflow hooks and
+ * shells that run Reliant code (journeys/catalog.ts, imported by routes.tsx,
+ * on both app hosts): its content pulls in Reliant's workflow hooks and
  * stores, which the forge demo's own bundle must not contain. Until it is
  * registered (the demo, forever) `workflows` is WORKFLOWS_ELSEWHERE: no steps,
  * never available here, only its "Try it in Reliant" link for the end card.

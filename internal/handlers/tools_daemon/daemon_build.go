@@ -8,8 +8,9 @@ import (
 )
 
 // daemonBuildFromRegister is the build a daemon reported when it registered.
-// A daemon that predates the fields sends none of them, which reads as the
-// zero value: an unknown build, stored and served as such.
+// A daemon that does not know its build (a development build) sends none of
+// them, which reads as the zero value: an unknown build, stored and served as
+// such.
 func daemonBuildFromRegister(reg *reliantv1.DaemonRegister) db.DaemonBuild {
 	return db.DaemonBuild{
 		Version:        reg.GetVersion(),

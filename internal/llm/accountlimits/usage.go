@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
@@ -376,19 +377,18 @@ func nextAfterPoll(cur *core.LimitState, benchUntil, now time.Time) time.Time {
 	return time.Time{}
 }
 
-// Backoff after a failed read.
-const (
-	// idleGiveUpAfter is how many consecutive failed reads an idle account gets.
-	idleGiveUpAfter = 3
+// idleGiveUpAfter is how many consecutive failed reads an idle account gets.
+const idleGiveUpAfter = 3
 
-	transientBackoffMin = time.Minute
-	transientBackoffMax = time.Hour
+// Backoff after a failed read: the wait before the next read doubles from
+// Initial per consecutive failure, capped at Max.
+var (
+	transientBackoff = retry.Backoff{Initial: time.Minute, Max: time.Hour}
 	// A usage endpoint that refuses the credential or answers in a shape we do
 	// not know is not coming back soon: the account runs on headers, and we ask
 	// again rarely, in case the provider changes its mind or the token was merely
 	// expired.
-	unavailableBackoffMin = time.Hour
-	unavailableBackoffMax = 12 * time.Hour
+	unavailableBackoff = retry.Backoff{Initial: time.Hour, Max: 12 * time.Hour}
 )
 
 // classifyFailure turns a failed read into the text stored on the row (shown to
@@ -402,37 +402,25 @@ func classifyFailure(err error, failures int) (text string, delay time.Duration,
 	)
 	switch {
 	case errors.As(err, &throttled):
-		delay = backoff(failures, transientBackoffMin, transientBackoffMax)
+		delay = transientBackoff.Delay(failures)
 		if throttled.RetryAfter > delay {
 			delay = throttled.RetryAfter
 		}
 		return "usage endpoint throttled (HTTP 429); showing rate-limit headers only", delay, false
 	case errors.As(err, &status):
 		return fmt.Sprintf("usage endpoint unavailable (HTTP %d); showing rate-limit headers only", status.StatusCode),
-			backoff(failures, unavailableBackoffMin, unavailableBackoffMax), isUnavailableStatus(status.StatusCode)
+			unavailableBackoff.Delay(failures), isUnavailableStatus(status.StatusCode)
 	case errors.Is(err, providerusage.ErrUnexpectedResponse):
 		return "usage endpoint answered in an unknown format; showing rate-limit headers only",
-			backoff(failures, unavailableBackoffMin, unavailableBackoffMax), true
+			unavailableBackoff.Delay(failures), true
 	case errors.As(err, &tokenErr):
-		return "usage not read: " + sanitize(tokenErr.Error()), backoff(failures, transientBackoffMin, transientBackoffMax), false
+		return "usage not read: " + sanitize(tokenErr.Error()), transientBackoff.Delay(failures), false
 	}
-	return "usage not read: " + sanitize(err.Error()), backoff(failures, transientBackoffMin, transientBackoffMax), false
+	return "usage not read: " + sanitize(err.Error()), transientBackoff.Delay(failures), false
 }
 
 func isUnavailableStatus(code int) bool {
 	return code == http.StatusUnauthorized || code == http.StatusForbidden || code == http.StatusNotFound
-}
-
-// backoff doubles from min per consecutive failure, capped at max.
-func backoff(failures int, min, max time.Duration) time.Duration {
-	d := min
-	for i := 1; i < failures && d < max; i++ {
-		d *= 2
-	}
-	if d > max {
-		d = max
-	}
-	return d
 }
 
 // sanitize keeps an error message short and single-line for storage and display.
