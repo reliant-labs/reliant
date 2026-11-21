@@ -119,7 +119,11 @@ import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { appsPath, onboardingPath, settingsPath } from "@/lib/paths";
+import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+import { useProjectStore } from "@/store/projectStore";
+import { consolePath } from "@/components/Forge/Console/paths";
+import ForgeLink from "@/components/forge-ui/link";
+import { appsPath, onboardingPath, settingsPath, usageBillingPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -172,6 +176,47 @@ const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default
  * app. The global upgradeInterceptor handles the billing-email-missing / quota
  * modals, so this component only renders inline errors for OTHER failures.
  */
+/**
+ * Usage & billing (components/Usage/UsageBillingPage.tsx, U6c) is the
+ * org-wide read of usage and spend; this page is its admin side, so this line
+ * links back to it. Per-project hosting costs live on each project's Usage
+ * page (U6b round 3, prototype); the line points there too, at the shell's
+ * current project when it has an app.
+ */
+function ProjectCostsPointer() {
+  // The shell's last pick, else the current project's app: no route or catalog read, so Settings renders anywhere.
+  const pick = useShellLastPick((state) => state.key);
+  const current = useProjectStore((state) => state.currentProject);
+  const pickRef = pick && pick !== ALL_PROJECTS_PICK && pick !== SEVERAL_PROJECTS_PICK ? refOfKey(pick) : null;
+  const app =
+    pickRef?.kind === "app"
+      ? pickRef.name
+      : current && (!pickRef || pickRef.id === current.id)
+        ? current.forge_project_name?.trim() || null
+        : null;
+  const shell = { app, name: app };
+  const href = shell.app ? consolePath(shell.app, { kind: "usage" }) : null;
+  return (
+    <p className="-mt-3 text-sm text-muted-foreground" data-testid="billing-project-costs-pointer">
+      Usage and spend across every project are on{" "}
+      <ForgeLink href={usageBillingPath()} className="text-primary-ink hover:underline" data-testid="billing-usage-billing-link">
+        Usage &amp; billing ›
+      </ForgeLink>
+      . Per-project hosting costs are on each project&apos;s Usage page
+      {href ? (
+        <>
+          {" "}
+          —{" "}
+          <ForgeLink href={href} className="text-primary-ink hover:underline">
+            {shell.name ?? shell.app}&apos;s usage
+          </ForgeLink>
+        </>
+      ) : null}
+      .
+    </p>
+  );
+}
+
 export function BillingSection() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
@@ -213,6 +258,7 @@ export function BillingSection() {
         description="Manage wallet credits, machine subscriptions, independent app hosting billing, usage and invoices."
         className="mb-0"
       />
+      <ProjectCostsPointer />
 
       {/* The route home, hoisted out of the Stripe-return banner.
           It used to render only alongside `?checkout=`, because a hosted

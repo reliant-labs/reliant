@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, CalendarClock, Activity, Inbox, Compass, ArrowLeftRight
+  Code, CalendarClock, Activity, Inbox, Compass, ArrowLeftRight, CreditCard
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -27,7 +27,7 @@ import type { SettingsSection } from "../../routeSchemas";
 import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
-import { inboxPath, runsPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { inboxPath, runsPath, settingsPath, usageBillingPath, workflowsPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 import { openProjectSwitcher } from "@/lib/projectSwitcher";
 
@@ -189,6 +189,16 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         keywords: ["run", "history", "execution", "agent", "started"],
         available: !isAt("/workflows/runs"),
         action: () => navigate({ to: runsPath() }),
+      },
+      {
+        id: "usage-billing",
+        title: "Usage & billing",
+        description: "Your organization's usage and spend, per project, plan, credits and invoices",
+        icon: <CreditCard className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["usage", "billing", "spend", "cost", "invoice", "credits", "plan"],
+        available: !isAt("/usage"),
+        action: () => navigate({ to: usageBillingPath() }),
       },
       // Settings sections
       {

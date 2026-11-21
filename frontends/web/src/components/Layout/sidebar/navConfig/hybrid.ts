@@ -8,8 +8,8 @@
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Auth ·
- *   Security ▾ · Configure ▾ (Secrets, Domains, Activity)
- *   footer: Settings
+ *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
+ *   footer: Usage & billing · Settings
  *
  * Only Agents and Observability drill in (their rows replace the nav, under a
  * "‹ Area" header, on their routes). Everything else is an accordion or a

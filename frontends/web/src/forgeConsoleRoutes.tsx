@@ -25,6 +25,7 @@
  *       /secrets, /domains, /activity
  *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
  *                                           (a database's name → /data, client-side: ServiceDetail)
+ *       /usage                              what the app's hosting costs this month
  *       /events                             Product analytics › Events & metrics
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
@@ -107,6 +108,8 @@ export interface ForgeConsoleComponents {
   services: RouteComponent
   /** One of them. */
   service: RouteComponent
+  /** Usage: the app's hosting cost this month. */
+  usage: RouteComponent
   /** Product analytics › Events & metrics. */
   events: RouteComponent
   /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
@@ -358,6 +361,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.service,
   })
+  const usageRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'usage',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.usage,
+  })
   const eventsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'events',
@@ -432,6 +441,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       activityRoute,
       servicesRoute,
       serviceRoute,
+      usageRoute,
       eventsRoute,
       analyticsRoute,
       analyticsTabRoute,

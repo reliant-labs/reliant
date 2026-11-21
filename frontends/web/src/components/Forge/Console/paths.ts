@@ -32,6 +32,7 @@
  *                                             (`view=charts`: each workload's charts, U6e)
  *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
  *                                             database's name redirects to Data (U6e)
+ *   /forge/p/:project/usage                   Usage: what the app's hosting costs this month
  *   /forge/p/:project/events                  Product analytics › Events & metrics
  *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
  *                                             tabs (overview · users · product · acquisition) + events
@@ -171,6 +172,8 @@ export type ConsolePage =
   | { kind: "services" }
   /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
   | { kind: "service"; name: string }
+  /** What the app costs this month: hosted compute, database storage, CDN (Usage/ProjectUsagePage.tsx). */
+  | { kind: "usage" }
   /** Product analytics › Events & metrics: the app's custom product events and OTel metrics. */
   | { kind: "events" }
   /**
@@ -283,6 +286,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/services`;
     case "service":
       return `${base}/services/${encodeURIComponent(page.name)}`;
+    case "usage":
+      return `${base}/usage`;
     case "events":
       return `${base}/events`;
     case "analytics":
@@ -315,6 +320,7 @@ export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, 
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 /** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
 export const authPath = (app: string, tab?: AuthTab, ctx?: PathContext) => consolePath(app, { kind: "auth", tab }, ctx);
+export const projectUsagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "usage" }, ctx);
 
 function safeDecode(segment: string): string {
   try {
@@ -365,6 +371,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "secrets":
       case "domains":
       case "activity":
+      case "usage":
       case "events":
       case "speed-insights":
         return sub ? null : { kind: section };
