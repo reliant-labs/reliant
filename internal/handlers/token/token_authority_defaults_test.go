@@ -20,7 +20,12 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 		fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
 		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead,
-		fat.ScopeDeployConfigRead, fat.ScopeStorageRead)
+		fat.ScopeDeployConfigRead, fat.ScopeStorageRead,
+		// forge v1.9: Changes (draft and stop; launch, ramp, roll out), the
+		// vulnerability findings and the test results of an environment. Org
+		// authority the control plane clips to the person's grants, like the
+		// rest; none acts as the person.
+		fat.ScopeChangesWrite, fat.ScopeChangesLaunch, fat.ScopeVulnRead, fat.ScopeTestsRead, fat.ScopeTestsWrite)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}
