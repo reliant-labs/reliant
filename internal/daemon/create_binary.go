@@ -37,7 +37,10 @@ var (
 // Seams for tests: the failure paths of WriteNewFile cannot be reached on a
 // healthy filesystem.
 var (
-	linkFile     = os.Link
+	linkFile = os.Link
+	// renameFile is os.Rename; removeIfSame's tests replace it to act in the
+	// instant between its moves.
+	renameFile   = os.Rename
 	writeContent = func(f *os.File, content []byte) error {
 		_, err := f.Write(content)
 		return err
@@ -151,12 +154,51 @@ func writeAndClose(f *os.File, content []byte) (os.FileInfo, error) {
 // removeIfSame removes path only if it is still the file described by info.
 // A path another process removed, or replaced with a file of its own, is left
 // alone.
+//
+// A remove by pathname cannot be made conditional on what the path names: a
+// check and then a Remove leaves a window in which another process can put
+// its own file at path, and the Remove deletes that one. So the file is first
+// moved, atomically, to a fresh name of this call's own in the same directory;
+// only that name is checked and removed. A file that turns out not to be the
+// one described by info is put back, never replacing one that has appeared at
+// path since: through a hard link, or where there are none, a rename only
+// while path is still free. If neither can put it back it stays under the
+// hidden name, intact, rather than being deleted.
 func removeIfSame(path string, info os.FileInfo) {
-	current, err := os.Lstat(path)
-	if err != nil || !os.SameFile(current, info) {
+	moved, err := unusedSiblingName(path, ".reliant-rm-")
+	if err != nil {
 		return
 	}
-	_ = os.Remove(path)
+	if err := renameFile(path, moved); err != nil {
+		return // gone already, or not ours to move
+	}
+	if current, err := os.Lstat(moved); err == nil && os.SameFile(current, info) {
+		_ = os.Remove(moved)
+		return
+	}
+	if err := linkFile(moved, path); err == nil {
+		_ = os.Remove(moved)
+		return
+	}
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		_ = renameFile(moved, path)
+	}
+}
+
+// unusedSiblingName returns a name in path's directory, starting with prefix,
+// that nothing has.
+func unusedSiblingName(path, prefix string) (string, error) {
+	for range 100 {
+		var suffix [8]byte
+		if _, err := rand.Read(suffix[:]); err != nil {
+			return "", err
+		}
+		name := filepath.Join(filepath.Dir(path), prefix+hex.EncodeToString(suffix[:])+".tmp")
+		if _, err := os.Lstat(name); errors.Is(err, fs.ErrNotExist) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("could not pick an unused name beside %s", path)
 }
 
 // classifyCreateBinaryFileError turns the daemon's text for a refused or

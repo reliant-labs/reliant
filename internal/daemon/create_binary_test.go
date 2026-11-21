@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -217,6 +218,62 @@ func TestWriteNewFile_FallbackCleanupNeverRemovesAnotherProcesssFile(t *testing.
 		t.Fatalf("the other process's file must survive; read % x, err %v", got, err)
 	}
 	assertOnlyEntries(t, dir, "shot.png")
+}
+
+// The cleanup never deletes by a pathname it only checked: another process
+// can put its own file at path in the instant after any check. Whatever
+// appears at path while removeIfSame runs survives it, whether it arrived
+// before the file was moved aside (it is moved back) or after (it is never
+// touched), with hard links and without.
+func TestRemoveIfSame_AFileThatAppearsDuringTheCleanupSurvives(t *testing.T) {
+	for name, stubLink := range map[string]bool{"hard link": false, "no hard links": true} {
+		for _, when := range []string{"before the move", "after the move"} {
+			t.Run(name+", "+when, func(t *testing.T) {
+				if stubLink {
+					stubLinkUnsupported(t)
+				}
+				dir := t.TempDir()
+				path := filepath.Join(dir, "shot.png")
+				if err := os.WriteFile(path, []byte("ours"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				ours, err := os.Lstat(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				theirs := []byte("another process's file")
+				// Ours is moved out of the way, not deleted, so its inode
+				// stays in use and theirs cannot be given the same one.
+				elsewhere := filepath.Join(t.TempDir(), "kept")
+				replace := func() {
+					if err := os.Rename(path, elsewhere); err != nil && !errors.Is(err, fs.ErrNotExist) {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(path, theirs, 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				orig := renameFile
+				t.Cleanup(func() { renameFile = orig })
+				renameFile = func(oldname, newname string) error {
+					renameFile = orig
+					if when == "before the move" {
+						replace()
+					}
+					err := orig(oldname, newname)
+					if when == "after the move" {
+						replace()
+					}
+					return err
+				}
+				removeIfSame(path, ours)
+				if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, theirs) {
+					t.Fatalf("the other process's file must survive at path; read %q, err %v", got, err)
+				}
+				assertOnlyEntries(t, dir, "shot.png")
+			})
+		}
+	}
 }
 
 // errSender answers every command with a daemon-reported error.

@@ -132,7 +132,7 @@ func runScreenshot(t *testing.T, server string, runtime *screenshotRuntime, d *f
 	}
 	// The chat and thread are the test's own, so the file awareness one test
 	// records is not another's.
-	var tc *rctx.ToolContext = createTestContext(t, t.Name())
+	tc := createTestContext(t, t.Name())
 	t.Cleanup(func() { ClearFileRecordsForThread(t.Name(), t.Name()) })
 	tc.Project = &rctx.Project{Checkout: "/home/workspace/worktrees/chat-1"}
 	tc = tc.WithMCP(runtime)
