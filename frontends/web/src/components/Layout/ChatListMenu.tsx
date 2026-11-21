@@ -1,25 +1,22 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Chats heading's one menu (restyle §11.5): which project the list shows,
- * how it is sorted, grouped or flat, every project or the active ones, and
- * the archived chats. It replaces the project filter, sort and view buttons
- * that used to sit in a row of their own above the list.
+ * The Chats heading's one menu (restyle §11.5): how the list is sorted,
+ * grouped or flat, every project or the active ones, the archived chats, and
+ * Add / Manage projects. Which projects it shows is the project filter beside
+ * it (Projects/ChatProjectFilter: choose N of M).
  *
- * Its trigger is a hover-only `⋯` on the heading. It keeps the project
- * filter's test id (`project-filter-trigger`): the filter's items live here
- * now, with their own test ids unchanged.
+ * Its trigger is a hover-only `⋯` on the heading. It keeps its old test id
+ * (`project-filter-trigger`), and its label still names what the list shows.
  */
 
-import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 import type { ChatSortOption } from "../../store/chatListPreferencesStore";
 import type { Project } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import DropdownMenu, { type MenuGroup } from "../forge-ui/dropdown_menu";
-import { ProjectSelectorDialog } from "../Projects/ProjectSelector";
-import { ALL_PROJECTS_LABEL, projectFilterGroups, projectFilterLabel } from "./ProjectFilterMenu";
+import { projectFilterGroups, projectFilterLabel } from "./ProjectFilterMenu";
 import { SIDEBAR_HEADING_HOVER_ACTION, SIDEBAR_ICON_BUTTON } from "./sidebar/primitives";
 
 /** The sort orders, in the menu's order. */
@@ -35,13 +32,12 @@ export const CHAT_SORT_OPTIONS: { value: ChatSortOption; label: string }[] = [
 export const SHOW_ALL_PROJECTS_LABEL = "Show every project";
 
 interface ChatListMenuProps {
-  // The project filter.
+  // What the list shows (its label): the project filter is its own control
+  // beside this menu (Projects/ChatProjectFilter).
   filterId: string | null;
   projects: readonly Project[];
-  onFilterChange: (projectId: string | null) => void;
   onAddProject: () => void;
   onManageProjects: () => void;
-  needsYouByProject?: ReadonlyMap<string, number>;
   // Sort and view.
   sortOrder: ChatSortOption;
   onSortChange: (sort: ChatSortOption) => void;
@@ -60,10 +56,8 @@ interface ChatListMenuProps {
 export function ChatListMenu({
   filterId,
   projects,
-  onFilterChange,
   onAddProject,
   onManageProjects,
-  needsYouByProject,
   sortOrder,
   onSortChange,
   viewMode,
@@ -72,8 +66,6 @@ export function ChatListMenu({
   archived,
   onArchivedChange,
 }: ChatListMenuProps) {
-  // The project selector, for every project the menu does not list.
-  const [choosing, setChoosing] = useState(false);
   const listToggles: MenuGroup["items"] = [];
   if (showAll) {
     listToggles.push({
@@ -120,21 +112,12 @@ export function ChatListMenu({
       ],
     },
     { selection: "multiple", items: listToggles },
-    ...projectFilterGroups({
-      filterId,
-      projects,
-      onChange: onFilterChange,
-      onChooseProject: () => setChoosing(true),
-      onAddProject,
-      onManageProjects,
-      needsYouByProject,
-    }),
+    ...projectFilterGroups({ onAddProject, onManageProjects }),
   ];
 
   const showing = projectFilterLabel(filterId, projects);
   return (
-    <>
-      <DropdownMenu
+    <DropdownMenu
         align="right"
         density="compact"
         label="Chat list options"
@@ -151,27 +134,7 @@ export function ChatListMenu({
             <MoreHorizontal className="size-4" aria-hidden="true" />
           </button>
         )}
-      />
-      <ProjectSelectorDialog
-        open={choosing}
-        onClose={() => setChoosing(false)}
-        mode="chat"
-        label="Show one project's chats"
-        selectedKey={filterId ?? ALL_PROJECTS_KEY}
-        leadItems={[
-          { key: ALL_PROJECTS_KEY, label: ALL_PROJECTS_LABEL, onSelect: () => onFilterChange(null), testId: "project-selector-all-projects" },
-        ]}
-        rowState={(row) => {
-          const waiting = needsYouByProject?.get(row.key);
-          return waiting ? { hint: `${waiting} waiting on you` } : undefined;
-        }}
-        onSelect={(selection) => {
-          if (selection.kind === "project") onFilterChange(selection.row.key);
-        }}
-      />
-    </>
+    />
   );
 }
 
-/** The selector's key for All projects: no project id is empty. */
-const ALL_PROJECTS_KEY = "";

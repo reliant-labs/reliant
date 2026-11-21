@@ -135,6 +135,17 @@ message ListSharedChatsRequest {
   // shared half of an app's chat list. A malformed name lists nothing; an
   // empty one is the same as unset.
   optional string app_name = 5;
+  // Narrow the list to several projects' shared chats: the union of
+  // project_id and project_ids, so a client may set either or both; with
+  // both empty every project is listed, as before this field existed. A
+  // project with nothing shared with the org contributes nothing. At most
+  // 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+  repeated string project_ids = 6 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {min_len: 1}
+    }
+  }];
 }
 
 message ListSharedChatsResponse {

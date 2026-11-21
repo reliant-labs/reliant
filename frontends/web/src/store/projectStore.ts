@@ -55,7 +55,12 @@ type RouterLike = {
 // OnboardingWizard read no step and rendered nothing. The tour appeared to
 // "sometimes not trigger", with no error anywhere, purely on whether the
 // restore landed after the handoff.
-const preserveSearch = (prev: Record<string, unknown>) => prev;
+// A filter of several projects (`?projects=`, hooks/useChatProjectFilter)
+// ends wherever this one is set: one project, or all of them.
+const preserveSearch = (prev: Record<string, unknown>) => {
+  const { projects: _projects, ...rest } = prev;
+  return rest;
+};
 function getRouter(): RouterLike | null {
   const r = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   return r ?? null;

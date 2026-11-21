@@ -174,6 +174,14 @@ export const indexSearchSchema = z.object({
   // onboarding offers on finishing. HomeNewChat applies it and drops it once
   // the chat is created.
   start: z.enum(START_VALUES).optional(),
+  // `?projects=<id>,<id>` is the chat list's filter of two or more projects
+  // (lib/chatProjectFilter; one project is `/project/<id>`, none is all).
+  // Comma-separated ids; anything unreadable is no filter, never a route error.
+  projects: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .optional()
+    .catch(undefined),
 });
 
 export const authSearchSchema = z.object({
