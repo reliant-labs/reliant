@@ -4,7 +4,8 @@
  * The console's nav grouped by what a reader is after, each page keeping its
  * technical name with a plain line under its title (PAGE_SUBTITLES):
  *
- *   Overview
+ *   Overview                the summary: health, what needs attention, a strip of the services
+ *   Services                everything the app runs, live (services, workers, jobs, the site, the database)
  *   Storage                 the app's object storage buckets (databases are Data)
  *   Dashboards        ▸     the app's own and starred dashboards — the ONE place (U6c bug 4)
  *   Issues            ▾     Errors · Alerts
@@ -23,7 +24,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -47,6 +48,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   profiles: "Where your code spends its CPU time",
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
+  services: "Everything your app runs, live: status, instances, CPU, memory and requests",
   storage: "Your app's object storage buckets: files, uploads and assets",
 };
 
@@ -137,7 +139,8 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   const profiles = optionalViews?.profiles !== false || isObs("profiles");
 
   const items: SidebarNavItem[] = [
-    row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview" || page.kind === "workload"),
+    row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview"),
+    row("Services", { kind: "services" }, icon(Boxes), page.kind === "services" || page.kind === "service" || page.kind === "workload"),
     row("Storage", { kind: "storage" }, icon(HardDrive), page.kind === "storage"),
     dashboards,
     {
@@ -179,8 +182,11 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
-  // Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
+  // Services, Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
   if (
+    page.kind === "services" ||
+    page.kind === "service" ||
+    page.kind === "workload" ||
     page.kind === "releases" ||
     page.kind === "release" ||
     page.kind === "environments" ||

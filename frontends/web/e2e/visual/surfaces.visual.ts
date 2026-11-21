@@ -367,6 +367,24 @@ const SURFACES: Surface[] = [
     },
   },
   {
+    name: 'shell-services',
+    path: '/forge/p/shopfront/services',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('services-row-api').first(),
+  },
+  {
+    name: 'shell-service-detail',
+    path: '/forge/p/shopfront/services/api',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('service-instances').first(),
+  },
+  {
+    name: 'shell-services-charts',
+    path: '/forge/p/shopfront/services?view=charts',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('services-charts').first(),
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],

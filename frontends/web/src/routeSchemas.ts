@@ -791,6 +791,17 @@ export const forgeConsoleOverviewSearchSchema = z.object({
   kind: z.enum(OVERVIEW_KIND_FILTERS).optional().catch(undefined),
 });
 
+/** Services and one service: the scope, the window, and (on a service) the custom metric charted. */
+export const forgeConsoleServicesSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  metric: textParam,
+  // Several projects in the shell (U6c): the in-page project filter (Console/severalProjects.tsx).
+  only: z.string().optional().catch(undefined),
+  // Services' view (U6e): absent is the table, `charts` every workload's charts (Services/ServiceCharts.tsx).
+  view: z.literal("charts").optional().catch(undefined),
+});
+
 /**
  * One workload: its tab, and the Logs / Traces / Profiles tabs' own keys (the
  * explorers' vocabulary, as on the Observability pages). The environment is

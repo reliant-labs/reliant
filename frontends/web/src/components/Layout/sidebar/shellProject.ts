@@ -141,6 +141,8 @@ export function sectionInAnotherApp(page: ConsolePage): ConsolePage {
       return { kind: "environments" };
     case "dashboard":
       return { kind: "obs-view", view: "dashboards" };
+    case "service":
+      return { kind: "services" };
     default:
       return page;
   }
