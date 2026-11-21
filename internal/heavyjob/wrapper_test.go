@@ -216,7 +216,7 @@ func TestNestedHeavyCommandRunsInsideItsParentsSlot(t *testing.T) {
 	g, dir := oneSlotGate(t)
 	self := testSelf(t)
 	// The heavy command itself runs a heavy command through the wrapper, as
-	// `make test` does through `forge slot run`. With one slot, a nested
+	// `make test` does through `forge machine slot run`. With one slot, a nested
 	// waiter would wait on its own parent forever.
 	inner := fmt.Sprintf("%s %s --dir %s --slots 1 --label inner -- sh -c 'echo inner ran'", self[0], self[1], dir)
 	outer := start(t, g, inner, true)

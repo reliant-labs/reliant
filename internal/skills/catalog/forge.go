@@ -20,7 +20,7 @@ import (
 const forgeNamespace = "forge"
 
 // forgeStartHerePath is forge's own path for its start-here skill — what
-// `reliant forge skill load forge` prints. In a forge project reliant surfaces
+// `reliant forge agent skill load forge` prints. In a forge project reliant surfaces
 // it at "forge/forge"; before adoption, at "forge" (see forgePreAdoption).
 const forgeStartHerePath = "forge"
 
@@ -47,7 +47,7 @@ const forgePreAdoptionDescription = forgePurpose + " Hosting, envs, releases."
 // the skill tool until forge.yaml exists — but the CLI serves every one of
 // them in any directory, so the preamble says to use it.
 const forgePreAdoptionPreamble = "> This project has no forge.yaml yet, so forge's other skills are not in the skill tool. " +
-	"Read any skill this one names with `reliant forge skill load <name>` in the shell — it works in any directory. " +
+	"Read any skill this one names with `reliant forge agent skill load <name>` in the shell — it works in any directory. " +
 	"Once forge.yaml exists they appear in the skill tool under `forge/`.\n\n"
 
 // forgeSyntheticScheme + forgePathSeparator together form a Definition.Path

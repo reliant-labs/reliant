@@ -168,7 +168,7 @@ For an organization on pay-as-you-go app hosting, that ceiling is 2,000m of CPU 
 - **The database is reachable only from inside the environment.** You can't connect to it from a laptop with a connection string; use `forge db query`.
 - **One API workload.** Every service and worker runs in the one `api` workload, reached at `/_api` on the site's host. A service split out on its own gets no origin the frontend can reach ([what gets hosted](/hosting/overview#what-gets-hosted)).
 - **Deleting an environment doesn't delete the project.** `forge env delete <env> --yes` removes the environment, its workloads, URLs and databases (unless `--keep-data`). The project's release images stay in the registry, and there is no command that deletes a hosted project.
-- **Static responses can't set cookies, cache policy or HSTS.** The platform owns those headers. HSTS `includeSubDomains` is set per custom domain, with [`forge domain add --hsts-include-subdomains`](/reference/cli#reliant-forge-domain-add).
+- **Static responses can't set cookies, cache policy or HSTS.** The platform owns those headers. HSTS `includeSubDomains` is set per custom domain, with [`forge cloud domain add --hsts-include-subdomains`](/reference/cli#reliant-forge-domain-add).
 - **Content scanning is static inspection** and applies only to unclaimed deploys. It can't see URLs or form fields that are built at run time.
 
 ## See it for yourself
