@@ -261,9 +261,11 @@ type InfoResponse struct {
 	// Unix timestamp when the response was generated
 	Timestamp int64 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	// Worktree name (for multi-worktree development)
-	WorktreeName  string `protobuf:"bytes,7,opt,name=worktree_name,json=worktreeName,proto3" json:"worktree_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	WorktreeName string `protobuf:"bytes,7,opt,name=worktree_name,json=worktreeName,proto3" json:"worktree_name,omitempty"`
+	// The oldest build of each client this server serves (see ClientMinimums).
+	ClientMinimums *ClientMinimums `protobuf:"bytes,8,opt,name=client_minimums,json=clientMinimums,proto3" json:"client_minimums,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InfoResponse) Reset() {
@@ -345,6 +347,13 @@ func (x *InfoResponse) GetWorktreeName() string {
 	return ""
 }
 
+func (x *InfoResponse) GetClientMinimums() *ClientMinimums {
+	if x != nil {
+		return x.ClientMinimums
+	}
+	return nil
+}
+
 // VersionRequest is the request for the Version RPC
 type VersionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -392,9 +401,11 @@ type VersionResponse struct {
 	// Build date (ISO 8601 format)
 	Date string `protobuf:"bytes,3,opt,name=date,proto3" json:"date,omitempty"`
 	// Git branch name
-	Branch        string `protobuf:"bytes,4,opt,name=branch,proto3" json:"branch,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Branch string `protobuf:"bytes,4,opt,name=branch,proto3" json:"branch,omitempty"`
+	// The oldest build of each client this server serves (see ClientMinimums).
+	ClientMinimums *ClientMinimums `protobuf:"bytes,5,opt,name=client_minimums,json=clientMinimums,proto3" json:"client_minimums,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *VersionResponse) Reset() {
@@ -455,6 +466,181 @@ func (x *VersionResponse) GetBranch() string {
 	return ""
 }
 
+func (x *VersionResponse) GetClientMinimums() *ClientMinimums {
+	if x != nil {
+		return x.ClientMinimums
+	}
+	return nil
+}
+
+// ClientMinimum is the oldest build of one kind of client this server serves.
+// A client names itself in the `Reliant-Client: <kind>/<version>` request
+// header; it is below the minimum iff its version is valid semver (no leading
+// v) and orders before min_version by semver precedence, prerelease and dev
+// builds included, build metadata ignored. An unknown or unparseable version
+// is never below it.
+type ClientMinimum struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Semver without a leading v ("1.9.0"); empty means no floor.
+	MinVersion string `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
+	// Where a below-minimum client sends its user to upgrade; may be empty.
+	UpgradeUrl string `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
+	// What a below-minimum client tells its user to run (e.g. "brew upgrade
+	// --cask reliant"); may be empty.
+	UpgradeCommand string `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ClientMinimum) Reset() {
+	*x = ClientMinimum{}
+	mi := &file_reliant_v1_system_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMinimum) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMinimum) ProtoMessage() {}
+
+func (x *ClientMinimum) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_system_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMinimum.ProtoReflect.Descriptor instead.
+func (*ClientMinimum) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ClientMinimum) GetMinVersion() string {
+	if x != nil {
+		return x.MinVersion
+	}
+	return ""
+}
+
+func (x *ClientMinimum) GetUpgradeUrl() string {
+	if x != nil {
+		return x.UpgradeUrl
+	}
+	return ""
+}
+
+func (x *ClientMinimum) GetUpgradeCommand() string {
+	if x != nil {
+		return x.UpgradeCommand
+	}
+	return ""
+}
+
+// ClientMinimums is the oldest build of each client kind this server serves,
+// public (no sign-in), so a stale client can always learn it, and show its
+// forced-upgrade screen before a call is refused.
+type ClientMinimums struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Web     *ClientMinimum         `protobuf:"bytes,1,opt,name=web,proto3" json:"web,omitempty"`
+	Desktop *ClientMinimum         `protobuf:"bytes,2,opt,name=desktop,proto3" json:"desktop,omitempty"`
+	Daemon  *ClientMinimum         `protobuf:"bytes,3,opt,name=daemon,proto3" json:"daemon,omitempty"`
+	Cli     *ClientMinimum         `protobuf:"bytes,4,opt,name=cli,proto3" json:"cli,omitempty"`
+	SdkGo   *ClientMinimum         `protobuf:"bytes,5,opt,name=sdk_go,json=sdkGo,proto3" json:"sdk_go,omitempty"`
+	SdkTs   *ClientMinimum         `protobuf:"bytes,6,opt,name=sdk_ts,json=sdkTs,proto3" json:"sdk_ts,omitempty"`
+	// True when the server refuses a below-minimum client's calls
+	// (FailedPrecondition, x-forge-error-reason: upgrade_required); false, the
+	// minimums are advertised only.
+	Enforced      bool `protobuf:"varint,7,opt,name=enforced,proto3" json:"enforced,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMinimums) Reset() {
+	*x = ClientMinimums{}
+	mi := &file_reliant_v1_system_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMinimums) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMinimums) ProtoMessage() {}
+
+func (x *ClientMinimums) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_system_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMinimums.ProtoReflect.Descriptor instead.
+func (*ClientMinimums) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ClientMinimums) GetWeb() *ClientMinimum {
+	if x != nil {
+		return x.Web
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetDesktop() *ClientMinimum {
+	if x != nil {
+		return x.Desktop
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetDaemon() *ClientMinimum {
+	if x != nil {
+		return x.Daemon
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetCli() *ClientMinimum {
+	if x != nil {
+		return x.Cli
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetSdkGo() *ClientMinimum {
+	if x != nil {
+		return x.SdkGo
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetSdkTs() *ClientMinimum {
+	if x != nil {
+		return x.SdkTs
+	}
+	return nil
+}
+
+func (x *ClientMinimums) GetEnforced() bool {
+	if x != nil {
+		return x.Enforced
+	}
+	return false
+}
+
 type StartOAuthSignInRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// OAuth provider name (e.g., "github", "google", "apple")
@@ -465,7 +651,7 @@ type StartOAuthSignInRequest struct {
 
 func (x *StartOAuthSignInRequest) Reset() {
 	*x = StartOAuthSignInRequest{}
-	mi := &file_reliant_v1_system_proto_msgTypes[8]
+	mi := &file_reliant_v1_system_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -477,7 +663,7 @@ func (x *StartOAuthSignInRequest) String() string {
 func (*StartOAuthSignInRequest) ProtoMessage() {}
 
 func (x *StartOAuthSignInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[8]
+	mi := &file_reliant_v1_system_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -490,7 +676,7 @@ func (x *StartOAuthSignInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthSignInRequest.ProtoReflect.Descriptor instead.
 func (*StartOAuthSignInRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StartOAuthSignInRequest) GetProvider() string {
@@ -513,7 +699,7 @@ type StartOAuthSignInResponse struct {
 
 func (x *StartOAuthSignInResponse) Reset() {
 	*x = StartOAuthSignInResponse{}
-	mi := &file_reliant_v1_system_proto_msgTypes[9]
+	mi := &file_reliant_v1_system_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -525,7 +711,7 @@ func (x *StartOAuthSignInResponse) String() string {
 func (*StartOAuthSignInResponse) ProtoMessage() {}
 
 func (x *StartOAuthSignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[9]
+	mi := &file_reliant_v1_system_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -538,7 +724,7 @@ func (x *StartOAuthSignInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthSignInResponse.ProtoReflect.Descriptor instead.
 func (*StartOAuthSignInResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StartOAuthSignInResponse) GetAccessToken() string {
@@ -585,7 +771,7 @@ type DevAuthLoadRequest struct {
 
 func (x *DevAuthLoadRequest) Reset() {
 	*x = DevAuthLoadRequest{}
-	mi := &file_reliant_v1_system_proto_msgTypes[10]
+	mi := &file_reliant_v1_system_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -597,7 +783,7 @@ func (x *DevAuthLoadRequest) String() string {
 func (*DevAuthLoadRequest) ProtoMessage() {}
 
 func (x *DevAuthLoadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[10]
+	mi := &file_reliant_v1_system_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -610,7 +796,7 @@ func (x *DevAuthLoadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthLoadRequest.ProtoReflect.Descriptor instead.
 func (*DevAuthLoadRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{12}
 }
 
 // DevAuthLoadResponse returns the auth session
@@ -624,7 +810,7 @@ type DevAuthLoadResponse struct {
 
 func (x *DevAuthLoadResponse) Reset() {
 	*x = DevAuthLoadResponse{}
-	mi := &file_reliant_v1_system_proto_msgTypes[11]
+	mi := &file_reliant_v1_system_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -636,7 +822,7 @@ func (x *DevAuthLoadResponse) String() string {
 func (*DevAuthLoadResponse) ProtoMessage() {}
 
 func (x *DevAuthLoadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[11]
+	mi := &file_reliant_v1_system_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -649,7 +835,7 @@ func (x *DevAuthLoadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthLoadResponse.ProtoReflect.Descriptor instead.
 func (*DevAuthLoadResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DevAuthLoadResponse) GetSuccess() bool {
@@ -676,7 +862,7 @@ type DevAuthSaveRequest struct {
 
 func (x *DevAuthSaveRequest) Reset() {
 	*x = DevAuthSaveRequest{}
-	mi := &file_reliant_v1_system_proto_msgTypes[12]
+	mi := &file_reliant_v1_system_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -688,7 +874,7 @@ func (x *DevAuthSaveRequest) String() string {
 func (*DevAuthSaveRequest) ProtoMessage() {}
 
 func (x *DevAuthSaveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[12]
+	mi := &file_reliant_v1_system_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -701,7 +887,7 @@ func (x *DevAuthSaveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthSaveRequest.ProtoReflect.Descriptor instead.
 func (*DevAuthSaveRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DevAuthSaveRequest) GetSessionJson() string {
@@ -721,7 +907,7 @@ type DevAuthSaveResponse struct {
 
 func (x *DevAuthSaveResponse) Reset() {
 	*x = DevAuthSaveResponse{}
-	mi := &file_reliant_v1_system_proto_msgTypes[13]
+	mi := &file_reliant_v1_system_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -733,7 +919,7 @@ func (x *DevAuthSaveResponse) String() string {
 func (*DevAuthSaveResponse) ProtoMessage() {}
 
 func (x *DevAuthSaveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[13]
+	mi := &file_reliant_v1_system_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -746,7 +932,7 @@ func (x *DevAuthSaveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthSaveResponse.ProtoReflect.Descriptor instead.
 func (*DevAuthSaveResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DevAuthSaveResponse) GetSuccess() bool {
@@ -765,7 +951,7 @@ type DevAuthClearRequest struct {
 
 func (x *DevAuthClearRequest) Reset() {
 	*x = DevAuthClearRequest{}
-	mi := &file_reliant_v1_system_proto_msgTypes[14]
+	mi := &file_reliant_v1_system_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -777,7 +963,7 @@ func (x *DevAuthClearRequest) String() string {
 func (*DevAuthClearRequest) ProtoMessage() {}
 
 func (x *DevAuthClearRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[14]
+	mi := &file_reliant_v1_system_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -790,7 +976,7 @@ func (x *DevAuthClearRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthClearRequest.ProtoReflect.Descriptor instead.
 func (*DevAuthClearRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{16}
 }
 
 // DevAuthClearResponse confirms session cleared
@@ -803,7 +989,7 @@ type DevAuthClearResponse struct {
 
 func (x *DevAuthClearResponse) Reset() {
 	*x = DevAuthClearResponse{}
-	mi := &file_reliant_v1_system_proto_msgTypes[15]
+	mi := &file_reliant_v1_system_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +1001,7 @@ func (x *DevAuthClearResponse) String() string {
 func (*DevAuthClearResponse) ProtoMessage() {}
 
 func (x *DevAuthClearResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_system_proto_msgTypes[15]
+	mi := &file_reliant_v1_system_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +1014,7 @@ func (x *DevAuthClearResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevAuthClearResponse.ProtoReflect.Descriptor instead.
 func (*DevAuthClearResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_system_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_system_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DevAuthClearResponse) GetSuccess() bool {
@@ -852,7 +1038,7 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\rReadyResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\"\r\n" +
-	"\vInfoRequest\"\xc1\x01\n" +
+	"\vInfoRequest\"\x86\x02\n" +
 	"\fInfoResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x12\n" +
@@ -860,13 +1046,29 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\x06branch\x18\x04 \x01(\tR\x06branch\x12\x10\n" +
 	"\x03api\x18\x05 \x01(\tR\x03api\x12\x1c\n" +
 	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\x12#\n" +
-	"\rworktree_name\x18\a \x01(\tR\fworktreeName\"\x10\n" +
-	"\x0eVersionRequest\"o\n" +
+	"\rworktree_name\x18\a \x01(\tR\fworktreeName\x12C\n" +
+	"\x0fclient_minimums\x18\b \x01(\v2\x1a.reliant.v1.ClientMinimumsR\x0eclientMinimums\"\x10\n" +
+	"\x0eVersionRequest\"\xb4\x01\n" +
 	"\x0fVersionResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x12\n" +
 	"\x04date\x18\x03 \x01(\tR\x04date\x12\x16\n" +
-	"\x06branch\x18\x04 \x01(\tR\x06branch\"5\n" +
+	"\x06branch\x18\x04 \x01(\tR\x06branch\x12C\n" +
+	"\x0fclient_minimums\x18\x05 \x01(\v2\x1a.reliant.v1.ClientMinimumsR\x0eclientMinimums\"z\n" +
+	"\rClientMinimum\x12\x1f\n" +
+	"\vmin_version\x18\x01 \x01(\tR\n" +
+	"minVersion\x12\x1f\n" +
+	"\vupgrade_url\x18\x02 \x01(\tR\n" +
+	"upgradeUrl\x12'\n" +
+	"\x0fupgrade_command\x18\x03 \x01(\tR\x0eupgradeCommand\"\xd2\x02\n" +
+	"\x0eClientMinimums\x12+\n" +
+	"\x03web\x18\x01 \x01(\v2\x19.reliant.v1.ClientMinimumR\x03web\x123\n" +
+	"\adesktop\x18\x02 \x01(\v2\x19.reliant.v1.ClientMinimumR\adesktop\x121\n" +
+	"\x06daemon\x18\x03 \x01(\v2\x19.reliant.v1.ClientMinimumR\x06daemon\x12+\n" +
+	"\x03cli\x18\x04 \x01(\v2\x19.reliant.v1.ClientMinimumR\x03cli\x120\n" +
+	"\x06sdk_go\x18\x05 \x01(\v2\x19.reliant.v1.ClientMinimumR\x05sdkGo\x120\n" +
+	"\x06sdk_ts\x18\x06 \x01(\v2\x19.reliant.v1.ClientMinimumR\x05sdkTs\x12\x1a\n" +
+	"\benforced\x18\a \x01(\bR\benforced\"5\n" +
 	"\x17StartOAuthSignInRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\xb8\x01\n" +
 	"\x18StartOAuthSignInResponse\x12!\n" +
@@ -909,7 +1111,7 @@ func file_reliant_v1_system_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_system_proto_rawDescData
 }
 
-var file_reliant_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_reliant_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_reliant_v1_system_proto_goTypes = []any{
 	(*HealthRequest)(nil),            // 0: reliant.v1.HealthRequest
 	(*HealthResponse)(nil),           // 1: reliant.v1.HealthResponse
@@ -919,37 +1121,47 @@ var file_reliant_v1_system_proto_goTypes = []any{
 	(*InfoResponse)(nil),             // 5: reliant.v1.InfoResponse
 	(*VersionRequest)(nil),           // 6: reliant.v1.VersionRequest
 	(*VersionResponse)(nil),          // 7: reliant.v1.VersionResponse
-	(*StartOAuthSignInRequest)(nil),  // 8: reliant.v1.StartOAuthSignInRequest
-	(*StartOAuthSignInResponse)(nil), // 9: reliant.v1.StartOAuthSignInResponse
-	(*DevAuthLoadRequest)(nil),       // 10: reliant.v1.DevAuthLoadRequest
-	(*DevAuthLoadResponse)(nil),      // 11: reliant.v1.DevAuthLoadResponse
-	(*DevAuthSaveRequest)(nil),       // 12: reliant.v1.DevAuthSaveRequest
-	(*DevAuthSaveResponse)(nil),      // 13: reliant.v1.DevAuthSaveResponse
-	(*DevAuthClearRequest)(nil),      // 14: reliant.v1.DevAuthClearRequest
-	(*DevAuthClearResponse)(nil),     // 15: reliant.v1.DevAuthClearResponse
+	(*ClientMinimum)(nil),            // 8: reliant.v1.ClientMinimum
+	(*ClientMinimums)(nil),           // 9: reliant.v1.ClientMinimums
+	(*StartOAuthSignInRequest)(nil),  // 10: reliant.v1.StartOAuthSignInRequest
+	(*StartOAuthSignInResponse)(nil), // 11: reliant.v1.StartOAuthSignInResponse
+	(*DevAuthLoadRequest)(nil),       // 12: reliant.v1.DevAuthLoadRequest
+	(*DevAuthLoadResponse)(nil),      // 13: reliant.v1.DevAuthLoadResponse
+	(*DevAuthSaveRequest)(nil),       // 14: reliant.v1.DevAuthSaveRequest
+	(*DevAuthSaveResponse)(nil),      // 15: reliant.v1.DevAuthSaveResponse
+	(*DevAuthClearRequest)(nil),      // 16: reliant.v1.DevAuthClearRequest
+	(*DevAuthClearResponse)(nil),     // 17: reliant.v1.DevAuthClearResponse
 }
 var file_reliant_v1_system_proto_depIdxs = []int32{
-	0,  // 0: reliant.v1.SystemService.Health:input_type -> reliant.v1.HealthRequest
-	2,  // 1: reliant.v1.SystemService.Ready:input_type -> reliant.v1.ReadyRequest
-	4,  // 2: reliant.v1.SystemService.Info:input_type -> reliant.v1.InfoRequest
-	6,  // 3: reliant.v1.SystemService.Version:input_type -> reliant.v1.VersionRequest
-	8,  // 4: reliant.v1.SystemService.StartOAuthSignIn:input_type -> reliant.v1.StartOAuthSignInRequest
-	10, // 5: reliant.v1.SystemService.DevAuthLoad:input_type -> reliant.v1.DevAuthLoadRequest
-	12, // 6: reliant.v1.SystemService.DevAuthSave:input_type -> reliant.v1.DevAuthSaveRequest
-	14, // 7: reliant.v1.SystemService.DevAuthClear:input_type -> reliant.v1.DevAuthClearRequest
-	1,  // 8: reliant.v1.SystemService.Health:output_type -> reliant.v1.HealthResponse
-	3,  // 9: reliant.v1.SystemService.Ready:output_type -> reliant.v1.ReadyResponse
-	5,  // 10: reliant.v1.SystemService.Info:output_type -> reliant.v1.InfoResponse
-	7,  // 11: reliant.v1.SystemService.Version:output_type -> reliant.v1.VersionResponse
-	9,  // 12: reliant.v1.SystemService.StartOAuthSignIn:output_type -> reliant.v1.StartOAuthSignInResponse
-	11, // 13: reliant.v1.SystemService.DevAuthLoad:output_type -> reliant.v1.DevAuthLoadResponse
-	13, // 14: reliant.v1.SystemService.DevAuthSave:output_type -> reliant.v1.DevAuthSaveResponse
-	15, // 15: reliant.v1.SystemService.DevAuthClear:output_type -> reliant.v1.DevAuthClearResponse
-	8,  // [8:16] is the sub-list for method output_type
-	0,  // [0:8] is the sub-list for method input_type
-	0,  // [0:0] is the sub-list for extension type_name
-	0,  // [0:0] is the sub-list for extension extendee
-	0,  // [0:0] is the sub-list for field type_name
+	9,  // 0: reliant.v1.InfoResponse.client_minimums:type_name -> reliant.v1.ClientMinimums
+	9,  // 1: reliant.v1.VersionResponse.client_minimums:type_name -> reliant.v1.ClientMinimums
+	8,  // 2: reliant.v1.ClientMinimums.web:type_name -> reliant.v1.ClientMinimum
+	8,  // 3: reliant.v1.ClientMinimums.desktop:type_name -> reliant.v1.ClientMinimum
+	8,  // 4: reliant.v1.ClientMinimums.daemon:type_name -> reliant.v1.ClientMinimum
+	8,  // 5: reliant.v1.ClientMinimums.cli:type_name -> reliant.v1.ClientMinimum
+	8,  // 6: reliant.v1.ClientMinimums.sdk_go:type_name -> reliant.v1.ClientMinimum
+	8,  // 7: reliant.v1.ClientMinimums.sdk_ts:type_name -> reliant.v1.ClientMinimum
+	0,  // 8: reliant.v1.SystemService.Health:input_type -> reliant.v1.HealthRequest
+	2,  // 9: reliant.v1.SystemService.Ready:input_type -> reliant.v1.ReadyRequest
+	4,  // 10: reliant.v1.SystemService.Info:input_type -> reliant.v1.InfoRequest
+	6,  // 11: reliant.v1.SystemService.Version:input_type -> reliant.v1.VersionRequest
+	10, // 12: reliant.v1.SystemService.StartOAuthSignIn:input_type -> reliant.v1.StartOAuthSignInRequest
+	12, // 13: reliant.v1.SystemService.DevAuthLoad:input_type -> reliant.v1.DevAuthLoadRequest
+	14, // 14: reliant.v1.SystemService.DevAuthSave:input_type -> reliant.v1.DevAuthSaveRequest
+	16, // 15: reliant.v1.SystemService.DevAuthClear:input_type -> reliant.v1.DevAuthClearRequest
+	1,  // 16: reliant.v1.SystemService.Health:output_type -> reliant.v1.HealthResponse
+	3,  // 17: reliant.v1.SystemService.Ready:output_type -> reliant.v1.ReadyResponse
+	5,  // 18: reliant.v1.SystemService.Info:output_type -> reliant.v1.InfoResponse
+	7,  // 19: reliant.v1.SystemService.Version:output_type -> reliant.v1.VersionResponse
+	11, // 20: reliant.v1.SystemService.StartOAuthSignIn:output_type -> reliant.v1.StartOAuthSignInResponse
+	13, // 21: reliant.v1.SystemService.DevAuthLoad:output_type -> reliant.v1.DevAuthLoadResponse
+	15, // 22: reliant.v1.SystemService.DevAuthSave:output_type -> reliant.v1.DevAuthSaveResponse
+	17, // 23: reliant.v1.SystemService.DevAuthClear:output_type -> reliant.v1.DevAuthClearResponse
+	16, // [16:24] is the sub-list for method output_type
+	8,  // [8:16] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_system_proto_init() }
@@ -957,14 +1169,14 @@ func file_reliant_v1_system_proto_init() {
 	if File_reliant_v1_system_proto != nil {
 		return
 	}
-	file_reliant_v1_system_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_system_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_system_proto_rawDesc), len(file_reliant_v1_system_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
