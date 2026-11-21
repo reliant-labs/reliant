@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestAuthInterceptorAcceptsDevSignerInDev(t *testing.T) {
 	require.NoError(t, err)
 
 	_, claims, err := interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/ListChats",
-		func(string) string { return "Bearer " + token })
+		http.Header{"Authorization": {"Bearer " + token}})
 	require.NoError(t, err)
 	require.Equal(t, "dev-smoke-user", claims.Sub)
 	require.Equal(t, auth.CredentialSession, claims.Credential)
