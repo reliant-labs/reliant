@@ -153,6 +153,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			PublicKeyPEM:              jwtPublicKey,
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
+			DevJWTSecret:              api.GetAuthDevJwtSecret(),
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -162,6 +163,11 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
 		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
+	}
+	// A dev signer outside the dev tier stops the process here, before it
+	// binds a port (auth.WithDevSigner refuses it again at every validator).
+	if err := auth.CheckDevSigner(s.Auth); err != nil {
+		return nil, err
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),

@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/app"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -77,6 +78,14 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	runenv.Configure(cfg.GetRuntime().GetEnvironment())
+	// A dev signer (AUTH_DEV_JWT_SECRET) outside the dev tier is refused with
+	// the config, before the process binds a port or migrates. NewAPISettings
+	// and every validator refuse it again.
+	if api := root.Configs.ApiServerConfig; api != nil {
+		if err := auth.CheckDevSigner(auth.Settings{DevJWTSecret: api.GetAuthDevJwtSecret()}); err != nil {
+			return err
+		}
+	}
 	skCfg, err := serverkitConfig(cfg, root.Configs)
 	if err != nil {
 		return err

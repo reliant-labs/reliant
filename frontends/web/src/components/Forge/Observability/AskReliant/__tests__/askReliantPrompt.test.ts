@@ -434,9 +434,9 @@ describe("the handoff: the reader's own agent, a standalone CLI", () => {
 
   it("gives the agent forge's playbook: the observability skill and the MCP server", () => {
     expect(askAgentPlaybook("forge")).toEqual([
-      "forge skill load observability/query",
-      "claude mcp add forge -- forge mcp",
-      "codex mcp add forge -- forge mcp",
+      "forge agent skill load observability/query",
+      "claude mcp add forge -- forge agent mcp",
+      "codex mcp add forge -- forge agent mcp",
     ]);
   });
 });

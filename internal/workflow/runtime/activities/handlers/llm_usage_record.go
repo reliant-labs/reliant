@@ -97,11 +97,11 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		FundingOrgID:     c.FundingOrgID,
 		AuthMode:         llmUsageAuthMode(c.Provider),
 		Purpose:          c.Purpose,
-		InputTokens:      c.Usage.InputTokens,
-		OutputTokens:     c.Usage.OutputTokens,
-		CacheReadTokens:  firstNonZero(c.Usage.CacheReadInputTokens, c.Usage.CachedInputTokens),
-		CacheWriteTokens: c.Usage.CacheCreationInputTokens,
-		LatencyMs:        c.LatencyMs,
+		InputTokens:      nonNegative(c.Usage.InputTokens),
+		OutputTokens:     nonNegative(c.Usage.OutputTokens),
+		CacheReadTokens:  nonNegative(firstNonZero(c.Usage.CacheReadInputTokens, c.Usage.CachedInputTokens)),
+		CacheWriteTokens: nonNegative(c.Usage.CacheCreationInputTokens),
+		LatencyMs:        nonNegative(c.LatencyMs),
 		Attempt:          info.Attempt,
 		CreatedAt:        time.Now(),
 	}
@@ -122,6 +122,17 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 	if _, err := c.Recorder.RecordLLMCallUsage(wctx, rec); err != nil {
 		logging.WarnContext(ctx, "could not record LLM usage", "chatID", c.ChatID, "purpose", c.Purpose, "error", err)
 	}
+}
+
+// nonNegative is a ledger count as llm_call_usage stores it: never below
+// zero (llm_call_usage_counts_nonnegative). A negative count is a measurement
+// artefact, not usage: a driver's retry that started before the wait it
+// announced had elapsed, or a provider's usage split that does not add up.
+// Writing it failed the whole row on the check constraint, so the request
+// was not counted at all and the failed transaction was an ERROR issue (prod
+// reliant-temporal-worker 53e2370c, 2026-11-20).
+func nonNegative(v int64) int64 {
+	return max(v, 0)
 }
 
 func llmUsageID(workflowID, runID, activityID, purpose string, ordinal, request int) string {
@@ -152,7 +163,9 @@ func newDriverRetries() *driverRetries { return &driverRetries{start: time.Now()
 // slept out the wait.
 func (r *driverRetries) observe(wait llm.RetryWait) {
 	now := time.Now()
-	r.list = append(r.list, driverRetry{wait: wait, latencyMs: now.Sub(r.start).Milliseconds()})
+	// A driver may retry before the whole wait it announced has passed (a
+	// shortened backoff), so the next request can start before r.start.
+	r.list = append(r.list, driverRetry{wait: wait, latencyMs: max(now.Sub(r.start).Milliseconds(), 0)})
 	r.start = now.Add(wait.Delay)
 }
 
