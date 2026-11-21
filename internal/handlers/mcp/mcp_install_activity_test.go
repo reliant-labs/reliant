@@ -139,7 +139,7 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 					}
 					daemonJSON = req.Content
 					return []byte(`{"success":true}`), nil
-				case "mcp.install_bundle":
+				case "mcp.install_skill_bundle":
 					bundles++
 					if tt.bundleTransportFail {
 						return nil, errors.New("bundle transport failed: " + secret)

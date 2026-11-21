@@ -45,6 +45,43 @@ const PUBLIC_BUILD_TARGETS = [
 
 const WRAPPER = 'with-release-config.mjs';
 
+const CONTROL_PLANE_DIR =
+  process.env.CONTROL_PLANE_DIR || path.resolve(ELECTRON_DIR, '..', '..', 'control-plane');
+
+/** Is an executable named `name` on PATH? */
+function onPath(name) {
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE').split(';') : [''];
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      try {
+        fs.accessSync(path.join(dir, name + ext), fs.constants.X_OK);
+        return true;
+      } catch {
+        // not here
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Why the wrapper cannot render control-plane's KCL here, or null when it can.
+ * Mirrors the checks of .github/scripts/release-config-kcl.mjs
+ * (renderReleaseConfig's `unavailable`): a control-plane checkout, forge (or
+ * reliant) to evaluate the entrypoint, and `kcl` to render it. Where any is
+ * missing the wrapper falls back to the committed cache, so the tests that
+ * prove the KCL is authoritative have nothing to prove and skip.
+ */
+function kclUnreachable() {
+  if (!fs.existsSync(path.join(CONTROL_PLANE_DIR, 'deploy/kcl/desktop_release.k'))) {
+    return `no control-plane checkout at ${CONTROL_PLANE_DIR}`;
+  }
+  if (!onPath('forge') && !onPath('reliant')) return 'neither forge nor reliant is on PATH';
+  if (!onPath('kcl')) return 'no kcl binary on PATH';
+  return null;
+}
+
 /**
  * Does this target reach its packaging step through the wrapper?
  *
@@ -128,7 +165,7 @@ test('the wrapper OVERRIDES an ambient dev-shell value rather than deferring to 
   assert.strictEqual(seen.cp, RELEASE_CONFIG.renderer.CONTROL_PLANE_API_URL);
 });
 
-test('a hand-edited release.config.json does NOT reach the build when the KCL is reachable', () => {
+test('a hand-edited release.config.json does NOT reach the build when the KCL is reachable', (t) => {
   // THE SOURCE-OF-TRUTH CONTRACT. The committed JSON is a CACHE of control-plane's
   // KCL, not an authority. Before this was enforced, editing the file put the
   // edited value straight into the build environment — verified by poisoning
@@ -139,11 +176,10 @@ test('a hand-edited release.config.json does NOT reach the build when the KCL is
   // Skips (rather than fails) where the KCL genuinely cannot be reached — a
   // fork with no control-plane checkout, or no kcl binary — because the cache
   // is legitimately authoritative there. That fallback is covered below.
-  const controlPlane =
-    process.env.CONTROL_PLANE_DIR ||
-    path.resolve(ELECTRON_DIR, '..', '..', 'control-plane');
-  if (!fs.existsSync(path.join(controlPlane, 'deploy/kcl/desktop_release.k'))) {
-    return; // no control-plane checkout; the cache path is the correct one
+  const unreachable = kclUnreachable();
+  if (unreachable) {
+    t.skip(`${unreachable}; the committed cache is the correct source here`);
+    return;
   }
 
   const original = fs.readFileSync(RELEASE_CONFIG_PATH, 'utf8');
@@ -265,7 +301,7 @@ test('release.config.json carries every key the packaged app cannot start withou
   }
 });
 
-test('a KCL change reaches the generated main-process config, not just the environment', () => {
+test('a KCL change reaches the generated main-process config, not just the environment', (t) => {
   // THE END-TO-END CONTRACT: change a value in forge's KCL, and it must appear
   // in the artifact the packaged app actually reads.
   //
@@ -277,12 +313,17 @@ test('a KCL change reaches the generated main-process config, not just the envir
   // the authority for exactly the half nobody was looking at.
   //
   // This edits the real KCL, because that is the thing a person changes. Skips
-  // where control-plane is unreachable; that fallback is covered above.
-  const controlPlane =
-    process.env.CONTROL_PLANE_DIR ||
-    path.resolve(ELECTRON_DIR, '..', '..', 'control-plane');
-  const envK = path.join(controlPlane, 'deploy/kcl/lib/env.k');
-  if (!fs.existsSync(envK)) return;
+  // where the KCL cannot be rendered; that fallback is covered above.
+  const unreachable = kclUnreachable();
+  if (unreachable) {
+    t.skip(unreachable);
+    return;
+  }
+  const envK = path.join(CONTROL_PLANE_DIR, 'deploy/kcl/lib/env.k');
+  if (!fs.existsSync(envK)) {
+    t.skip(`no ${envK}`);
+    return;
+  }
 
   const buildConfigPath = path.join(ELECTRON_DIR, 'src', 'build-config.js');
   const rendererConfigPath = path.join(ELECTRON_DIR, 'src', 'release-renderer-config.js');
