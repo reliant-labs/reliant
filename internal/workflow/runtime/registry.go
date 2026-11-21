@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
@@ -96,6 +97,11 @@ func markTextOnlyUserError(err error) error {
 	if drivererrors.IsProviderCreditExhaustion(err) {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
+	// A conversation that outgrew the model's window even after call_llm
+	// trimmed the request: the user's to change (a new chat, a larger model).
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return svcerr.WithClass(err, svcerr.ClassUser)
+	}
 	// The provider refused the user's prompt under its usage policy (prod
 	// c1ef7abd): the content is the user's to change.
 	if drivererrors.IsProviderPromptRefusal(err) {
@@ -108,6 +114,16 @@ func markTextOnlyUserError(err error) error {
 	}
 	return err
 }
+
+// ContextOverflowErrType is the Temporal error type of an activity failure
+// caused by drivererrors.ErrContextOverflow: a request the provider refused as
+// larger than the model's context window even after call_llm shrank it.
+// Never retryable.
+const ContextOverflowErrType = "LLMContextOverflow"
+
+// StreamEndedEarlyErrType is the Temporal error type of an activity failure
+// caused by drivererrors.ErrStreamEndedEarly. Always retryable.
+const StreamEndedEarlyErrType = "LLMStreamEndedEarly"
 
 // classifyError determines if an error is terminal or transient
 // Returns a Temporal-compatible error that controls retry behavior
@@ -125,8 +141,9 @@ func classifyError(err error) error {
 	// status and a transport's text verbatim, so the text rules below could
 	// match ("not found", "permission denied") and replace the type with
 	// TerminalError — and a machine-unavailable run would pause, holding its
-	// automation's slot, instead of ending.
-	if errors.As(err, &app) && app.NonRetryable() && strings.HasPrefix(app.Type(), "RunStep") {
+	// automation's slot, instead of ending. A retryable one (RunStepReleased)
+	// keeps its retry the same way.
+	if errors.As(err, &app) && strings.HasPrefix(app.Type(), "RunStep") {
 		return err
 	}
 	// Check if already classified as TerminalError
@@ -142,6 +159,18 @@ func classifyError(err error) error {
 		delay, retry := scheduled.RetryAfter()
 		return temporal.NewApplicationErrorWithOptions(err.Error(), scheduled.TemporalErrorType(),
 			temporal.ApplicationErrorOptions{NonRetryable: !retry, NextRetryDelay: delay, Cause: err})
+	}
+
+	// A provider stream that closed before its terminal event is a response
+	// cut short in transit: always retryable, and decided by identity before
+	// every text rule below, so no word a layer above wraps it in ("not
+	// found", "invalid") can make it terminal. This runs in the worker, where
+	// the Go error still carries its identity; it crosses to the workflow as
+	// a typed, retryable ApplicationError (flattenForTemporal keeps the type
+	// and NonRetryable=false).
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return temporal.NewApplicationErrorWithOptions(err.Error(), StreamEndedEarlyErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: false, Cause: err})
 	}
 
 	// A database that did not answer is always retryable, and is decided
@@ -197,6 +226,18 @@ func classifyError(err error) error {
 			// A policy the org's admins set, never a server fault.
 			Category: temporal.ApplicationErrorCategoryBenign,
 		})
+	}
+
+	// A prompt the provider refused as larger than the model's window. call_llm
+	// already shrank the request and resent it before giving up, so resending
+	// it again cannot succeed: terminal, and typed so the workflow side still
+	// knows what it was after Go identity is lost to serialization. Decided by
+	// identity before the text rules below: the streaming-429 rule matches
+	// "429" anywhere in the text, and a token count can contain it
+	// ("prompt is too long: 204291 tokens").
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return temporal.NewApplicationErrorWithOptions(err.Error(), ContextOverflowErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
 	}
 
 	// Auto-classify based on error content
@@ -336,6 +377,13 @@ func categorizeError(err error) string {
 
 	if errors.Is(err, drivererrors.ErrEmptyInput) {
 		return "validation"
+	}
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return "terminal"
+	}
+
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return "network"
 	}
 
 	// Before "not found": a database outage is what a mislabelled lookup
@@ -569,6 +617,15 @@ func isTerminal(err error) bool {
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
+	}
+
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return true
+	}
+
+	// Identity beats the text rules below; see classifyError.
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return false
 	}
 
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {
@@ -1364,7 +1421,8 @@ func resolveMaxAttempts(info activity.Info) int32 {
 		"WorkflowStatus",
 		"EmitStreamFinalized",
 		"DrainAgentMessages",
-		"Cleanup":
+		"Cleanup",
+		machinepool.PlaceRunActivityName:
 		return infrastructureActivityMaxAttempts
 	}
 
@@ -1780,6 +1838,12 @@ type activityInputInfo struct {
 	// is what lets a consumer of the node event attribute an activity deep in
 	// a sub-workflow to the loop-body node that contains it.
 	NodePath string
+	// RunID is the run the activity works for: its RuntimeContext.Telemetry's
+	// root run id (a spawned sub-agent's RootRunID, else the run's own
+	// RunID), "" when the input names no run. Recorded on the step's row
+	// (step_executions.run_id), it is what tells this run's attempts from an
+	// earlier run's on the same reused workflow id (run_outcome.go).
+	RunID string
 }
 
 // extractActivityInputInfo extracts common fields from a typed input using JSON.
@@ -1852,7 +1916,29 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 	if nodePath, ok := m["node_path"].(string); ok {
 		info.NodePath = nodePath
 	}
+	info.RunID = telemetryRunID(m)
 	return info
+}
+
+// telemetryRunID is the root run id of the RunTelemetry in an activity input
+// (types.RuntimeContext.Telemetry), "" when it carries none. The telemetry is
+// an object, which withNestedInputKeys does not lift, so it is read where a v3
+// input holds it (runtime.telemetry) or where a flat one does (telemetry).
+func telemetryRunID(m map[string]interface{}) string {
+	tel, _ := m["telemetry"].(map[string]interface{})
+	if tel == nil {
+		if rt, ok := m["runtime"].(map[string]interface{}); ok {
+			tel, _ = rt["telemetry"].(map[string]interface{})
+		}
+	}
+	if tel == nil {
+		return ""
+	}
+	if root, ok := tel["root_run_id"].(string); ok && root != "" {
+		return root
+	}
+	run, _ := tel["run_id"].(string)
+	return run
 }
 
 // withNestedInputKeys returns m with the scalar keys of its one-level-nested
@@ -2013,6 +2099,10 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 	if attempt.Scope.NodePath != "" {
 		nodePath = ptr.Of(attempt.Scope.NodePath)
 	}
+	var runID *string
+	if attempt.Scope.RunID != "" {
+		runID = ptr.Of(attempt.Scope.RunID)
+	}
 
 	return &db.StepExecution{
 		ID:            uuid.New().String(),
@@ -2029,6 +2119,7 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 		ErrorMessage:  recordedError(attempt.Err),
 		Attempt:       attemptNumber,
 		NodePath:      nodePath,
+		RunID:         runID,
 		// No .UTC(): created_at is timestamptz, so the offset is preserved and
 		// normalized on the way in and a local time stores the same instant.
 		// This site is where the two-basis bug was found — it wrote local time

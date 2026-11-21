@@ -30,9 +30,9 @@ export const PROJECT = {
 
 /** Every environment the org holds: two apps, one of them never opened as a Reliant project. */
 export const ENVIRONMENTS = [
-  { id: 'env_store_prod', name: 'prod', project: 'storefront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: minutesAgo(9000) },
-  { id: 'env_store_staging', name: 'staging', project: 'storefront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: minutesAgo(9000) },
-  { id: 'env_status_prod', name: 'prod', project: 'status-page', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: minutesAgo(20000) },
+  { id: 'env_store_prod', name: 'prod', project: 'storefront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: minutesAgo(9000) },
+  { id: 'env_store_staging', name: 'staging', project: 'storefront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: minutesAgo(9000) },
+  { id: 'env_status_prod', name: 'prod', project: 'status-page', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: minutesAgo(20000) },
 ];
 
 const promotion = (environmentId: string, version: string, ago: number) => ({

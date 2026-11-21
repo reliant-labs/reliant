@@ -24,6 +24,8 @@ import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { homePath, projectPath } from "@/lib/paths";
+import { navigateToChatUrl, navigateToNewChatUrl, pathOwnsChat, routeOwnsChat } from "@/lib/chatRoute";
+import { orgFreePath } from "@/lib/paths/org";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
@@ -67,9 +69,10 @@ export function syncProjectFilterUrl(projectId: string | null) {
   try {
     const router = getRouter();
     if (!router) return; // routes.tsx hasn't registered yet — startup window
-    const currentPath = router.state.location.pathname;
+    // Both org-less: an org page is matched as its org-less twin.
+    const currentPath = orgFreePath(router.state.location.pathname);
     if (projectId) {
-      const targetPrefix = projectPath(projectId);
+      const targetPrefix = orgFreePath(projectPath(projectId));
       if (currentPath === targetPrefix || currentPath.startsWith(`${targetPrefix}/`)) {
         return;
       }
@@ -101,6 +104,10 @@ export function syncProjectFilterUrl(projectId: string | null) {
         // app before the flow had finished. OnboardingRoute owns when to
         // leave; the selection is background context until then.
         currentPath.startsWith("/onboarding") ||
+        // A chat's URL (or the new-chat view's) names the open chat, and
+        // the filter is the sidebar's control there (R6): it moves only the
+        // list. selectProject moves the URL itself when it opens a chat.
+        pathOwnsChat(currentPath) ||
         // The mobile surface has its own project handling (MobileShell picks a
         // fallback project itself). Without this, MobileShell's own
         // selectProject call navigated the user out of /m/* and into the
@@ -219,7 +226,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // The open chat belongs to the project being left: show the new project's
     // own last chat (restored below) or its new-chat view, never another
     // project's chat in this project's context.
-    if (isProjectSwitch && restoreChat) {
+    //
+    // When the URL names the open chat (`/c/<id>`, `/new`; lib/chatRoute.ts)
+    // the URL moves instead, once that chat is known (below): a push to it, so
+    // Back returns to the chat being left. Nothing is restored over a chat
+    // URL otherwise (a first selection, a reload): the URL's chat is the one.
+    const urlOwnsChat = routeOwnsChat();
+    if (isProjectSwitch && restoreChat && !urlOwnsChat) {
       useChatStore.getState().clearCurrentChat(null);
     }
 
@@ -292,14 +305,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       
       // Restore active chat from workspace state
       const worktreeState = useWorkspaceStateStore.getState().getWorktreeState(project.id, currentWorktreeId);
-      if (restoreChat && worktreeState.activeChatId) {
+      const restoreOverUrl = urlOwnsChat && isProjectSwitch;
+      if (restoreChat && (!urlOwnsChat || restoreOverUrl)) {
         const chat = worktreeState.activeChatId
           ? await resolveChat(worktreeState.activeChatId)
           : undefined;
         if (!isCurrent()) return;
         if (chat) {
+          if (restoreOverUrl) navigateToChatUrl(chat.id, { orgId: chat.orgId });
           await openChatInWorkspace(chat, { isCurrent, openEntry: "restore" });
           if (!isCurrent()) return;
+        } else if (restoreOverUrl) {
+          navigateToNewChatUrl({ project: project.id });
+          useChatStore.getState().clearCurrentChat(null);
         }
       }
       

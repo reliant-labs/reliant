@@ -324,6 +324,9 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		repo         *core.Repo
 		worktreePath string
 		baseBranch   string
+		// requested is whether the base came from the request (global or
+		// per-repo) rather than the daemon's default-branch detection.
+		requested bool
 	}
 	successes := make([]repoCreateResult, 0, len(repos))
 
@@ -430,7 +433,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 
 		if ex, ok := req.Existing[repo.ID]; ok {
-			return repoCreateResult{repo: repo, worktreePath: ex.Path, baseBranch: ex.Base}, nil
+			return repoCreateResult{repo: repo, worktreePath: ex.Path, baseBranch: ex.Base, requested: repoBase != ""}, nil
 		}
 
 		// Force is passed to the daemon's create operation, which validates
@@ -496,6 +499,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			repo:         repo,
 			worktreePath: createResp.WorktreePath,
 			baseBranch:   firstNonEmpty(createResp.BaseBranch, repoBase),
+			requested:    repoBase != "",
 		}, nil
 	}
 
@@ -597,7 +601,9 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 	}
 
-	// BaseBranch is the resolved value of the first repo, for display.
+	// BaseBranch is the resolved value of the first repo whose base was
+	// requested (a base asked for one repo only names that repo's, not a
+	// sibling's default), else of the first repo, for display.
 	// BaseBranches records every successful repo's resolved base — what
 	// CreatePR consults so a repo whose default is `master` doesn't get a PR
 	// opened against `main`.
@@ -605,6 +611,12 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 	baseBranches := make(map[string]string, len(successes))
 	if len(successes) > 0 {
 		displayBase = successes[0].baseBranch
+	}
+	for _, s := range successes {
+		if s.requested {
+			displayBase = s.baseBranch
+			break
+		}
 	}
 	for _, s := range successes {
 		if s.baseBranch != "" {
@@ -645,6 +657,19 @@ type checkoutResponse struct {
 	ErrorDetail string             `json:"error_detail,omitempty"`
 }
 
+// BaseNotFoundError is a repo's checkout refused because its base branch does
+// not exist in that repo. It is the svcerr NotFound it wraps (same code, same
+// message); the type lets a caller say what to change, e.g. scope the base to
+// the one repo that has it.
+type BaseNotFoundError struct {
+	Base string
+	Repo string
+	err  error
+}
+
+func (e *BaseNotFoundError) Error() string { return e.err.Error() }
+func (e *BaseNotFoundError) Unwrap() error { return e.err }
+
 // checkoutError is the reason a repo's checkout was refused.
 //
 // A reason the daemon diagnosed (worktreeerr) is the caller's input — a base
@@ -661,7 +686,8 @@ func checkoutError(resp checkoutResponse, repoName, branch string, adopting bool
 		if !strings.HasPrefix(base, "origin/") {
 			msg += fmt.Sprintf(" (a branch that is only on the remote is 'origin/%s')", base)
 		}
-		return svcerr.WithMessage(svcerr.NotFound("base branch"), msg)
+		return &BaseNotFoundError{Base: base, Repo: repoName,
+			err: svcerr.WithMessage(svcerr.NotFound("base branch"), msg)}
 	case worktreeerr.InvalidBranchName:
 		return svcerr.InvalidArgument(fmt.Sprintf(
 			"'%s' is not a valid git branch name — choose another", branch))

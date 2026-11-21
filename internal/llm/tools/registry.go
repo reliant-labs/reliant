@@ -672,6 +672,14 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolListMachines, (*ToolsFactory).ListMachines, []ToolTag{TagReadOnly}, PlacementServer, false},
 		{ToolManageMachine, (*ToolsFactory).ManageMachine, nil, PlacementServer, false},
 		{ToolManageMachinePool, (*ToolsFactory).ManageMachinePool, nil, PlacementServer, false},
+		// Forge Changes (remote config, rollouts, A/B tests), through the
+		// control plane's ChangesService as the user (change_tools.go).
+		// Loaded on demand; manage_change's launch, roll_out and ramp up need
+		// an approval card, and stop never does.
+		{ToolListChanges, (*ToolsFactory).ListChanges, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolGetChange, (*ToolsFactory).GetChange, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolManageChange, (*ToolsFactory).ManageChange, nil, PlacementServer, false},
+		{ToolChangeResults, (*ToolsFactory).ChangeResults, []ToolTag{TagReadOnly}, PlacementServer, false},
 		// Asks a person, on an approval card, to connect an integration in
 		// the connection dialog (connection_proposal_tool.go). Loaded on
 		// demand; the agent never sees the credential.

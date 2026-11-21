@@ -175,6 +175,17 @@ type RuntimeContext struct {
 	// Set on call_llm nodes only, for one dispatch (reliant #2759).
 	CutOffMessageID string `json:"cut_off_message_id,omitempty"`
 
+	// InterruptedTurn is set on an execute_tools step dispatched to settle a
+	// batch a same-thread interrupt cancelled ("Interrupt & send now"). The
+	// activity runs nothing: a call a previous dispatch already finished
+	// keeps its recorded result, and every other call is recorded Cancelled
+	// and answered as stopped by the user. So every tool call of the turn
+	// gets a tool_result, its save_message keeps the history valid, and the
+	// loop reaches the call_llm that delivers the thread's mailbox, instead
+	// of running the batch (and its approval previews) again. Set on
+	// execute_tools nodes only, for one dispatch.
+	InterruptedTurn bool `json:"interrupted_turn,omitempty"`
+
 	// CatalogPin is the workflow catalog the run started with
 	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
 	// describes from it, so the model is offered the presets a spawn then

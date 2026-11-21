@@ -52,6 +52,10 @@ const PAGES: ConsolePage[] = [
   { kind: "secrets" },
   { kind: "domains" },
   { kind: "activity" },
+  { kind: "vulnerabilities" },
+  { kind: "vulnerability", advisory: "CVE-2026-4101" },
+  { kind: "vulnerability", advisory: "GHSA-7f3x-q2mv-9hc4" },
+  { kind: "sboms" },
 ];
 
 describe("console paths", () => {
@@ -92,6 +96,16 @@ describe("console paths", () => {
     expect(consolePageOf("/forge/p/x/observability/dashboards/workspace")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/dashboards/workspace/a/b")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/logs/workspace/a")).toBeNull();
+  });
+
+  it("puts Vulnerabilities and SBOMs under Security", () => {
+    expect(consolePath("shop", { kind: "vulnerabilities" })).toBe("/forge/p/shop/security/vulnerabilities");
+    expect(consolePath("shop", { kind: "vulnerability", advisory: "CVE-2026-4101" })).toBe("/forge/p/shop/security/vulnerabilities/CVE-2026-4101");
+    expect(consolePath("shop", { kind: "sboms" })).toBe("/forge/p/shop/security/sboms");
+    // The section itself is a redirect, and nothing nests below an advisory or the SBOMs.
+    expect(consolePageOf("/forge/p/shop/security")).toBeNull();
+    expect(consolePageOf("/forge/p/shop/security/vulnerabilities/CVE-1/x")).toBeNull();
+    expect(consolePageOf("/forge/p/shop/security/sboms/x")).toBeNull();
   });
 
   it("puts a dashboard under Observability › Dashboards, by kind and key", () => {
@@ -154,6 +168,10 @@ describe("redirects from the retired URLs", () => {
     [{ tab: "secrets", secret: "DATABASE_URL" }, "/forge/p/shop/secrets?env=prod&secret=DATABASE_URL"],
     [{ tab: "observability" }, "/forge/p/shop?env=prod"],
     [{ tab: "observability", view: "usage" }, "/settings/billing"],
+    // The control plane's queued-deploy link names its org: the environment
+    // page asks before switching to it, so the redirect must not drop it.
+    [{ org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&org=org-b"],
+    [{ tab: "identity", org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&tab=identity&org=org-b"],
   ])("/forge/env/prod %o → %s", (search, target) => {
     expect(legacyEnvTarget("shop", "prod", search)).toBe(target);
   });

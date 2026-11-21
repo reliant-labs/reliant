@@ -22,8 +22,23 @@
  *     constant, a return value, a nav item, a map. Except where it MATCHES a
  *     path rather than builds one: a comparison, a `case`, `startsWith` and
  *     friends, an `is…`/`…match…`/`…Prefix` predicate's argument, a route's
- *     own `path` (or a `…Route(path)` factory's),
- *     `from` or `id`, and types.
+ *     own `path` or `id` (an object passed to `createRoute` and friends, or a
+ *     `…Route(path)` factory's argument), a `from` route id, and types.
+ *
+ * Seen through as well: a same-file `const` holding a path that reaches a
+ * navigation (`const HOME = "/"; navigate({ to: HOME })`), and an absolute
+ * URL of this app's own origin (`${location.origin}/inbox`).
+ *
+ * WHAT IT CANNOT SEE. It reads syntax, one file at a time, with no types and
+ * no data flow beyond the two cases above: a path assembled from pieces none
+ * of which is a route (`"/" + area`), one that crosses a function or module
+ * boundary as a value and is navigated to there (`items.map((i) =>
+ * navigate({ to: i.target }))` where `target` was built from a variable), or
+ * a destination that never passes through a navigation call it knows (a
+ * custom wrapper). A passing guard is therefore not a proof that every
+ * navigation goes through a builder: the real-router tests (lib/paths
+ * __tests__, the route-tree harness in test/orgRouteHarness.ts) are what
+ * prove destinations resolve.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -51,8 +66,11 @@ const MATCH_METHODS = new Set(["startsWith", "endsWith", "includes", "indexOf", 
 
 const SKIPPED_DIRS = new Set(["gen", "__tests__", "__preview__", "__fixtures__", "demoData", "test", "mocks", "node_modules"]);
 
-/** Properties whose value is a route's own declaration or a route id to read from. */
-const DECLARATION_KEYS = new Set(["path", "from", "id"]);
+/** Properties whose value declares a route, when the object is a route's own options (`createRoute({ path })`). */
+const DECLARATION_KEYS = new Set(["path", "id"]);
+
+/** Calls whose object argument is a route's declaration. */
+const ROUTE_FACTORIES = /^(createRoute|createRootRoute|createFileRoute|createLazyRoute)$|Route$/;
 
 export function listSources(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -161,8 +179,56 @@ function isMatching(parent: ts.Node, child: ts.Node): boolean {
     // …and a route factory's path (`legacyRoute("/runs")`) is a declaration.
     return MATCH_METHODS.has(name) || /^(is|has|under)[A-Z]/.test(name) || /[mM]atch|Prefix/.test(name) || /Route$/.test(name);
   }
-  if (ts.isPropertyAssignment(parent) && parent.initializer === child) return DECLARATION_KEYS.has(nameOf(parent.name) ?? "");
+  if (ts.isPropertyAssignment(parent) && parent.initializer === child) {
+    const key = nameOf(parent.name) ?? "";
+    // A route id read from (`useSearch({ from: "/_app" })`) is never a destination.
+    if (key === "from") return true;
+    // `path` and `id` only in a route's own options: `{ path: "/inbox" }` anywhere
+    // else is a value that may well be navigated to.
+    return DECLARATION_KEYS.has(key) && isRouteOptions(parent.parent);
+  }
   return false;
+}
+
+/** Whether `object` is the options object of a route factory call. */
+function isRouteOptions(object: ts.Node): boolean {
+  if (!ts.isObjectLiteralExpression(object)) return false;
+  let node: ts.Node = object;
+  while (ts.isParenthesizedExpression(node.parent) || ts.isAsExpression(node.parent) || ts.isSatisfiesExpression(node.parent)) node = node.parent;
+  const call = node.parent;
+  return ts.isCallExpression(call) && call.arguments.includes(node as ts.Expression) && ROUTE_FACTORIES.test(calleeName(call) ?? "");
+}
+
+/** The navigation sink an expression reaches, unwrapped as `consumer` does, or null. */
+function reachesNavigation(node: ts.Node): boolean {
+  const { parent, child } = consumer(node);
+  return isNavigation(parent, child);
+}
+
+/** Same-file `const NAME = "/…"` declarations, by name: a path literal held in a constant. */
+function constPaths(sf: ts.SourceFile): Map<string, string> {
+  const out = new Map<string, string>();
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclarationList(node) && node.flags & ts.NodeFlags.Const) {
+      for (const decl of node.declarations) {
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) continue;
+        const text = literalText(decl.initializer);
+        if (text !== null && text.startsWith("/") && !text.startsWith("//")) out.set(decl.name.text, text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** `${location.origin}/inbox` (this app's own origin): the path after the origin, else null. */
+function sameOriginTemplatePath(node: ts.Node): string | null {
+  if (!ts.isTemplateExpression(node) || node.head.text !== "" || node.templateSpans.length === 0) return null;
+  const first = node.templateSpans[0];
+  if (!/^(window\.|document\.)?location\.origin$/.test(first.expression.getText())) return null;
+  const rest = first.literal.text;
+  return rest.startsWith("/") && !rest.startsWith("//") ? rest : null;
 }
 
 /** The first segments of every absolute route path declared with `createRoute({ path })`. */
@@ -194,7 +260,18 @@ export function routeRoots(files: string[]): Set<string> {
 export function scanSource(file: string, text: string, roots: ReadonlySet<string>): PathSite[] {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const sites: PathSite[] = [];
+  const consts = constPaths(sf);
   const visit = (node: ts.Node) => {
+    const at = () => `${file}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+    // A constant holding a path, navigated to by name.
+    if (ts.isIdentifier(node) && consts.has(node.text) && !ts.isVariableDeclaration(node.parent) && reachesNavigation(node)) {
+      sites.push({ kind: "navigation", where: at(), file, text: consts.get(node.text)! });
+    }
+    // This app's own origin in front of a path.
+    const absolute = sameOriginTemplatePath(node);
+    if (absolute !== null && reachesNavigation(node)) {
+      sites.push({ kind: "navigation", where: at(), file, text: node.getText().slice(1, -1) });
+    }
     const literal = literalText(node);
     if (literal !== null && literal.startsWith("/") && !literal.startsWith("//") && !isInType(node)) {
       // A literal inside a bigger string (`/auth?redirect=${encodeURIComponent("/claim")}`)

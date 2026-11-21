@@ -42,9 +42,8 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/components/AuthInitializer.tsx", why: "Reliant authenticated startup" },
   { match: "src/components/AuthLayout.tsx", why: "Reliant sign-in" },
   { match: "src/components/AuthScreen.tsx", why: "Reliant sign-in" },
-  // The Reliant app and the other shells' route trees.
-  { match: "src/routes.tsx", why: "Reliant's route tree" },
-  { match: "src/forgeShellRoutes.tsx", why: "the forge shell's route tree" },
+  // The app's route tree (both app hosts: Reliant and the forge brand).
+  { match: "src/routes.tsx", why: "the app's route tree" },
   { match: "src/settingsSectionRoutes.tsx", why: "Reliant settings" },
   { match: "src/settingsConnectorRoutes.tsx", why: "Reliant settings" },
   { match: "src/workflowsAreaRoutes.tsx", why: "Reliant workflows" },

@@ -1,5 +1,5 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
-// Package contract; canonical pattern lives in `forge skill load contracts`.
+// Package contract; canonical pattern lives in `forge agent skill load contracts`.
 
 // Package orgmove runs a project's move to another org as a saga
 // (control-plane docs/design/org-project-move.md §3): control-plane's

@@ -25,6 +25,16 @@
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
+ *   /forge/p/:project/experiments             Experiments: the project's Forge Changes
+ *                                             (remote config, rollouts, A/B tests)
+ *   /forge/p/:project/experiments/:changeId   one change (`who` opens it on a "Who gets it?" answer)
+ *   /forge/p/:project/security/vulnerabilities
+ *                                             Security › Vulnerabilities: the findings of the
+ *                                             scope's releases (`release`, `severity`, `fixable`,
+ *                                             `kev`, `exempt`: Security/vulnModel.ts)
+ *   /forge/p/:project/security/vulnerabilities/:advisory
+ *                                             one advisory, across the project's releases
+ *   /forge/p/:project/security/sboms          Security › SBOMs: each artifact's SBOM and scan (`release`)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -62,6 +72,7 @@
  */
 
 import { settingsPath, withOrg, withSearch, type PathContext } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
@@ -110,9 +121,9 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView };
 
 /**
- * The path of an org page. U3 moves it to `/o/<org>/observability[/<view>]`
- * (design §3.1): the org form is not this path behind a prefix, so it is
- * rewritten here.
+ * The path of an org page. Its org form (flag `web.org_routes` on) is
+ * `/o/<org>/observability[/<view>]` (design §3.1): withOrg rewrites it
+ * (lib/paths/org.ts, orgFormOf).
  */
 export function orgPath(page: OrgPage, ctx?: PathContext): string {
   switch (page.kind) {
@@ -125,7 +136,7 @@ export function orgPath(page: OrgPage, ctx?: PathContext): string {
 
 /** Which org page `pathname` is, or null for any other path. The inverse of orgPath. */
 export function orgPageOf(pathname: string): OrgPage | null {
-  const parts = pathname.split("/").filter(Boolean);
+  const parts = orgFreePath(pathname).split("/").filter(Boolean);
   if (parts[0] !== "forge" || parts[1] !== "observability") return null;
   if (parts.length === 2) return { kind: "observability" };
   return parts.length === 3 && isObsNavView(parts[2]) ? { kind: "obs-view", view: parts[2] } : null;
@@ -151,11 +162,32 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** Forge Changes: remote config, gradual rollouts and A/B tests (Experiments/ExperimentsPage.tsx). */
+  | { kind: "experiments" }
+  /** One change, by its control-plane id: a change is one per environment, so its id names both. */
+  | { kind: "experiment"; changeId: string }
+  /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
+  | { kind: "vulnerabilities" }
+  /** One advisory in the project (Security/VulnerabilityPage.tsx). */
+  | { kind: "vulnerability"; advisory: string }
+  /** Security › SBOMs: each release artifact's SBOM and its scan (Security/SbomsPage.tsx). */
+  | { kind: "sboms" };
 
 /**
- * One app's console. U3 moves it to `/o/<org>/apps/<app>` (design §3.1): the
- * org form is not this path behind a prefix, so it is rewritten here.
+ * The Security section's path segments: `/forge/p/<app>/security/<page>`. The
+ * nav's Security group points its rows at these pages through consolePath;
+ * the segments are exported for a reader of a pathname.
+ */
+export const SECURITY_SEGMENT = "security";
+export const SECURITY_PAGES = { vulnerabilities: "vulnerabilities", sboms: "sboms" } as const;
+/** The Security pages, in nav order. */
+export const SECURITY_PAGE_KINDS = ["vulnerabilities", "sboms"] as const satisfies readonly ConsolePage["kind"][];
+
+/**
+ * One app's console. Its org form (flag `web.org_routes` on) is
+ * `/o/<org>/apps/<app>` (design §3.1): withOrg rewrites it (lib/paths/org.ts,
+ * orgFormOf).
  */
 export function consoleBase(project: string, ctx?: PathContext): string {
   return withOrg(`${FORGE_ROOT}/p/${encodeURIComponent(project)}`, ctx);
@@ -193,6 +225,16 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "experiments":
+      return `${base}/experiments`;
+    case "experiment":
+      return `${base}/experiments/${encodeURIComponent(page.changeId)}`;
+    case "vulnerabilities":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}`;
+    case "vulnerability":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}/${encodeURIComponent(page.advisory)}`;
+    case "sboms":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.sboms}`;
   }
 }
 
@@ -210,7 +252,7 @@ function safeDecode(segment: string): string {
  * and the breadcrumb.
  */
 export function consolePageOf(pathname: string): { project: string; page: ConsolePage } | null {
-  const parts = pathname.split("/").filter(Boolean);
+  const parts = orgFreePath(pathname).split("/").filter(Boolean);
   if (parts[0] !== "forge" || parts[1] !== "p" || !parts[2]) return null;
   const project = safeDecode(parts[2]);
   const [section, sub, dashKind, dashKey, ...rest] = parts.slice(3);
@@ -230,6 +272,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
+      case "experiments":
+        if (dashKind) return null;
+        return sub ? { kind: "experiment", changeId: safeDecode(sub) } : { kind: "experiments" };
       case "storage":
       case "data":
       case "users":
@@ -237,6 +282,11 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "domains":
       case "activity":
         return sub ? null : { kind: section };
+      case SECURITY_SEGMENT:
+        if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
+          return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };
+        }
+        return sub === SECURITY_PAGES.sboms && !dashKind ? { kind: "sboms" } : null;
       default:
         return null;
     }
@@ -325,6 +375,8 @@ export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "work
 export interface LegacyEnvSearch extends LegacyObsSearch {
   tab?: string;
   secret?: string;
+  /** The org the link was written for (a queued deploy's action URL); the environment page asks before switching to it. */
+  org?: string;
 }
 
 /**
@@ -344,6 +396,10 @@ function legacyWorkloadsTarget(project: string, env: string, workload: string | 
  * scoped to that environment; everything else about the
  * environment — overview, the local dev stack, domain bindings, the retired
  * tab names — is the environment's own page under Configure.
+ *
+ * `org` rides along to the environment's own page, the one page that honours
+ * it (its OrgSwitchGate asks before acting in another org): the control
+ * plane's queued-deploy link is `/forge/env/<env>?forgeProject=…&org=…`.
  */
 export function legacyEnvTarget(project: string, env: string, search: LegacyEnvSearch): string {
   switch (search.tab) {
@@ -364,9 +420,9 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
       return withSearch(consolePath(project, { kind: "domains" }), { env });
     case "identity":
     case "running":
-      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab, org: search.org });
     default:
-      return withSearch(consolePath(project, { kind: "environment", env }), { env });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, org: search.org });
   }
 }
 

@@ -329,9 +329,10 @@ effects are skipped when storage isn't the settings adapter:
 - the API-key prompt;
 - the chat landing.
 
-The forge shell does this in `forgeShellRoutes.tsx` (`bootForgeTour`,
-ForgeShell/forgeTourBoot.ts), mounts `<JourneyTour />` at its root, and mounts
-`/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
+The forge brand does this in `routes.tsx` (`bootForgeTour`,
+ForgeShell/forgeTourBoot.ts, at module load on the forge host), mounts
+`<JourneyTour />` at its root in place of `OnboardingWizard`, and both brands
+mount `/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
 by ForgeShell/landingJourney.ts:
 - `forge` starts the forge journey: at once for a signed-out visitor (on the
   public demo, instead of the sign-in redirect), on arrival for a signed-in

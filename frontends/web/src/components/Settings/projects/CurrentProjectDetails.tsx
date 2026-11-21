@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type ReactNode } from "react";
+import { navigateToChatUrl } from "@/lib/chatRoute";
 import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
@@ -45,7 +46,7 @@ export interface CurrentProjectDetailsProps {
 }
 
 const RECENT_CHAT_LIMIT = 5;
-const SECTION_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const SECTION_LABEL = "text-xs font-semibold text-muted-foreground";
 
 export function CurrentProjectDetails({
   project,
@@ -90,6 +91,7 @@ export function CurrentProjectDetails({
       await switchWorktreeContext(project.id, target);
     }
     navigateToChat(chat.id);
+    navigateToChatUrl(chat.id, { orgId: chat.orgId });
     selectChat(chat);
     onChatOpened?.();
   };

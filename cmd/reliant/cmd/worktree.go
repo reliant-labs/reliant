@@ -27,40 +27,48 @@ import (
 // proposes, and the restore of any capture. It reads and writes the daemon's
 // state directory (~/.reliant/reclaim) and the repositories' capture refs;
 // it never deletes a worktree itself. Deletion is the daemon's alone, under
-// its admission lease.
-
-func init() { registerCommand(newWorktreeCmd) }
+// its admission lease. `list` and `archive` (worktree_workspaces.go) are the
+// server's view of the project's workspaces, which is why the group is a
+// CLIConfig subtree (root.go).
 
 func newWorktreeCmd(Deps) *cobra.Command {
 	wt := &cobra.Command{
 		Use:   "worktree",
-		Short: "Inspect and restore the worktrees the daemon reclaims",
-		Long: `The daemon reclaims the disk of linked git worktrees nobody is using, on
-every machine it runs on: worktrees Reliant made and ones agents made with
-` + "`git worktree add`" + ` alike. Before it deletes one it commits everything
-git can see of it (HEAD, the staged index, unstaged edits, untracked files,
-commits only its reflog reached) into a local ref of the repository,
-refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
-immediately before deleting them.
+		Short: "List and archive workspaces; inspect and restore the worktrees the daemon reclaims",
+		Long: `'list' and 'archive' are the app's workspace list and its Archive action:
+each workspace is one row of the project's worktrees on the server.
 
-By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
-every worktree and records what it would reclaim, but captures and deletes
-nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
-after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
-holds is never reclaimed: after about five days idle it is proposed in the
-report, for a person to free by hand.
+The rest is this machine's worktree reclaim. The daemon can reclaim the disk
+of linked git worktrees nobody is using: worktrees Reliant made and ones
+agents made with ` + "`git worktree add`" + ` alike. Before it deletes one it commits
+everything git can see of it (HEAD, the staged index, unstaged edits,
+untracked files, commits only its reflog reached) into a local ref of the
+repository, refs/reliant/reclaimed/<key>/<time>, and checks that ref against
+the files immediately before deleting them.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
-default) or on. Every mode rides the storage reaper's schedule, which runs on
-managed machines, and on your own computer only with
-RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
-older worktree reap, which removes unlocked, clean, pushed worktrees idle for
-a day without capturing them first.`,
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (the default: it
+classifies every worktree and reports what it would reclaim, but captures and
+deletes nothing) or on. In mode on, a clean worktree whose HEAD is on a remote
+is reclaimed after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE); one with
+work only it holds is never reclaimed on its own: after about five days idle
+it is proposed in the report and the machine's Inbox item, for a person to
+approve or free by hand. Mode on runs on its own schedule; dry-run and off
+passes run where the storage reaper runs (RELIANT_STORAGE_REAPER: managed
+machines by default, your own computer only with RELIANT_STORAGE_REAPER=on),
+and there that schedule also runs the older worktree reap, which removes
+unlocked, clean, pushed worktrees idle for a day without capturing them first.
+'reclaim scan' runs a pass now, and 'reclaim scan --capture' captures what it
+would reclaim, so a restore can be tried, and deletes nothing.
+
+Reliant locks each of its workspaces' checkouts (` + "`git worktree lock`" + `, reason
+"reliant: worktree <id>"), so a plain ` + "`git worktree remove`" + ` refuses one:
+archive the workspace instead, or unlock it first (` + "`git worktree unlock <path>`" + `)
+or pass --force twice.`,
 	}
 	reclaim := &cobra.Command{Use: "reclaim", Short: "The daemon's last reclaim report, and decisions about proposed worktrees"}
 	reclaim.AddCommand(newWorktreeReportCmd(), newWorktreeScanCmd(), newWorktreeDecideCmd(worktreereclaim.DecisionApprove), newWorktreeDecideCmd(worktreereclaim.DecisionDecline),
 		newWorktreeProposalsCmd(), newWorktreeNoteCmd())
-	wt.AddCommand(reclaim, newWorktreeReclaimedCmd(), newWorktreeRestoreCmd())
+	wt.AddCommand(newWorktreeListCmd(), newWorktreeArchiveCmd(), reclaim, newWorktreeReclaimedCmd(), newWorktreeRestoreCmd())
 	return wt
 }
 
@@ -110,14 +118,25 @@ the key and fingerprint ` + "`approve`" + ` and ` + "`decline`" + ` take.`,
 }
 
 func newWorktreeScanCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, capture bool
 	var stateDir, roots string
 	c := &cobra.Command{
 		Use:   "scan",
 		Short: "Run a dry-run pass now and write its report",
 		Long: `Run one dry-run pass in this process: discover every linked worktree,
 classify it, and write the report and journal the daemon's passes write. It
-captures nothing and deletes nothing.`,
+captures nothing and deletes nothing.
+
+--capture also captures each worktree the pass would reclaim (auto_safe) into
+its refs/reliant/reclaimed/... ref and verifies the capture against the files,
+exactly as a reclaim does before it deletes anything; it still deletes
+nothing, and the worktrees stay where they are. Each captured entry names its
+ref, so you can try a restore into a new directory:
+
+  reliant worktree restore <ref> --repo <repo> --to <new dir>
+
+A worktree with work only it holds is not captured: a reclaim captures one
+only after a person approves it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := worktreereclaim.DefaultRoot()
@@ -125,8 +144,13 @@ captures nothing and deletes nothing.`,
 				return err
 			}
 			r := worktreereclaim.NewReclaimer(root)
+			trigger := "cli"
+			if capture {
+				trigger = "cli-capture"
+			}
 			rep := r.SweepMachine(cmd.Context(), worktreereclaim.SweepOptions{
-				Mode: worktreereclaim.SweepDryRun, Roots: worktreereclaim.ParseSweepRoots(roots), StateDir: stateDir, Trigger: "cli",
+				Mode: worktreereclaim.SweepDryRun, Roots: worktreereclaim.ParseSweepRoots(roots), StateDir: stateDir, Trigger: trigger,
+				CaptureOnly: capture,
 			})
 			if asJSON {
 				return writeJSON(cmd.OutOrStdout(), rep)
@@ -136,6 +160,7 @@ captures nothing and deletes nothing.`,
 		},
 	}
 	c.Flags().BoolVar(&asJSON, "json", false, "print the report as JSON")
+	c.Flags().BoolVar(&capture, "capture", false, "also capture and verify each worktree the pass would reclaim, deleting nothing, so a restore can be tried")
 	c.Flags().StringVar(&roots, "roots", "", "directories to walk, comma-separated path[:depth] (default: the daemon's)")
 	stateDirFlag(c, &stateDir)
 	return c
@@ -298,6 +323,9 @@ type reclaimedCapture struct {
 	CapturedAt time.Time `json:"captured_at"`
 	Clean      bool      `json:"clean"`
 	Orphans    int       `json:"orphan_commits,omitempty"`
+	// CaptureOnly: made by `reclaim scan --capture`; the worktree was not
+	// removed.
+	CaptureOnly bool `json:"capture_only,omitempty"`
 }
 
 func newWorktreeReclaimedCmd() *cobra.Command {
@@ -308,7 +336,9 @@ func newWorktreeReclaimedCmd() *cobra.Command {
 		Short: "List the captures of reclaimed worktrees",
 		Long: `List every capture (refs/reliant/reclaimed/...) in the repositories the
 reclaim journal names, or in --repo, newest first. A capture is kept until it
-is restored or deleted by hand; none expires.`,
+is restored or deleted by hand; none expires. The captures 'reclaim scan
+--capture' made are listed too, marked "kept in place": their worktrees were
+never removed.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			repos := map[string]bool{}
@@ -333,7 +363,7 @@ is restored or deleted by hand; none expires.`,
 				}
 				for _, i := range infos {
 					rows = append(rows, reclaimedCapture{Ref: i.Ref, Repo: r, Path: i.Meta.Path, Branch: i.Meta.Branch, Class: i.Meta.Class,
-						CapturedAt: i.Meta.CapturedAt, Clean: i.Clean, Orphans: len(i.Orphans)})
+						CapturedAt: i.Meta.CapturedAt, Clean: i.Clean, Orphans: len(i.Orphans), CaptureOnly: i.Meta.CaptureOnly})
 				}
 			}
 			sort.Slice(rows, func(a, b int) bool { return rows[a].CapturedAt.After(rows[b].CapturedAt) })
@@ -346,6 +376,9 @@ is restored or deleted by hand; none expires.`,
 				work := "clean"
 				if !r.Clean {
 					work = "unsaved work"
+				}
+				if r.CaptureOnly {
+					work += ", kept in place"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.CapturedAt.Local().Format(time.DateTime), r.Path, r.Branch, work, r.Ref, r.Repo)
 			}
@@ -431,10 +464,12 @@ func resolveCapture(ctx context.Context, stateDir, arg, repo string) (ref, repoO
 	lines, jerr := worktreereclaim.ReadJournal(stateDir)
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := lines[i]
-		if l.Outcome != worktreereclaim.OutcomeReclaimed || l.CaptureRef == "" {
+		if l.CaptureRef == "" {
 			continue
 		}
-		if (isRef && l.CaptureRef == arg) || (!isRef && filepath.Clean(l.Path) == filepath.Clean(arg)) {
+		// A ref is found whatever made it, a `scan --capture` included; a
+		// path only by a reclaim (a captured-only worktree is still there).
+		if (isRef && l.CaptureRef == arg) || (!isRef && l.Outcome == worktreereclaim.OutcomeReclaimed && filepath.Clean(l.Path) == filepath.Clean(arg)) {
 			return l.CaptureRef, firstNonEmpty(repo, l.CommonDir), nil
 		}
 	}

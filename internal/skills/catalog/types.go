@@ -64,7 +64,7 @@ func (d Definition) Key() SkillKey {
 // which reliant discovers at ScopeClaude (priority 7) while the forge-embedded
 // originals are ScopeForge (priority 10) — so the generated render wins, and
 // the copy that wins carries a banner telling the reader that
-// `forge skill load` prints the authoritative version. A preloaded skill that
+// `forge agent skill load` prints the authoritative version. A preloaded skill that
 // says the preload may be stale, with nothing anywhere reporting that two
 // copies exist, is a question a reader cannot answer.
 //

@@ -689,7 +689,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		}
 
 		// Wait for step completions
-		if len(runningSteps) > 0 {
+		if len(runningSteps) > 0 && !routePendingFirst(gCtx, len(events)) {
 			completedSteps := waitForStepCompletions(gCtx, runningSteps)
 
 			for _, running := range completedSteps {

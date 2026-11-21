@@ -568,7 +568,7 @@ function TriggerDefinition({ trigger }: { trigger: Trigger }) {
       </dl>
       {trigger.message && (
         <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt</h3>
+          <h3 className="mb-1 text-xs font-semibold text-muted-foreground">Prompt</h3>
           <p className="whitespace-pre-wrap break-words text-sm text-foreground">{trigger.message}</p>
         </div>
       )}
@@ -603,7 +603,7 @@ function TriggerConfigurationHistory({ triggerId }: { triggerId: string }) {
 
   return (
     <section aria-label="Configuration history" data-testid="trigger-configuration-history">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Configuration history</h3>
+      <h3 className="text-xs font-semibold text-muted-foreground">Configuration history</h3>
       {query.isLoading ? (
         <p className="py-3 text-sm text-muted-foreground" aria-busy="true">Loading configuration history…</p>
       ) : query.isError || !query.data ? (
@@ -653,7 +653,7 @@ function TriggerHistory({ trigger }: { trigger: Trigger }) {
   return (
     <div data-testid="trigger-history">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground">History</h3>
         <Link
           to={runsPath()}
           search={{ trigger: trigger.id, range: "all", allProjects: true }}

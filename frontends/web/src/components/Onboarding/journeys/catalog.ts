@@ -1,6 +1,6 @@
 /**
  * The tour's Reliant-side wiring, for the shells that carry Reliant code
- * (routes.tsx, forgeShellRoutes.tsx, OnboardingWizard). Imported for its
+ * (routes.tsx, on both app hosts, and OnboardingWizard). Imported for its
  * effects:
  *
  *  - registers the workflows journey's content (registry.ts keeps only a

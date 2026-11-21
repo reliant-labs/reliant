@@ -159,13 +159,11 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       });
 
       // A prefetch, not awaited: the project list waits for the tab's org
-      // (lib/orgScope), and nothing below depends on it. The forge shell has
-      // no Reliant projects (lib/shell.ts).
-      if (!isForgeShell()) {
-        void fetchProjects().catch((err: unknown) => {
-          logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
-        });
-      }
+      // (lib/orgScope), and nothing below depends on it. On both hosts: the
+      // forge host mounts the one route tree, projects included (U6).
+      void fetchProjects().catch((err: unknown) => {
+        logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
+      });
       try {
         await Promise.all([loadPrivacySettings(), settingsSync.initialize()]);
         if (!stillSignedInAs(startupUserId)) return;

@@ -22,6 +22,7 @@
 import { startTransition, useCallback } from "react";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useTourStore } from "../../store/tourStore";
+import { orgFreePath } from "@/lib/paths/org";
 import { dropLandingJourney } from "../../lib/landingAttribution";
 import { trackEvent } from "../../lib/analytics";
 import {
@@ -58,7 +59,10 @@ async function promptApiKeyIfNeededAfterTour(): Promise<void> {
 
 /** Whether `pathname` is on a step's page. */
 export function isOnRoute(route: JourneyRoute | undefined, pathname: string): boolean {
-  return !route || pathname.startsWith(route.path);
+  // Both org-less: a step's page is the same page in either form (`/o/<org>/…`).
+  if (!route) return true;
+  const path = orgFreePath(pathname);
+  return [route.path, ...(route.alsoAt ?? [])].some((prefix) => path.startsWith(orgFreePath(prefix)));
 }
 
 /** Where a route sends the user, given the journey's context; null when it can't be built yet. */
@@ -162,7 +166,7 @@ export function useTourNavigation(): TourNavigation {
       const path = target.to.replace(/\$([A-Za-z0-9_]+)/g, (_, name: string) =>
         encodeURIComponent(target.params?.[name] ?? ""),
       );
-      const here = router.history.location.pathname === path;
+      const here = orgFreePath(router.history.location.pathname) === orgFreePath(path);
       startTransition(() => {
         void navigate({
           to: target.to,

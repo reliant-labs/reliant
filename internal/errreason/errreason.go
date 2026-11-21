@@ -69,11 +69,12 @@ const (
 	NoControlPlaneCredential = "no_control_plane_credential"
 
 	// UpgradeRequired: the client named in the Reliant-Client header is older
-	// than the minimum this server supports. FailedPrecondition, with a
-	// google.rpc.ErrorInfo detail (reason UPGRADE_REQUIRED, domain
-	// reliantlabs.io) whose metadata carries client_kind, client_version,
-	// min_version, upgrade_url and upgrade_command. Retrying cannot help;
-	// the client upgrades.
+	// than the minimum this server supports, or names no version while the
+	// server refuses unidentified clients (ClientVersionPolicy).
+	// FailedPrecondition, with a google.rpc.ErrorInfo detail (reason
+	// UPGRADE_REQUIRED, domain reliantlabs.io) whose metadata carries
+	// client_kind, client_version, min_version, upgrade_url and
+	// upgrade_command. Retrying cannot help; the client upgrades.
 	UpgradeRequired = "upgrade_required"
 )
 

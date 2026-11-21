@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (78 tools)
+- [Other Tools](#other-tools) (82 tools)
 
 ---
 
@@ -2176,10 +2176,12 @@ _Miscellaneous tools and utilities._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`ask_user`](#ask_user) | coding:default, coding:plan | Ask the user one or more questions. By default the question is posted to the user (in the chat an... |
+| [`change_results`](#change_results) | readonly | Read the results of one Forge Change experiment run, as the control plane computes them: the verd... |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
+| [`get_change`](#get_change) | readonly | Show one Forge Change in full: its declared variants (from the environment's current release), mo... |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
 | [`github__branch_rules`](#github__branch_rules) | integration | List every rule that applies to a branch from the repository's and its organization's active rule... |
@@ -2217,10 +2219,12 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_changes`](#list_changes) | readonly | List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list... |
 | [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
+| [`manage_change`](#manage_change) | - | Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout o... |
 | [`manage_machine`](#manage_machine) | - | Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Sett... |
 | [`manage_machine_pool`](#manage_machine_pool) | - | Define or delete one of the user's machine pools: a named set of their machines (those whose labe... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2282,6 +2286,14 @@ Usage notes:
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).
+
+---
+
+### change_results
+
+**Tags:** `readonly`
+
+Read the results of one Forge Change experiment run, as the control plane computes them: the verdict (no data, sample-ratio check failed, inconclusive and why, the new version better, or worse), each version's assigned people, people whose metric window has closed, conversions and conversion rate with its confidence interval, each treatment's lift against the control with its interval, the sample-ratio check, and the window the readout covers (still collecting or final). Every call runs a query, so do not poll it. A fixed-horizon test is decided once, at the pre-registered sample size: do not treat an early significant result as a decision.
 
 ---
 
@@ -2428,13 +2440,21 @@ NOTES:
 
 ---
 
+### get_change
+
+**Tags:** `readonly`
+
+Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). For an experiment's results use change_results.
+
+---
+
 ### get_run
 
 **Tags:** `runs`, `readonly`
 
 Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
 
@@ -2728,6 +2748,14 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_changes
+
+**Tags:** `readonly`
+
+List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list as the console's Experiments page. Each change shows its key, id, environment, mode (off, preview, everyone, rollout, experiment), the share of its audience that gets it, how long its current run has been open, whether the environment's current release declares it, and its revision. Use get_change for one change's variants, audience, metric and audit trail, and manage_change to draft, preview, launch, ramp, roll out or stop one.
+
+---
+
 ### list_machines
 
 **Tags:** `readonly`
@@ -2777,6 +2805,23 @@ Use this when you need a tool that isn't currently loaded. You can:
 - Search for tools by keyword or tag name: `{"query": "workflow"}`
 
 Loaded tools become available immediately on the next turn.
+
+---
+
+### manage_change
+
+Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout or A/B test), exactly as the console's Experiments page does, as the user, with the same audit trail. The release declares what a change can be (changes.yaml: key, variants, default); this decides who gets it.
+
+- draft: without change_id, create a change (key + environment; it starts off). With change_id, edit what the next launch freezes: description, unit, audience (or clear_audience), split, metric (or clear_metric). A running experiment keeps its frozen copy until the next launch. No card.
+- preview: replace the preview list (teammates by unit id, each with a variant; ids are hashed server-side and never measured). activate moves an off change to preview. No card.
+- launch: start an experiment (a new run) at percent of the audience with the draft's split and metric. Launching while a run is open ends that run. Needs the user's approval card.
+- ramp: move a running experiment or rollout to percent. Raising it only adds people; it needs an approval card. Lowering it needs none.
+- roll_out: give variant to everyone (everyone=true) or to percent of the audience. Needs an approval card.
+- stop: the kill switch. Everyone gets the default, previews included, and the open run ends. Never needs approval.
+- end_run: conclude an experiment or rollout without shipping a variant (back to preview). Never needs approval.
+- request_approval: email the user a one-time code for one launch, ramp up or roll-out in a protected environment.
+
+Production needs a person: in a protected environment (prod) the control plane refuses a launch, ramp up or roll-out from an agent with approval_required even after the card. Then ask the user to approve it in the Experiments page of the Forge console, or run request_approval and retry with the code they read to you as step_up_code. Launching or rolling out a variant the environment's current release does not declare is refused until a release that declares it is deployed. Unattended runs may only draft, preview, stop, end_run and ramp down.
 
 ---
 
@@ -3216,8 +3261,9 @@ Prefer this to running "git worktree add" yourself: a checkout made by hand is i
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/`<project>`/`<name>`-`<id>`/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 
 ACTIONS:
-1. create - Required: name. Optional: branch, base_branch, copy_files, force
+1. create - Required: name. Optional: branch, base_branch, base_branch_repo, copy_files, force
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   In a multi-repo project base_branch must exist in every repository; to start from a branch that exists in one repository only (e.g. a pull request's branch), also pass base_branch_repo (the name of that repository) and the others start from their default branch.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
 2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.

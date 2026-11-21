@@ -139,7 +139,7 @@ Deleting a machine releases everything bound to it. Chats pinned to it lose thei
 
 ### Reclaiming disk on a machine
 
-Each daemon can reclaim the disk of linked git worktrees nobody is using on its own machine. Reclaim reports only (`RELIANT_WORKTREE_RECLAIM=dry-run`) unless it is switched `on`, and on your own computer the storage reaper must also be on (`RELIANT_STORAGE_REAPER=on`); see [Reclaim and restore worktrees](/guides/machines/reclaim-restore-worktrees). With it on, a clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
+Each daemon can reclaim the disk of linked git worktrees nobody is using on its own machine. Reclaim reports only (`RELIANT_WORKTREE_RECLAIM=dry-run`) unless it is switched `on`. Switched `on`, it runs on its own schedule on any machine, your own computer included, whether or not the storage reaper runs. `reliant worktree reclaim scan --capture` captures what a pass would reclaim without deleting anything, so you can try a restore; see [Reclaim and restore worktrees](/guides/machines/reclaim-restore-worktrees). With it on, a clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
 
 ## Design decisions and trade-offs
 
@@ -239,10 +239,10 @@ reliant workflow run --help | grep -A5 'The run executes on'
 
 ```text
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
-or created on that machine, which is the one that holds it. With --project-id
-the project must already be checked out on that machine; otherwise the run
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached or created on
+that machine, which is the one that holds it. With --project-id the project
 ```
 
 ## Guides

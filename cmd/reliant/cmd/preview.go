@@ -117,7 +117,7 @@ the deliverable shape a handoff node can post.`,
 			// Human/agent path: URL on stdout (easy to capture), notes on stderr.
 			fmt.Fprintln(cmd.OutOrStdout(), url)
 			if remote {
-				fmt.Fprintln(cmd.ErrOrStderr(), "access: openable by the workspace owner (authenticated); make the port public to share beyond the owner")
+				fmt.Fprintf(cmd.ErrOrStderr(), "access: openable by the workspace owner (authenticated); to share it beyond the owner: reliant preview access set <machine> %d public\n", port)
 			}
 			return nil
 		},

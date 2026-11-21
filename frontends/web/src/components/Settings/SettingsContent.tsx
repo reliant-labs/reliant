@@ -12,6 +12,9 @@ import { BranchesSection } from "./BranchesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { ForgeConnectorsSection } from "./ForgeConnectorsSection";
+import { ForgeTokensSection } from "../ForgeShell/ForgeTokensSection";
+import { CliLoginsSection } from "../ForgeShell/CliLoginsSection";
+import { hasControlPlane } from "../../services/controlPlane/config";
 import { MembersPage } from "./cloud/members/MembersPage";
 import { PoliciesPage } from "./cloud/policies/PoliciesPage";
 import { OrgAIAccountsPage } from "./cloud/aiAccounts/OrgAIAccountsPage";
@@ -95,6 +98,14 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
           <div className="space-y-6">
             <TokenSettings />
             <ForgeConnectorsSection />
+            {/* The forge CLI's and CI's tokens, and the CLI sign-ins: the
+                control plane's, so only where there is one. */}
+            {hasControlPlane && (
+              <>
+                <ForgeTokensSection />
+                <CliLoginsSection />
+              </>
+            )}
           </div>
         );
       case "member-permissions":

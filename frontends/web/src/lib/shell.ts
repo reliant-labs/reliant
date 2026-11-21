@@ -14,11 +14,11 @@
  * bundle still mounts the demo shell on the DEMO_APP_HOST host, so a
  * deployment that still points that host at reliant-web keeps its demo.
  *
- *   forge    ForgeShell (forgeShellRoutes.tsx): the forge console,
- *            observability, environments, secrets, domains, releases and
- *            activity, plus claim, sites, usage & spend and a small settings
- *            area. Control-plane pages only: no daemon, no onboarding, no
- *            chats. Branded "Forge by Reliant", telemetry service `forge-web`.
+ *   forge    the app's one route tree (routes.tsx), as the forge BRAND:
+ *            the same routes, guards and pages as Reliant (U6, one shell),
+ *            branded "Forge by Reliant", telemetry service `forge-web`. What
+ *            the brand changes is listed at the top of routes.tsx; ask
+ *            isForgeShell() for it.
  *   demo     the public forge demo (demoShellRoutes.tsx): ONE route,
  *            `/forge/demo`, on sample data, read-only, the forge tour started
  *            on every visit. No sign-in, no account, no control-plane call.
@@ -36,7 +36,8 @@
  * the post-deploy checks and the rollback.
  *
  * Resolved ONCE per page load (getShell memoises): the shell decides which
- * router is built, and a router cannot be swapped under a mounted app.
+ * router is built (the demo's or the app's) and the app's brand, and neither
+ * can be swapped under a mounted app.
  */
 
 import { loadConfig } from "./config_gen";
@@ -197,9 +198,12 @@ export function getShell(): AppShell {
 }
 
 /**
- * True when this page load mounts a forge-branded shell: the forge shell or
- * the demo. Neither has a daemon, Reliant's projects or its onboarding, which
- * is what every caller means by it.
+ * True when this page load is forge-branded: the forge host (the app's route
+ * tree as the forge brand) or the demo. The brand check: the brand mark, the
+ * tour's shell, the landing journey, the home of a person who has not
+ * onboarded. Since the forge host mounts the one route tree (U6) it HAS
+ * daemons, projects and onboarding, so a caller that used this to mean "no
+ * daemon here" is a dead branch on that host (U6 removes them).
  */
 export function isForgeShell(): boolean {
   return getShell() !== "reliant";

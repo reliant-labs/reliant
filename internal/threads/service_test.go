@@ -7,6 +7,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // =============================================================================
@@ -365,7 +366,7 @@ func TestCompact(t *testing.T) {
 		if second.ID != first.ID || second.Sequence != first.Sequence {
 			t.Fatalf("retry created a different context window: first=%+v second=%+v", first, second)
 		}
-		windows, err := h.repo.ListContextWindowsByThread(ctx, thread.ID)
+		windows, err := store.ListContextWindowsByThread(ctx, h.repo.ORM(), thread.ID)
 		if err != nil {
 			t.Fatalf("failed to list context windows: %v", err)
 		}

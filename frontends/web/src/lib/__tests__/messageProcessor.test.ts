@@ -188,3 +188,44 @@ describe("processMessage tool input", () => {
     expect(processed.toolExecutions?.[0].call.input).toEqual({});
   });
 });
+
+describe("processMessage thinking", () => {
+  it("keeps readable thinking as its own segment, in block order, out of the text", () => {
+    const processed = processMessage(
+      msg("t1", [
+        { type: ContentBlockType.THINKING, index: 0, content: "The discount is applied per line." },
+        textBlock(1, "Found it."),
+        toolBlock(2, "view", "call-1"),
+        { type: ContentBlockType.THINKING, index: 3, content: "Now cap it." },
+        { type: ContentBlockType.THINKING, index: 4, content: "At the line price." },
+      ]),
+    );
+
+    expect(processed.segments.map((s) => s.kind)).toEqual(["thinking", "text", "tools", "thinking"]);
+    expect(processed.segments[0]).toEqual({ kind: "thinking", text: "The discount is applied per line." });
+    // Consecutive thinking blocks read as one thought.
+    expect(processed.segments[3]).toEqual({ kind: "thinking", text: "Now cap it.\n\nAt the line price." });
+    // Copy and search read `text`: the reasoning is never part of it.
+    expect(processed.text).toBe("Found it.");
+  });
+
+  it("never yields a segment for REDACTED_THINKING, whose content is ciphertext", () => {
+    const processed = processMessage(
+      msg("t2", [
+        { type: ContentBlockType.REDACTED_THINKING, index: 0, content: "EuYBCkQYAiJA-opaque-ciphertext" },
+        textBlock(1, "Done."),
+      ]),
+    );
+
+    expect(processed.segments).toEqual([{ kind: "text", text: "Done." }]);
+    expect(JSON.stringify(processed)).not.toContain("opaque-ciphertext");
+  });
+
+  it("drops a thinking block with no readable text", () => {
+    const processed = processMessage(
+      msg("t3", [{ type: ContentBlockType.THINKING, index: 0, content: "  " }, textBlock(1, "Hi.")]),
+    );
+
+    expect(processed.segments.map((s) => s.kind)).toEqual(["text"]);
+  });
+});
