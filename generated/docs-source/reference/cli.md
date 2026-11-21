@@ -11627,6 +11627,10 @@ Examples:
                                  # unwired rpc stubs
   forge lint --secrets           # FAIL on a platform-secrets defect, with
                                  # file:line and its escape
+  forge lint --telemetry         # FAIL on a declared dashboard series whose
+                                 # metric no scrape of its system keeps;
+                                 # WARN on an unbounded or high-cardinality
+                                 # scrape and a rate over a likely gauge
   forge lint --guarded-fields    # Flag a scaffolded edit page whose
                                  # update_mask still writes a column a
                                  # custom rpc guards (forge:guards) — the
@@ -11752,6 +11756,7 @@ reliant forge lint [paths...] [flags]
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash). For each Vite frontend bound to a static runtime, FAILS when vite build's outDir is not the env's public_dir or base does not match its base_path, and WARNS on a relative base with a path-based client router. Every other frontend gets an explicit "not applicable" line |
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, contract refusals in a tree with no forge.yaml, and an advisory lane's own could-not-run report (the typed-config guardrail when golangci-lint never reported). Not needed for a gating lane that could NOT run: that always fails, unless --allow-skip accepts it |
+| `--telemetry` | `bool` | - | Judge declared telemetry (forge.Telemetry) per env, with the KCL file:line: FAILS on a declared dashboard series whose metric no scrape of its system keeps (allow minus deny; a histogram x counts as x_bucket/_sum/_count); WARNS on a metrics scrape with no allow, a rate/increase over a name no counters or _total/_count/_sum marks as a counter, and a scrape that raises sample_limit or keeps every name without drop_labels. Runs in every forge lint |
 | `--test-waits` | `bool` | - | Fail on a Go test that waits on the wall clock where it should wait on an event — a time.Sleep before the test goes on, an event wait that fails the test after a deadline under 5s (select on time.After, testify Eventually, a poll bounded by time.Now().Add), or an upper bound asserted on real elapsed time — the shapes that flake on a loaded machine. Runs in every forge lint; the fix is testkit.Eventually / testkit.Receive |
 | `--tests` | `bool` | - | Run test-presence rules (handler-tests-use-tdd + frontend-hook-tests; warnings only — the gating hook-test-shape rule runs in --conventions) |
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
@@ -16588,7 +16593,9 @@ that emitted no span, which is where to look next.
 The tree is capped for an agent's context: depth 8, 100 rendered spans, runs of
 identical siblings collapsed ("×37 SELECT jobs … p50 2ms p95 9ms"); failing
 spans, their ancestors and the critical path (the child that ends last at each
-level, marked *) are always expanded. --full lifts the caps.
+level, marked *) are always expanded. --full lifts the caps. --attributes gives
+every span its attributes (tree.attributes: the whole db.query.text, every rpc
+and http attribute), which otherwise only a failing span carries.
 
 A trace is read up to 10,000 spans, in start order. A bigger one (an N+1 loop
 that ran until its deadline) says how many spans it has and how many were read;
@@ -16703,6 +16710,7 @@ reliant forge obs trace <trace-id> [env] [flags]
 |------|------|---------|-------------|
 | `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--attributes` | `bool` | - | carry every span's attributes (the whole db.query.text, every rpc and http attribute), not only a failing span's |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
@@ -17086,8 +17094,10 @@ Dockerfile build, host builds and air all use it with no flag changes.
 build after that is optimized for how the binary really runs. Builds never
 fetch profiles themselves, so they stay reproducible.
 
-Configure it per build in KCL (`pgo = forge.PGO {...}` on a GoBuild, or
-DockerBuild.pgo keyed by binary); load `forge skill load observability/profiles`.
+Configure it per build in KCL (`pgo = forge.PGO {...}` on a GoBuild,
+DockerBuild.pgo keyed by binary, or ShellBuild.pgo keyed by binary relative to its
+cwd, whose `forge.ShellPGO {out = ...}` may name a sibling checkout's profile);
+load `forge skill load observability/profiles`.
 
 ```
 reliant forge pgo [flags]
@@ -17123,6 +17133,10 @@ merged. The workloads come from the rendered env; `pgo.services` overrides them.
 
 Config is read from --env's KCL (default prod): `pgo = forge.PGO {from_env, since,
 min_weight, services, enabled}` on a GoBuild, or DockerBuild.pgo keyed by binary.
+A ShellBuild's binaries are pulled only when its `pgo` names them (forge.ShellPGO,
+keyed by package relative to its cwd), which also says where the profile goes
+(`out`, e.g. a sibling checkout's ../reliant/cmd/reliant/default.pgo) and whose
+service.namespace to read.
 --since and --from-env override it for this run. Profiles come from the local
 ClickStack when the source env's telemetry is local, else from its control
 plane (needs sign-in and obs:read); both produce the same bytes.
@@ -19600,6 +19614,15 @@ not signed in, on this machine's ledger, which monitoring cannot see.
 Idempotent: a CI retry records once. The same version with different digests
 (or, version-only, a different commit) is refused as a conflict.
 
+SBOMs: each --image gets an SBOM generated from its registry by digest, with
+the registry credentials the CI already has (docker login), stored in this
+machine's ledger and recorded on the workload. --sbom <workload>=<path> records
+one your pipeline produced instead (CycloneDX or SPDX JSON); --sbom-source <dir>
+describes a version-only record's source tree; --no-sbom records none. An SBOM
+that cannot be produced warns, and the record still succeeds. An env declaring
+provenance_sbom off generates none from --image, but still records what --sbom
+and --sbom-source supply.
+
 Examples:
   cli forge release record --env prod --version v1.4.0
   cli forge release record --env prod --version v1.4.0 --commit "$GITHUB_SHA" \
@@ -19621,7 +19644,10 @@ reliant forge release record [flags]
 | `--image` | `stringArray` | `[]` | Image the matching --workload runs, pinned by digest: <ref>@sha256:<hex> (repeatable) |
 | `--json` | `bool` | - | Emit machine-readable JSON |
 | `--no-run` | `bool` | - | Record no CI run, even inside CI |
+| `--no-sbom` | `bool` | - | Record without SBOMs (each workload shows as not scanned) |
 | `--run-id` | `string` | - | CI run id, stable across retries (default: detected, or the --url) |
+| `--sbom` | `stringArray` | `[]` | An SBOM your pipeline produced for a workload, CycloneDX or SPDX JSON: <workload>=<path> (repeatable; default: generated from the workload's --image) |
+| `--sbom-source` | `string` | - | Version-only records: describe this source tree's lockfiles as the release's SBOM |
 | `--token` | `string` | - | Credential for the control plane, ahead of the env var and the credentials file |
 | `--url` | `string` | - | Link to the CI run (default: detected from the CI environment) |
 | `--version` | `string` | - | Version label of what it deployed, e.g. v1.4.0 (required) |
