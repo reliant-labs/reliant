@@ -3,14 +3,18 @@
 /**
  * Tests › Flaky tests and a test's page against the fixture TestsService.
  *
- * The list: ranked by flake rate shown as "x% (n runs)", never a verdict;
- * suspected is the state to act on, with the quarantine command to copy and
- * the agent that fixes it (Ask Reliant, seeded from the test's own record,
- * and disabled with its reason where no agent can start); quarantine path and "overdue"; the issue;
- * host health apart, and no row for a test that only failed on the host.
- * The state filter is held in the URL. A test's page: its record, the
- * outcome strip, its events with verdict and signal (host and correlated
- * shown as never counting), its failure signatures. And the empty,
+ * The list: one line per test, ranked by flake rate (its n in the
+ * tooltip, never a verdict), with its state's dot, the reason in plain words,
+ * its last 20 runs, a quiet tag for a quarantine ("Overdue" past its expiry)
+ * and its issue; the actions in its ⋯ menu (Ask an agent to fix, seeded from
+ * the test's own record and left out where no agent can start; the
+ * quarantine command to copy; the issue); the counts and a sparkline above,
+ * host health in one line below, and no row for a test that only failed on
+ * the host. The state tabs are held in the URL. A test's page: its short
+ * name as the title, the full id behind a copy button, one row of figures,
+ * the run strip, its events in plain words (host and correlated folded
+ * behind "Show N not counted"), its failure signatures collapsed. And the
+ * empty,
  * unimplemented and denied states of both.
  */
 
@@ -74,8 +78,17 @@ function renderFlaky(scenario: TestsScenario, query = "") {
 const flakyRequests = (api: FixtureTestApi) => api.calls.filter((call) => call.method === "listFlakyTests").map((call) => (call.req as { filters: unknown }).filters);
 const rowNames = () => screen.getAllByTestId(/^tests-flake-row-/).map((row) => row.getAttribute("data-testid")!.replace("tests-flake-row-", ""));
 
+/** Opens a row's ⋯ menu and returns its items' names. */
+async function openMenu(name: string): Promise<string[]> {
+  fireEvent.click(await screen.findByRole("button", { name: `Actions for ${name}` }));
+  const menu = await screen.findByRole("menu");
+  return within(menu)
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent?.trim() ?? "");
+}
+
 describe("Tests › Flaky tests: the full list", () => {
-  it("ranks by flake rate, shown with its n, and states each test's state", async () => {
+  it("ranks by flake rate, one line per test, with its state, plain-language reason and the row as the link", async () => {
     const { api } = renderFlaky("report");
     await screen.findByTestId("tests-flaky-list");
     expect(rowNames()).toEqual([
@@ -94,55 +107,87 @@ describe("Tests › Flaky tests: the full list", () => {
 
     const sync = screen.getByTestId("tests-flake-row-TestSyncJob");
     expect(sync).toHaveAttribute("data-state", "flaky");
-    expect(sync).toHaveTextContent("Flaky");
-    expect(screen.getByTestId("tests-flake-rate-TestSyncJob")).toHaveTextContent("1.1% (412 runs)");
+    // The rate is a ranking: its n and what it means are in its tooltip, never beside it as a verdict.
+    expect(screen.getByTestId("tests-flake-rate-TestSyncJob")).toHaveTextContent("1.1%");
+    expect(screen.getByTestId("tests-flake-rate-TestSyncJob")).toHaveAttribute("title", expect.stringContaining("1.1% (412 runs)"));
     expect(screen.getByTestId("tests-flake-rate-TestSyncJob")).toHaveAttribute("title", expect.stringContaining("A ranking, never a verdict"));
-    expect(sync).toHaveTextContent("same-tree split · retry pass");
-    // The routed page reads the wall clock; the fixture event is 14 minutes before the fixture's "now".
-    expect(sync).toHaveTextContent(/\d+[smhd] ago/);
-    expect(within(sync).getByRole("link", { name: /#212/ })).toHaveAttribute("href", "https://github.com/acme/shopfront/issues/212");
-    expect(within(sync).getAllByRole("link")[0]).toHaveAttribute("href", `/forge/p/shopfront/tests/flaky/${encodeTestIdSegment(idOf("internal/jobs", "TestSyncJob"))}`);
-    // A test with few runs ranks low, and still says its n.
-    expect(screen.getByTestId("tests-flake-rate-TestWebhookSign/rotated key")).toHaveTextContent("0.21% (22 runs)");
-    expect(screen.getByTestId("tests-flake-row-TestCheckoutTimeout")).toHaveTextContent("Suspected");
+    // Plain words, not the signal's jargon.
+    expect(sync).toHaveTextContent("internal/jobs · Passed and failed on the same commit");
+    expect(sync).not.toHaveTextContent("same-tree split");
+    expect(screen.getByTestId("tests-flake-row-TestStockSync")).toHaveTextContent("Failed, then passed on retry");
+    // No command box and no button in a row: the actions are in its menu.
+    expect(within(sync).queryByTestId("getting-started-command")).not.toBeInTheDocument();
+    expect(within(sync).queryByTestId("tests-fix-with-agent")).not.toBeInTheDocument();
+    // The routed page reads the wall clock; never "0s ago".
+    expect(sync).not.toHaveTextContent(/\b0s ago/);
+    // The name is the row's link, stretched over it, named with the state and rate.
+    const link = within(sync).getByRole("link", { name: /^TestSyncJob: flaky, flake rate 1\.1% \(412 runs\)/ });
+    expect(link).toHaveAttribute("href", `/forge/p/shopfront/tests/flaky/${encodeTestIdSegment(idOf("internal/jobs", "TestSyncJob"))}`);
+    expect(within(sync).getByTestId("tests-flake-issue-TestSyncJob")).toHaveAttribute("href", "https://github.com/acme/shopfront/issues/212");
+    expect(screen.getByTestId("tests-flake-rate-TestWebhookSign/rotated key")).toHaveAttribute("title", expect.stringContaining("0.21% (22 runs)"));
+    expect(screen.getByTestId("tests-flake-row-TestCheckoutTimeout")).toHaveAttribute("data-state", "suspected");
   });
 
-  it("shows a quarantine's path, and flags one past its expiry as overdue", async () => {
+  it("draws each row's last 20 runs from the test's own read", async () => {
+    const { api } = renderFlaky("report");
+    await screen.findByTestId("tests-flaky-list");
+    const sync = screen.getByTestId("tests-flake-row-TestSyncJob");
+    const strip = await within(sync).findByTestId("tests-mini-strip");
+    expect(strip.children).toHaveLength(20);
+    expect(strip).toHaveAccessibleName(/^Last 20 runs: \d+ passed on retry/);
+    expect(api.calls.filter((call) => call.method === "getTest").length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("marks a quarantine with a quiet tag, and one past its expiry as overdue", async () => {
     renderFlaky("report");
     const overdue = await screen.findByTestId("tests-flake-quarantine-TestInventoryReserve");
-    expect(overdue).toHaveTextContent("ci/quarantine/go/internal/inventory/TestInventoryReserve.yaml");
-    expect(overdue).toHaveTextContent("overdue");
+    expect(overdue).toHaveTextContent("Overdue");
     const current = screen.getByTestId("tests-flake-quarantine-TestSessionRefresh");
-    expect(current).toHaveTextContent("ci/quarantine/go/internal/auth/TestSessionRefresh.yaml");
-    expect(current).not.toHaveTextContent("overdue");
+    expect(current).toHaveTextContent("Quarantined");
+    expect(current).not.toHaveTextContent("Overdue");
+    expect(screen.getByTestId("tests-flaky-count-overdue")).toHaveTextContent("1 overdue");
   });
 
-  it("suggests the quarantine command for a test to act on, beside the agent that fixes it", async () => {
+  it("puts the actions in each row's menu: fix, copy the quarantine command, open the issue", async () => {
     renderFlaky("report");
-    const suspected = await screen.findByTestId("tests-flake-actions-TestCheckoutTimeout");
-    expect(within(suspected).getByTestId("getting-started-command")).toHaveTextContent(
-      `reliant forge test quarantine add ${idOf("internal/checkout", "TestCheckoutTimeout")} --issue https://github.com/acme/shopfront/issues/231`
-    );
-    expect(within(suspected).getByRole("button", { name: /Copy reliant forge test quarantine add/ })).toBeInTheDocument();
-    const fix = within(suspected).getByTestId("tests-fix-with-agent");
-    expect(fix).toBeEnabled();
-    expect(fix).toHaveTextContent("Fix this flaky test");
-
-    expect(within(screen.getByTestId("tests-flake-actions-TestWebhookSign/rotated key")).getByTestId("getting-started-command")).toHaveTextContent(
-      `reliant forge test quarantine add '${idOf("internal/webhooks", "TestWebhookSign/rotated key")}'`
-    );
-    // Quarantined already: no command, still the fix slot. Fixed: nothing to do.
-    const quarantined = screen.getByTestId("tests-flake-actions-TestInventoryReserve");
-    expect(within(quarantined).queryByTestId("getting-started-command")).not.toBeInTheDocument();
-    expect(within(quarantined).getByTestId("tests-fix-with-agent")).toBeEnabled();
-    expect(screen.queryByTestId("tests-flake-actions-TestEmailDigest")).not.toBeInTheDocument();
+    await screen.findByTestId("tests-flaky-list");
+    expect(await openMenu("TestCheckoutTimeout")).toEqual(["Ask an agent to fix", "Copy quarantine command", "Open issue #231", "Copy test ID"]);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    // Quarantined already: no command. Fixed: nothing to fix.
+    expect(await openMenu("TestInventoryReserve")).toEqual(["Ask an agent to fix", "Open issue #198", "Copy test ID"]);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(await openMenu("TestEmailDigest")).toEqual(["Open issue #176", "Copy test ID"]);
   });
 
-  it("Fix this flaky test hands Ask Reliant the test's record and its failure signatures, to send at once", async () => {
+  it("copies the quarantine command, quoted when the id needs it", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderFlaky("report");
+    await screen.findByTestId("tests-flaky-list");
+    await openMenu("TestWebhookSign/rotated key");
+    fireEvent.click(screen.getByTestId("tests-flake-menu-quarantine"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`reliant forge test quarantine add '${idOf("internal/webhooks", "TestWebhookSign/rotated key")}'`));
+  });
+
+  it("leaves Ask an agent to fix out of the menu where no agent can start", async () => {
+    vi.mocked(useProject).mockReturnValue({ is_git_repo: false } as ReturnType<typeof useProject>);
+    try {
+      renderFlaky("report");
+      await screen.findByTestId("tests-flaky-list");
+      expect(await openMenu("TestCheckoutTimeout")).toEqual(["Copy quarantine command", "Open issue #231", "Copy test ID"]);
+    } finally {
+      vi.mocked(useProject).mockReturnValue(undefined);
+    }
+  });
+
+  it("Ask an agent to fix hands Ask Reliant the test's record and its failure signatures, to send at once", async () => {
     ask.mockClear();
     const { api } = renderFlaky("report");
-    const sync = await screen.findByTestId("tests-flake-actions-TestSyncJob");
-    fireEvent.click(within(sync).getByTestId("tests-fix-with-agent"));
+    await screen.findByTestId("tests-flaky-list");
+    await openMenu("TestSyncJob");
+    fireEvent.click(screen.getByTestId("tests-flake-menu-fix"));
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
     const [subject, , intent] = ask.mock.calls[0] as unknown as [AskFlakyTestSubject, unknown, string];
     expect(intent).toBe("fix");
@@ -153,36 +198,46 @@ describe("Tests › Flaky tests: the full list", () => {
     expect(subject.signatures[0].sampleOutput).toContain("TestSyncJob");
   });
 
-  it("keeps host health apart, and lists no test that only failed on the host", async () => {
+  it("leads with the counts and a 30-day sparkline of counted flake events", async () => {
+    renderFlaky("report");
+    const summary = await screen.findByTestId("tests-flaky-summary");
+    await waitFor(() => expect(within(summary).getByTestId("tests-flaky-count-flaky")).toHaveTextContent("4 flaky"));
+    expect(within(summary).getByTestId("tests-flaky-count-suspected")).toHaveTextContent("3 suspected");
+    expect(within(summary).getByTestId("tests-flaky-count-quarantined")).toHaveTextContent("2 quarantined");
+    const spark = await within(summary).findByTestId("tests-flaky-sparkline");
+    // Host and infrastructure events never count, so TestSyncJob adds 3, not 5.
+    expect(within(spark).getByRole("img")).toHaveAccessibleName(/^Flake events per day over 30 days: \d+ in all$/);
+  });
+
+  it("keeps host health to one line under the list, and lists no test that only failed on the host", async () => {
     renderFlaky("report");
     const health = await screen.findByTestId("tests-flaky-host-health");
-    expect(health).toHaveTextContent("Never counted against a test");
-    expect(within(health).getByTestId("tests-flaky-host-failures")).toHaveTextContent("5");
-    expect(within(health).getByTestId("tests-flaky-infra-groups")).toHaveTextContent("one infrastructure event");
+    expect(health).toHaveTextContent("Host and infrastructure failures never count against a test.");
+    await waitFor(() => expect(within(health).getByTestId("tests-flaky-host-failures")).toHaveTextContent("5 in the last 30 days."));
     expect(screen.queryByTestId("tests-flake-row-TestWebhookDeliver")).not.toBeInTheDocument();
-    expect(screen.getByTestId("tests-flaky-rule")).toHaveTextContent("Suspected (one confirmed flake) is the state to act on");
-    expect(screen.getByTestId("tests-flaky-rule")).toHaveTextContent("The flake rate ranks the list and decides nothing");
+    // The policy is behind the "?", not a paragraph on the page.
+    expect(screen.getByTestId("tests-flaky-rule")).toHaveAccessibleName("How flaky tests are judged");
   });
 });
 
-describe("Tests › Flaky tests: the state filter held in the URL", () => {
+describe("Tests › Flaky tests: the state tabs held in the URL", () => {
   it("reads the URL's state into the request", async () => {
     const { api } = renderFlaky("report", "?state=suspected");
     await screen.findByTestId("tests-flaky-list");
     expect(rowNames()).toEqual(["TestCheckoutTimeout", "TestCartMerge", "TestWebhookSign/rotated key"]);
-    expect(flakyRequests(api)).toEqual([{ state: "suspected" }]);
-    expect(screen.getByTestId("tests-flaky-filter-suspected")).toHaveAttribute("aria-pressed", "true");
+    expect(flakyRequests(api)).toContainEqual({ state: "suspected" });
+    expect(screen.getByRole("tab", { name: /Suspected/ })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("writes a picked state to the URL, and a second click clears it", async () => {
+  it("writes a picked tab to the URL, and All clears it", async () => {
     const { search } = renderFlaky("report", "?env=prod");
     await screen.findByTestId("tests-flaky-list");
     // The default branch's counts, from the summary.
-    expect(screen.getByTestId("tests-flaky-filter-flaky")).toHaveTextContent("4");
-    fireEvent.click(screen.getByTestId("tests-flaky-filter-quarantined"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Flaky/ })).toHaveTextContent("4"));
+    fireEvent.click(screen.getByRole("tab", { name: /Quarantined/ }));
     await waitFor(() => expect(search()).toEqual({ env: "prod", state: "quarantined" }));
     await waitFor(() => expect(rowNames()).toEqual(["TestInventoryReserve", "TestSessionRefresh"]));
-    fireEvent.click(screen.getByTestId("tests-flaky-filter-quarantined"));
+    fireEvent.click(screen.getByRole("tab", { name: /All/ }));
     await waitFor(() => expect(search()).toEqual({ env: "prod" }));
   });
 
@@ -199,7 +254,7 @@ describe("Tests › Flaky tests: nothing to show", () => {
   it("says no test flaked when runs exist and none did, with host health at zero", async () => {
     renderFlaky("no-flakes");
     expect(await screen.findByTestId("tests-flaky-none")).toHaveTextContent("No flaky tests");
-    await waitFor(() => expect(screen.getByTestId("tests-flaky-host-failures")).toHaveTextContent("0"));
+    await waitFor(() => expect(screen.getByTestId("tests-flaky-host-failures")).toHaveTextContent("None in the last 30 days."));
   });
 
   it("names the commands that record a first run when nothing was ever recorded", async () => {
@@ -227,19 +282,34 @@ function renderTest(scenario: TestsScenario, testId: string, { projectId = "proj
 }
 
 describe("a test's page", () => {
-  it("shows its record: state, the flake rate with its n, its issue, the command and the agent", async () => {
+  it("titles it by its short name, with package, file:line and state under it, and the full id behind a copy button", async () => {
     renderTest("report", idOf("internal/jobs", "TestSyncJob"));
-    const record = await screen.findByTestId("tests-test-record");
-    expect(record).toHaveTextContent("TestSyncJob");
-    expect(record).toHaveTextContent("…/internal/jobs");
-    expect(within(record).getByTestId("tests-test-state")).toHaveTextContent("Flaky");
-    expect(within(record).getByTestId("tests-test-rate")).toHaveTextContent("1.1% (412 runs)");
-    expect(within(record).getByRole("link", { name: /#212/ })).toHaveAttribute("href", "https://github.com/acme/shopfront/issues/212");
-    expect(within(record).getByTestId("tests-test-quarantine-command")).toHaveTextContent(`reliant forge test quarantine add ${idOf("internal/jobs", "TestSyncJob")}`);
-    expect(within(record).getByTestId("tests-fix-with-agent")).toBeEnabled();
+    await screen.findByTestId("tests-test-state");
+    const header = screen.getByTestId("tests-test-header");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent(/^TestSyncJob$/);
+    expect(header).toHaveTextContent("internal/jobs");
+    expect(within(header).getByTestId("tests-test-place")).toHaveTextContent("internal/jobs/jobs_test.go:88");
+    expect(within(header).getByTestId("tests-test-state")).toHaveTextContent("Flaky");
+    expect(within(header).getByTestId("tests-test-copy-id")).toHaveAccessibleName(`Copy test ID ${idOf("internal/jobs", "TestSyncJob")}`);
+    expect(within(header).getByTestId("tests-fix-with-agent")).toBeEnabled();
+    expect(within(header).getByTestId("tests-fix-with-agent")).toHaveTextContent("Ask an agent to fix");
   });
 
-  it("disables Fix this flaky test, saying why, where no agent can start in Reliant", async () => {
+  it("shows one row of figures: the flake rate with its n, flakes, first seen, last flaked", async () => {
+    renderTest("report", idOf("internal/jobs", "TestSyncJob"));
+    expect(await screen.findByTestId("tests-test-rate")).toHaveTextContent("1.1%of 412 runs");
+    expect(screen.getByTestId("tests-test-rate")).toHaveAttribute("title", expect.stringContaining("A ranking, never a verdict"));
+    expect(screen.getByTestId("tests-test-events-count")).toHaveTextContent("3");
+  });
+
+  it("keeps the quarantine command and the issue in the ⋯ menu", async () => {
+    renderTest("report", idOf("internal/jobs", "TestSyncJob"));
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for TestSyncJob" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Copy quarantine command", "Open issue #212", "Copy test ID"]);
+  });
+
+  it("disables Ask an agent to fix, its reason in the tooltip and description, where no agent can start in Reliant", async () => {
     const id = idOf("internal/jobs", "TestSyncJob");
     const reasonOf = async () => {
       const fix = await screen.findByTestId("tests-fix-with-agent");
@@ -262,7 +332,7 @@ describe("a test's page", () => {
     renderTest("report", idOf("internal/jobs", "TestSyncJob"));
     const strip = await screen.findByTestId("tests-test-strip");
     expect(strip).toHaveTextContent("Last 50 runs");
-    expect(strip).toHaveTextContent("45 passed · 3 failed, then passed on retry · 2 failed");
+    expect(strip).toHaveTextContent("3 passed on retry · 2 failed · 45 passed");
     const cells = within(strip).getByRole("list", { name: "Outcomes, oldest first" }).querySelectorAll("li");
     expect(cells).toHaveLength(50);
     const newest = cells[cells.length - 1]!;
@@ -271,40 +341,45 @@ describe("a test's page", () => {
     expect(within(newest as HTMLElement).getByRole("link")).toHaveAccessibleName("failed, then passed on retry: integration on main 9f3c2a1, 14m ago");
   });
 
-  it("lists its flake events with signal and verdict, host and infra ones shown as never counting", async () => {
+  it("lists its flake events in plain words, host and infra ones folded behind Show N not counted", async () => {
     renderTest("report", idOf("internal/jobs", "TestSyncJob"));
     const events = await screen.findByTestId("tests-test-events");
-    expect(events).toHaveTextContent("2 host or infrastructure, never counted");
     expect(screen.getByTestId("tests-test-event-0")).toHaveAttribute("data-verdict", "confirmed");
-    expect(screen.getByTestId("tests-test-event-0")).toHaveTextContent("Flaky: passed on rerun");
-    expect(screen.getByTestId("tests-test-event-0")).toHaveTextContent("retry pass");
-    expect(screen.getByTestId("tests-test-event-1")).toHaveTextContent("same-tree split");
+    expect(screen.getByTestId("tests-test-event-0")).toHaveTextContent("Failed, then passed on retry");
+    expect(screen.getByTestId("tests-test-event-1")).toHaveTextContent("Passed and failed on the same commit");
     expect(within(screen.getByTestId("tests-test-event-1")).getAllByRole("link")).toHaveLength(2);
+    expect(screen.queryByTestId("tests-test-event-2")).not.toBeInTheDocument();
+    expect(events).not.toHaveTextContent("retry pass");
+
+    fireEvent.click(within(events).getByTestId("tests-test-events-toggle"));
+    expect(within(events).getByTestId("tests-test-events-toggle")).toHaveTextContent("Hide 2 not counted");
     expect(screen.getByTestId("tests-test-event-2")).toHaveAttribute("data-verdict", "host");
-    expect(screen.getByTestId("tests-test-event-2")).toHaveTextContent("Host failure: not counted");
+    expect(screen.getByTestId("tests-test-event-2")).toHaveTextContent("Host problem (network, disk, port in use): not counted");
     const infra = screen.getByTestId("tests-test-event-4");
-    expect(infra).toHaveTextContent("Infra group: not counted");
+    expect(infra).toHaveTextContent("Part of a wider infrastructure failure: not counted");
     expect(infra).toHaveTextContent("infra:pgtest-template-busy:7f3a");
   });
 
-  it("groups its failures by signature, most frequent first, the first sample open", async () => {
+  it("groups its failures by signature, collapsed, each with its first line of output", async () => {
     renderTest("report", idOf("internal/jobs", "TestSyncJob"));
     const first = await screen.findByTestId("tests-test-signature-0");
     expect(first).toHaveTextContent("3 failures");
-    expect(first).toHaveTextContent("Flaky: passed on rerun");
-    expect(screen.getByTestId("tests-test-signature-0-output")).toHaveAttribute("open");
+    expect(first).toHaveTextContent("sync_test.go:88: job 7 did not finish within 2s: context deadline exceeded");
+    expect(first.querySelector("details")).not.toHaveAttribute("open");
     expect(screen.getByTestId("tests-test-signature-0-output").querySelector("pre")).toHaveTextContent("context deadline exceeded");
     expect(screen.getByTestId("tests-test-signature-1")).toHaveAttribute("data-verdict", "host");
+    expect(screen.getByTestId("tests-test-signature-1")).toHaveTextContent("Host problem");
     expect(screen.getByTestId("tests-test-signature-2")).toHaveAttribute("data-verdict", "correlated");
   });
+
 
   it("shows a quarantine past its expiry as overdue and still applied, with no command", async () => {
     renderTest("report", idOf("internal/inventory", "TestInventoryReserve"));
     const quarantine = await screen.findByTestId("tests-test-quarantine");
     expect(quarantine).toHaveTextContent("ci/quarantine/go/internal/inventory/TestInventoryReserve.yaml");
-    expect(quarantine).toHaveTextContent("overdue");
-    expect(quarantine).toHaveTextContent("It is still applied");
-    expect(quarantine).toHaveTextContent("Reason: times out under -race");
+    expect(quarantine).toHaveTextContent("is still applied");
+    expect(screen.getByTestId("tests-test-header")).toHaveTextContent("Quarantine overdue");
+    expect(quarantine).toHaveTextContent("times out under -race");
     expect(screen.queryByTestId("tests-test-quarantine-command")).not.toBeInTheDocument();
   });
 
@@ -335,7 +410,8 @@ describe("a test's page", () => {
     renderRoutedPage(api, { path: "/forge/p/$project/tests/flaky/$test", url, validateSearch: (s) => s, component: TestsFlakyTestPage });
     expect(await screen.findByTestId("tests-test-state")).toHaveTextContent("Suspected");
     expect(api.calls.find((call) => call.method === "getTest")!.req).toEqual({ orgId: null, project: "shopfront", testId: id });
-    expect(screen.getByTestId("console-tests-flaky-test")).toHaveTextContent(id);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^TestWebhookSign\/rotated key$/);
+    expect(screen.getByTestId("tests-test-copy-id")).toHaveAccessibleName(`Copy test ID ${id}`);
   });
 
   it("still reads a link in the old percent-encoded form", async () => {

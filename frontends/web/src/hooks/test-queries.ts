@@ -14,7 +14,7 @@
  * valid only with the same request.
  */
 
-import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 
 import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { useTestApi } from "@/services/controlPlane/tests/TestApiContext";
@@ -184,6 +184,29 @@ export function useFlakyTests(project: string, filters: FlakyFilters | null) {
       org
     )
   );
+}
+
+/**
+ * Several tests' records at once, by the same key as useTest: what the Flaky
+ * tests list draws each row's recent runs from, so opening a test is
+ * answered from the cache.
+ */
+export function useTests(project: string, testIds: readonly string[]) {
+  const api = useTestApi();
+  const org = useOrgScope();
+  return useQueries({
+    queries: testIds.map((testId) =>
+      withOrgFailure(
+        {
+          queryKey: testKeys.test(org.orgId, project, testId),
+          queryFn: ({ signal }: { signal: AbortSignal }) => api.getTest({ orgId: org.orgId, project, testId }, { signal }),
+          enabled: !!project && !!testId && orgQueryEnabled(org),
+          ...LIVE,
+        },
+        org
+      )
+    ),
+  });
 }
 
 /** One test: its outcomes over its last runs, flake record, events and failure signatures. */
