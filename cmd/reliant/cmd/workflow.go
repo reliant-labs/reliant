@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1407,15 +1408,17 @@ func newWorkflowScenarioRunCmd() *cobra.Command {
 		Long: `Runs scenario tests against workflow definitions on the real workflow runtime
 (DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
 ` + scenarioLayoutHelp + `
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed <workflow>/<scenario> label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.`,
@@ -1430,7 +1433,7 @@ Exit code 0 if all scenarios pass, 1 if any fail.`,
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop on first scenario failure")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (for CI)")
 	cmd.Flags().BoolVar(&includeBuiltins, "include-builtins", false, "Also run builtin workflow scenarios")
-	cmd.Flags().StringVar(&filterScenario, "filter", "", "Only run scenarios whose name contains this string")
+	cmd.Flags().StringVar(&filterScenario, "filter", "", "Only run scenarios whose name, or <workflow>/<scenario> label, contains this string")
 
 	return cmd
 }
@@ -1500,6 +1503,10 @@ type scenarioResultSummary struct {
 	DurationMs int64    `json:"duration_ms"`
 	Mismatches []string `json:"mismatches,omitempty"`
 	Error      string   `json:"error,omitempty"`
+	// Warnings are the ways the run could have passed without testing what
+	// its author meant (a mock key no output has, a ref node nothing mocked,
+	// `outcome: completed` matching a failed run). They never change Status.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type scenarioListEntry struct {
@@ -1597,6 +1604,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				Name:       scenario.Name,
 				Status:     string(result.Status),
 				DurationMs: duration,
+				Warnings:   result.Warnings,
 			}
 
 			if result.Status != wfscenario.StatusPassed {
@@ -1637,9 +1645,11 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 	return nil
 }
 
-// filterScenarios keeps the scenarios whose name contains filter, and the
-// workflows left with any. It runs before anything is counted or run, so the
-// "Running N scenario(s)" line and the run agree.
+// filterScenarios keeps the scenarios whose name, or whose
+// `<workflow>/<scenario>` label (the one the run prints), contains filter, and
+// the workflows left with any — so a workflow's name selects all of its
+// scenarios. It runs before anything is counted or run, so the "Running N
+// scenario(s)" line and the run agree.
 func filterScenarios(workflows []workflowWithScenarios, filter string) []workflowWithScenarios {
 	if filter == "" {
 		return workflows
@@ -1648,7 +1658,7 @@ func filterScenarios(workflows []workflowWithScenarios, filter string) []workflo
 	for _, wf := range workflows {
 		var matching []*wfscenario.Scenario
 		for _, s := range wf.Scenarios {
-			if strings.Contains(s.Name, filter) {
+			if strings.Contains(wf.WorkflowName+"/"+s.Name, filter) {
 				matching = append(matching, s)
 			}
 		}
@@ -1710,6 +1720,9 @@ func runWorkflowScenarioList(_ *cobra.Command, args []string, dir string, jsonOu
 // adds the builtin workflows' scenarios, laid out the same way and embedded in
 // the binary (workflowref.BuiltinLayout).
 func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins bool) ([]workflowWithScenarios, error) {
+	if len(args) == 1 && strings.HasPrefix(strings.TrimSpace(args[0]), workflowref.BuiltinScheme) {
+		return builtinWorkflowScenarios(args[0])
+	}
 	workflowsDir, onlyFile := dir, ""
 	if len(args) == 1 {
 		path := args[0]
@@ -1752,6 +1765,41 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 	}
 
 	return results, nil
+}
+
+// builtinWorkflowScenarios is the scenarios of the one builtin a
+// builtin://<name> ref names, as `scenario run builtin://autopilot-oncall`
+// asks: the builtin's own scenarios and no project's.
+func builtinWorkflowScenarios(raw string) ([]workflowWithScenarios, error) {
+	ref, err := workflowref.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	layout, err := workflowref.BuiltinLayout()
+	if err != nil {
+		return nil, fmt.Errorf("reading builtin workflows: %w", err)
+	}
+	known := false
+	for _, e := range layout.Workflows.Entries() {
+		if e.Stem() == ref.Name || e.Name == ref.Name {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, fmt.Errorf("%s: no builtin workflow has that name (reliant workflow list --builtins-only lists them)", ref.Raw)
+	}
+	all, err := layoutScenarios(layout, "builtin", "", "")
+	if err != nil {
+		return nil, err
+	}
+	var kept []workflowWithScenarios
+	for _, wf := range all {
+		if strings.TrimSuffix(path.Base(wf.WorkflowFile), path.Ext(wf.WorkflowFile)) == ref.Name || wf.WorkflowName == ref.Name {
+			kept = append(kept, wf)
+		}
+	}
+	return kept, nil
 }
 
 // layoutScenarios pairs each workflow of a layout with its scenarios — a
@@ -1871,12 +1919,18 @@ func printScenarioResult(s scenarioResultSummary, workflowName string, verbose b
 			}
 		}
 	}
+	// Warnings print whatever the status: each is a way the run could have
+	// passed for a reason its author did not mean.
+	for _, w := range s.Warnings {
+		fmt.Printf("      Warning: %s\n", w)
+	}
 }
 
 func printScenarioSummary(results []scenarioRunResult) {
-	passed, failed, errored := 0, 0, 0
+	passed, failed, errored, warned := 0, 0, 0, 0
 	for _, wf := range results {
 		for _, s := range wf.Scenarios {
+			warned += len(s.Warnings)
 			switch wfscenario.ScenarioStatus(s.Status) {
 			case wfscenario.StatusPassed:
 				passed++
@@ -1897,6 +1951,9 @@ func printScenarioSummary(results []scenarioRunResult) {
 	fmt.Printf("  Passed:  %d\n", passed)
 	fmt.Printf("  Failed:  %d\n", failed)
 	fmt.Printf("  Errors:  %d\n", errored)
+	if warned > 0 {
+		fmt.Printf("  Warnings: %d (printed under their scenarios)\n", warned)
+	}
 	fmt.Println("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550")
 
 	if failed+errored > 0 {
