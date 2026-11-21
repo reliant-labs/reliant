@@ -37,8 +37,10 @@ env:
   # your environment wins over this block (Task never overrides one), and
   # -trimpath=false in it, or in `go env -w GOFLAGS`, opts out. Code here must
   # not locate files from runtime.Caller (internal/architecture/trimpath_guard_test.go).
+  # `|| true`: a machine with no Go (the Playwright CI image) still runs every
+  # task; a failed `go env` there would fail Task before any task starts.
   GOFLAGS:
-    sh: 'f="$(go env GOFLAGS 2>/dev/null)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
+    sh: 'f="$(go env GOFLAGS 2>/dev/null || true)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
   # The forge pin is a commit pseudo-version (dev-docs/pinning.md), which
   # proxy.golang.org may not have ingested yet: fetch reliant-labs modules
   # straight from GitHub. Yours wins when set.
