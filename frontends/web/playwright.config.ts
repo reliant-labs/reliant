@@ -24,7 +24,15 @@ export default defineConfig({
   // "1 flaky" in a passing run. A test that fails once is a defect to fix at
   // the root, and it has to be red to get fixed.
   retries: 0,
-  workers: isCI ? 1 : undefined,
+  // Two workers in CI, not one: the desktop suite's ~430s of tests ran one
+  // after another. The tests share nothing a second worker can disturb: each
+  // has its own browser context, every backend call is a page.route mock,
+  // and the preview server only serves the built files. Not four: on the
+  // 4-vCPU runner each worker is a whole Chromium, and the suite's 5s
+  // expectations are what a starved CPU fails first (on a host at ~2x load,
+  // 2 and 4 workers both failed first-page-load asserts that pass at normal
+  // load). PLAYWRIGHT_WORKERS overrides it.
+  workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : isCI ? 2 : undefined,
   reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'html',
   timeout: 30000,
 

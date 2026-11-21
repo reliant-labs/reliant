@@ -141,9 +141,17 @@ for (const [name, block, build, verify, buildLine] of [
 }
 
 test("CI's web-bundle job runs the task, on every change that can alter the bundle it verifies", () => {
-  assert.match(CI_WEB, /\n {4}if: needs\.lanes\.outputs\.web == 'true'\n/);
+  assert.match(CI_WEB, /\n {4}if: needs\.lanes\.outputs\.web == 'true' && github\.event_name == 'pull_request'\n/);
   assert.match(CI_WEB, /\n\s+run: task build:web:verify\n/);
   assert.ok(!CI_WEB.includes("NODE_ENV"), "ci.yml's web-bundle job must not set NODE_ENV: the task does, on the build command only");
+
+  // Off a pull request the release gate's webbuild part is the same build, and
+  // a release blocker through the record's webbuild step.
+  const gate = read("scripts", "release-gate.sh");
+  assert.match(gate, /\n {4}webbuild\) task build:web:verify ;;\n/, "release-gate.sh's webbuild step no longer runs `task build:web:verify`");
+  assert.match(gate, /\n {2}\[webbuild\]="npm webbuild"\n/, "release-gate.sh has no webbuild part for CI to run");
+  const releaseGate = jobBlock(read(".github", "workflows", "ci.yml"), "release-gate");
+  assert.match(releaseGate, /\{ label: "webbuild", part: webbuild, shard: "" \}/, "ci.yml's release gate no longer runs the webbuild part, which stands in for web-bundle off a pull request");
 
   const lanes = read("scripts", "ci-lanes.sh");
   const m = /if grep -qE '([^']+)' <<< "\$changed"; then web=true; fi/.exec(lanes);

@@ -158,9 +158,6 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
-          cache: "npm"
-          cache-dependency-path: |
-            electron/package-lock.json
 
       - name: Extract Electron tool versions from package.json
         id: electron-versions
@@ -789,13 +786,22 @@ jobs:
         shell: bash
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
+      - name: Install pnpm
+        if: needs.prepare.outputs.prebuilt_run == ''
+        # The version electron/pnpm-lock.yaml was written with, read from the
+        # root package.json's packageManager field (electron/package.json pins
+        # the same). No `version:` here: the action fails when one is named
+        # beside that field. Before setup-node, whose pnpm cache asks it for
+        # the store path.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
-          cache: "npm"
-          cache-dependency-path: electron/package-lock.json
+          cache: "pnpm"
+          cache-dependency-path: electron/pnpm-lock.yaml
 
       # Platform-specific Electron cache (macOS uses ~/Library/Caches)
       - name: Cache Electron binaries
@@ -843,7 +849,7 @@ jobs:
       - name: Install electron dependencies
         if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
-        run: npm ci --legacy-peer-deps --prefer-offline
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Generate runtime build config
         if: needs.prepare.outputs.prebuilt_run == ''
@@ -1015,13 +1021,22 @@ jobs:
         shell: bash
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
+      - name: Install pnpm
+        if: needs.prepare.outputs.prebuilt_run == ''
+        # The version electron/pnpm-lock.yaml was written with, read from the
+        # root package.json's packageManager field (electron/package.json pins
+        # the same). No `version:` here: the action fails when one is named
+        # beside that field. Before setup-node, whose pnpm cache asks it for
+        # the store path.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
-          cache: "npm"
-          cache-dependency-path: electron/package-lock.json
+          cache: "pnpm"
+          cache-dependency-path: electron/pnpm-lock.yaml
 
       # Platform-specific Electron cache (Linux uses ~/.cache)
       - name: Cache Electron binaries
@@ -1069,7 +1084,7 @@ jobs:
       - name: Install electron dependencies
         if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
-        run: npm ci --legacy-peer-deps --prefer-offline
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Generate runtime build config
         if: needs.prepare.outputs.prebuilt_run == ''
@@ -1204,13 +1219,22 @@ jobs:
         shell: bash
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
+      - name: Install pnpm
+        if: needs.prepare.outputs.prebuilt_run == ''
+        # The version electron/pnpm-lock.yaml was written with, read from the
+        # root package.json's packageManager field (electron/package.json pins
+        # the same). No `version:` here: the action fails when one is named
+        # beside that field. Before setup-node, whose pnpm cache asks it for
+        # the store path.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
-          cache: "npm"
-          cache-dependency-path: electron/package-lock.json
+          cache: "pnpm"
+          cache-dependency-path: electron/pnpm-lock.yaml
 
       # Platform-specific Electron cache (Windows)
       - name: Cache Electron binaries
@@ -1257,7 +1281,7 @@ jobs:
       - name: Install electron dependencies
         if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
-        run: npm ci --legacy-peer-deps --prefer-offline
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Generate runtime build config
         if: needs.prepare.outputs.prebuilt_run == ''

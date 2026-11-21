@@ -164,6 +164,8 @@ if [[ $RELEASE_TYPE == "prerelease" ]]; then
     cd ..
 else
     # npm version takes a bump name or an exact version; `auto` is the computed one.
+    # It only rewrites package.json's version here: electron installs with
+    # pnpm, and pnpm-lock.yaml records no version of the app itself.
     BUMP="$RELEASE_TYPE"
     [[ "$BUMP" != "auto" ]] || BUMP="${COMPUTED#v}"
     echo -e "${YELLOW}📦 Creating release: $CURRENT_VERSION → ${BUMP}${NC}"
@@ -173,7 +175,7 @@ else
     # npm version returns with 'v' prefix, strip it
     NEW_VERSION=${NEW_VERSION#v}
     if [[ "v$NEW_VERSION" != "$COMPUTED" && "$OWNER_OVERRIDE" != "true" ]]; then
-        git checkout -- electron/package.json electron/package-lock.json 2>/dev/null || true
+        git checkout -- electron/package.json 2>/dev/null || true
         echo -e "${RED}Error: $RELEASE_TYPE makes v$NEW_VERSION, but the PR titles since the last tag compute ${COMPUTED}${NC}"
         echo -e "${YELLOW}  Omit the type to propose ${COMPUTED}; only the owner proposes another (--owner-override).${NC}"
         exit 1
@@ -198,7 +200,7 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
         echo -e "${YELLOW}Draft it from the PR titles merged since v${CURRENT_VERSION} (and edit it if you like):${NC}"
         echo -e "${BLUE}  task generate:docs:changelog:draft VERSION=${RELEASE_TAG} SINCE_TAG=v${CURRENT_VERSION}${NC}"
         # npm version already rewrote the version: put it back, so the retry starts clean.
-        git checkout -- electron/package.json electron/package-lock.json 2>/dev/null || true
+        git checkout -- electron/package.json 2>/dev/null || true
         exit 1
     fi
 
@@ -249,12 +251,10 @@ if [[ $CURRENT_BRANCH != "$VERSION_BRANCH" ]]; then
 fi
 
 echo -e "${YELLOW}📝 Creating release commit (no tag — see phase 2)...${NC}"
-# `npm version` rewrites BOTH package.json and package-lock.json. Staging
-# only the former left the lockfile's version field behind on every release
-# — by v1.7.8 it still read 1.7.4, three releases stale — and left the
-# working tree dirty after a release, which is exactly the state that hides
-# a real uncommitted change.
-git add electron/package.json electron/package-lock.json
+# The version lives in electron/package.json alone: electron/pnpm-lock.yaml
+# records no version of the app (npm's package-lock.json did, and staging only
+# package.json left it three releases stale by v1.7.8, and the tree dirty).
+git add electron/package.json
 if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     git add "$CHANGELOG_FILE" "$GENERATED_CHANGELOG"
 fi

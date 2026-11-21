@@ -569,7 +569,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`reliant workflow wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`reliant workflow watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
-| [`reliant worktree`](#reliant-worktree) | Inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree`](#reliant-worktree) | List and archive workspaces; inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree archive`](#reliant-worktree-archive) | Archive a workspace, as the app's Archive does |
+| [`reliant worktree list`](#reliant-worktree-list) | List a project's workspaces (its worktrees in the app) |
 | [`reliant worktree reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
 | [`reliant worktree reclaim approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
 | [`reliant worktree reclaim decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
@@ -23661,29 +23663,37 @@ reliant workflow watch <execution-id> [flags]
 
 ## reliant worktree
 
-Inspect and restore the worktrees the daemon reclaims
+List and archive workspaces; inspect and restore the worktrees the daemon reclaims
 
-The daemon reclaims the disk of linked git worktrees nobody is using, on
-every machine it runs on: worktrees Reliant made and ones agents made with
-`git worktree add` alike. Before it deletes one it commits everything
-git can see of it (HEAD, the staged index, unstaged edits, untracked files,
-commits only its reflog reached) into a local ref of the repository,
-refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
-immediately before deleting them.
+'list' and 'archive' are the app's workspace list and its Archive action:
+each workspace is one row of the project's worktrees on the server.
 
-By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
-every worktree and records what it would reclaim, but captures and deletes
-nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
-after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
-holds is never reclaimed: after about five days idle it is proposed in the
-report, for a person to free by hand.
+The rest is this machine's worktree reclaim. The daemon can reclaim the disk
+of linked git worktrees nobody is using: worktrees Reliant made and ones
+agents made with `git worktree add` alike. Before it deletes one it commits
+everything git can see of it (HEAD, the staged index, unstaged edits,
+untracked files, commits only its reflog reached) into a local ref of the
+repository, refs/reliant/reclaimed/<key>/<time>, and checks that ref against
+the files immediately before deleting them.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
-default) or on. Every mode rides the storage reaper's schedule, which runs on
-managed machines, and on your own computer only with
-RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
-older worktree reap, which removes unlocked, clean, pushed worktrees idle for
-a day without capturing them first.
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (the default: it
+classifies every worktree and reports what it would reclaim, but captures and
+deletes nothing) or on. In mode on, a clean worktree whose HEAD is on a remote
+is reclaimed after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE); one with
+work only it holds is never reclaimed on its own: after about five days idle
+it is proposed in the report and the machine's Inbox item, for a person to
+approve or free by hand. Mode on runs on its own schedule; dry-run and off
+passes run where the storage reaper runs (RELIANT_STORAGE_REAPER: managed
+machines by default, your own computer only with RELIANT_STORAGE_REAPER=on),
+and there that schedule also runs the older worktree reap, which removes
+unlocked, clean, pushed worktrees idle for a day without capturing them first.
+'reclaim scan' runs a pass now, and 'reclaim scan --capture' captures what it
+would reclaim, so a restore can be tried, and deletes nothing.
+
+Reliant locks each of its workspaces' checkouts (`git worktree lock`, reason
+"reliant: worktree <id>"), so a plain `git worktree remove` refuses one:
+archive the workspace instead, or unlock it first (`git worktree unlock <path>`)
+or pass --force twice.
 
 ```
 reliant worktree
@@ -23693,9 +23703,74 @@ reliant worktree
 
 | Command | Description |
 |---------|-------------|
+| [`archive`](#reliant-worktree-archive) | Archive a workspace, as the app's Archive does |
+| [`list`](#reliant-worktree-list) | List a project's workspaces (its worktrees in the app) |
 | [`reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
 | [`reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
 | [`restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant worktree archive
+
+Archive a workspace, as the app's Archive does
+
+Archive one of the project's workspaces, named by its id or its name
+('reliant worktree list'), as the app's Archive does. Its chats keep their
+history. The machine that holds its checkout removes the directory later, only
+once it is clean, its work is pushed or merged, and nothing uses it; otherwise
+the directory is kept and listed in the Inbox. --delete-branch also deletes its
+local branch. The main checkout cannot be archived.
+
+A name is looked up in --project (by id, name or path), or in the project
+whose folder holds the current directory.
+
+An agent's shell is refused: an agent archives a workspace with its worktree
+tool, which refuses one a chat is working in.
+
+```
+reliant worktree archive <name|id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--delete-branch` | `bool` | - | also delete the workspace's local branch |
+| `--json` | `bool` | - | print the result as JSON |
+| `--project` | `string` | - | the project a name is looked up in, by id, name or path (default: the one holding the current directory) |
+
+---
+
+### reliant worktree list
+
+List a project's workspaces (its worktrees in the app)
+
+List the project's workspaces, as the app's workspace list does: the main
+checkout first, then the rest, most recently active first. --archived lists
+the archived ones instead, most recently archived first.
+
+--project names the project by id, name or path ('reliant project list');
+without it, the project whose folder holds the current directory.
+
+```
+reliant worktree list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--archived` | `bool` | - | list the archived workspaces instead |
+| `--json` | `bool` | - | print {"worktrees": [...]}, each in the API's JSON form |
+| `--project` | `string` | - | the project, by id, name or path (default: the one holding the current directory) |
 
 ---
 
@@ -23857,6 +23932,17 @@ Run one dry-run pass in this process: discover every linked worktree,
 classify it, and write the report and journal the daemon's passes write. It
 captures nothing and deletes nothing.
 
+--capture also captures each worktree the pass would reclaim (auto_safe) into
+its refs/reliant/reclaimed/... ref and verifies the capture against the files,
+exactly as a reclaim does before it deletes anything; it still deletes
+nothing, and the worktrees stay where they are. Each captured entry names its
+ref, so you can try a restore into a new directory:
+
+  reliant worktree restore <ref> --repo <repo> --to <new dir>
+
+A worktree with work only it holds is not captured: a reclaim captures one
+only after a person approves it.
+
 ```
 reliant worktree reclaim scan [flags]
 ```
@@ -23865,6 +23951,7 @@ reliant worktree reclaim scan [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--capture` | `bool` | - | also capture and verify each worktree the pass would reclaim, deleting nothing, so a restore can be tried |
 | `--json` | `bool` | - | print the report as JSON |
 | `--roots` | `string` | - | directories to walk, comma-separated path[:depth] (default: the daemon's) |
 | `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
@@ -23877,7 +23964,9 @@ List the captures of reclaimed worktrees
 
 List every capture (refs/reliant/reclaimed/...) in the repositories the
 reclaim journal names, or in --repo, newest first. A capture is kept until it
-is restored or deleted by hand; none expires.
+is restored or deleted by hand; none expires. The captures 'reclaim scan
+--capture' made are listed too, marked "kept in place": their worktrees were
+never removed.
 
 ```
 reliant worktree reclaimed [flags]

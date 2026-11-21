@@ -203,6 +203,9 @@ type UserChainDeps struct {
 	Auth                *grpcserver.UserAuth
 	AllowedEmailDomains []string
 	Logger              *slog.Logger
+	// ClientVersions is the client version policy the chain judges callers
+	// by (ServerProcessConfig.client_versions).
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewUserChain is the API listener's interceptor chain (grpcserver.NewUserChain).
@@ -213,6 +216,7 @@ func NewUserChain(d UserChainDeps) (*grpcserver.UserChain, error) {
 		Auth:                d.Auth,
 		AllowedEmailDomains: d.AllowedEmailDomains,
 		Logger:              d.Logger,
+		ClientVersions:      d.ClientVersions,
 	})
 }
 
@@ -284,6 +288,9 @@ type APIListenerDeps struct {
 	Membership *orgs.Resolver
 	// Policies is the org policy resolver every request carries (orgpolicy).
 	Policies *orgpolicy.Resolver
+	// ClientVersions is the client version policy, whose legacy switches
+	// the listener's edge applies (ServerProcessConfig.client_versions).
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -303,6 +310,7 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		Chain:              d.Chain,
 		Membership:         d.Membership,
 		Policies:           d.Policies,
+		ClientVersions:     d.ClientVersions,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
