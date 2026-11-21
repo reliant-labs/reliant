@@ -18,6 +18,9 @@ import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from 
 import { activeArea, backHref, childrenOf, drillInIds, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../navConfig";
 import { NavRenderer } from "../NavRenderer";
 
+const changesUI = vi.hoisted(() => ({ on: false }));
+vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => changesUI.on }));
+
 function ctxAt(href: string, over: Partial<NavCtx> = {}): NavCtx {
   const [pathname, query = ""] = href.split("?");
   return {
@@ -145,6 +148,34 @@ describe("the hybrid nav's shape", () => {
     expect(ids).not.toContain("ai-providers");
     const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
     expect(flattenIds([analytics], ctx)).toEqual(["analytics", "analytics-overview", "analytics-users", "analytics-product", "analytics-acquisition", "analytics-events"]);
+  });
+
+  it("lists Experiments under Analytics behind CHANGES_UI, and always on its own pages", () => {
+    const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
+    const experiments = consolePath("shopfront", { kind: "experiments" });
+    expect(flattenIds([analytics], ctxAt(inboxPath()))).not.toContain("experiments");
+    // Opened by its URL with the flag off, it is still where you are.
+    const onPage = ctxAt(experiments);
+    expect(flattenIds([analytics], onPage)).toContain("experiments");
+    expect(activeArea(hybridNav, onPage)).toBe(null);
+    changesUI.on = true;
+    try {
+      const ctx = ctxAt(inboxPath());
+      expect(flattenIds([analytics], ctx)).toEqual([
+        "analytics",
+        "analytics-overview",
+        "analytics-users",
+        "analytics-product",
+        "analytics-acquisition",
+        "analytics-events",
+        "experiments",
+      ]);
+      const row = childrenOf(analytics, ctx).find((item) => item.id === "experiments")!;
+      expect(hrefOf(row, ctx)).toBe(experiments);
+      expect(isCurrent(row, ctxAt(consolePath("shopfront", { kind: "experiment", changeId: "c-1" })))).toBe(true);
+    } finally {
+      changesUI.on = false;
+    }
   });
 
   it("keeps the same top level across several projects", () => {
