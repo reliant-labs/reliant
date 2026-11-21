@@ -17,6 +17,7 @@ import {
   BarChart3,
   Boxes,
   Inbox,
+  Plug,
   ShieldCheck,
   CreditCard,
   Database,
@@ -38,7 +39,7 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
@@ -398,13 +399,24 @@ export const sandboxes: NavRow = {
   match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
 };
 
-/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes. */
+
+/** Connectors: integrations and MCP servers on one page (owner, U6d). */
+export const connectors: NavRow = {
+  kind: "row",
+  id: "connectors",
+  label: "Connectors",
+  icon: icon(Plug),
+  href: () => connectorsPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, connectorsPath()) || isAtOrBelow(ctx.pathname, connectorsPath("mcp")),
+};
+
+/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes, Connectors. */
 export const isAgentsRoute = (ctx: NavCtx): boolean =>
-  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath());
+  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath()) || connectors.match!(ctx);
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, slot("chat-list")];
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {

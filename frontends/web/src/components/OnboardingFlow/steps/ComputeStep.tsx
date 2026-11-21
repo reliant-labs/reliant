@@ -21,10 +21,7 @@ import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machin
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
-import {
-  DaemonStatus,
-  type DaemonInfo,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { hasUsableDaemonForOnboarding } from "../usableDaemon";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 import { ConnectWait } from "../ConnectWait";
@@ -49,40 +46,9 @@ import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 
-// The "where do you want to run your daemon?" step is bootstrap-only: it
-// disambiguates a brand-new user between "Reliant Cloud" and "your own
-// machine." Once a daemon — local OR managed — is registered to the user's
-// account, that bootstrap question is moot. The post-onboarding workspace
-// picker handles selection when multiple daemons exist.
-//
-// "Usable" means the user has clearly already picked a daemon location, so
-// the where-question must not re-appear:
-//   - ACTIVE:    actively attached (the obvious case).
-//   - PENDING:   a managed machine that is provisioning or cloning. The user
-//                asked for it; it is coming.
-//   - SUSPENDED: a real machine, deliberately parked, which resumes on use.
-// DISCONNECTED / FAILED / UNSPECIFIED are skipped: a stale row, a machine
-// that will never come up, or an unhealthy registration — the cases where the
-// user genuinely needs to (re)decide.
-//
-// There used to be TWO of these predicates, one per DaemonStatus enum, because
-// the UI read two different daemon lists whose numeric values collided
-// (reliant ACTIVE=1 was control-plane PENDING=1; reliant IDLE=2 was
-// control-plane ACTIVE=2). There is now one list and one enum, so there is one
-// predicate — and PENDING and SUSPENDED are nameable here for the first time,
-// which is why this reads richer than the registry half it replaces rather
-// than narrower than the control-plane half. See
-// docs/design/one-daemon-list.md.
-export function hasUsableDaemonForOnboarding(
-  daemons: ReadonlyArray<Pick<DaemonInfo, "status">>,
-): boolean {
-  return daemons.some(
-    (d) =>
-      d.status === DaemonStatus.ACTIVE ||
-      d.status === DaemonStatus.PENDING ||
-      d.status === DaemonStatus.SUSPENDED,
-  );
-}
+// Whether a user's daemons answer the "where do you want to run your
+// daemon?" step: ../usableDaemon.ts (light enough for the shell to import).
+export { hasUsableDaemonForOnboarding };
 
 // Derives the code-source classification for a given compute + intent. The
 // result is no longer stored on the plan (the wizard never branched on it);
