@@ -149,7 +149,7 @@ export function OverviewTestsCard({ project, frame }: { project: string; frame: 
                 {data.flaky}
               </Link>
               {(data.suspected > 0 || data.quarantined > 0) && (
-                <span className="ml-1 font-normal text-ink-muted">
+                <span className="block truncate font-normal text-ink-muted">
                   {[data.suspected > 0 ? `${data.suspected} suspected` : "", data.quarantined > 0 ? `${data.quarantined} quarantined` : ""].filter(Boolean).join(" · ")}
                 </span>
               )}
