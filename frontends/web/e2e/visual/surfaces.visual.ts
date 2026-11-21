@@ -207,6 +207,10 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByTestId('app-code-sources'),
     act: async (page) => {
+      // The rail fills in above the card (Recent releases), so scroll once everything has landed.
+      await expect(page.getByTestId('app-code-sources')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('overview-recent-releases').getByText('live in prod').first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
       await page.getByTestId('app-code-card').evaluate((el) => el.scrollIntoView({ block: 'start' }))
     },
     harness: { fixtures: appCodeCardFixtures },
