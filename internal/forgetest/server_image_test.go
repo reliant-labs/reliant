@@ -3,6 +3,7 @@ package forgetest
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,20 +16,21 @@ func TestReleaseServerImageIsBuildOnlyAndReceivesVersionStamp(t *testing.T) {
 	t.Setenv("FORGE_LEDGER_HOME", t.TempDir())
 	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
+	type workload struct {
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Image   string `json:"image"`
+		Runtime struct {
+			Type string `json:"type"`
+		} `json:"runtime"`
+		Build struct {
+			Type       string            `json:"type"`
+			Dockerfile string            `json:"dockerfile"`
+			BuildArgs  map[string]string `json:"build_args"`
+		} `json:"build"`
+	}
 	type bundle struct {
-		Workloads []struct {
-			Name    string `json:"name"`
-			Kind    string `json:"kind"`
-			Image   string `json:"image"`
-			Runtime struct {
-				Type string `json:"type"`
-			} `json:"runtime"`
-			Build struct {
-				Type       string            `json:"type"`
-				Dockerfile string            `json:"dockerfile"`
-				BuildArgs  map[string]string `json:"build_args"`
-			} `json:"build"`
-		} `json:"workloads"`
+		Workloads []workload        `json:"workloads"`
 		Manifests []json.RawMessage `json:"manifests"`
 		Frontends []json.RawMessage `json:"frontends"`
 	}
@@ -57,9 +59,13 @@ func TestReleaseServerImageIsBuildOnlyAndReceivesVersionStamp(t *testing.T) {
 			require.NoError(t, json.Unmarshal(out, &got))
 			assert.Empty(t, got.Manifests, "the release environment must not deploy objects")
 			assert.Empty(t, got.Frontends)
-			require.Len(t, got.Workloads, 1)
-			image := got.Workloads[0]
-			assert.Equal(t, "reliant-image", image.Name)
+			// The release env declares other build-only artifacts beside the
+			// image (the CLI variants); this test owns only the image.
+			i := slices.IndexFunc(got.Workloads, func(w workload) bool {
+				return w.Name == "reliant-image"
+			})
+			require.GreaterOrEqual(t, i, 0, "the release environment must declare reliant-image")
+			image := got.Workloads[i]
 			assert.Equal(t, "tool", image.Kind)
 			assert.Equal(t, "build-only", image.Runtime.Type)
 			assert.Equal(t, "us-central1-docker.pkg.dev/reliant-nonprod-490701/reliant-nonprod/reliant", image.Image)

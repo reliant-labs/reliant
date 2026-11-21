@@ -179,6 +179,18 @@ func (r *RemoteClient) WriteBinaryFile(ctx context.Context, path string, content
 	return &resp, nil
 }
 
+// CreateBinaryFile writes raw bytes to a new file on the daemon. The payload
+// is fs.write_binary_file's; the command is its own (CreateBinaryFileCommand
+// says why).
+func (r *RemoteClient) CreateBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error) {
+	var resp WriteResult
+	req := writeBinaryFileRequest{Path: path, Data: base64.StdEncoding.EncodeToString(content)}
+	if err := r.send(ctx, CreateBinaryFileCommand, req, &resp, timeoutFSDefault); err != nil {
+		return nil, classifyCreateBinaryFileError(err)
+	}
+	return &resp, nil
+}
+
 type patchFileRequest struct {
 	Path  string      `json:"path"`
 	Edits []PatchEdit `json:"edits"`

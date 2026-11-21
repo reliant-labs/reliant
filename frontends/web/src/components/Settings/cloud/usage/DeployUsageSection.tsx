@@ -290,7 +290,7 @@ export function DeployUsageSection({
       {/* 4. How do I stop it? — plus where the tenant sits on the ladder. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Monthly admission budget">
-          <p className="text-sm">Your budget is recorded with the app hosting billing agreement above. Changing it is not supported here.</p>
+          <p className="text-sm">Your organization’s budget is set on the app hosting billing card above, where any owner or admin can change it.</p>
           <p className="mt-2 text-xs text-muted-foreground">Admission and suspension follow measured usage. Enforcement can lag and in-flight work may keep accruing charges; this is not a guaranteed maximum bill. Storage is not deleted.</p>
         </Panel>
         <Panel title="Enforcement">

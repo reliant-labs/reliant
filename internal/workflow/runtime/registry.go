@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
@@ -1389,7 +1390,8 @@ func resolveMaxAttempts(info activity.Info) int32 {
 		"WorkflowStatus",
 		"EmitStreamFinalized",
 		"DrainAgentMessages",
-		"Cleanup":
+		"Cleanup",
+		machinepool.PlaceRunActivityName:
 		return infrastructureActivityMaxAttempts
 	}
 
