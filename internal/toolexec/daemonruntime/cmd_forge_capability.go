@@ -28,9 +28,9 @@ import (
 //	reachable + CANNOT render   -> say so, in forge's words, with the version
 //	not reachable               -> the existing daemon-unreachable state
 //
-// WHY `forge doctor --json` AND NOT A STDERR MATCH. The capability is already
+// WHY `forge project doctor --json` AND NOT A STDERR MATCH. The capability is already
 // a first-class, machine-readable fact in forge: kclplugin.Available() backs a
-// `forge doctor` self-capability check (forge internal/cli/
+// `forge project doctor` self-capability check (forge internal/cli/
 // doctor_selfcapabilities.go) that reports `forge: kcl-plugin` pass/fail with
 // the expected/found/impact/fix evidence. Reading that is a contract. Matching
 // the render-time error text would be a second, weaker copy of forge's own
@@ -43,13 +43,13 @@ import (
 // a pure in-process capability read.
 // =============================================================================
 
-// forgeKCLPluginCheckName is the check `forge doctor` reports the KCL plugin
+// forgeKCLPluginCheckName is the check `forge project doctor` reports the KCL plugin
 // capability under. Matched exactly, not by substring: `tool: kcl` is a
 // DIFFERENT check in the same report (the kcl binary on PATH, which can pass
 // on a binary that cannot render), and a substring match would conflate them.
 const forgeKCLPluginCheckName = "forge: kcl-plugin"
 
-// forgeDoctorCheck is one check in `forge doctor --json`'s report. Only the
+// forgeDoctorCheck is one check in `forge project doctor --json`'s report. Only the
 // fields this decision needs are declared; forge is free to add more.
 type forgeDoctorCheck struct {
 	Name     string `json:"name"`
@@ -58,7 +58,7 @@ type forgeDoctorCheck struct {
 	Evidence string `json:"evidence"`
 }
 
-// forgeDoctorReport is the top-level `forge doctor --json` document.
+// forgeDoctorReport is the top-level `forge project doctor --json` document.
 type forgeDoctorReport struct {
 	Checks []forgeDoctorCheck `json:"checks"`
 }
@@ -66,7 +66,7 @@ type forgeDoctorReport struct {
 // forgeRenderCapabilityRequest asks about the project at ProjectPath.
 //
 // The path is required even though the capability is a property of the BINARY,
-// not of the project: `forge doctor` resolves its project from the working
+// not of the project: `forge project doctor` resolves its project from the working
 // directory, and the answer should be reported beside the project the UI is
 // showing.
 type forgeRenderCapabilityRequest struct {
@@ -88,7 +88,7 @@ type forgeRenderCapabilityResponse struct {
 	// Reason is forge's OWN one-line explanation when CanRender is false
 	// (e.g. "kcl_plugin.forge unavailable — this forge was built without
 	// CGO; no environment can render"). Forge's words, not a paraphrase,
-	// so the UI and `forge doctor` cannot tell the user different stories.
+	// so the UI and `forge project doctor` cannot tell the user different stories.
 	Reason string `json:"reason,omitempty"`
 
 	// Detail is forge's expected/found/impact/fix evidence block. Carried
@@ -117,7 +117,7 @@ func handleForgeRenderCapability(ctx context.Context, payload []byte) ([]byte, e
 	// `doctor` exits non-zero whenever ANY check fails — an absent docker,
 	// an unreachable cluster — so the exit code says nothing about the one
 	// check being read here. The report is the answer; the code is noise.
-	res, err := runForge(ctx, req.ProjectPath, []string{"doctor", "--json"})
+	res, err := runForge(ctx, req.ProjectPath, []string{"project", "doctor", "--json"})
 	if err != nil {
 		// Could not run forge at all. Undetermined, NOT incapable.
 		return json.Marshal(resp)

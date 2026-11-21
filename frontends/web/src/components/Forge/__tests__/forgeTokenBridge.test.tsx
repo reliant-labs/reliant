@@ -4,7 +4,7 @@
  * The forge → reliant token bridge (the @theme block in src/index.css).
  *
  * Forge's component library is installed as SOURCE via
- * `forge component install`, and is written against forge's own semantic
+ * `forge ui component install`, and is written against forge's own semantic
  * token vocabulary (bg-surface, text-ink, bg-danger-surface, …). Reliant's
  * vocabulary is different (bg-card, text-foreground, bg-destructive, …).
  * The bridge maps one onto the other so every installed component inherits
@@ -97,7 +97,7 @@ function declaredTokens(css: string): Set<string> {
 
 /**
  * Color-token names referenced by the installed forge components. Every .tsx
- * in the components dir is one `forge component install` wrote: hand-written
+ * in the components dir is one `forge ui component install` wrote: hand-written
  * harnesses live in components/DesignSandbox, so one that strays in here and
  * uses reliant's vocabulary (`bg-card`) fails this as an undeclared token.
  */

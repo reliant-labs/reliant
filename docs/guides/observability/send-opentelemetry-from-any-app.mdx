@@ -18,7 +18,7 @@ The variables are the standard OpenTelemetry ones, so there is no Reliant SDK to
 <Steps>
   <Step title="Sign in as yourself">
     ```bash terminal
-    reliant forge login
+    reliant forge cloud login
     ```
 
     This opens your browser and stores a credential for Reliant's control plane.
@@ -123,7 +123,7 @@ The variables are the standard OpenTelemetry ones, so there is no Reliant SDK to
 
 <AccordionGroup>
   <Accordion title="telemetry ingest tokens are minted, rotated and revoked by a person, not a machine credential">
-    `obs init` ran with an agent's or a pipeline's credential. Run it yourself in your own terminal after `reliant forge login`. The refused run may still have registered the env and written `deploy/envs/prod.yaml`; running it again reuses both and only mints the token.
+    `obs init` ran with an agent's or a pipeline's credential. Run it yourself in your own terminal after `reliant forge cloud login`. The refused run may still have registered the env and written `deploy/envs/prod.yaml`; running it again reuses both and only mints the token.
   </Accordion>
   <Accordion title="minting an ingest token needs a person who is a member of the organization holding the obs:write permission">
     Your account lacks `obs:write`. Ask an owner or admin of the organization to grant it, or to run `obs init` for you.
