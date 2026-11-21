@@ -54,6 +54,10 @@ CREATE TABLE pr_record_heads (
     head_sha TEXT NOT NULL,
     -- The head a push replaced (a synchronize event's before), when known.
     previous_head_sha TEXT NOT NULL DEFAULT '',
+    -- The snapshot time (the pull request's updated_at) of the push that
+    -- recorded previous_head_sha. A same-second push is followed only along
+    -- an edge of the record's own snapshot second, never an older one.
+    pushed_snapshot_at TIMESTAMPTZ,
     first_seen_at TIMESTAMPTZ NOT NULL,
     superseded_at TIMESTAMPTZ,
     UNIQUE (record_id, head_sha)

@@ -98,8 +98,11 @@ type PRRecordHead struct {
 	RecordID        string
 	HeadSHA         string
 	PreviousHeadSHA string
-	FirstSeenAt     time.Time
-	SupersededAt    *time.Time
+	// PushedSnapshotAt is the snapshot time of the push that recorded
+	// PreviousHeadSHA (nil when no push named it).
+	PushedSnapshotAt *time.Time
+	FirstSeenAt      time.Time
+	SupersededAt     *time.Time
 }
 
 // PR record review marker kinds.

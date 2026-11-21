@@ -30,11 +30,18 @@ func (s *Service) GetPullRequestRecord(
 	if req.Msg.GetNumber() <= 0 {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("number must be positive"))
 	}
-	rec, err := s.deps.Store.GetPRRecord(ctx, prrecords.ProviderGitHub, repo, int(req.Msg.GetNumber()))
+	// Resolve the identities the caller may read before choosing the record,
+	// as a list does: of a deleted and a re-created repository sharing the
+	// name and the number, the readable one is the answer.
+	allowed, err := s.readableRepositories(ctx, userID, repo)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	notFound := svcerr.NotFound("no record of that pull request")
+	rec, err := s.deps.Store.GetPRRecord(ctx, prrecords.ProviderGitHub, repo, int(req.Msg.GetNumber()), allowed)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
 	if rec == nil {
 		return nil, svcerr.Wrap(notFound)
 	}

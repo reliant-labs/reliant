@@ -54,19 +54,9 @@ func (s *Service) ListPullRequestRecords(
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	identities, err := s.deps.Store.ListPRRecordRepositories(ctx, prrecords.ProviderGitHub, repo)
+	allowed, err := s.readableRepositories(ctx, userID, repo)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
-	}
-	var allowed []string
-	for _, id := range identities {
-		ok, err := s.canRead(ctx, userID, &core.PRRecord{Provider: prrecords.ProviderGitHub, AccountKey: id.AccountKey, RepositoryID: id.RepositoryID})
-		if err != nil {
-			return nil, svcerr.Wrap(err)
-		}
-		if ok {
-			allowed = append(allowed, id.RepositoryID)
-		}
 	}
 	resp := &pb.ListPullRequestRecordsResponse{}
 	if len(allowed) == 0 {

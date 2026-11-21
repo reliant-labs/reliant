@@ -2,6 +2,7 @@ package pull_request_record
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -38,6 +39,28 @@ func repositoryArg(repo string) (string, error) {
 func (s *Service) canRead(ctx context.Context, userID string, rec *core.PRRecord) (bool, error) {
 	return s.deps.Store.HasFreshIntegrationAccess(ctx, userID, rec.Provider, rec.AccountKey, rec.RepositoryID,
 		s.now().Add(-core.IntegrationAccessFreshness))
+}
+
+// readableRepositories is the repository identities records were kept under
+// the name repo that the caller may read. A name can have named a deleted
+// repository before, so both reads resolve them before they select a record:
+// a record the caller cannot see never stands in for one it can.
+func (s *Service) readableRepositories(ctx context.Context, userID, repo string) ([]string, error) {
+	identities, err := s.deps.Store.ListPRRecordRepositories(ctx, prrecords.ProviderGitHub, repo)
+	if err != nil {
+		return nil, err
+	}
+	var allowed []string
+	for _, id := range identities {
+		ok, err := s.canRead(ctx, userID, &core.PRRecord{Provider: prrecords.ProviderGitHub, AccountKey: id.AccountKey, RepositoryID: id.RepositoryID})
+		if err != nil {
+			return nil, err
+		}
+		if ok && !slices.Contains(allowed, id.RepositoryID) {
+			allowed = append(allowed, id.RepositoryID)
+		}
+	}
+	return allowed, nil
 }
 
 func policyOf(p *pb.VerdictPolicy) prrecords.Policy {

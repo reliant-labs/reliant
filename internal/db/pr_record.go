@@ -41,10 +41,15 @@ func (r *Repo) ApplyPRRecordChange(ctx context.Context, c core.PRRecordChange) (
 				d.Outcome = core.PRDeliveryApplied
 			}
 			if c.Snapshot.HeadSHA != "" {
-				if err := store.EnsurePRRecordHead(tx, r.ORM(), core.PRRecordHead{
+				h := core.PRRecordHead{
 					ID: c.HeadID, RecordID: res.RecordID, HeadSHA: c.Snapshot.HeadSHA,
 					PreviousHeadSHA: c.PreviousHeadSHA, FirstSeenAt: c.Snapshot.ObservedAt,
-				}); err != nil {
+				}
+				if c.PreviousHeadSHA != "" {
+					at := c.Snapshot.SnapshotAt
+					h.PushedSnapshotAt = &at
+				}
+				if err := store.EnsurePRRecordHead(tx, r.ORM(), h); err != nil {
 					return err
 				}
 			}
@@ -82,9 +87,10 @@ func (r *Repo) ApplyPRRecordChange(ctx context.Context, c core.PRRecordChange) (
 	return applied && err == nil, err
 }
 
-// GetPRRecord returns one pull request's record, or nil.
-func (r *Repo) GetPRRecord(ctx context.Context, provider, repository string, number int) (*core.PRRecord, error) {
-	return store.GetPRRecord(ctx, r.ORM(), provider, repository, number)
+// GetPRRecord returns one pull request's record among the given repository
+// identities, or nil.
+func (r *Repo) GetPRRecord(ctx context.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error) {
+	return store.GetPRRecord(ctx, r.ORM(), provider, repository, number, repositoryIDs)
 }
 
 // ListPRRecords lists one repository's records in (number, repository id) order.

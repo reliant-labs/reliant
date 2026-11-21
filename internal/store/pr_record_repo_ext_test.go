@@ -70,7 +70,7 @@ func applyPR(t *testing.T, env *storetest.Env, c core.PRRecordChange) bool {
 
 func getPR(t *testing.T, env *storetest.Env) *core.PRRecord {
 	t.Helper()
-	rec, err := env.Repo.GetPRRecord(context.Background(), "github", "acme/widgets", 7)
+	rec, err := env.Repo.GetPRRecord(context.Background(), "github", "acme/widgets", 7, []string{"42"})
 	if err != nil || rec == nil {
 		t.Fatalf("get: %v %v", rec, err)
 	}
@@ -187,6 +187,31 @@ func TestPRRecordSameSecondTransitions(t *testing.T) {
 		c.PreviousHeadSHA = from
 		return c
 	}
+	// A force-push back to a sha the pull request had before, in the same
+	// second as a snapshot at the head it replaced, must not follow the
+	// earlier push out of that sha: that edge is history, not a pending push.
+	t.Run("a same-second force-push back to an earlier head stays there", func(t *testing.T) {
+		env := storetest.New(t)
+		applyPR(t, env, prChange{key: "opened", updated: 3, head: prShaA, full: true}.change())
+		ab := prChange{key: "ab", updated: 4, head: prShaB, full: true, delta: core.PRRecordDelta{FromHead: prShaA, HeadSHA: prShaB}}.change()
+		ab.PreviousHeadSHA = prShaA
+		applyPR(t, env, ab)
+		applyPR(t, env, prChange{key: "labeled", updated: 5, head: prShaB, full: true, labels: []string{"x"}}.change())
+		applyPR(t, env, push("ba", prShaB, prShaA))
+		rec := getPR(t, env)
+		if rec.HeadSHA != prShaA {
+			t.Fatalf("head = %s, want the force-push's %s", rec.HeadSHA[:4], prShaA[:4])
+		}
+		heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range heads {
+			if (h.HeadSHA == prShaA) != (h.SupersededAt == nil) {
+				t.Errorf("head %s superseded_at = %v", h.HeadSHA[:4], h.SupersededAt)
+			}
+		}
+	})
 	for _, order := range [][]string{{"ab", "bc"}, {"bc", "ab"}} {
 		t.Run("two pushes in one second, "+order[0]+" first", func(t *testing.T) {
 			env := storetest.New(t)

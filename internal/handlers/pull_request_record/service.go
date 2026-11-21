@@ -36,7 +36,7 @@ type Deps struct {
 // Store is the slice of the repository this service reads; *db.Repo
 // satisfies it.
 type Store interface {
-	GetPRRecord(ctx context.Context, provider, repository string, number int) (*core.PRRecord, error)
+	GetPRRecord(ctx context.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error)
 	ListPRRecordRepositories(ctx context.Context, provider, repository string) ([]core.PRRecordRepository, error)
 	ListPRRecords(ctx context.Context, f core.PRRecordFilter) ([]*core.PRRecord, error)
 	ListPRRecordHeads(ctx context.Context, recordID string) ([]core.PRRecordHead, error)

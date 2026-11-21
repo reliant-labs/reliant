@@ -201,6 +201,48 @@ func TestRecordsListAcrossARecreatedRepository(t *testing.T) {
 	}
 }
 
+// TestRecordsGetAcrossARecreatedRepository: of a deleted and a re-created
+// repository sharing the name and a number, Get returns the one the caller
+// may read, even when the other was observed more recently (a late
+// delivery for the deleted repository).
+func TestRecordsGetAcrossARecreatedRepository(t *testing.T) {
+	svc, env := newService(t)
+	seed(t, env, "42", 3)
+	seed(t, env, "41", 3)
+	// A stale snapshot of the deleted repository's #3, delivered late: it
+	// changes nothing but marks that record observed last.
+	late := time.Date(2026, 11, 20, 11, 0, 0, 0, time.UTC)
+	if _, err := env.Repo.ApplyPRRecordChange(context.Background(), core.PRRecordChange{
+		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: "late-41-3", EventType: "pull_request.labeled", AppliedAt: late},
+		Snapshot: &core.PRRecordSnapshot{
+			ID: "late-41-3", Provider: "github", AccountKey: "inst", RepositoryID: "41", Repository: "acme/widgets",
+			Number: 3, State: core.PRRecordOpen, HeadSHA: head, SnapshotAt: late.Add(-2 * time.Hour), ObservedAt: late, Full: true,
+		},
+		HeadID: "late-41-3-h",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	repoOf := func(userID string) (string, error) {
+		resp, err := svc.GetPullRequestRecord(asUser(userID), connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "acme/widgets", Number: 3}))
+		if err != nil {
+			return "", err
+		}
+		return resp.Msg.GetRecord().GetRepositoryId(), nil
+	}
+
+	grant(t, env, alice, now.Add(-time.Minute), "42")
+	if id, err := repoOf(alice); err != nil || id != "42" {
+		t.Fatalf("alice (granted the re-created repository): repository %q, err %v; want 42", id, err)
+	}
+	grant(t, env, bob, now.Add(-time.Minute), "41")
+	if id, err := repoOf(bob); err != nil || id != "41" {
+		t.Fatalf("bob (granted the deleted repository): repository %q, err %v; want 41", id, err)
+	}
+	if _, err := repoOf("user-carol"); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("carol (no grant): err = %v, want NotFound", err)
+	}
+}
+
 func TestRecordsReadComputesTheVerdict(t *testing.T) {
 	svc, env := newService(t)
 	seed(t, env, "42", 2)

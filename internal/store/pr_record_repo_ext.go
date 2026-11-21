@@ -192,14 +192,17 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 }
 
 // AdvancePRRecordHead moves a record's head one push forward when exactly one
-// known head was pushed over it: the push that arrived first of two in one
-// second, which could not apply until the one it replaced had. It returns the
-// head after the move.
+// known head was pushed over it in the record's own snapshot second: the push
+// that arrived first of two in one second, which could not apply until the
+// one it replaced had. An edge an older push recorded is history, not a
+// pending push (a force-push back to a sha the pull request had before must
+// not follow that sha's old successor). It returns the head after the move.
 func AdvancePRRecordHead(ctx context.Context, db orm.Context, recordID string) (string, error) {
 	var head string
 	err := db.Bun().NewRaw(`UPDATE pr_records AS r SET head_sha = n.head_sha
 		FROM (SELECT min(h.head_sha) AS head_sha FROM pr_record_heads h JOIN pr_records p ON p.id = h.record_id
 			WHERE h.record_id = ?0 AND h.previous_head_sha = p.head_sha AND h.head_sha <> p.head_sha
+				AND h.pushed_snapshot_at = p.snapshot_at
 			HAVING count(*) = 1) AS n
 		WHERE r.id = ?0
 		RETURNING r.head_sha`, recordID).Scan(ctx, &head)
@@ -213,15 +216,22 @@ func AdvancePRRecordHead(ctx context.Context, db orm.Context, recordID string) (
 }
 
 // EnsurePRRecordHead records a head of a pull request. A head already known
-// keeps its row; it learns the head a push replaced if it did not know it.
+// keeps its row; it learns the head a push replaced (and that push's snapshot
+// time) if it did not know it.
 func EnsurePRRecordHead(ctx context.Context, db orm.Context, h core.PRRecordHead) error {
+	var pushedAt *time.Time
+	if h.PushedSnapshotAt != nil {
+		at := h.PushedSnapshotAt.UTC()
+		pushedAt = &at
+	}
 	_, err := db.Bun().NewRaw(`INSERT INTO pr_record_heads AS h
-		(id, record_id, head_sha, previous_head_sha, first_seen_at)
-		VALUES (?, ?, ?, ?, ?)
+		(id, record_id, head_sha, previous_head_sha, pushed_snapshot_at, first_seen_at)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (record_id, head_sha) DO UPDATE SET
 			previous_head_sha = CASE WHEN h.previous_head_sha = '' THEN EXCLUDED.previous_head_sha ELSE h.previous_head_sha END,
+			pushed_snapshot_at = CASE WHEN h.previous_head_sha = '' THEN EXCLUDED.pushed_snapshot_at ELSE h.pushed_snapshot_at END,
 			first_seen_at = LEAST(h.first_seen_at, EXCLUDED.first_seen_at)`,
-		h.ID, h.RecordID, h.HeadSHA, h.PreviousHeadSHA, h.FirstSeenAt.UTC()).Exec(ctx)
+		h.ID, h.RecordID, h.HeadSHA, h.PreviousHeadSHA, pushedAt, h.FirstSeenAt.UTC()).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("ensure pr record head: %w", err)
 	}
@@ -278,13 +288,21 @@ func UpsertPRRecordCheck(ctx context.Context, db orm.Context, c core.PRRecordChe
 }
 
 // GetPRRecord returns the record of one pull request, looked up by the
-// repository's owner/name (case-insensitive, as the provider treats it), or
-// nil when there is none.
-func GetPRRecord(ctx context.Context, db orm.Context, provider, repository string, number int) (*core.PRRecord, error) {
+// repository's owner/name (case-insensitive, as the provider treats it)
+// among the given repository identities only, or nil when there is none. A
+// name can have named a deleted repository whose pull requests share
+// numbers with the re-created one's: the caller resolves which identities it
+// may read first (as a list does), so a record it cannot read never hides
+// one it can. No identities is no record. Of two readable identities with
+// the number, the more recently observed wins.
+func GetPRRecord(ctx context.Context, db orm.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error) {
+	if len(repositoryIDs) == 0 {
+		return nil, nil
+	}
 	var rows []prRecordRow
 	err := db.Bun().NewRaw(`SELECT `+prRecordColumns+` FROM pr_records
-		WHERE provider = ? AND lower(repository) = lower(?) AND number = ?
-		ORDER BY observed_at DESC LIMIT 1`, provider, repository, number).Scan(ctx, &rows)
+		WHERE provider = ?0 AND lower(repository) = lower(?1) AND number = ?2 AND repository_id = ANY(?3::text[])
+		ORDER BY observed_at DESC, repository_id LIMIT 1`, provider, repository, number, orm.Arg(repositoryIDs)).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("get pr record: %w", err)
 	}
@@ -341,7 +359,7 @@ func ListPRRecords(ctx context.Context, db orm.Context, f core.PRRecordFilter) (
 // ListPRRecordHeads lists a record's heads, oldest first.
 func ListPRRecordHeads(ctx context.Context, db orm.Context, recordID string) ([]core.PRRecordHead, error) {
 	var out []core.PRRecordHead
-	err := db.Bun().NewRaw(`SELECT id, record_id, head_sha, previous_head_sha, first_seen_at, superseded_at
+	err := db.Bun().NewRaw(`SELECT id, record_id, head_sha, previous_head_sha, pushed_snapshot_at, first_seen_at, superseded_at
 		FROM pr_record_heads WHERE record_id = ? ORDER BY first_seen_at, head_sha`, recordID).Scan(ctx, &out)
 	if err != nil {
 		return nil, fmt.Errorf("list pr record heads: %w", err)
