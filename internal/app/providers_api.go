@@ -1447,6 +1447,16 @@ func hostedControlPlane(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
+// projectHostedApps is where ListProjectsWithApps reads an org's hosted apps:
+// the control plane, with the caller's own bearer. nil — never a typed nil in
+// the handler's interface — when the control plane is not hosted.
+func projectHostedApps(cfg *configv1.ControlPlaneConfig) project.HostedApps {
+	if cp := hostedControlPlane(cfg); cp != nil {
+		return cp
+	}
+	return nil
+}
+
 // controlPlaneClient is the control-plane client SettingsService mints LLM
 // keys through, authenticated as the signed-in user.
 func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {

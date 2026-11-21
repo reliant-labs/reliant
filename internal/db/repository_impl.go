@@ -1364,6 +1364,13 @@ func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID strin
 	return store.ListProjectDaemonsForProject(ctx, r.ORM(), projectID)
 }
 
+// ListProjectDaemonsForProjects returns where every project in projectIDs is
+// installed, by project and then oldest clone first: one read for a list of
+// projects.
+func (r *Repo) ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
+	return store.ListProjectDaemonsForProjects(ctx, r.ORM(), projectIDs)
+}
+
 func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
 	if daemonID == "" {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
@@ -2150,6 +2157,18 @@ func (r *Repo) ListRepoForgeAppsByProject(ctx context.Context, projectID string)
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 	return store.ListRepoForgeAppsByProject(ctx, r.ORM(), projectID)
+}
+
+// ListReposByProjects returns the repos of every project in projectIDs, by
+// project and relative path: one read for a list of projects.
+func (r *Repo) ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error) {
+	return store.ListReposByProjects(ctx, r.ORM(), projectIDs)
+}
+
+// ListRepoForgeAppsByProjects returns every forge app recorded in the repos
+// of every project in projectIDs, ordered by repo and subpath.
+func (r *Repo) ListRepoForgeAppsByProjects(ctx context.Context, projectIDs []string) ([]core.RepoForgeApp, error) {
+	return store.ListRepoForgeAppsByProjects(ctx, r.ORM(), projectIDs)
 }
 
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
