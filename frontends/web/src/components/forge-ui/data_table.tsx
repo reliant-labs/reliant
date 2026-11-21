@@ -212,7 +212,11 @@ export default function DataTable<T extends Record<string, unknown>>({
   stacked = false,
   ariaLabel,
 }: DataTableProps<T>) {
-  const rowHeight = compact ? "h-8" : "h-10";
+  // 41px rows (--table-row-h): calm, readable, Vercel-like. Compact stays 32px.
+  // The cells pad vertically too, so a two-line row (a name over its
+  // description) breathes instead of filling the 41px exactly.
+  const rowHeight = compact ? "h-8" : "h-[41px]";
+  const cellPad = compact ? "py-1" : "py-2.5";
   const titleIndex = Math.max(
     0,
     columns.findIndex((col) => col.stackTitle),
@@ -263,7 +267,7 @@ export default function DataTable<T extends Record<string, unknown>>({
     "inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className={flush ? "" : "overflow-hidden rounded-lg border border-border bg-surface"}>
+    <div className={flush ? "" : "overflow-hidden rounded-xl border border-border bg-surface"}>
       {/* relative: the visually hidden header labels (sr-only) are absolutely
           positioned, and with no positioned ancestor inside the scroller they
           escaped it — at 390px the whole page scrolled sideways. */}
@@ -277,7 +281,7 @@ export default function DataTable<T extends Record<string, unknown>>({
           <thead className={stacked ? STACK.head : undefined}>
             <tr className="border-b border-border">
               {selectable && (
-                <th className="h-9 w-10 px-4">
+                <th className="h-10 w-10 px-4">
                   <input
                     type="checkbox"
                     aria-label="Select all rows"
@@ -298,7 +302,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                         : "descending"
                       : undefined
                   }
-                  className={`h-9 whitespace-nowrap px-4 text-xs font-medium text-ink-muted ${
+                  className={`h-10 whitespace-nowrap px-4 text-meta font-medium text-ink-muted ${
                     col.numeric ? "text-right" : "text-left"
                   } ${col.headerClassName ?? ""}`}
                   style={col.width ? { width: col.width } : undefined}
@@ -345,7 +349,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                   <React.Fragment key={getRowKey ? getRowKey(row, i) : i}>
                     <tr
                       {...rowAttributes}
-                      className={`border-t border-border/70 first:border-t-0 ${
+                      className={`border-t border-border-subtle first:border-t-0 ${
                         href || action ? "relative cursor-pointer hover:bg-ink/5" : ""
                       } ${selected.has(i) ? "bg-accent-surface" : ""} ${stacked ? STACK.row : ""} ${
                         rowClassName ?? ""
@@ -353,7 +357,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                     >
                       {selectable && (
                         <td
-                          className={`${rowHeight} relative z-10 px-4 ${stacked ? STACK.cell : ""}`}
+                          className={`${rowHeight} ${cellPad} relative z-10 px-4 ${stacked ? STACK.cell : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -373,7 +377,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                           <td
                             key={col.key}
                             data-label={stacked && !isTitle ? col.header : undefined}
-                            className={`${rowHeight} whitespace-nowrap px-4 text-sm text-ink ${
+                            className={`${rowHeight} ${cellPad} whitespace-nowrap px-4 text-ui text-ink ${
                               col.numeric ? "text-right tabular-nums" : ""
                             } ${col.interactive ? "relative z-10" : ""} ${col.className ?? ""} ${
                               stacked

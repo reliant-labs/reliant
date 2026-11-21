@@ -1,6 +1,7 @@
 ---
-title: "Architecture Overview"
-description: "High-level architecture of the Reliant cloud service"
+title: "Reliant architecture: how the cloud service fits together"
+sidebarTitle: "Architecture Overview"
+description: "Reliant architecture: the API server, Temporal workers, daemon gateway, NATS, Postgres and tools daemon, and how a chat message flows through them."
 ---
 
 Reliant is a cloud service: the desktop and web apps connect to Reliant's API, worker and gateway servers on Google Cloud, and an account is required. It orchestrates multi-step, multi-agent workflows. Each workflow coordinates LLM inference with tool operations on a daemon—shell commands, file edits, MCP servers, terminal sessions—through a durable execution engine that survives crashes and restarts.

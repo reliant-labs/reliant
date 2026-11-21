@@ -48,10 +48,25 @@ type client struct {
 	mcpService      *mcpservice.MCPService
 
 	preferredEnvelopeByTool map[string]string
+
+	// lookupEnv resolves the ${VAR} references in cfg at launch (expand.go).
+	// Never nil: newClientWithEnvLookup substitutes resolveNoEnv for nil.
+	lookupEnv func(string) (string, bool)
 }
 
-// NewClient creates a new MCP client with the given configuration
+// NewClient creates a standalone MCP client, resolving references from the
+// caller's environment as before. Use NewManager for role-scoped clients;
+// a server managing tenant configuration must not use this standalone path.
 func NewClient(name string, cfg config.MCPServer) (Client, error) {
+	return newClientWithEnvLookup(name, cfg, os.LookupEnv) //nolint:forbidigo // legacy standalone client runs in the caller's environment
+}
+
+// newClientWithEnvLookup resolves references with the supplied policy.
+// nil means no process lookup: each reference uses its default or is empty.
+func newClientWithEnvLookup(name string, cfg config.MCPServer, lookupEnv func(string) (string, bool)) (Client, error) {
+	if lookupEnv == nil {
+		lookupEnv = resolveNoEnv
+	}
 	// Create SDK client implementation
 	impl := &mcp.Implementation{
 		Name:    "reliant",
@@ -68,6 +83,7 @@ func NewClient(name string, cfg config.MCPServer) (Client, error) {
 		toolCallService:         mcpservice.NewToolCallService(nil),
 		mcpService:              mcpservice.NewMCPService(nil),
 		preferredEnvelopeByTool: make(map[string]string),
+		lookupEnv:               lookupEnv,
 	}, nil
 }
 
@@ -90,9 +106,10 @@ func (c *client) Initialize(ctx context.Context) error {
 	var stdioCmd *exec.Cmd
 
 	// The config arrives with its ${VAR} references as the user wrote them;
-	// this is where they are resolved, from this (the user's) environment.
+	// this is where they are resolved, through the lookup the client was
+	// built with (the daemon's environment on a daemon, nothing on a server).
 	// See expand.go.
-	launch := resolveLaunchConfig(c.cfg, os.LookupEnv) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
+	launch := resolveLaunchConfig(c.cfg, c.lookupEnv)
 
 	switch launch.Type {
 	case config.MCPStdio:

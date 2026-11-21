@@ -248,12 +248,25 @@ func TestDeliverToRunUsesSignalRunSemantics(t *testing.T) {
 }
 
 // The target thread reaches SignalRun, and a live run with no agent running
-// reports why it took nothing (errreason.NotDeliveredHeader).
+// reports why it took nothing (SignalRunResponse.not_delivered_reason).
 func TestDeliverToRunCarriesTheTargetAndTheNotDeliveredReason(t *testing.T) {
-	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{Delivered: false}, signalHeader: errreason.RunNoListeningAgent}
+	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{
+		Delivered:          false,
+		NotDeliveredReason: errreason.RunNoListeningAgent,
+	}, signalHeader: "header_reason"}
 	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "implement", "hello", tools.RunSender{ThreadID: "sender-run"})
 	require.NoError(t, err)
 	assert.Equal(t, "implement", api.signaled.Thread)
+	assert.False(t, delivery.Delivered)
+	assert.Equal(t, errreason.RunNoListeningAgent, delivery.NotDeliveredReason, "the field wins over the header")
+}
+
+// A server older than not_delivered_reason sends the reason only in
+// errreason.NotDeliveredHeader; the reader falls back to it.
+func TestDeliverToRunFallsBackToTheNotDeliveredHeader(t *testing.T) {
+	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{Delivered: false}, signalHeader: errreason.RunNoListeningAgent}
+	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "", "hello", tools.RunSender{ThreadID: "sender-run"})
+	require.NoError(t, err)
 	assert.False(t, delivery.Delivered)
 	assert.Equal(t, errreason.RunNoListeningAgent, delivery.NotDeliveredReason)
 }

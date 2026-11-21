@@ -213,9 +213,7 @@ service TriggerService {
   // tool's schema as the structured output, and normalized by the same code
   // that tool runs.
   rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}
-    };
+    option (forge.v1.method) = {activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}};
   }
 }
 
@@ -1340,6 +1338,13 @@ message WorkflowTriggerOverride {
 
   // Merged over the shared params for this trigger.
   map<string, google.protobuf.Value> params = 7;
+
+  // Write-only, for a declared webhook trigger with hmac: the shared signing
+  // secret, as TriggerDefinition.webhook_hmac_secret. Required to enable one
+  // that has no stored secret; set on an existing activation to replace its
+  // secret; unset keeps the stored one. Stored sealed and never returned. A
+  // trigger whose declaration has no hmac refuses it.
+  optional string webhook_hmac_secret = 9;
 }
 
 // WorkflowTriggerOutcome is what EnableWorkflow did for one declared trigger.

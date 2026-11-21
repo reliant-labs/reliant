@@ -279,7 +279,7 @@ function WorkspaceDetail({
                 <CardHeader title="Details" />
                 <dl className="flex flex-col gap-3 text-sm">
                   <div className="flex flex-col gap-1">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-xs font-semibold text-muted-foreground">
                       Location
                     </dt>
                     <dd>
@@ -441,7 +441,7 @@ function LifecycleMenu({ worktree }: { worktree: Worktree }) {
           role="menu"
           className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
         >
-          <p className="px-3 pb-1 pt-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="px-3 pb-1 pt-1.5 text-2xs font-medium text-muted-foreground">
             Mark this workspace as
           </p>
           {LIFECYCLE_OPTIONS.map((value) => {

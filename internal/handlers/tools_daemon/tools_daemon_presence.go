@@ -3,6 +3,7 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -82,6 +83,14 @@ func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID str
 		// re-reads the daemon list when it changes rather than up to a
 		// poll later. The reason itself is read from the list.
 		payload["health_state"] = string(machineHealthFromHeartbeat(hb.Health).State)
+		// A restart the platform asked for, while one is in progress
+		// (upgrade.go): "updating", "drained", "awaiting_owner", "failed".
+		if up := hb.GetUpgrade(); up != nil {
+			payload["upgrade_state"] = strings.ToLower(strings.TrimPrefix(up.GetState().String(), "DAEMON_UPGRADE_STATE_"))
+			if up.GetDeadlineUnixMs() > 0 {
+				payload["upgrade_deadline_unix_ms"] = up.GetDeadlineUnixMs()
+			}
+		}
 	}
 	data, _ := json.Marshal(payload)
 	s.deps.UserUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{

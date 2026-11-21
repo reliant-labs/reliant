@@ -287,9 +287,7 @@ service ChatService {
 
   // SendMessage sends a user message to a chat and continues workflow
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn conversation traffic: the chat's own message history records every send"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn conversation traffic: the chat's own message history records every send"}};
   }
 
   // SendAgentMessage lets a human queue a message into a SPECIFIC running
@@ -301,9 +299,7 @@ service ChatService {
   // The message is delivered at the target thread's next agent-loop step
   // boundary, same as spawn_send. It is queued, not delivered synchronously.
   rpc SendAgentMessage(SendAgentMessageRequest) returns (SendAgentMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"}
-    };
+    option (forge.v1.method) = {activity: {none: "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"}};
   }
 
   // ListQueuedAgentMessages returns the messages currently sitting in a
@@ -318,9 +314,7 @@ service ChatService {
   // boundary -- see CancelQueuedAgentMessageResponse for the honesty
   // contract when the message was already delivered.
   rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "withdraws a queued mailbox message before delivery: per-turn agent traffic"}
-    };
+    option (forge.v1.method) = {activity: {none: "withdraws a queued mailbox message before delivery: per-turn agent traffic"}};
   }
 
   // InterruptThread stops what a thread is doing right now so it reads its
@@ -342,9 +336,7 @@ service ChatService {
   //
   // Queue the message first (SendAgentMessage), then interrupt.
   rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}};
   }
 
   // ListMessages lists messages for a chat with content blocks
@@ -424,9 +416,7 @@ service ChatService {
   // resets ("Retry now"): it retries the step immediately instead of waiting
   // for the reset. A run that is not waiting is left alone (woken = false).
   rpc RetryUsageLimitWait(RetryUsageLimitWaitRequest) returns (RetryUsageLimitWaitResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"}
-    };
+    option (forge.v1.method) = {activity: {none: "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"}};
   }
 
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
@@ -437,16 +427,12 @@ service ChatService {
 
   // DismissChat clears needs_attention state when user views a chat
   rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}};
   }
 
   // MarkUnreadChat marks a chat as needing attention (mark as unread)
   rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-user read state: marks the chat unread"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-user read state: marks the chat unread"}};
   }
 
   // CompactChat triggers manual context compaction for a chat
@@ -487,16 +473,12 @@ service ChatService {
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
   rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"}
-    };
+    option (forge.v1.method) = {activity: {none: "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"}};
   }
 
   // UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
   rpc UpdateChatProviderPolicy(UpdateChatProviderPolicyRequest) returns (UpdateChatProviderPolicyResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}};
   }
 
   // GetChatUpdates fetches chat updates since a sequence number
@@ -756,6 +738,11 @@ message Message {
   // a message keeps role USER (every provider accepts it) but must not be
   // presented as the user's own words. Unset means the human (or the model).
   MessageSender sender = 20;
+  // thinking_level is the effective thinking (reasoning-effort) level the
+  // assistant turn ran at, after the model's capabilities reconciled the
+  // requested one. Unset for a message no model wrote, a model that takes no
+  // level, and a message saved before this was recorded.
+  optional string thinking_level = 21;
 }
 
 // MessageSender attributes a message to the agent thread that sent it.
@@ -1019,11 +1006,13 @@ message RunNowResponse {
   string run_id = 3;
 }
 
-// ListChatsRequest lists the caller's chats: in one project, or in all of them.
+// ListChatsRequest lists the caller's chats: in one project, in several, or in
+// all of them.
 message ListChatsRequest {
-  // The project to list. Empty lists every project the caller owns: the
-  // sidebar's "All projects" view. Chats are scoped by the caller either way,
-  // so a project id that is not the caller's lists nothing.
+  // The project to list. Empty (and no project_ids) lists every project the
+  // caller owns: the sidebar's "All projects" view. Chats are scoped by the
+  // caller either way, so a project id that is not the caller's lists
+  // nothing. Set with project_ids, it is one more project of that set.
   string project_id = 1;
   optional int32 limit = 2;
   // ListChats is the chat list: it returns only chats the sidebar lists
@@ -1044,6 +1033,18 @@ message ListChatsRequest {
   // app's name is its identity only within one org. A malformed name lists
   // nothing; an empty one is the same as unset.
   optional string app_name = 5;
+  // List the chats of several projects at once: the sidebar's multi-project
+  // filter. The projects listed are the union of project_id and project_ids,
+  // so a client may set either or both; with both empty every project is
+  // listed, as before this field existed. One query answers it, ordered and
+  // limited exactly like a single project's list. Chats are still scoped by
+  // the caller, so an id that is not the caller's contributes nothing. At
+  // most 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+  // main_worktrees then holds the main workspace of each listed project.
+  repeated string project_ids = 6 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {string: {min_len: 1}}
+  }];
 }
 
 // ListChatsResponse returns the list of chats
@@ -1148,12 +1149,25 @@ message ListArchivedChatsRequest {
   // orgs list under the caller's default org. Unset lists every archived chat
   // the caller owns, in any org, as before this field existed.
   optional string org_id = 1;
+  // Page size: at most this many chats, clamped to 200. Unset (or 0) with no
+  // page_token lists every archived chat in one response, as before paging
+  // existed; a page_token without a page size gets pages of 50. New clients
+  // always set it: a heavy account archives tens of thousands of chats.
+  optional int32 page_size = 2;
+  // Continues a previous response's next_page_token. Opaque. Pages are
+  // ordered most recently updated first, keyset on (updated time, id), so a
+  // chat archived mid-pagination can neither repeat nor be skipped.
+  optional string page_token = 3;
 }
 
 // ListArchivedChatsResponse returns archived chats with worktree info
 message ListArchivedChatsResponse {
   repeated ArchivedChat chats = 1;
+  // Number of chats in this response (this page, when paged).
   int32 total = 2;
+  // Set when more archived chats follow; pass it as page_token. Empty on the
+  // last page, and always empty for an unpaged request.
+  string next_page_token = 3;
 }
 
 // SendMessageRequest sends messages to a chat

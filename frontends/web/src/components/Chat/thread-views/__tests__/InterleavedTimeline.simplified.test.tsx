@@ -207,10 +207,10 @@ const pendingApproval = (blockId: string): Approval =>
 
 function renderTimeline(
   messages: Message[],
-  props: { isStreaming?: boolean; approvals?: Approval[]; errorEvents?: ErrorUpdate[] } = {},
+  props: { isStreaming?: boolean; approvals?: Approval[]; errorEvents?: ErrorUpdate[]; surface?: "desktop" | "mobile" } = {},
 ) {
   const element = (next: Message[], p: typeof props) => (
-    <SurfaceProvider surface="mobile">
+    <SurfaceProvider surface={p.surface ?? "mobile"}>
       <InterleavedTimeline
         messages={next}
         chatId="chat-1"
@@ -282,6 +282,45 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(follows(screen.getByText("Fix the flaky test"), screen.getByText("Let me look at the test."))).toBe(true);
     expect(follows(screen.getByText("Let me look at the test."), fold())).toBe(true);
     expect(follows(fold(), screen.getByText("Fixed: the race is gone."))).toBe(true);
+  });
+
+  // The preview's long fixture chat shows "Activity · 1 file read · 1 command"
+  // and no "Explored …" row: that IS the fold, collapsed, as on main. On the
+  // desktop a run groups its reads only when it has two or more (ChatMessage,
+  // readOnly.length > 1); the phone never groups reads, as on main.
+  it("collapses a realistic research run into one fold whose open body groups its reads (desktop)", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    const reads = ["view", "view", "view", "view", "view", "grep", "grep", "grep"];
+    renderTimeline([
+      user(1, "Move tax rates behind the pricing config"),
+      assistant(2, [
+        text(0, "I will start by finding every place that reads a tax rate."),
+        ...reads.map((name, i) => tool(i + 1, name, `call-r${i}`)),
+        tool(reads.length + 1, "shell", "call-s0"),
+      ]),
+      assistant(3, [text(0, "Three call sites.")]),
+    ], { surface: "desktop" });
+
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    expect(foldButton()).toHaveAttribute("aria-expanded", "false");
+    expect(foldButton()).toHaveTextContent(/^Activity · 5 files read · 3 searches · 1 command/);
+    expect(screen.queryByTestId("tool-collapsible-group")).toBeNull();
+
+    fireEvent.click(foldButton());
+    expect(screen.getAllByTestId("tool-collapsible-group")).toHaveLength(1);
+  });
+
+  it("opens a run with a single read onto its rows: one read is never an Explored group (desktop)", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Fix the flaky test"),
+      assistant(2, [text(0, "Let me look."), tool(1, "view", "call-v"), tool(2, "shell", "call-s")]),
+      assistant(3, [text(0, "Fixed.")]),
+    ], { surface: "desktop" });
+
+    expect(foldButton()).toHaveTextContent(/^Activity · 1 file read · 1 command/);
+    fireEvent.click(foldButton());
+    expect(screen.queryByTestId("tool-collapsible-group")).toBeNull();
   });
 
   it("reveals the tool calls when the fold is expanded, never a second copy of the prose", () => {

@@ -211,6 +211,7 @@ nodes:
 
   # The repo's checkout inside the project: a subdirectory named for the repo for a project of several,
   # or the project itself. It must be a clone of THIS repository, not just a neighbour.
+  # lint:allow requires-undeclared-tool — git only checks a checkout's origin: without it no checkout matches, and no_checkout fails the run with a message naming the missing clone before anything is reviewed
   - id: dir
     type: run
     timeout: 2m

@@ -61,6 +61,7 @@ import DropdownMenu from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 import { homePath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -69,7 +70,7 @@ const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
 
 /** Pages that host a transcript own their height and scrolling. */
 function isFillLayout(pathname: string): boolean {
-  return pathname.startsWith("/workflows/runs/");
+  return orgFreePath(pathname).startsWith("/workflows/runs/");
 }
 
 export function WorkflowsLayout() {
@@ -324,5 +325,5 @@ function ProjectSwitcher() {
 /** The resolution ladder in the header comment. Runs once per mount of the area. */
 function useWorkflowsProjectResolution() {
   const { pathname } = useLocation();
-  useRouteProjectResolution({ reflectInUrl: pathname.startsWith(WORKFLOWS_AREA_PATH) });
+  useRouteProjectResolution({ reflectInUrl: orgFreePath(pathname).startsWith(WORKFLOWS_AREA_PATH) });
 }

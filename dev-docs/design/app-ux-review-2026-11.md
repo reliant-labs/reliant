@@ -630,7 +630,7 @@ pages. It used a three-entity sample app (`fieldops`). These fixes land in
 why they are ranked separately.
 
 Every forge app inherits these, and so does every "Forge app" screenshot on
-the landing page. Seven bugs were filed with `reliant forge report-bug`. The
+the landing page. Seven bugs were filed with `reliant forge agent report-bug`. The
 ids are in 06 §5.
 
 Effort scale: S is up to half a day, M is one to two days, L is several days.

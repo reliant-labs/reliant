@@ -61,6 +61,9 @@ func thingCreatedDataThing(v any) map[string]any {
 	if s := capText(text(dig(v, "notes"))); s != "" {
 		out["notes"] = s
 	}
+	if m := markers(text(dig(v, "notes"))); len(m) > 0 {
+		out["marks"] = m
+	}
 	return out
 }
 

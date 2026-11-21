@@ -13,6 +13,12 @@ import { ResourceVisibility } from "../../../gen/reliant/v1/common_pb";
 const state = vi.hoisted(() => ({ chat: {} as Record<string, unknown> }));
 
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
+vi.mock("../../../hooks/useOnboardingQueries", () => ({
+  useDaemonList: () => ({ data: [
+    { daemonId: "other", name: "Other machine" },
+    { daemonId: "assigned", name: "Build workstation" },
+  ] }),
+}));
 vi.mock("../thread-views/useChatThreadMode", () => ({
   useChatThreadMode: () => ({ mode: "detailed", preference: "auto" }),
   setChatThreadMode: vi.fn(),
@@ -38,7 +44,7 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useContextUsageByThread: () => ({}),
 }));
 vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null }));
-vi.mock("../../runs/ChildRunsStrip", () => ({ ChildRunsStrip: () => null }));
+vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: undefined }) }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => <span>no machine</span> }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 vi.mock("../MoveChatToProjectDialog", () => ({ MoveChatToProjectDialog: () => null }));
@@ -61,6 +67,21 @@ async function openMenu() {
 
 beforeEach(() => {
   state.chat = { id: "chat-1", title: "Deploy fix", orgId: "acme", visibility: ResourceVisibility.PRIVATE, worktreeId: "wt-1" };
+});
+
+describe("ChatHeader machine", () => {
+  it("names only the chat's assigned machine", async () => {
+    state.chat = { ...state.chat, activeDaemonId: "assigned" };
+    await openMenu();
+    expect(screen.getByText("Machine: Build workstation")).toBeInTheDocument();
+    expect(screen.queryByText("Machine: Other machine")).not.toBeInTheDocument();
+  });
+
+  it("doesn't guess when the assigned machine isn't in the registry", async () => {
+    state.chat = { ...state.chat, activeDaemonId: "missing" };
+    await openMenu();
+    expect(screen.queryByText(/^Machine:/)).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatHeader sharing", () => {
@@ -88,11 +109,11 @@ describe("ChatHeader sharing", () => {
     state.chat = { ...state.chat, visibility: ResourceVisibility.ORG, viewerAccess: true, userId: "dana", noMachine: true };
     await openMenu();
     expect(screen.getByTestId("chat-shared-chip")).toHaveTextContent("Read only");
-    for (const name of ["Edit Title", "Move to project…", "Export Chat", "Archive chat"]) {
+    for (const name of ["Edit title", "Move to project…", "Export chat", "Archive chat"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByTestId("chat-menu-share")).not.toBeInTheDocument();
     expect(screen.queryByText("no machine")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy Chat ID" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy chat ID" })).toBeInTheDocument();
   });
 });

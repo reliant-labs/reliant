@@ -65,7 +65,7 @@ func (p *GitHubProvider) Parse(_ context.Context, req *Request) (*Delivery, erro
 		// fire twice, so nothing is accepted that lacks one.
 		return nil, fmt.Errorf("github: no %s header", github.DeliveryHeader)
 	}
-	out := &Delivery{Revocations: parsed.Revocations}
+	out := &Delivery{ID: delivery, Revocations: parsed.Revocations}
 	for _, ev := range parsed.Events {
 		out.Events = append(out.Events, Event{
 			Type:        ev.Type,

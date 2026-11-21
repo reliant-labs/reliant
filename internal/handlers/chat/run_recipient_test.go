@@ -214,7 +214,8 @@ func TestSendMessage_RunThatCannotSayFallsBackToTheRoot(t *testing.T) {
 
 // SignalRun (what send_to_run calls) on a graph run: no target reaches its
 // one running agent; with none running it reports delivered=false and says
-// why in the reason header, queuing nothing; with several it is refused with
+// why in not_delivered_reason and the reason header, queuing nothing; with
+// several it is refused with
 // the list; a node name picks one.
 func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 	t.Parallel()
@@ -243,7 +244,9 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 	resp, err := signal("", "nobody home")
 	require.NoError(t, err, "a live run with no agent running reports delivered=false, never an error")
 	assert.False(t, resp.Msg.Delivered)
-	assert.Equal(t, errreason.RunNoListeningAgent, resp.Header().Get(errreason.NotDeliveredHeader))
+	assert.Equal(t, errreason.RunNoListeningAgent, resp.Msg.NotDeliveredReason)
+	assert.Equal(t, errreason.RunNoListeningAgent, resp.Header().Get(errreason.NotDeliveredHeader),
+		"the header still carries the reason for clients older than the field")
 	assert.Empty(t, queuedBodies(t, ctx, repo, fx.rootThreadID))
 
 	// One agent running: it gets the message.

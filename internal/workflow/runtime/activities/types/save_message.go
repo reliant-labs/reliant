@@ -36,6 +36,7 @@ type SaveMessageInput struct {
 	TokenCount        int                  `json:"token_count,omitempty" reliant:"-"`         // Total tokens (prompt + response + context)
 	Cost              float64              `json:"cost,omitempty" reliant:"-"`                // Request cost in USD returned by the LLM provider
 	Model             string               `json:"model,omitempty" reliant:"-"`               // Concrete model that served the completion (post tag resolution), persisted to messages.model
+	ThinkingLevel     string               `json:"thinking_level,omitempty" reliant:"-"`      // Effective thinking level the completion ran at, persisted to messages.thinking_level
 	Agent             string               `json:"agent,omitempty" reliant:"-"`               // Agent/workflow identity that produced the message, persisted to messages.agent
 	ProviderAccountID string               `json:"provider_account_id,omitempty" reliant:"-"` // Provider account that served the completion, persisted to messages.provider_account_id
 	ContextWindowID   string               `json:"context_window_id,omitempty" reliant:"-"`   // FK to context_windows (nullable during migration)
