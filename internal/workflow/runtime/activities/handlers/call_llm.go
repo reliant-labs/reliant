@@ -1896,7 +1896,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// here (Codex/OpenAI envelopes are organisation-bound): drop it before the
 	// request rather than learn that from a 400.
 	history = stripForeignReasoning(history, models.DriverID(resolved.ProviderDriver), accountID)
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
+	// Snapshot before the trim, so a request the provider refuses as too long
+	// can be resent trimmed further (contextOverflowRecovery).
+	overflowRecovery := newContextOverflowRecovery(chat.ID, resolved.ProviderDriver, resolvedModelID, history, systemPrompts, availableTools, ceiling)
+	history = overflowRecovery.sending(prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling))
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
 	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
@@ -2060,7 +2063,13 @@ streamLoop:
 					break streamLoop
 				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-					streamErr = err
+					// A request refused as too long is resent smaller.
+					next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+					if next != nil {
+						eventChan = next
+						continue
+					}
+					streamErr = failed
 					driverErrored = true
 					break streamLoop
 				}
@@ -2198,7 +2207,13 @@ streamLoop:
 
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-				streamErr = err
+				// A request refused as too long is resent smaller.
+				next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+				if next != nil {
+					eventChan = next
+					continue
+				}
+				streamErr = failed
 				driverErrored = true
 				break streamLoop
 			}
