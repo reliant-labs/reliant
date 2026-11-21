@@ -52,6 +52,10 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
   const [accepted, setAccepted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // The budget version current when editing began (undefined: the org had
+  // none). Saving sends it as the concurrency guard, so a change someone else
+  // made while this form was open is refused, never silently overwritten.
+  const [baseVersion, setBaseVersion] = useState<bigint | undefined>(undefined);
   const fieldId = useId();
 
   const history = useMemo(
@@ -60,10 +64,14 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
   );
   const current = history.find((v) => v.current) ?? history[0];
   const unserved = isUnimplemented(versions.error);
+  // Editing needs the history: without it there is no version to guard with.
+  const historyLoaded = versions.isSuccess;
   const { cents: draftCents, error: draftError } = validateHostingBudget(draft);
   const pausesNow = draftCents !== undefined && spentCents != null && Number(draftCents) <= spentCents;
 
   const start = () => {
+    if (!historyLoaded) return;
+    setBaseVersion(current ? BigInt(current.version) : undefined);
     setDraft(hostingBudgetInputValue(budgetCents));
     setAccepted(false);
     setMessage(null);
@@ -75,13 +83,14 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
     if (draftError !== undefined) return setProblem(draftError);
     if (!accepted) return setProblem("Agree to the usage billing policy to change the budget.");
     if (!policyVersion) return setProblem("The usage billing policy could not be verified. Reload and try again.");
+    if (!historyLoaded) return setProblem("The budget history hasn't loaded yet. Try again in a moment.");
     setProblem(null);
     save.mutate(
       {
         infraBudgetCents: draftCents,
         policyVersion,
         consent: true,
-        expectedCurrentVersion: current ? BigInt(current.version) : undefined,
+        expectedCurrentVersion: baseVersion,
       },
       {
         onSuccess: () => {
@@ -100,7 +109,7 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
           Monthly budget: <span className="font-medium tabular-nums">{formatCents(Number(budgetCents))}</span>
         </p>
         {canManage && !editing && !unserved && (
-          <Button size="sm" variant="outline" onClick={start} data-testid="hosting-budget-change">
+          <Button size="sm" variant="outline" onClick={start} disabled={!historyLoaded} data-testid="hosting-budget-change">
             Change budget
           </Button>
         )}

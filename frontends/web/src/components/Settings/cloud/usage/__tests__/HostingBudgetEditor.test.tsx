@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HostingBudgetEditor } from "../HostingBudgetEditor";
 import { validateHostingBudget } from "../hostingBudget";
+import { hostingBillingKeys } from "../hostingBillingQueries";
 
 const mocks = vi.hoisted(() => ({ client: {} as Record<string, unknown> }));
 vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => mocks.client }));
@@ -16,12 +17,14 @@ const versions = [
 
 function mount(props: Partial<Parameters<typeof HostingBudgetEditor>[0]> = {}) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+  return { cache, ...mount.render(cache, props) };
+}
+mount.render = (cache: QueryClient, props: Partial<Parameters<typeof HostingBudgetEditor>[0]>) =>
+  render(
     <QueryClientProvider client={cache}>
       <HostingBudgetEditor orgId="org-a" budgetCents={8000n} policyVersion="p1" canManage {...props} />
     </QueryClientProvider>,
   );
-}
 
 beforeEach(() => {
   mocks.client = {
@@ -109,6 +112,38 @@ describe("HostingBudgetEditor", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/changed since you opened this/);
+  });
+
+  it("keeps the version the edit started from when the history refreshes mid-edit", async () => {
+    const { cache } = mount();
+    await screen.findByTestId("hosting-budget-history");
+    fireEvent.click(screen.getByTestId("hosting-budget-change"));
+    // Another admin changes the budget; this form's history refreshes to version 2.
+    await act(async () => {
+      cache.setQueryData(hostingBillingKeys.budgetVersions("org-a"), {
+        versions: [
+          ...versions.map((v) => ({ ...v, current: false })),
+          { version: 2n, infraBudgetCents: 9000n, actorUserId: "u3", actorEmail: "max@example.com", policyVersion: "p1", source: "budget_change", agreementId: "a1", current: true },
+        ],
+      });
+    });
+    fireEvent.change(screen.getByLabelText(/New monthly budget/), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
+    await waitFor(() => expect(mocks.client.setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ expectedCurrentVersion: 1n })));
+  });
+
+  it("offers no change until the history has loaded, so a save always carries its version", async () => {
+    let resolve!: (v: unknown) => void;
+    (mocks.client.listUsageBillingBudgetVersions as ReturnType<typeof vi.fn>).mockReturnValue(new Promise((r) => { resolve = r; }));
+    mount();
+    const change = screen.getByTestId("hosting-budget-change");
+    expect(change).toBeDisabled();
+    fireEvent.click(change);
+    expect(screen.queryByLabelText(/New monthly budget/)).not.toBeInTheDocument();
+    await act(async () => resolve({ versions }));
+    await waitFor(() => expect(screen.getByTestId("hosting-budget-change")).toBeEnabled());
+    expect(mocks.client.setUsageBillingBudget).not.toHaveBeenCalled();
   });
 
   it("is read-only, without a change button, before the server serves budget versions", async () => {

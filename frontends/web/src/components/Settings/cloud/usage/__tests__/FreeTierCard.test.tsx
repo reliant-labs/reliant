@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
@@ -112,6 +112,33 @@ describe("FreeTierView", () => {
     expect(await screen.findByTestId("free-tier-moved")).toHaveTextContent("Moved.");
     expect(onMove).toHaveBeenLastCalledWith(false);
     expect(onMove).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts the move over when the org changes during confirmation: A's preview never confirms a move to B", async () => {
+    const moveA = vi.fn(async () => preview({ cooldownApplies: false }));
+    const moveB = vi.fn(async () => preview({ toOrgId: "org-b", cooldownApplies: false }));
+    const { rerender } = render(<FreeTierView orgId="org-a" orgName="Acme" status={notHere} onMove={moveA} />);
+    fireEvent.click(screen.getByTestId("free-tier-move"));
+    await screen.findByTestId("free-tier-move-confirm");
+
+    rerender(<FreeTierView orgId="org-b" orgName="Beta" status={notHere} onMove={moveB} />);
+    expect(screen.queryByTestId("free-tier-move-confirm")).not.toBeInTheDocument();
+    expect(screen.getByTestId("free-tier-move")).toBeInTheDocument();
+    expect(moveB).not.toHaveBeenCalled();
+    expect(moveA).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it("drops a preview still in flight when the org changes", async () => {
+    let resolveA!: (r: MoveFreeHostingDesignationResponse) => void;
+    const moveA = vi.fn(() => new Promise<MoveFreeHostingDesignationResponse>((r) => { resolveA = r; }));
+    const moveB = vi.fn(async () => preview({ toOrgId: "org-b", cooldownApplies: false }));
+    const { rerender } = render(<FreeTierView orgId="org-a" orgName="Acme" status={notHere} onMove={moveA} />);
+    fireEvent.click(screen.getByTestId("free-tier-move"));
+    rerender(<FreeTierView orgId="org-b" orgName="Beta" status={notHere} onMove={moveB} />);
+    await act(async () => resolveA(preview({ cooldownApplies: false })));
+    expect(screen.queryByTestId("free-tier-move-confirm")).not.toBeInTheDocument();
+    expect(screen.getByTestId("free-tier-move")).toBeInTheDocument();
+    expect(moveB).not.toHaveBeenCalled();
   });
 
   it("blocks the move on cooldown_applies, and cancel sends nothing", async () => {

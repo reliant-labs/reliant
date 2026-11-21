@@ -43,6 +43,7 @@ export function FreeTierCard({ orgId, orgName }: FreeTierCardProps) {
   const move = useMoveFreeHostingDesignation(orgId);
   return (
     <FreeTierView
+      orgId={orgId}
       orgName={orgName}
       status={status.data}
       loading={status.isLoading}
@@ -54,6 +55,12 @@ export function FreeTierCard({ orgId, orgName }: FreeTierCardProps) {
 }
 
 export interface FreeTierViewProps {
+  /**
+   * The org the card is for. A move's preview and confirmation belong to one
+   * org: switching orgs starts the move over, so a preview fetched for one org
+   * can never confirm a move to another.
+   */
+  orgId?: string;
   orgName: string;
   status?: FreeHostingStatus;
   loading?: boolean;
@@ -65,7 +72,7 @@ export interface FreeTierViewProps {
 
 const heading = <h3 className="text-section text-foreground">Free static hosting</h3>;
 
-export function FreeTierView({ orgName, status, loading, error, onRetry, onMove }: FreeTierViewProps) {
+export function FreeTierView({ orgId, orgName, status, loading, error, onRetry, onMove }: FreeTierViewProps) {
   if (loading) {
     return (
       <section className="space-y-3" data-testid="free-tier-card">
@@ -110,7 +117,7 @@ export function FreeTierView({ orgName, status, loading, error, onRetry, onMove 
       {status.isDesignated ? (
         <DesignatedAllowance status={status} />
       ) : status.callerIsFounder ? (
-        <MoveAllowance orgName={orgName} status={status} onMove={onMove} />
+        <MoveAllowance key={orgId} orgName={orgName} status={status} onMove={onMove} />
       ) : (
         <p className="text-ui text-muted-foreground">
           This organization doesn&apos;t have a free hosting allowance. Hosting here needs billing.
