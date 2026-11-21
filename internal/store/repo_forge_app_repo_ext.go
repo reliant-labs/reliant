@@ -116,6 +116,27 @@ ORDER BY a.repo_id, a.subpath`, projectID).Scan(ctx, &rows); err != nil {
 	return out, nil
 }
 
+// ListReposHoldingForgeApp returns the repos, of the given projects, in which
+// a daemon recorded a forge app named name (at any subpath), ordered by
+// project and relative path. No project ids is no repos.
+func ListReposHoldingForgeApp(ctx context.Context, db orm.Context, name string, projectIDs []string) ([]*core.Repo, error) {
+	if len(projectIDs) == 0 {
+		return nil, nil
+	}
+	var rows []*Repo
+	if err := db.Bun().NewRaw(`SELECT `+columnsOf[Repo]("r")+` FROM repos r
+WHERE r.project_id = ANY(?1)
+  AND EXISTS (SELECT 1 FROM repo_forge_apps a WHERE a.repo_id = r.id AND a.forge_name = ?0)
+ORDER BY r.project_id, r.relative_path`, name, orm.Arg(projectIDs)).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list repos holding forge app: %w", err)
+	}
+	out := make([]*core.Repo, len(rows))
+	for i, row := range rows {
+		out[i] = repoToCore(row)
+	}
+	return out, nil
+}
+
 // RepoForgeAppExtra carries fields on RepoForgeApp that are NOT columns — computed
 // values, transient state, anything derived rather than stored. RepoForgeApp is
 // embedded on RepoForgeAppExtra (see repo_forge_app_orm.go), so a field added here is a field on

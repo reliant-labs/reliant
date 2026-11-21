@@ -152,6 +152,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ConnectorService/RevokeClientAuthorization"?: (req: import("@/gen/reliant/v1/connector_pb").RevokeClientAuthorizationRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/connector_pb").RevokeClientAuthorizationResponseSchema>>;
   }
 
+  // forge:section reliant.v1.CoverageSourceService
+  // forge:hash=47ce5d5e28efb8fba7f5e7168f4d891757fe860dee0842f4008c30388296a029
+  & {
+    "reliant.v1.CoverageSourceService/GetCoverageSource"?: (req: import("@/gen/reliant/v1/coverage_source_pb").GetCoverageSourceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/coverage_source_pb").GetCoverageSourceResponseSchema>>;
+  }
+
   // forge:section reliant.v1.DaemonService
   // forge:hash=6d40ba5d85af62e41f2a57ecd61038a5f458069facc01d1554b08e54e4f82328
   & {

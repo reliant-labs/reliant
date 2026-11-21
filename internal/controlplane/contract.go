@@ -204,6 +204,15 @@ type Service interface {
 	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
 	// control-plane's code (unavailable: no catalog could be read).
 	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
+
+	// HasCoverageBlob asks whether a retained coverage report of the forge
+	// project names the git blob (TestsService.HasCoverageBlob), as the
+	// caller: token is their own bearer, so control-plane's tests:read and
+	// org checks are theirs. orgID "" is their default org. Errors:
+	// ErrCoverageBlobUnsupported when the control plane does not answer it;
+	// otherwise a *connect.Error carrying control-plane's code
+	// (PermissionDenied: no tests:read; NotFound: not a project of the org).
+	HasCoverageBlob(ctx context.Context, token, orgID, project, blobID string) (CoverageBlob, error)
 }
 
 // Deps configures the adapter.
