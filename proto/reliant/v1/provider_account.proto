@@ -44,7 +44,9 @@ service ProviderAccountService {
   // ReorderProviderAccounts sets the priority order of one provider's
   // accounts. account_ids must be exactly that provider's accounts.
   rpc ReorderProviderAccounts(ReorderProviderAccountsRequest) returns (ReorderProviderAccountsResponse) {
-    option (forge.v1.method) = {activity: {none: "routing preference: the priority order among one provider's accounts, which the Providers list shows directly"}};
+    option (forge.v1.method) = {
+      activity: {none: "routing preference: the priority order among one provider's accounts, which the Providers list shows directly"}
+    };
   }
   // DeleteProviderAccount removes an account and its stored credential.
   // forge:custom — also revokes the sealed credential and reassigns threads pinned to it
@@ -78,7 +80,9 @@ service ProviderAccountService {
   // provider. The server throttles it: a refresh inside the throttle window
   // returns the stored state with throttled = true.
   rpc RefreshProviderAccountUsage(RefreshProviderAccountUsageRequest) returns (RefreshProviderAccountUsageResponse) {
-    option (forge.v1.method) = {activity: {none: "re-reads usage from the provider (throttled); changes only the cached usage windows"}};
+    option (forge.v1.method) = {
+      activity: {none: "re-reads usage from the provider (throttled); changes only the cached usage windows"}
+    };
   }
   // GetChatProviderAccount returns the account the chat's root thread is
   // currently using for its provider; unset when none is assigned yet. An
@@ -93,7 +97,9 @@ service ProviderAccountService {
   // The chat's owner only.
   // forge:custom
   rpc GetPersonalFundingQuestion(GetPersonalFundingQuestionRequest) returns (GetPersonalFundingQuestionResponse) {
-    option (forge.v1.method) = {activity: {none: "reads the chat's own pending question"}};
+    option (forge.v1.method) = {
+      activity: {none: "reads the chat's own pending question"}
+    };
   }
 
   // ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
@@ -106,7 +112,9 @@ service ProviderAccountService {
   // the chat's owner only: nothing else can spend the person's own account in
   // place of the org's.
   rpc ResolvePersonalFundingChoice(ResolvePersonalFundingChoiceRequest) returns (ResolvePersonalFundingChoiceResponse) {
-    option (forge.v1.method) = {activity: {none: "answers the chat's own question; the chat's transcript notice records the move"}};
+    option (forge.v1.method) = {
+      activity: {none: "answers the chat's own question; the chat's transcript notice records the move"}
+    };
   }
 }
 

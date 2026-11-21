@@ -27,33 +27,34 @@ var wantCallerResolvers = []string{
 	"github.com/reliant-labs/reliant/internal/daemoncmd.UserID",
 }
 
-// The authenticated rpcs the audit may still report as never resolving the
-// caller: each is a stub that answers CodeUnimplemented and touches no data.
-// They are deliberately not marked forge:auth-unscoped-ok, because a marker
-// on a stub would stay when someone implements the rpc and hide a real gap.
-// Implementing one takes it off this list (the audit then sees it resolve
-// its caller, or reports it, and this test fails until it does).
-var allowedUnscopedRPCs = map[string]bool{
-	"PlanService/ListPlansByProject":              true,
-	"SettingsService/DeleteGlobalSkill":           true,
-	"SettingsService/GetInstalledSkillDefinition": true,
-	"SettingsService/InstallSkill":                true,
-	"SettingsService/ListInstalledSkills":         true,
-	"SettingsService/ListRecommendedSkills":       true,
-	"SettingsService/SetSkillEnabled":             true,
-	"SettingsService/TrackOnboardingEvent":        true,
-	"TaskService/AddTaskDependency":               true,
-	"TaskService/ListReadyTasks":                  true,
-	"TaskService/RemoveTaskDependency":            true,
-	"ToolsDaemonService/ConnectGateway":           true,
-	"ToolsDaemonService/ReportToolResult":         true,
+// The authenticated rpcs whose handlers are stubs: each answers
+// CodeUnimplemented and touches no data, so the audit lists it under
+// unimplemented_rpcs instead of judging it (forge #2431). They are
+// deliberately not marked forge:auth-unscoped-ok, because a marker on a stub
+// would stay when someone implements the rpc and hide a real gap.
+// Implementing one takes it off the audit's stub list, so this test fails
+// until it is taken off this one too, and from then on the audit judges it.
+var stubRPCs = []string{
+	"PlanService/ListPlansByProject",
+	"SettingsService/DeleteGlobalSkill",
+	"SettingsService/GetInstalledSkillDefinition",
+	"SettingsService/InstallSkill",
+	"SettingsService/ListInstalledSkills",
+	"SettingsService/ListRecommendedSkills",
+	"SettingsService/SetSkillEnabled",
+	"SettingsService/TrackOnboardingEvent",
+	"TaskService/AddTaskDependency",
+	"TaskService/ListReadyTasks",
+	"TaskService/RemoveTaskDependency",
+	"ToolsDaemonService/ConnectGateway",
+	"ToolsDaemonService/ReportToolResult",
 }
 
 // The pinned forge's audit, run over this repository, recognizes exactly the
-// declared caller resolvers, clears every authenticated rpc that calls one,
-// and still reports the handlers that resolve no caller. Removing a marker
-// drops its resolver from the set and unscopes every handler that reads the
-// caller only through it, so this fails.
+// declared caller resolvers and clears every implemented authenticated rpc
+// that calls one. Removing a marker drops its resolver from the set and
+// unscopes every handler that reads the caller only through it, so this
+// fails.
 func TestUnscopedAuthAuditRecognisesTheCallerResolvers(t *testing.T) {
 	forge := Pinned(t) // forge's audit is a subprocess over the whole module: slow.
 	t.Setenv("FORGE_LEDGER", "machine")
@@ -71,14 +72,12 @@ func TestUnscopedAuthAuditRecognisesTheCallerResolvers(t *testing.T) {
 		Categories struct {
 			UnscopedAuth struct {
 				Details struct {
-					CallerResolverMarker string   `json:"caller_resolver_marker"`
-					CallerResolvers      []string `json:"caller_resolvers"`
-					AuthenticatedRPCs    int      `json:"authenticated_rpcs"`
-					ScopedRPCs           int      `json:"scoped_rpcs"`
-					UnscopedRPCs         []struct {
-						Service string `json:"service"`
-						Method  string `json:"method"`
-					} `json:"unscoped_rpcs"`
+					CallerResolverMarker string     `json:"caller_resolver_marker"`
+					CallerResolvers      []string   `json:"caller_resolvers"`
+					AuthenticatedRPCs    int        `json:"authenticated_rpcs"`
+					ScopedRPCs           int        `json:"scoped_rpcs"`
+					UnscopedRPCs         []auditRPC `json:"unscoped_rpcs"`
+					UnimplementedRPCs    []auditRPC `json:"unimplemented_rpcs"`
 				} `json:"details"`
 			} `json:"unscoped_auth"`
 		} `json:"categories"`
@@ -91,18 +90,26 @@ func TestUnscopedAuthAuditRecognisesTheCallerResolvers(t *testing.T) {
 		"the audit's caller resolvers are the //forge:resolves-caller declarations")
 
 	require.Positive(t, got.AuthenticatedRPCs)
-	var unscoped []string
 	for _, rpc := range got.UnscopedRPCs {
-		name := fmt.Sprintf("%s/%s", rpc.Service, rpc.Method)
-		unscoped = append(unscoped, name)
-		assert.True(t, allowedUnscopedRPCs[name],
-			"%s resolves no caller: scope it with one of the caller resolvers, or say why it is global with // forge:auth-unscoped-ok: <reason>", name)
+		assert.Fail(t, "an implemented authenticated rpc resolves no caller",
+			"%s: scope it with one of the caller resolvers, or say why it is global with // forge:auth-unscoped-ok: <reason>", rpc)
 	}
-	// A handler that never resolves its caller is still reported: the
-	// markers clear callers, they do not switch the audit off. (When the
-	// last stub is implemented, this witness goes with it.)
-	assert.NotEmpty(t, unscoped, "the audit reports no unscoped rpc at all; the stubs above should be")
-	assert.LessOrEqual(t, len(unscoped), len(allowedUnscopedRPCs))
-	assert.GreaterOrEqual(t, got.ScopedRPCs, got.AuthenticatedRPCs-len(allowedUnscopedRPCs)-4, // the four acknowledged CatalogService rpcs
+	var stubs []string
+	for _, rpc := range got.UnimplementedRPCs {
+		stubs = append(stubs, rpc.String())
+	}
+	assert.ElementsMatch(t, stubRPCs, stubs,
+		"the stubs the audit does not judge are exactly the known ones")
+	// The audit still judges everything else: without the resolvers it
+	// would count none of these as scoped.
+	assert.GreaterOrEqual(t, got.ScopedRPCs, got.AuthenticatedRPCs-len(stubRPCs)-4, // the four acknowledged CatalogService rpcs
 		"every authenticated rpc but the stubs and the acknowledged global ones resolves its caller")
 }
+
+// auditRPC is one rpc in the audit's unscoped_auth details.
+type auditRPC struct {
+	Service string `json:"service"`
+	Method  string `json:"method"`
+}
+
+func (r auditRPC) String() string { return fmt.Sprintf("%s/%s", r.Service, r.Method) }

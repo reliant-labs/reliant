@@ -71,14 +71,18 @@ service SharingService {
   // viewer_access, and leaves out what is the owner's alone (see
   // Chat.viewer_access).
   rpc ListSharedChats(ListSharedChatsRequest) returns (ListSharedChatsResponse) {
-    option (forge.v1.method) = {activity: {none: "reads only: lists what others shared"}};
+    option (forge.v1.method) = {
+      activity: {none: "reads only: lists what others shared"}
+    };
   }
 
   // ListSharedProjects lists the projects other members shared with an
   // organization the caller is a live member of, most recently active first,
   // each with viewer_access set and without path.
   rpc ListSharedProjects(ListSharedProjectsRequest) returns (ListSharedProjectsResponse) {
-    option (forge.v1.method) = {activity: {none: "reads only: lists what others shared"}};
+    option (forge.v1.method) = {
+      activity: {none: "reads only: lists what others shared"}
+    };
   }
 }
 
@@ -145,7 +149,9 @@ message ListSharedChatsRequest {
   // otherwise).
   repeated string project_ids = 6 [(buf.validate.field).repeated = {
     max_items: 200
-    items: {string: {min_len: 1}}
+    items: {
+      string: {min_len: 1}
+    }
   }];
 }
 
