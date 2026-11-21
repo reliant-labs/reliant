@@ -13,6 +13,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
+import { stagingDatabaseFixtures } from './fixtures/data'
 import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
@@ -327,6 +328,22 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront/observability/errors',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('idempotency key reused', { exact: false }).first(),
+  },
+  {
+    // Data is the database's home: the deploy verdict, "Coming soon" for live status, backups and
+    // metrics, then the tables. Staging: prod opens the audited-read dialog first.
+    name: 'shell-data',
+    path: '/forge/p/shopfront/data?env=staging',
+    on: ['desktop'],
+    ready: (page) => page.getByText('customers', { exact: true }).first(),
+    harness: { fixtures: stagingDatabaseFixtures },
+  },
+  {
+    // Storage is buckets only: the scoped environment's buckets.
+    name: 'shell-storage',
+    path: '/forge/p/shopfront/storage',
+    on: ['desktop'],
+    ready: (page) => page.getByText('uploads', { exact: true }).first(),
   },
   {
     // The forge host's shell (lib/shell.ts reads this key before the router is built).

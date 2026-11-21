@@ -13,6 +13,7 @@
  */
 import type { Fixtures } from '../rpc'
 import { DAY, HOUR, iso } from './base'
+import { consoleFixtures } from './console'
 
 const DATABASES: Record<string, string[]> = { 'env-shop-prod': ['db'], 'env-shop-staging': ['db'] }
 
@@ -89,4 +90,19 @@ export const dataFixtures: Fixtures = {
   }),
   'controlplane.v1.AppDatabaseService/DescribeDatabase': (req) => ({ database: String(req.database ?? 'db'), tables: TABLES, durationMs: '11', auditId: '' }),
   'controlplane.v1.AppDatabaseService/BrowseTable': browseTable,
+}
+
+/**
+ * Staging with its managed Postgres declared, for the surface that shows the
+ * database's home (prod opens the audited-read dialog first). Only that page
+ * asks for it: the shared console fixture's staging stays as it is.
+ */
+export const stagingDatabaseFixtures: Fixtures = {
+  'controlplane.v1.DeployService/GetStatus': (req) => {
+    const base = (consoleFixtures['controlplane.v1.DeployService/GetStatus'] as (r: Record<string, unknown>) => Record<string, unknown>)
+    const status = base(req)
+    if (req.environmentId !== 'env-shop-staging') return status
+    const prodDb = (base({ environmentId: 'env-shop-prod' }).deployments as { deployment: { name: string } }[]).find((d) => d.deployment.name === 'db')
+    return { ...status, deployments: [...(status.deployments as unknown[]), prodDb] }
+  },
 }
