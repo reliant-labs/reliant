@@ -146,7 +146,7 @@ function Headline({ summary, hrefs, now }: { summary: TestSummary; hrefs: TestsO
             <>
               <p>
                 {coverage.delta !== null && (
-                  <span className={cn("mr-1 font-medium", coverage.delta < 0 ? "text-danger" : "text-ink")} data-testid="tests-coverage-delta">
+                  <span className={cn("mr-1 font-medium", coverage.delta < 0 ? "text-danger-ink" : "text-ink")} data-testid="tests-coverage-delta">
                     {formatDelta(coverage.delta)}
                   </span>
                 )}
