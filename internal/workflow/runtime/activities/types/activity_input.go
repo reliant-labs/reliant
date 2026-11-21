@@ -4,6 +4,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -69,7 +70,59 @@ func (a *ActivityInput) UnmarshalJSON(data []byte) error {
 		if err := unmarshaler.Unmarshal(raw.Node, a.Node); err != nil {
 			return err
 		}
+		refused, err := legacyRefusedToolCalls(raw.Node)
+		if err != nil {
+			return err
+		}
+		for id, reason := range refused {
+			if a.Runtime.ActivationRefusals == nil {
+				a.Runtime.ActivationRefusals = make(map[string]string, len(refused))
+			}
+			if _, ok := a.Runtime.ActivationRefusals[id]; !ok {
+				a.Runtime.ActivationRefusals[id] = reason
+			}
+		}
 	}
 
 	return nil
+}
+
+// legacyRefusedToolCalls reads ExecuteToolsArgs.refused_tool_calls (field 7,
+// now reserved) from an ExecuteTools activity an earlier release scheduled:
+// the calls a person denied at the removed integration action approval
+// prompt. protojson discards the field as unknown, and the activity would then
+// run a call the person refused, so it is read here and enforced as an
+// activation refusal. A payload it cannot read fails the decode rather than
+// dropping a denial. Delete it once no ExecuteTools activity scheduled by a
+// release that still had the field can be pending.
+func legacyRefusedToolCalls(node json.RawMessage) (map[string]string, error) {
+	type args struct {
+		Proto map[string]string `json:"refused_tool_calls"`
+		JSON  map[string]string `json:"refusedToolCalls"`
+	}
+	if !bytes.Contains(node, []byte("refused_tool_calls")) && !bytes.Contains(node, []byte("refusedToolCalls")) {
+		return nil, nil // every payload this release writes: no second parse
+	}
+	var legacy struct {
+		Proto *args `json:"execute_tools"`
+		JSON  *args `json:"executeTools"`
+	}
+	if err := json.Unmarshal(node, &legacy); err != nil {
+		return nil, err
+	}
+	var refused map[string]string
+	for _, a := range []*args{legacy.Proto, legacy.JSON} {
+		if a == nil {
+			continue
+		}
+		for _, m := range []map[string]string{a.Proto, a.JSON} {
+			for id, reason := range m {
+				if refused == nil {
+					refused = map[string]string{}
+				}
+				refused[id] = reason
+			}
+		}
+	}
+	return refused, nil
 }
