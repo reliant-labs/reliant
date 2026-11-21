@@ -29,6 +29,23 @@ const (
 	redriveInterval = time.Minute
 )
 
+// capacityExpiredDetail is the outcome_detail of an event that expired
+// before it launched: an undelivered event and one queued for workflow
+// capacity alike.
+const capacityExpiredDetail = "the event was never launched; it is too old to start now"
+
+// capacityExpiredBefore is the expiry cutoff at now: an event recorded
+// before it has waited redriveGiveUp and must never launch.
+func capacityExpiredBefore(now time.Time) time.Time {
+	return now.Add(-redriveGiveUp)
+}
+
+// capacityExpiry settles expired capacity events independently of the
+// priority-ranked heads ListStalePendingTriggerEvents returns.
+type capacityExpiry interface {
+	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error)
+}
+
 // Redriver restarts the fires of inbound events left pending: the receiver
 // wrote the row and crashed before the start, Temporal refused the start,
 // or the fire exhausted its retries on a transient failure.
@@ -74,6 +91,14 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 			}
 		}
 	}
+	// Expire waiting capacity events before listing the heads. The listing
+	// returns one head per scope in admission order, so a low-priority event
+	// behind a stream of higher ones would never reach the expiry check below.
+	if expiry, ok := r.repo.(capacityExpiry); ok {
+		if _, err := expiry.ExpirePendingTriggerCapacityEvents(ctx, capacityExpiredBefore(now), capacityExpiredDetail, redriveBatch); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
@@ -90,9 +115,9 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		// a queue that never drains must surface as failed events, not grow forever.
 		// A launched capacity start still awaiting its binding is not waiting: it
 		// keeps being redriven so its slot is bound or recovered.
-		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
+		if ev.CreatedAt.Before(capacityExpiredBefore(now)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
-				"the event was never launched; it is too old to start now", nil); err != nil {
+				capacityExpiredDetail, nil); err != nil {
 				errs = append(errs, err)
 			}
 			continue

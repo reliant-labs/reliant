@@ -787,9 +787,10 @@ func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 		{"frontends/web/package.json", "web", "/repo/frontends/web", pnpmLock},
 		{"frontends/web/pnpm-lock.yaml", "web", "/repo/frontends/web", pnpmLock},
 		{"frontends/web/pnpm-workspace.yaml", "web", "/repo/frontends/web", pnpmLock},
-		{"electron/package-lock.json", "electron", "/repo/electron", npmLock},
-		{"package-lock.json", "electron", "/repo", npmLock},
-		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es", npmLock},
+		{"electron/pnpm-lock.yaml", "electron", "/repo/electron", pnpmLock},
+		{"electron/pnpm-workspace.yaml", "electron", "/repo/electron", pnpmLock},
+		{"pnpm-lock.yaml", "electron", "/repo", pnpmLock},
+		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es", pnpmLock},
 	} {
 		steps := r.steps(classify(tc.path), laneSet(tc.lanes))
 		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv(tc.lock), " ") || steps[0].dir != tc.dir {
@@ -850,12 +851,12 @@ func TestNPMProjectsNameEveryLockfile(t *testing.T) {
 // A FULL lane is a whole-module run and queues for a host heavy slot; a scoped
 // run is the inner loop and never does.
 func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
-	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
+	r := &runner{root: "/repo", slot: []string{"forge", "machine", "slot", "run", "--class", "heavy", "--"}}
 	for _, s := range r.steps(classify("go.mod", "frontends/web/package.json"), laneSet("go,web")) {
 		if strings.HasPrefix(s.name, "npm lockfile") {
 			continue // a ~10s check, not a lane
 		}
-		if joined := strings.Join(s.argv, " "); !strings.HasPrefix(joined, "forge slot run --class heavy -- ") {
+		if joined := strings.Join(s.argv, " "); !strings.HasPrefix(joined, "forge machine slot run --class heavy -- ") {
 			t.Errorf("full step %q runs outside a heavy slot: %s", s.name, joined)
 		}
 	}
@@ -881,13 +882,13 @@ func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
 
 func TestRunnerRunsTheDocsCheckAfterForgeAndBeforeTests(t *testing.T) {
 	pl := classify("internal/vault/contract.go", "internal/leaf/leaf.go")
-	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
+	r := &runner{root: "/repo", slot: []string{"forge", "machine", "slot", "run", "--class", "heavy", "--"}}
 	var got []string
 	for _, s := range r.steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")) {
 		got = append(got, strings.Join(s.argv, " "))
 	}
 	if len(got) < 3 || got[0] != "task generate:check" ||
-		got[1] != "forge slot run --class heavy -- task generate:docs:check" {
+		got[1] != "forge machine slot run --class heavy -- task generate:docs:check" {
 		t.Fatalf("the docs check runs second (after forge, before the tests), in a heavy slot: %v", got)
 	}
 	for _, s := range r.steps(pl, laneSet("go,forge-generate")) {

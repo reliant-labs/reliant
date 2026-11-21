@@ -25,6 +25,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
+	"github.com/reliant-labs/forge/pkg/hostslot"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
@@ -42,6 +44,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinehealth"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
 	"github.com/reliant-labs/reliant/internal/procguard"
@@ -167,6 +170,11 @@ type daemonClient struct {
 	// (internal/forkwatch; reliant#1919). Its verdict rides on the
 	// heartbeat's health.
 	forkWatch *forkwatch.Watchdog
+	// hostStats reads the host's load and memory for every heartbeat
+	// (DaemonHeartbeat.machine_stats), which the gateway logs for the
+	// self-hosted machines it watches (internal/machinehealth). Nil-safe: a
+	// nil reader, or a host without /proc, leaves the field unset.
+	hostStats *machinehealth.HostStats
 	// forkHeal carries out the watchdog's self-heal: it stops the largest
 	// background command after five minutes degraded, and a managed daemon
 	// exits if that did not help (fork_heal.go).
@@ -204,6 +212,10 @@ type daemonClient struct {
 	// (session_liveness.go). Zero in production, meaning the defaults; tests
 	// shorten it.
 	timing sessionTiming
+
+	// upgrade is the drain protocol's state: a restart the platform asked
+	// for (upgrade_drain.go).
+	upgrade upgradeDrain
 }
 
 // currentDaemonID is the daemon's id as the gateway last assigned it.
@@ -271,6 +283,14 @@ type StartOptions struct {
 	// OAuthHelperOrigins are the configured web origins the on-demand OAuth
 	// helper accepts beyond its defaults (oauthhelper.WebOrigins).
 	OAuthHelperOrigins []string
+	// DataDirClaim is a claim on BootstrapConfig.DataDir the caller already
+	// holds (`daemon start` takes it before it resolves credentials). Start
+	// runs under it instead of acquiring its own, so the directory is never
+	// unclaimed between the two: a competing start is refused at its first
+	// check, not after it has logged in or registered. The caller keeps it
+	// and releases it after Start returns, so a retry runs under the same
+	// claim. Nil: Start acquires and releases its own.
+	DataDirClaim *daemonstate.Lock
 }
 
 // Guards is the daemon's policy for heavy commands (internal/heavyjob), a
@@ -332,18 +352,20 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// incumbent on every registration, so the pair evict each other until one
 	// is killed. Refusing to be the second one is the only place that costs
 	// nothing.
-	lock, err := daemonstate.Acquire(opts.BootstrapConfig.DataDir)
-	if err != nil {
-		if errors.Is(err, daemonstate.ErrLocked) {
-			return fmt.Errorf("%s: %w", describeIncumbentDaemon(opts.BootstrapConfig.DataDir), err)
+	if opts.DataDirClaim == nil {
+		lock, err := daemonstate.Acquire(opts.BootstrapConfig.DataDir)
+		if err != nil {
+			if errors.Is(err, daemonstate.ErrLocked) {
+				return fmt.Errorf("%s: %w", describeIncumbentDaemon(opts.BootstrapConfig.DataDir), err)
+			}
+			return err
 		}
-		return err
+		defer func() {
+			if releaseErr := lock.Release(); releaseErr != nil {
+				logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+			}
+		}()
 	}
-	defer func() {
-		if releaseErr := lock.Release(); releaseErr != nil {
-			logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
-		}
-	}()
 
 	// Credentialed scratch directories moved aside more than a day ago have
 	// been kept for inspection long enough (#2823). In the background: there
@@ -381,6 +403,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And when its process table stays full even after the self-heal stopped
 	// its largest command (fork_heal.go).
 	client.forkHeal.arm(client.cancelAllRequests, stopRuntime)
+	// And when it drained for a restart the platform asked for, and the
+	// platform did not restart it (upgrade_drain.go).
+	client.armUpgrade(stopRuntime, opts.BootstrapConfig.DataDir, os.Exit)
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
@@ -404,6 +429,15 @@ func Start(ctx context.Context, opts StartOptions) error {
 		logging.WarnContext(ctx, logPrefix+" Failed to write daemon runtime state", "error", stateErr)
 	}
 	defer func() {
+		// An upgrade exit leaves the record, marked, so a supervisor that
+		// polls it (Electron) reads "exited to update", not a daemon that
+		// vanished.
+		if client.upgrade.exitRequested() {
+			if markErr := daemonstate.MarkUpgradeExit(opts.BootstrapConfig.DataDir, ErrUpgradeExit.Error()); markErr != nil {
+				logging.WarnContext(ctx, logPrefix+" Failed to record the upgrade exit in the daemon runtime state", "error", markErr)
+			}
+			return
+		}
 		if clearErr := daemonstate.Clear(opts.BootstrapConfig.DataDir); clearErr != nil {
 			logging.WarnContext(ctx, logPrefix+" Failed to clear daemon runtime state", "error", clearErr)
 		}
@@ -422,7 +456,8 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
 	// Every linked worktree on the machine, on the same schedule: captured,
-	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
+	// then reclaimed, or only reported in dry-run (worktree_sweep.go). Mode
+	// on runs it even where the storage reaper is off.
 	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
 	client.reclaimMode = opts.WorktreeReclaim.Mode
 	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
@@ -440,8 +475,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	go client.forkWatch.Run(ctx)
 	// A managed machine logs a load/pressure/disk/heavy-slot sample a minute,
 	// which control-plane's machine-health dashboard and alerts read from
-	// tenant zero's logs (internal/machinehealth). A person's own machine
-	// ships no logs to us, so it does not sample.
+	// tenant zero's logs (internal/machinehealth). A self-hosted machine
+	// ships no logs to us, so it does not sample: its load and memory ride
+	// on every heartbeat instead (hostStats), and the gateway logs them for
+	// the machines it watches.
 	if opts.Host.Managed() {
 		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
 	}
@@ -514,6 +551,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		if full := client.forkHeal.gaveUp(); full != nil {
 			return full
 		}
+		if client.upgrade.exitRequested() {
+			return ErrUpgradeExit
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("tools daemon server stopped: %w", err)
 		}
@@ -532,6 +572,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	if full := client.forkHeal.gaveUp(); full != nil {
 		return full
+	}
+	if client.upgrade.exitRequested() {
+		return ErrUpgradeExit
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("tools daemon runtime stopped: %w", err)
@@ -578,6 +621,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
 	runtimeType := strings.TrimSpace(host.RuntimeType)
 
+	// The daemon runs in the user's environment, so the ${VAR} references in
+	// their MCP configs resolve from it (mcp/expand.go). Explicit, because a
+	// manager resolves nothing by default.
+	mcpOpts = append([]mcp.ManagerOption{mcp.WithEnvLookup(os.LookupEnv)}, mcpOpts...) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
 	mcpManager := mcp.NewManager(mcp.RoleDaemon, mcpOpts...)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
@@ -591,7 +638,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// would describe the wrong machine entirely.
 	toolsFactory := newDaemonToolsFactory(host)
 
+	// Registration lists the tools this machine runs, then the command
+	// features a server must not assume of an older daemon (daemonFeatures).
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
+	caps = append(caps, daemonFeatures...)
 	sort.Strings(caps)
 
 	// The disk guard acts on a filling disk: past its reclaim threshold it
@@ -748,6 +798,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		procGuard:         procGuard,
 		forkWatch:         forkWatch,
 		forkHeal:          forkHeal,
+		hostStats:         machinehealth.NewHostStats("", hostslot.DetectMachine().CPUs),
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -1292,6 +1343,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// and holds tool results until they are acknowledged
 			// (gateway_session.go).
 			MovesOnDrain: true,
+			// This daemon acts on RestartRequested: it reports its upgrade
+			// state on the heartbeat and drains (upgrade_drain.go).
+			DrainsOnRestartRequest: true,
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())
@@ -1426,6 +1480,12 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
+			return nil
+		}
+		// Draining for a restart: refused unrun, before it is recorded, so
+		// the same request id runs normally once the daemon is back.
+		if d.upgrade.refusing() {
+			d.refuseForUpgrade(s, m.ToolRequest)
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
@@ -1645,6 +1705,12 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 
 	case *reliantv1.ServerMessage_LocalModelRefresh:
 		d.handleLocalModelRefresh()
+		return nil
+
+	case *reliantv1.ServerMessage_RestartRequested:
+		if m.RestartRequested != nil {
+			d.handleRestartRequested(ctx, m.RestartRequested)
+		}
 		return nil
 
 	default:
@@ -1985,9 +2051,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
+		// Where a restart the platform asked for stands (nil while none is).
+		hb.Upgrade = d.upgrade.heartbeatStatus(int(hb.ToolCallsInFlight))
 		// Whether this machine can start processes (nil before the first
 		// probe, which the gateway reads as healthy).
 		hb.Health = d.forkWatch.Health()
+		// The host's load and memory (nil where /proc cannot be read).
+		hb.MachineStats = d.hostStats.Read(now)
 		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
@@ -1995,6 +2065,17 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		}
 		liveness.heartbeatSent(hb.Timestamp, time.Now())
 		return nil
+	}
+
+	// A stream that registers while a restart is in progress (a reconnect
+	// mid-drain) says so at once, not a heartbeat interval later: until it
+	// does, its gateway routes tool calls here.
+	upgradeChanged := d.upgrade.changedCh()
+	if d.upgrade.active() {
+		if err := sendHeartbeat(time.Now()); err != nil {
+			logSendFailure(logPrefix+" Failed to send upgrade-state heartbeat", err)
+			return
+		}
 	}
 
 	for {
@@ -2050,6 +2131,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			// dev-server starts without a heartbeat-interval lag.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logSendFailure(logPrefix+" Failed to send port-change heartbeat", err)
+				return
+			}
+		case <-upgradeChanged:
+			// A requested restart moved on (upgrade_drain.go): the gateway
+			// stops or resumes routing tool calls here on this heartbeat.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send upgrade-state heartbeat", err)
 				return
 			}
 		}

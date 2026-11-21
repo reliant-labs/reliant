@@ -1,6 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 package gitpublish
 
+import (
+	"encoding/json"
+	"slices"
+)
+
 // The daemon commands a publish is made of. Two, so the credential exists for
 // as short a time as it can: preparing a commit needs none, and only the push
 // does.
@@ -11,7 +16,28 @@ const (
 	// CommandPush pushes the commit CommandPrepare made, with a credential that
 	// is used for that one git process and for nothing else.
 	CommandPush = "git.publish"
+
+	// CapabilityForceWithLease is what a daemon that enforces
+	// PushRequest.ForceWithLease lists in DaemonRegister.capabilities. The
+	// server sends a lease-bearing push only to a machine whose registration
+	// lists it: an older daemon would ignore the field and make a plain push,
+	// which could recreate a deleted branch or fast-forward one that moved.
+	CapabilityForceWithLease = "git.publish.force_with_lease"
 )
+
+// HasCapability reports whether a daemon's registered capabilities, as the
+// daemons table stores them (a JSON array of strings), include capability.
+// Absent or unreadable capabilities include nothing.
+func HasCapability(capabilitiesJSON *string, capability string) bool {
+	if capabilitiesJSON == nil {
+		return false
+	}
+	var caps []string
+	if err := json.Unmarshal([]byte(*capabilitiesJSON), &caps); err != nil {
+		return false
+	}
+	return slices.Contains(caps, capability)
+}
 
 // PrepareRequest is the payload of CommandPrepare.
 type PrepareRequest struct {
@@ -67,7 +93,13 @@ type PushRequest struct {
 	// ExpectSHA is the head CommandPrepare returned. The push refuses if the
 	// checkout has moved since, so what is pushed is what was recorded.
 	ExpectSHA string `json:"expect_sha"`
-	Token     string `json:"token"`
+	// ForceWithLease, when set, is the full sha the remote branch must still
+	// be at: the push may then replace the branch, as one compare-and-swap on
+	// the remote, and is refused (LeaseRefused) if the branch is elsewhere.
+	// Empty: the push is never forced. Sent only to a daemon that registered
+	// CapabilityForceWithLease; one older than the field would ignore it.
+	ForceWithLease string `json:"force_with_lease,omitempty"`
+	Token          string `json:"token"`
 }
 
 // PushResponse is the reply of CommandPush.
@@ -80,4 +112,35 @@ type PushResponse struct {
 	// NonFastForward is true when the remote branch holds commits this checkout
 	// does not: the push was refused rather than forced.
 	NonFastForward bool `json:"non_fast_forward,omitempty"`
+	// LeaseChecked is true when the push was made under ForceWithLease: the
+	// daemon understood the lease and git enforced it.
+	LeaseChecked bool `json:"lease_checked,omitempty"`
+	// LeaseRefused is true when the remote branch was not at ForceWithLease:
+	// nothing was pushed. Refusal names both commits.
+	LeaseRefused bool `json:"lease_refused,omitempty"`
+	// RemoteSHA is the remote branch's head, read back after a refused lease.
+	// Empty when the branch does not exist or could not be read.
+	RemoteSHA string `json:"remote_sha,omitempty"`
+}
+
+// ValidLeaseSHA reports whether s can be a force_with_lease value: a full,
+// lowercase sha-1 or sha-256 object name that is not all zeros. An
+// abbreviation is refused because git would resolve it against the checkout,
+// not the remote, and the all-zero name means "the branch must not exist",
+// which a lease on an existing pull request head never means.
+func ValidLeaseSHA(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	zero := true
+	for _, c := range s {
+		switch {
+		case c == '0':
+		case c >= '1' && c <= '9', c >= 'a' && c <= 'f':
+			zero = false
+		default:
+			return false
+		}
+	}
+	return !zero
 }

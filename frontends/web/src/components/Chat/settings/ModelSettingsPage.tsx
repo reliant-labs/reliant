@@ -16,6 +16,7 @@ import { driverDisplayName } from "../../../hooks/catalog-models";
 import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
 import { OnLimitRow } from "./OnLimitRow";
 import { useSurface } from "../../../lib/surfaceContext";
+import { mobileSettingsPath, settingsPath } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -317,8 +318,8 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            if (mobile) void navigate({ to: '/m/settings', search: { section: 'ai' } });
-            else void navigate({ to: '/settings/$section', params: { section: 'ai' } });
+            if (mobile) void navigate({ to: mobileSettingsPath(), search: { section: 'ai' } });
+            else void navigate({ to: settingsPath('ai') });
           }}
           title="Model preferences"
           aria-label="Model preferences"
@@ -431,7 +432,7 @@ export function ModelSettingsPage({
           <div className="p-1 max-h-60 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
-                <div className="px-2.5 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <div className="px-2.5 py-1.5 text-2xs font-semibold text-muted-foreground/70">
                   {provider}
                 </div>
                 {groupedModels[provider].map((model) => {
@@ -484,12 +485,12 @@ export function ModelSettingsPage({
                           </span>
                         )}
                         {model.canReason && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-primary/15 text-primary-ink">
+                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold tracking-tight bg-primary/15 text-primary-ink">
                             reasoning
                           </span>
                         )}
                         {model.capabilities?.includes("fast") && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-sky-400/15 text-sky-400">
+                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold tracking-tight bg-sky-400/15 text-sky-400">
                             fast
                           </span>
                         )}
@@ -533,7 +534,7 @@ export function ModelSettingsPage({
 
       {/* Overrides section */}
       <div className="border-t border-border/50 px-3.5 py-2.5">
-        <div className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
+        <div className="text-2xs font-semibold text-muted-foreground/70 mb-2">
           Overrides
         </div>
 

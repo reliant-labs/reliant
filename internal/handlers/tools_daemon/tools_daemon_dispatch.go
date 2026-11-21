@@ -209,6 +209,9 @@ func (s *Service) SendToolRequest(ctx context.Context, userID, daemonID string, 
 			"requestID", request.RequestID)
 		return fmt.Errorf("daemon %s offline for user %s, request %s could not be delivered: %w", daemonID, userID, request.RequestID, err)
 	}
+	if conn.refusesToolRequests() {
+		return errUpdating(conn, request.RequestID)
+	}
 
 	// Convert context map to JSON
 	contextJSON := ""
@@ -400,6 +403,9 @@ func (s *Service) SendToolRequestSync(ctx context.Context, userID, daemonID stri
 	conn, err := s.connForUser(userID, daemonID)
 	if err != nil {
 		return nil, err
+	}
+	if conn.refusesToolRequests() {
+		return nil, errUpdating(conn, request.RequestID)
 	}
 	return s.sendToolRequestToConn(ctx, conn, request)
 }

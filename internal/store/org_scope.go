@@ -52,12 +52,25 @@ type orgBackfillStep struct {
 // interleave. Saved workflows belong to no project and take the default. Runs
 // come last and take their chat's committed org.
 var orgBackfillSteps = []orgBackfillStep{
+	// A project is unique per (org, user, path) and (org, user, remote_url)
+	// (projects_org_user_path_key, projects_org_user_remote_url_key), and an
+	// unassigned row is keyed apart from every org's. One whose path or
+	// remote the default org already holds is left unassigned rather than
+	// stamped into a collision: it still lists with the default org
+	// (OrgScope.IncludeUnassigned), and a violation would fail the whole
+	// batch. The create-time checks refuse making such a pair, so only a
+	// create that could not resolve an org can leave one.
 	{"projects", `
 WITH batch AS (
-    SELECT id FROM projects
-    WHERE user_id = ?0 AND org_id IS NULL AND id > ?2
-    ORDER BY id LIMIT ?3
-    FOR UPDATE SKIP LOCKED
+    SELECT p.id FROM projects p
+    WHERE p.user_id = ?0 AND p.org_id IS NULL AND p.id > ?2
+      AND NOT EXISTS (
+          SELECT 1 FROM projects o
+          WHERE o.user_id = p.user_id AND o.org_id = ?1
+            AND (o.path = p.path OR o.remote_url = p.remote_url)
+      )
+    ORDER BY p.id LIMIT ?3
+    FOR UPDATE OF p SKIP LOCKED
 ), stamped AS (
     UPDATE projects p SET org_id = ?1
     FROM batch WHERE p.id = batch.id

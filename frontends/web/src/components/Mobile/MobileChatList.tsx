@@ -100,6 +100,7 @@ import { chatListRows } from "../../lib/sidebarChatList";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
 import { archiveWorktree } from "../../hooks/worktree-actions";
+import { mobileChatPath, mobileNewChatPath, mobileSearchPath } from "@/lib/paths";
 
 // Explicit px, not `h-11 w-11`: rem sizing resolves against the root
 // font-size, and at the smallest Appearance step it measures under 44px.
@@ -251,8 +252,7 @@ const ChatRow = memo(function ChatRow({
   return (
     <div className="px-4">
       <Link
-        to="/m/chats/$chatId"
-        params={{ chatId: chat.id }}
+        to={mobileChatPath(chat.id)}
         // The press lands well before the tap completes and the chat screen
         // mounts: start a cold chat's transcript read now, and home the row's
         // Chat so the screen has it on the first frame (without it, a send in
@@ -549,10 +549,10 @@ export function MobileChatList() {
         leading={<MobileMenuButton />}
         trailing={
           <>
-            <Link to="/m/search" className={HEADER_ACTION} aria-label="Search chats">
+            <Link to={mobileSearchPath()} className={HEADER_ACTION} aria-label="Search chats">
               <Search className="h-5 w-5" />
             </Link>
-            <Link to="/m/new" className={HEADER_ACTION} aria-label="New chat">
+            <Link to={mobileNewChatPath()} className={HEADER_ACTION} aria-label="New chat">
               {/* The same glyph the nav drawer uses for New chat, so the two
                   entry points read as one action. */}
               <MessageSquarePlus className="h-5 w-5" />
@@ -573,7 +573,7 @@ export function MobileChatList() {
             scope ? "Start a chat to put an agent to work on this project." : "Start a chat to put an agent to work."
           }
           action={
-            <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
+            <Link to={mobileNewChatPath()} className={MOBILE_PRIMARY_ACTION}>
               <MessageSquarePlus className="h-4 w-4" />
               Start a chat
             </Link>
@@ -627,7 +627,7 @@ export function MobileChatList() {
             // A workspace is made to work in, and an empty one is not listed
             // here (groups come from chats). So land on the composer already
             // pointed at it, rather than back on a list that doesn't show it.
-            void navigate({ to: "/m/new", search: { worktreeId: worktree.id } });
+            void navigate({ to: mobileNewChatPath(), search: { worktreeId: worktree.id } });
           }}
         />
       )}
@@ -637,7 +637,7 @@ export function MobileChatList() {
           role="dialog"
           aria-modal="true"
           aria-label="Confirm archive"
-          className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50"
+          className="fixed inset-0 z-[9999] flex items-end justify-center bg-scrim"
           onClick={() => {
             if (!isArchiving) setConfirmingArchive(null);
           }}

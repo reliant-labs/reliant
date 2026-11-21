@@ -136,8 +136,10 @@ func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*ArchivedChatInfo, error) {
-	return store.ListArchivedChats(ctx, r.ORM(), userID, org)
+// ListArchivedChats lists the user's archived chats, a page of them when
+// page.Limit is set; the bool says whether more follow.
+func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page ArchivedChatPage) ([]*ArchivedChatInfo, bool, error) {
+	return store.ListArchivedChats(ctx, r.ORM(), userID, org, page)
 }
 
 // ListRuns is the cross-cutting run list, scoped to filters.UserID.
@@ -617,13 +619,14 @@ func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, 
 	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
-// CountMessagesInChat returns the true message count for a chat.
+// CountMessagesInChat returns the true message count for a chat, read from
+// the trigger-maintained chat_thread_message_counts rather than counted.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldChatID, chatID))
+	return store.CountMessagesInChat(ctx, r.ORM(), chatID)
 }
 
 // CountMessagesByContextWindow returns the row count of a single context
@@ -1072,6 +1075,32 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
+// GetProjectByPathAndUserInScope is the user's project at path in scope (an
+// org, with its unassigned rows when it is the user's default); nil scope is
+// every org's. Projects are unique per (org, user, path).
+func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
+	if path == "" {
+		return nil, fmt.Errorf("project path cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
+}
+
+// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
+// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
+// user, remote_url).
+func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
+}
+
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1164,7 +1193,7 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	// Recording the checkout ends a detachment of the pair, in the same
 	// transaction: a pair never has both (project_daemon_detachment.go). It
 	// is the USER's choice (attach, create, clone), so it may; a checkout the
-	// platform merely found goes through RecordObservedProjectDaemon. The
+	// platform merely found goes through RecordObservedProjectDaemonInScope. The
 	// catalog lock orders it against a concurrent detach.
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
@@ -1177,14 +1206,27 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	})
 }
 
-// RecordObservedProjectDaemon records a checkout the platform found on the
-// machine (the connect reconcile, the plain-folder heal, a discovered folder,
-// a pool member's restore), never one the user chose. A detachment of the
-// pair wins: it records nothing and reports false, and it never clears the
-// detachment. The check runs under the catalog lock DetachProjectFromDaemon
-// holds, so a detach that commits while the caller was probing the machine
-// is seen here rather than undone.
-func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error) {
+// RecordObservedProjectDaemonInScope records a checkout the platform found
+// on the machine (the connect reconcile, the plain-folder heal, a discovered
+// folder, a pool member's restore), never one the user chose, for a machine
+// that holds only scope's projects (its org's, or its owner's default org's
+// when its org is not known: authz.MachineScopeFor; nil, every org's, only in
+// a deployment with no orgs).
+//
+// Two things win over the write, each re-read in its transaction:
+//   - a detachment of the pair: it records nothing and reports false, and it
+//     never clears the detachment. The check runs under the catalog lock
+//     DetachProjectFromDaemon holds, so a detach that commits while the caller
+//     was probing the machine is seen here rather than undone;
+//   - the project's org: the project row is locked FOR SHARE — a project's
+//     org move takes it FOR NO KEY UPDATE, so the two serialize — and nothing
+//     is recorded unless the project's org NOW is in scope. A project moved
+//     out of the machine's org while the caller probed or cloned is never
+//     recorded on it.
+//
+// A project gone since is false, not an error. There is deliberately no
+// unscoped form: every caller records for one machine, whose scope it has.
+func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" {
 		return false, fmt.Errorf("project ID cannot be empty")
 	}
@@ -1197,7 +1239,8 @@ func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemo
 	recorded := false
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		recorded = false
-		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
 			return err
 		}
 		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
@@ -1248,13 +1291,63 @@ func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, instal
 	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
 }
 
-// MarkProjectDaemonInstalled settles a queued clone from a filesystem
-// announcement, which names the path but carries no request id.
-func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error {
+// MarkProjectDaemonInstalledInScope settles the machine's clone of the
+// project as installed, from evidence the machine gave (its filesystem
+// announcement, or a directory at the row's own path for a clone whose outcome
+// was lost), for a machine that holds only scope's projects (nil: every
+// org's). It reports whether the checkout is installed now: false when there
+// is no row, or when the project is gone or no longer in scope.
+//
+// Like RecordObservedProjectDaemonInScope, it re-reads the project's org
+// under the catalog lock and the project row FOR SHARE, so a move out of the
+// machine's org that committed while the caller probed the machine is seen
+// and nothing is settled on it. A detached pair has no row, so it settles
+// nothing. There is deliberately no unscoped form.
+func (r *Repo) MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+	installed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		installed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		installed, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return installed, err
+}
+
+// lockProjectInScope takes, inside the caller's transaction, the locks every
+// machine-observed checkout or config write holds — the project's catalog
+// lock, then its row FOR SHARE — and reports whether the write may land: the
+// project still exists, is not scheduled for deletion, and its org, read
+// under that lock, is in scope.
+//
+// The row lock conflicts with a project's org move (FOR NO KEY UPDATE) and a
+// deletion schedule (FOR UPDATE), so either is committed and seen here, or
+// waits for this write. Neither takes the catalog lock — their order is the
+// owner's org lock, then the project row (store/project_schedule.go) — and
+// nothing that holds a project row takes it after, so the order cannot
+// deadlock. A project scheduled for deletion gets nothing new from its
+// machines: no checkout recorded or settled, no config synced
+// (project_delete_admission covers chats, workspaces, runs and triggers in
+// the database; these writes are refused here). A restore clears
+// delete_after, and the next connect records and syncs again.
+func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *core.OrgScope) (bool, error) {
+	if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+		return false, err
+	}
+	org, scheduled, found, err := store.LockProjectOrgForShare(ctx, r.ORM(), projectID)
+	if err != nil || !found || scheduled {
+		return false, err
+	}
+	return scope.Includes(org), nil
 }
 
 // StartQueuedProjectDaemonClones starts the stuck-clone clock of the
@@ -1266,13 +1359,67 @@ func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID stri
 	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
-// FailProjectDaemonInstall settles a clone still installing as failed: one
-// whose outcome was lost.
-func (r *Repo) FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error {
+// FailProjectDaemonInstallInScope settles the machine's clone of the project
+// that is still installing as failed — one whose outcome was lost and whose
+// path is empty on the machine — for a machine that holds only scope's
+// projects (nil: every org's). It reports whether it marked the row failed.
+// The org is re-read under the same locks as MarkProjectDaemonInstalledInScope:
+// a project moved out of the machine's org meanwhile is not the machine's to
+// settle (the machine-org cleanup detaches its row instead).
+func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
 	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+	failed := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		failed = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		failed, err = store.FailProjectDaemonInstall(ctx, r.ORM(), projectID, daemonID, installErr)
+		return err
+	})
+	return failed, err
+}
+
+// RecordFailedProjectDaemonRestoreInScope records that putting a pool
+// member's checkout of the project back failed, with installErr as the
+// reason, so its install state and placement say so instead of waiting on it
+// forever. The restore clones for minutes before it gets here, so, like
+// RecordObservedProjectDaemonInScope, it writes nothing when the project
+// moved out of scope (nil: every org's) or the user detached it from the
+// machine meanwhile — and it never clears a detachment: a restore is the
+// platform's doing, not the user's. It reports whether it recorded the
+// failure.
+func (r *Repo) RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" || path == "" {
+		return false, fmt.Errorf("project ID, daemon ID and path cannot be empty")
+	}
+	recorded := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		recorded = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
+		if err != nil || detached {
+			return err
+		}
+		// Queued and resolved at once, under a request id of its own: a
+		// late outcome of an earlier clone cannot overwrite the failure.
+		requestID := uuid.NewString()
+		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
 }
 
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
@@ -1922,9 +2069,10 @@ func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktre
 }
 
 // ListMainWorktreesForUser returns the main workspace of each of the user's
-// projects, or of the one project when projectID is set and the user owns it.
-func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*Worktree, error) {
-	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projectID)
+// projects, or of each project named that the user owns when projects is
+// non-empty.
+func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projects []string) ([]*Worktree, error) {
+	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projects)
 }
 
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2659,7 +2807,7 @@ func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int6
 		logging.DebugContext(ctx, "[GetThreadTokenCount] Thread record not found, trying direct query",
 			"thread", thread,
 			"error", err)
-		return r.getThreadTokenCountDirect(ctx, thread, thread, maxSeq)
+		return r.getThreadTokenCountDirect(ctx, thread, maxSeq)
 	}
 
 	// Get current context sequence for the thread
@@ -2724,11 +2872,9 @@ func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int6
 	return r.GetThreadTokenCount(ctx, parentThreadID, &forkMsg.Seq)
 }
 
-// getThreadTokenCountDirect queries token count directly using chat_id and thread.
+// getThreadTokenCountDirect queries the thread's token count directly.
 // Used as fallback when Thread record doesn't exist.
-func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
-	_ = chatID // kept for API compatibility
-
+func (r *Repo) getThreadTokenCountDirect(ctx context.Context, thread string, maxSeq *int64) (int64, error) {
 	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
@@ -2842,7 +2988,12 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 		return fmt.Errorf("workflow cannot be nil")
 	}
 
-	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// READ COMMITTED: the write is one INSERT … ON CONFLICT DO NOTHING (the
+	// activity emit runs after commit), and its admission triggers are
+	// row-lock protocols that bump the chat's worktree rows. SERIALIZABLE
+	// failed every insert that waited on another run's admission in the same
+	// chat with SQLSTATE 40001 (threads.Service.CreateWorkflowWithThread).
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
@@ -3042,6 +3193,21 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 // change whether the chat is busy, only what the finished run means.
 func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
+}
+
+// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
+func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
+	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
+}
+
+// HandledNodeFailure is a node of an ended run whose last attempt failed.
+type HandledNodeFailure = store.HandledNodeFailure
+
+// FirstHandledNodeFailure returns a node of the run, or of a run under it,
+// whose last attempt in run runID (since since, for an attempt that names no
+// run) failed, or nil (store.FirstHandledNodeFailure).
+func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
+	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
 }
 
 // SetWorkflowFailureDetail records why a run failed, on the run.
@@ -3487,6 +3653,15 @@ func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status strin
 	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
 }
 
+// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
+// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
+func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
+}
+
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3642,6 +3817,16 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
+// Attention-managed actors are excluded before the success boundary and cap;
+// callers needing diagnostic health continue to use the unfiltered reads.
+func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
 // GetLatestTriggerEvent returns the trigger's latest firing, optionally
 // filtered by outcome, and (nil, nil) when it has never fired.
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
@@ -3678,6 +3863,10 @@ func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) 
 
 func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
 	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
+}
+
+func (r *Repo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+	return store.ExpirePendingTriggerCapacityEvents(ctx, r.ORM(), recordedBefore, detail, limit)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
@@ -4606,22 +4795,6 @@ func generateID() string {
 func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
-}
-
-// backfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
-// number of rows sealed. Requires EnableCredentialSealing.
-func (r *Repo) backfillAPIKeys(ctx context.Context, batch int) (int, error) {
-	return r.apiKeys.BackfillAPIKeys(ctx, batch)
-}
-
-// countUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
-func (r *Repo) countUnsealedAPIKeys(ctx context.Context) (int64, error) {
-	return r.apiKeys.CountUnsealedAPIKeys(ctx)
-}
-
-// validateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
-func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
-	return r.apiKeys.ValidateAPIKeysSealedConstraint(ctx)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without

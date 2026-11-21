@@ -23,6 +23,12 @@
  *    renders and retries (useDaemonWait), not a failure; the file tree
  *    reported it on every 2s retry.
  *
+ *  - WORKTREE RECOVERING (reliant-web 1ada7020, 591b1445, 2026-11-20). The
+ *    machine refused a process list or file read for a moment, while it
+ *    finalizes a worktree's recovery (a remove or reclone), and said so with
+ *    Unavailable and the worktree_recovering reason. Nothing ran, and the
+ *    poll that asked asks again; one finalization reported every poll.
+ *
  *  - DEADLINE (2026-10-10, the "[gRPC] Request error" page). The server ran
  *    out of time — most often a daemon command a busy machine did not answer
  *    before the rpc's deadline — and said so with DeadlineExceeded. The server
@@ -35,6 +41,11 @@
  *    with a bare HTTP 404, which connect maps to Unimplemented with the message
  *    "HTTP 404". That is an app older than the server (desktop 1.7.16 calling
  *    the retired ChatService/CreateChat) — the fix is an update prompt.
+ *
+ *  - UPGRADE REQUIRED. The server compared this build's `Reliant-Client`
+ *    header with its minimum and refused it: FailedPrecondition with the
+ *    reason `upgrade_required`. Not a defect either; the fix is the forced
+ *    reload or update (api/versionSkew.ts noteUpgradeRequired).
  *
  *  - NETWORK (reliant-web "TypeError: Failed to fetch", 2026-11-02..06, 64
  *    events across three issues). fetch itself rejected — the device went
@@ -65,10 +76,14 @@ export type RpcFailureKind =
   | "already-absent"
   /** The user's machine is not serving yet; the UI waits on it. */
   | "machine-wait"
+  /** The machine refused work for a moment (a worktree's recovery); retryable. */
+  | "machine-busy"
   /** The server's deadline passed (a busy machine); retryable, not a defect. */
   | "deadline"
   /** This app calls an RPC the server does not route: the app is out of date. */
   | "version-skew"
+  /** The server refused this build as older than its minimum (`upgrade_required`). */
+  | "upgrade-required"
   /** fetch rejected before any server answered: the user's network. */
   | "network"
   /** Anything else: worth a report. */
@@ -168,6 +183,11 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   if (hasErrorReason(error, ACCOUNT_REQUIRED_REASON)) {
     return "account-required";
   }
+  // By reason too, and before the expected codes: the refusal is a
+  // FailedPrecondition, which on its own would read as the caller's state.
+  if (hasErrorReason(error, "upgrade_required")) {
+    return "upgrade-required";
+  }
   if (
     error.code === Code.NotFound &&
     IDEMPOTENT_DELETES.has(`${ctx.serviceTypeName}/${ctx.methodName ?? ""}`)
@@ -180,6 +200,9 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   }
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {
     return "machine-wait";
+  }
+  if (error.code === Code.Unavailable && hasErrorReason(error, "worktree_recovering")) {
+    return "machine-busy";
   }
   if (error.code === Code.DeadlineExceeded) return "deadline";
   if (

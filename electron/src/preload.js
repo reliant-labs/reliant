@@ -147,6 +147,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  // The server requires a newer version: check, download and install now
+  // (main.js "force-update", update-check.js createForcedUpdate).
+  forceUpdate: (minVersion) => ipcRenderer.invoke('force-update', minVersion),
 
   // Ask whether the daemon is connected RIGHT NOW.
   //

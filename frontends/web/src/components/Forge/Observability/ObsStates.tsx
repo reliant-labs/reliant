@@ -30,6 +30,7 @@ import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane
 
 import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
+import { settingsPath } from "@/lib/paths";
 
 /** The frame for Observability, Data and Storage states: an icon, title, words and actions. */
 export function StateFrame({
@@ -481,7 +482,7 @@ export function OperatorBadge({ provenance }: { provenance: Provenance }) {
   const label = provenance.source || "operator";
   return (
     <span
-      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-ink-muted"
+      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs text-ink-muted"
       title="Reliant operator data: platform telemetry, not this app's"
       data-testid="obs-operator-badge"
     >
@@ -545,7 +546,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
 }
 
 const BILLING_USAGE_TAB = "usage" satisfies BillingTab;
-const BILLING_USAGE_HREF = `/settings/billing?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
+const BILLING_USAGE_HREF = `${settingsPath("billing")}?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
 
 /**
  * The one banner per page, said once instead of once per panel. Renders nothing

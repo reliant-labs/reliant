@@ -37,8 +37,10 @@ env:
   # your environment wins over this block (Task never overrides one), and
   # -trimpath=false in it, or in `go env -w GOFLAGS`, opts out. Code here must
   # not locate files from runtime.Caller (internal/architecture/trimpath_guard_test.go).
+  # `|| true`: a machine with no Go (the Playwright CI image) still runs every
+  # task; a failed `go env` there would fail Task before any task starts.
   GOFLAGS:
-    sh: 'f="$(go env GOFLAGS 2>/dev/null)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
+    sh: 'f="$(go env GOFLAGS 2>/dev/null || true)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
   # The forge pin is a commit pseudo-version (dev-docs/pinning.md), which
   # proxy.golang.org may not have ingested yet: fetch reliant-labs modules
   # straight from GitHub. Yours wins when set.
@@ -50,39 +52,40 @@ vars:
   # whatever `forge` is first on PATH — that is routinely another version (a
   # bundled forge, a months-old `go install`), and an older forge rejects a
   # newer forge.yaml ("unknown key") or lints, gates and generates with
-  # templates the project did not pin. `go run module@version` builds the
-  # pinned forge once and then reuses the cached executable.
+  # templates the project did not pin. scripts/forge.sh finds the pin, in
+  # order: FORGE_BIN; forge on PATH or in .tools/bin when it IS the pin;
+  # `reliant forge`, which hands the command to the pin; `go run
+  # module@version` (a CI runner); else it fails naming what to install.
   #
   # Overrides, for forge developers and pins no proxy serves:
-  #   FORGE_BIN=/path/to/forge task lint   (environment), or
+  #   FORGE_BIN=/path/to/forge task lint   (environment or command line), or
   #   task lint FORGE=forge                (command line).
-  # A pin that names no published forge (a +dirty build, `dev`) falls back to
-  # the forge on PATH, which then hands the command to the pin when it can.
-  FORGE_YAML:
-    sh: cat forge.yaml
-  FORGE: '{{$pin := index (fromYaml .FORGE_YAML) "forge_version" | default "" | toString}}{{if .FORGE_BIN}}{{.FORGE_BIN}}{{else if or (eq $pin "") (eq $pin "dev") (contains "+" $pin)}}forge{{else}}go run github.com/reliant-labs/forge/cmd/forge@{{$pin}}{{end}}'
+  # A pin that names no published forge (a +dirty build, `dev`) takes any
+  # forge on PATH, which then hands the command to the pin when it can.
+  FORGE: '{{if .FORGE_BIN}}{{.FORGE_BIN}}{{else}}{{.ROOT_DIR}}/scripts/forge.sh{{end}}'
   # GOTESTRACE is a TOP-LEVEL var on purpose: only global vars can be
   # overridden from the command line (`task test GOTESTRACE=`). Clearing it
   # drops the race detector for one run; leave it set otherwise.
   GOTESTRACE: '-race'
   # SLOT runs the heavy lanes (`test`, `test:integration`, `coverage`, a full
   # `test:affected` lane, the docs check) inside one of this machine's
-  # host-wide heavy slots: `forge slot run` waits while N other heavy jobs
+  # host-wide heavy slots: `forge machine slot run` waits while N other heavy jobs
   # (builds, test lanes, codegen, lints — from any agent, worktree or
   # terminal) are running, because past a handful every one of them slows
   # down. N comes from the machine; set FORGE_HEAVY_SLOTS=<n> to change it or
   # =off to switch it off. Inside a slot already (a gate check, a parent
-  # `forge slot run`) it does not wait. Empty when forge is absent or predates
-  # `forge slot` (the probe fails), so these tasks still run without it;
+  # `forge machine slot run`) it does not wait. Empty when forge is absent or predates
+  # `forge machine slot` (the probe fails), so these tasks still run without it;
   # `task test SLOT=` skips the slot for one run. `test:short` takes no slot:
   # the scoped inner loop is not heavy and must not queue.
   #
-  # The one deliberate use of the forge on PATH rather than FORGE: slots are
+  # The one deliberate use of any forge rather than FORGE: slots are
   # machine-wide (every project and forge version shares one queue), and this
   # probe runs on every `task` invocation, so it must cost nothing — never a
-  # `go run`.
+  # `go run`. `scripts/forge.sh --machine` is FORGE_BIN, else forge on PATH or
+  # in .tools/bin, else `reliant forge`.
   SLOT:
-    sh: forge slot status --class heavy >/dev/null 2>&1 && echo 'forge slot run --class heavy --' || true
+    sh: 's=$(./scripts/forge.sh --machine --which 2>/dev/null) && $s machine slot status --class heavy >/dev/null 2>&1 && echo "$s machine slot run --class heavy --" || true'
 
   # ── Code generation: local, pinned, reproducible ──────────────────────
   # Generated code is committed, and CI fails on any diff a regenerate makes.
@@ -143,7 +146,7 @@ tasks:
   # ── Dependencies ──────────────────────────────────────────────────────
 
   deps:
-    desc: Install Go modules and the web (pnpm), electron and protoc-gen-es (npm) packages
+    desc: Install Go modules and the web, electron and protoc-gen-es packages (pnpm)
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
@@ -151,6 +154,7 @@ tasks:
       - task: deps:electron
 
   deps:web:
+    aliases: [deps:frontend]  # forge's scaffold name
     desc: Install the web app's packages (frontends/web, pnpm install --frozen-lockfile)
     dir: frontends/web
     cmds:
@@ -158,21 +162,25 @@ tasks:
 
   deps:electron:
     # Not --ignore-scripts: electron's postinstall fetches the Electron binary
-    # its tests and the package build load.
-    desc: Install the electron app's npm packages (electron, npm ci)
+    # its tests and the package build load (electron/pnpm-workspace.yaml's
+    # allowBuilds names the scripts that may run).
+    desc: Install the electron app's packages (electron, pnpm install --frozen-lockfile)
     dir: electron
     cmds:
-      - npm ci --no-audit --no-fund
+      - pnpm install --frozen-lockfile
 
   deps:protoc-gen-es:
-    # npm ci rewrites node_modules/.package-lock.json, so it doubles as the
-    # stamp: a lockfile edit (a version bump) reinstalls, an unchanged one is a
-    # no-op. Every buf template's TypeScript plugin runs from here.
+    # node_modules/.modules.yaml is the stamp: pnpm writes it when an install
+    # changes node_modules, and the touch dates it after a no-op one (pnpm 12
+    # leaves it alone when the tree already matched). A lockfile edit (a
+    # version bump) reinstalls, an unchanged one is a no-op. Every buf
+    # template's TypeScript plugin runs from here.
     desc: Install the pinned protoc-gen-es (tools/protoc-gen-es) when its lockfile changed
     status:
-      - test tools/protoc-gen-es/node_modules/.package-lock.json -nt tools/protoc-gen-es/package-lock.json
+      - test tools/protoc-gen-es/node_modules/.modules.yaml -nt tools/protoc-gen-es/pnpm-lock.yaml
     cmds:
-      - npm ci --prefix tools/protoc-gen-es --ignore-scripts --no-audit --no-fund --loglevel=error
+      - pnpm install --dir tools/protoc-gen-es --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
+      - touch tools/protoc-gen-es/node_modules/.modules.yaml
 
   deps:go-protoc-plugins:
     # buf runs protoc-gen-go and protoc-gen-connect-go as `go tool <name>`,
@@ -258,6 +266,7 @@ tasks:
       - go build -buildvcs=false -o dist/reliant-dev ./tools/reliant-dev
 
   build:web:
+    aliases: [build:frontend]  # forge's scaffold name
     desc: Build the web application (frontends/web/dist)
     dir: frontends/web
     cmds:
@@ -446,6 +455,7 @@ tasks:
         silent: true
 
   test:web:
+    aliases: [test:frontend]  # forge's scaffold name
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
     dir: frontends/web
     cmds:
@@ -467,7 +477,7 @@ tasks:
     desc: Run the electron tests (node --test)
     dir: electron
     cmds:
-      - npm test --silent
+      - pnpm --silent test
 
   # ── The gate ──────────────────────────────────────────────────────────
 
@@ -594,13 +604,11 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
-  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix). The
-  # split follows the install cost: WebKit's system packages (GStreamer, GTK 4,
-  # ~114 MB from the Ubuntu mirror) took 6.5 of a 15-minute budget on a slow
-  # mirror, and the desktop suite, which needs none of them, timed out behind
-  # that install. Each half now pays only for the browsers it runs.
+  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix, in
+  # the Playwright image, which has both browsers and their system packages).
+  # The split dates from when CI installed WebKit's system packages from the
+  # Ubuntu mirror; it still keeps one suite's failure from hiding the other's.
   test:web:e2e:desktop:
     desc: Run the desktop Chromium Playwright suite against the built renderer
     cmds:
@@ -609,7 +617,6 @@ tasks:
           BROWSERS: chromium
           PROJECTS: --project=chromium
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   test:web:e2e:responsive:
     desc: Run the touch Chromium and WebKit phone/tablet Playwright projects against the built renderer
@@ -619,7 +626,6 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   test:web:visual:
     # The visual-regression baseline (frontends/web/e2e/visual/README.md):
@@ -639,14 +645,16 @@ tasks:
       - ./scripts/visual-docker.sh {{.CLI_ARGS}}
 
   web:e2e:run:
-    # Playwright against the built renderer, no Go backend, one worker (the
-    # tests share one preview server). The runtime config document is the
+    # Playwright against the built renderer, no Go backend, two workers in CI
+    # (frontends/web/playwright.config.ts says why; the tests share only the
+    # preview server, which serves static files). The runtime config document is the
     # public KCL-sourced renderer config committed in
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
-    # packages (needs sudo). PLAYWRIGHT_DEPS_CACHE=<dir> installs them through
-    # scripts/playwright-os-deps.sh instead, from a .deb cache it fills on a
-    # miss: CI does, so a slow Ubuntu mirror cannot eat the job's budget.
+    # packages (needs sudo), for a machine that lacks them. CI needs neither:
+    # it runs in the Playwright image of this @playwright/test version, whose
+    # browsers `playwright install` finds already there (reliant#2880).
+    # The config document is read with node, not jq: the image has no jq.
     internal: true
     requires:
       vars: [BROWSERS, PROJECTS]
@@ -656,10 +664,10 @@ tasks:
         config_dir="$(mktemp -d)"
         trap 'rm -rf "$config_dir"' EXIT
         doc="$config_dir/config.js"
-        printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
+        renderer="$(node -e 'const r = require("./electron/release.config.json").renderer; if (r == null) { console.error("electron/release.config.json has no renderer"); process.exit(1) } process.stdout.write(JSON.stringify(r))')"
+        printf 'window.__FORGE_CONFIG__ = %s;\n' "$renderer" > "$doc"
         cd frontends/web
         npm run build:alpha
-        {{if .PLAYWRIGHT_DEPS_CACHE}}../../scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}{{end}}
         npx playwright install {{.BROWSERS}} {{.PLAYWRIGHT_DEPS}}
         CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- {{.PROJECTS}} {{.CLI_ARGS}}
 
@@ -667,12 +675,12 @@ tasks:
     # dist:pr runs with-release-config -> build:config -> build:web:alpha ->
     # electron-builder --dir: the same config path a release takes (the class
     # of defect that shipped v1.7.5). It compiles no Go and signs nothing.
-    desc: Package the electron app without publishing (npm run dist:pr)
+    desc: Package the electron app without publishing (pnpm run dist:pr)
     dir: electron
     env:
       CI: 'true'
     cmds:
-      - npm run dist:pr
+      - pnpm run dist:pr
 
   contract:controlplane:check:
     # proto-vendor/controlplane/ is a generated `buf export` of control-plane's
@@ -739,6 +747,7 @@ tasks:
       - bash scripts/vet.sh {{.CLI_ARGS}}
 
   lint:web:
+    aliases: [lint:frontend]  # forge's scaffold name
     desc: Lint the web app
     dir: frontends/web
     cmds:
@@ -757,6 +766,7 @@ tasks:
       - go fmt ./...
 
   fmt:web:
+    aliases: [fmt:frontend]  # forge's scaffold name
     desc: Format the web app (eslint --fix)
     dir: frontends/web
     cmds:
@@ -787,6 +797,7 @@ tasks:
       - '{{.GEN_ENV}} {{.FORGE}} generate'
 
   generate:check:
+    aliases: [verify-generate]  # forge's scaffold name for the generated-code drift guard
     # It judges only what generate changes, so it runs on a tree with
     # uncommitted edits too. `task test:affected` runs it when the diff
     # touches a forge input. `-- --github` adds CI annotations. FORGE=<binary>
@@ -955,6 +966,30 @@ tasks:
     cmds:
       - go run ./cmd/reliant db migrate up
 
+  # forge's scaffold names for the dev loop. `forge env up dev` is the whole
+  # product stack on this machine (deploy/kcl/dev): air for the three server
+  # roles, the web app, host Postgres, NATS and Temporal; no docker compose,
+  # so forge's dev-up/dev-up-prod/dev-psql have no counterpart here (the
+  # stack's DSN: `forge env config dev`; queries: .reliant/tools/db-query.sh).
+  dev:
+    desc: Run this checkout's dev stack with hot reload (forge env up dev)
+    cmds:
+      - '{{.FORGE}} env up dev {{.CLI_ARGS}}'
+
+  dev-down:
+    desc: Stop this checkout's dev stack only (forge env down dev)
+    cmds:
+      - '{{.FORGE}} env down dev {{.CLI_ARGS}}'
+
+  db-seed:
+    # forge's seeder: deterministic, FK-coherent rows derived from the applied
+    # schema, with reliant's vocabulary (db/seeds/vocab.yaml). It refuses every
+    # env but dev (deploy/kcl/dev/config.k) and has no override; the DSN is the
+    # env's own database unless `-- --dsn <loopback DSN>` names another.
+    desc: Seed the dev database (forge db seed apply; dev only)
+    cmds:
+      - '{{.FORGE}} db seed apply {{.CLI_ARGS}}'
+
   # ── Pins, releases, docs site ─────────────────────────────────────────
 
   pin:forge:
@@ -1011,10 +1046,36 @@ tasks:
     cmds:
       - ./scripts/release-tag.sh --dry-run
 
+  release:sourcemaps:
+    # The desktop renderer's source maps, filed so its prod browser errors are
+    # symbolicated (reliant#2535). release.yml's `sourcemaps` job runs it on
+    # every release tag with FORGE_CONTROL_PLANE_TOKEN set to a sourcemaps:write
+    # org token (RELIANT_SOURCEMAPS_TOKEN). The maps are filed under the env the
+    # renderer REPORTS into, not this repo: tenant zero's prod (ORG) in
+    # control-plane's forge project (PROJECT), frontend `desktop`
+    # (control-plane deploy/kcl/lib/env.k, reliant_desktop_ingest_keys).
+    # --env desktop only names the control plane (deploy/kcl/desktop). BUILD_ID
+    # is the version the renderer reports as service.version
+    # (frontends/web/dist/version.json), the release tag without its `v`.
+    desc: "File the desktop renderer's source maps (DIST, default frontends/web/dist) for BUILD_ID=<version> with the platform registry"
+    requires:
+      vars: [BUILD_ID]
+    vars:
+      DIST: '{{.DIST | default "frontends/web/dist"}}'
+      ORG: '{{.ORG | default "55949942-3ee9-4cfc-bb7c-817bdba75186"}}'
+      PROJECT: '{{.PROJECT | default "control-plane"}}'
+    cmds:
+      - '{{.FORGE}} ui sourcemaps push {{.DIST}} --frontend desktop --build-id {{.BUILD_ID}} --env desktop --project {{.PROJECT}} --org {{.ORG}} {{.CLI_ARGS}}'
+
   flake:report:test:
     desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
     cmds:
       - ./scripts/test-flake-report.sh
+
+  forge:resolve:test:
+    desc: Self-test of scripts/forge.sh (which forge tasks and scripts run - FORGE_BIN, forge at the pin, reliant forge, go run) against fake binaries
+    cmds:
+      - ./scripts/test-forge.sh
 
   lint:scope:test:
     desc: Self-test of scripts/lint-scope.sh (the merge gate's forge lint scope drops nested Go modules, keeps root-module directories) against throwaway repos

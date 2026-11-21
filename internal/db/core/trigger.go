@@ -555,6 +555,15 @@ type TriggerEvent struct {
 	// same key. Nil is FIFO (or a key that could not be rendered): the event
 	// supersedes nothing and nothing supersedes it.
 	CapacityKey *string
+	// CapacityRunningKey is the rendered concurrency key under
+	// max_running_per_key: the group whose running runs are capped. Nil when
+	// the workflow caps no key, or the key could not be rendered (the event
+	// then counts only against the workflow-wide cap).
+	CapacityRunningKey *string
+	// CapacityPriority is the evaluated concurrency.priority, fixed when the
+	// event enrolls: waiting events are admitted highest first, then by
+	// CapacityOrder. Nil is 0.
+	CapacityPriority *int64
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for
@@ -562,6 +571,12 @@ type TriggerEvent struct {
 	// chat going with turns of their own; the trigger's health, streak and
 	// overlap rules are about its own run, so they read this, not the chat.
 	RunStatus string
+	// RunOutcome is that run's Workflow.RunOutcome (a RunOutcome* value),
+	// recorded with RunStatus. It is what tells a run that completed cleanly
+	// from one that completed only because its failure path ran. Empty
+	// wherever RunStatus is, for a cancelled run, and on a firing recorded
+	// before it existed.
+	RunOutcome string
 	// Sender is who or what the event came from, as the source authenticated
 	// it: set once at intake and never from the payload. Nil for a start a
 	// person made themselves (a chat, a builder test).

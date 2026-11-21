@@ -60,6 +60,8 @@ import { useProjects } from "@/hooks/project-queries";
 import DropdownMenu from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
+import { homePath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -68,7 +70,7 @@ const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
 
 /** Pages that host a transcript own their height and scrolling. */
 function isFillLayout(pathname: string): boolean {
-  return pathname.startsWith("/workflows/runs/");
+  return orgFreePath(pathname).startsWith("/workflows/runs/");
 }
 
 export function WorkflowsLayout() {
@@ -99,7 +101,7 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
 
   // The button always leaves the area. Escape steps to the logical parent: a
   // detail page's list, or out of the area from a list.
-  const leave = useCallback(() => void navigate({ to: "/", search: {} }), [navigate]);
+  const leave = useCallback(() => void navigate({ to: homePath(), search: {} }), [navigate]);
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
   useEscapeToLeave(stepBack);
 
@@ -112,7 +114,7 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       const Icon = TAB_ICONS[tab.key];
       return {
         label: tab.label,
-        href: `${tab.path}${query}`,
+        href: `${tab.href()}${query}`,
         active: tab.key === activeTab,
         icon: <Icon className="h-4 w-4" aria-hidden="true" />,
       };
@@ -323,5 +325,5 @@ function ProjectSwitcher() {
 /** The resolution ladder in the header comment. Runs once per mount of the area. */
 function useWorkflowsProjectResolution() {
   const { pathname } = useLocation();
-  useRouteProjectResolution({ reflectInUrl: pathname.startsWith(WORKFLOWS_AREA_PATH) });
+  useRouteProjectResolution({ reflectInUrl: orgFreePath(pathname).startsWith(WORKFLOWS_AREA_PATH) });
 }

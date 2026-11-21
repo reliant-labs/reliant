@@ -9,12 +9,13 @@
 # Usage:
 #   scripts/check-compat.sh proto        buf breaking: this tree's proto vs the base's
 #   scripts/check-compat.sh migrations   a migration declaring forge:breaks-rollback
-#                                        needs the owner's label
+#                                        needs the owner's approval label
 #
 # Env:
 #   CI_BASE        the base to judge against (default: merge-base of HEAD and origin/main)
 #   CI_PR          the pull request number, to read its labels (no PR: a finding fails)
-#   COMPAT_OWNERS  logins whose label counts (default: reliant-01, the owner)
+#   COMPAT_OWNERS  logins whose label counts (default: reliant-01,reliant-labs[bot],
+#                  the owner and the Reliant bot; comma- or space-separated)
 #   COMPAT_GH      the gh binary (default: gh)
 #   COMPAT_REPO    owner/repo (default: from origin's URL)
 #   CI_QUEUE_ENTRY 1 in the merge queue: judge only this entry's own squash, HEAD
@@ -25,14 +26,17 @@
 #                  each break is judged in the run of the pull request that made it,
 #                  against that pull request's labels.
 #
-# A pull request passes a finding only when the OWNER applied its label (the label's
-# `labeled` event names the actor; a label a bot or the author added does not count):
+# A pull request passes a finding only when the OWNER accepted it: the last `labeled`
+# event of its label names one of COMPAT_OWNERS. That is the owner's account, or the
+# Reliant bot (reliant-labs[bot]) applying the label on the owner's instruction:
+# agents label as the bot (owner decision, 2026-11-19: "Let the bot's label count").
+# A label the author or any other account added does not count:
 #   breaking:approved                     proto (or API / CLI) break
 #   migration:breaks-rollback-approved    a migration the previous release cannot run on
 set -euo pipefail
 
 GH="${COMPAT_GH:-gh}"
-OWNERS="${COMPAT_OWNERS:-reliant-01}"
+OWNERS="${COMPAT_OWNERS:-reliant-01,reliant-labs[bot]}"
 die() { echo "check-compat: $*" >&2; exit 2; }
 
 base="${CI_BASE:-}"
@@ -54,7 +58,9 @@ if [ -z "$repo" ]; then
   repo="${repo#git@github.com:}"; repo="${repo#https://github.com/}"; repo="${repo#ssh://git@github.com/}"; repo="${repo%.git}"
 fi
 
-# owner_approved <label>: the PR carries <label> and an owner was the last to apply it.
+# owner_approved <label>: the PR carries <label> and one of OWNERS was the last to
+# apply it (that login is left in $approver).
+approver=""
 owner_approved() {
   [ -n "${CI_PR:-}" ] && [ -n "$repo" ] || return 1
   local has actors actor
@@ -66,20 +72,22 @@ owner_approved() {
   actors="$("$GH" api --paginate "repos/$repo/issues/$CI_PR/events" \
     --jq ".[] | select(.event == \"labeled\" and .label.name == \"$1\") | .actor.login" 2>/dev/null)" || return 1
   actor="$(tail -1 <<<"$actors")"
-  [ -n "$actor" ] && tr ', ' '\n\n' <<<"$OWNERS" | grep -qxF "$actor"
+  [ -n "$actor" ] && tr ', ' '\n\n' <<<"$OWNERS" | grep -qxF "$actor" && approver="$actor"
 }
 
 # refuse <label> <what> <how to deprecate>: fail unless the owner approved it.
 refuse() {
   if owner_approved "$1"; then
-    echo "check-compat: $2 — approved by the owner's '$1' label on #$CI_PR"
+    echo "check-compat: $2 — approved by the '$1' label on #$CI_PR, applied by $approver"
     return 0
   fi
   {
     echo "check-compat: FAIL: $2"
     echo "  Majors are locked at 1 (owner, 2026-11-05): a breaking change to a public surface"
     echo "  does not merge. $3"
-    echo "  Only the owner can accept it, by applying the '$1' label to the pull request${CI_PR:+ (#$CI_PR)}."
+    echo "  Only the owner can accept it: the '$1' label on the pull request${CI_PR:+ (#$CI_PR)}, applied by"
+    echo "  the owner, or by the Reliant bot on the owner's instruction (owner decision, 2026-11-19)."
+    echo "  Accounts whose label counts: $OWNERS. A label any other account applied does not."
   } >&2
   return 1
 }

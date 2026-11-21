@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -45,8 +47,9 @@ func lockTriggerCapacity(ctx context.Context, db orm.Context, scope TriggerCapac
 const TriggerCapacitySuperseded = "superseded by a newer firing (concurrency waiting: latest)"
 
 // EnqueueTriggerCapacity durably records a filtered trigger event and assigns
-// its immutable FIFO ordinal under the same lock used at launch. It is safe to
-// retry after commit/ack loss. It does not claim a slot or create a chat.
+// its immutable arrival ordinal, with its CapacityRunningKey and
+// CapacityPriority, under the same lock used at launch. It is safe to retry
+// after commit/ack loss. It does not claim a slot or create a chat.
 //
 // An event with a CapacityKey also supersedes, in the same transaction, every
 // older WAITING event of its scope and key: they settle skipped with
@@ -85,9 +88,10 @@ FROM trigger_events WHERE kind = ? AND dedupe_key = ? FOR UPDATE`, ev.Kind, ev.D
 		}
 		var order int64
 		err = db.Bun().NewRaw(`UPDATE trigger_events
-SET capacity_project_id = ?, capacity_workflow_ref = ?, capacity_key = ?, capacity_order = nextval('trigger_capacity_order_seq')
+SET capacity_project_id = ?, capacity_workflow_ref = ?, capacity_key = ?, capacity_running_key = ?, capacity_priority = ?,
+  capacity_order = nextval('trigger_capacity_order_seq')
 WHERE id = ? AND outcome = 'pending' AND capacity_order IS NULL
-RETURNING capacity_order`, scope.ProjectID, scope.WorkflowRef, ev.CapacityKey, row.ID).Scan(ctx, &order)
+RETURNING capacity_order`, scope.ProjectID, scope.WorkflowRef, ev.CapacityKey, ev.CapacityRunningKey, ev.CapacityPriority, row.ID).Scan(ctx, &order)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("cannot enroll an already settled trigger event")
 		}
@@ -109,25 +113,40 @@ WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ? AND 
 	})
 }
 
-// NextWaitingTriggerCapacityEvent returns the head of a scope's FIFO queue —
-// its oldest waiting event, the only one CanLaunchTriggerCapacity may admit —
-// or nil when nothing waits. Served by trigger_events_capacity_waiting.
-func NextWaitingTriggerCapacityEvent(ctx context.Context, db orm.Context, scope TriggerCapacityScope) (*core.TriggerEvent, error) {
-	if !scope.valid() {
-		return nil, errors.New("invalid trigger capacity scope")
+// TriggerCapacityLimits is a workflow's admission policy as one launch sees
+// it: the caps resolved for the firing's trigger now. They are not stored on
+// the waiting events, so a changed policy applies to the events already
+// waiting.
+type TriggerCapacityLimits struct {
+	// MaxRunning bounds the scope's running runs. Required (> 0); a policy
+	// with only a per-key cap passes TriggerCapacityUnbounded.
+	MaxRunning uint32
+	// MaxRunningPerKey bounds the launched runs of one capacity_running_key.
+	// 0 is no per-key cap. An event with no running key is never held by it.
+	MaxRunningPerKey uint32
+	// ExpiredBefore is the expiry cutoff: a waiting event recorded before it
+	// is never admitted, and the scope admits the next one past it. The zero
+	// time expires nothing. The redriver settles expired events
+	// (ExpirePendingTriggerCapacityEvents); admission only refuses them, so an
+	// event the redriver has not reached yet can never launch late.
+	ExpiredBefore time.Time
+}
+
+// expiredBefore is ExpiredBefore as the admission query binds it: NULL for
+// none.
+func (l TriggerCapacityLimits) expiredBefore() any {
+	if l.ExpiredBefore.IsZero() {
+		return nil
 	}
-	var rows []*TriggerEvent
-	err := db.Bun().NewRaw(`SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event
-WHERE event.user_id = ? AND event.capacity_project_id = ? AND event.capacity_workflow_ref = ?
-  AND event.capacity_order IS NOT NULL AND event.outcome = 'pending'
-ORDER BY event.capacity_order LIMIT 1`, scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
-	if err != nil {
-		return nil, fmt.Errorf("find waiting trigger capacity head: %w", err)
-	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	return triggerEventToCore(rows[0])
+	return l.ExpiredBefore.UTC()
+}
+
+// TriggerCapacityUnbounded is the MaxRunning of a policy that caps only per
+// key. It fits capacity_limit, the integer a parked run resumes against.
+const TriggerCapacityUnbounded = math.MaxInt32
+
+func (l TriggerCapacityLimits) valid() bool {
+	return l.MaxRunning > 0 && l.MaxRunning <= TriggerCapacityUnbounded
 }
 
 // occupiedForAdmission is the slot predicate queued admission counts, over an
@@ -138,45 +157,97 @@ const occupiedForAdmission = `occupied.capacity_order IS NOT NULL AND occupied.o
        AND NOT occupied.capacity_released
        AND (occupied.capacity_parked_at IS NULL OR occupied.capacity_resume_requested_at IS NOT NULL)`
 
-// CanLaunchTriggerCapacity checks FIFO and capacity inside the caller's launch
-// transaction. The caller MUST claim the pending event in that same transaction
-// before releasing the lock (ClaimPendingTriggerEvent already does this).
+// occupiedForKey is the per-key cap's predicate, over the alias occupied: a
+// launched run of the key that was not released. A run parked on a provider
+// gives back its workflow-wide slot but keeps its key's: the cap is about the
+// subject (one run per pull request), and the parked run still owns it and
+// resumes without asking the key.
+const occupiedForKey = `occupied.capacity_order IS NOT NULL AND occupied.outcome = 'launched'
+       AND NOT occupied.capacity_released`
+
+// nextAdmissibleTriggerCapacitySQL selects the waiting event a scope admits
+// next, or no row: the first waiting event in admission order (highest
+// capacity_priority, NULL being 0, then oldest capacity_order) that its key's
+// running cap does not hold back, provided the scope has a free slot at all.
+//
+// An event whose key is at its cap is passed over rather than blocking the
+// queue: one busy pull request must not stop every other one behind it. It
+// keeps its place, and is admitted once its key frees a slot. With no priority
+// and no per-key cap this is exactly the FIFO head, when a slot is free.
+//
+// An expired event (recorded before ExpiredBefore) is passed over too, and
+// never admitted: it is the redriver's to settle.
+//
+// Parameters: ?0 user, ?1 project, ?2 workflow ref, ?3 MaxRunning,
+// ?4 MaxRunningPerKey, ?5 ExpiredBefore (NULL for none). The waiting scan is
+// trigger_events_capacity_waiting; the occupied counts read
+// trigger_events_capacity_occupied, a handful of rows.
+const nextAdmissibleTriggerCapacitySQL = ` FROM trigger_events event
+WHERE event.user_id = ?0 AND event.capacity_project_id = ?1 AND event.capacity_workflow_ref = ?2
+  AND event.capacity_order IS NOT NULL AND event.outcome = 'pending'
+  AND (?5::timestamptz IS NULL OR event.created_at >= ?5::timestamptz)
+  AND (SELECT count(*) FROM trigger_events occupied
+    WHERE occupied.user_id = ?0 AND occupied.capacity_project_id = ?1 AND occupied.capacity_workflow_ref = ?2
+      AND ` + occupiedForAdmission + `
+  ) < ?3
+  AND (?4 = 0 OR event.capacity_running_key IS NULL OR (SELECT count(*) FROM trigger_events occupied
+    WHERE occupied.user_id = ?0 AND occupied.capacity_project_id = ?1 AND occupied.capacity_workflow_ref = ?2
+      AND occupied.capacity_running_key = event.capacity_running_key
+      AND ` + occupiedForKey + `
+  ) < ?4)
+ORDER BY COALESCE(event.capacity_priority, 0) DESC, event.capacity_order
+LIMIT 1`
+
+// NextAdmissibleTriggerCapacityEvent returns the waiting event the scope would
+// admit now (the only one CanLaunchTriggerCapacity may admit), or nil when
+// nothing waits, every waiting event is held by its key's cap, or the scope
+// is full. Outside the launch lock it is a hint: the event's own fire decides,
+// under the lock.
+func NextAdmissibleTriggerCapacityEvent(ctx context.Context, db orm.Context, scope TriggerCapacityScope, limits TriggerCapacityLimits) (*core.TriggerEvent, error) {
+	if !scope.valid() || !limits.valid() {
+		return nil, errors.New("invalid trigger capacity policy")
+	}
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`SELECT `+columnsOf[TriggerEvent]("event")+nextAdmissibleTriggerCapacitySQL,
+		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey, limits.expiredBefore()).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("find the next admissible trigger capacity event: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return triggerEventToCore(rows[0])
+}
+
+// CanLaunchTriggerCapacity checks admission order and capacity inside the
+// caller's launch transaction: eventID may launch only if it is the event
+// NextAdmissibleTriggerCapacityEvent names under the scope's lock. The caller
+// MUST claim the pending event in that same transaction before releasing the
+// lock (ClaimPendingTriggerEvent already does this).
 // Missing terminal evidence retains a slot, including half-starts, paused runs,
 // deleted chats and unknown statuses. Only the Temporal-confirmed release flag
 // frees capacity; best-effort chat/run status never releases a slot. The one
-// exception is a run parked on a provider, which holds none while it waits
-// (ParkTriggerCapacity).
+// exception is a run parked on a provider, which holds no workflow-wide slot
+// while it waits (ParkTriggerCapacity).
 //
-// An admitted event is stamped with maxRunning: the cap a parked run resumes
-// against (ResumeTriggerCapacity).
-func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID string, scope TriggerCapacityScope, maxRunning uint32) (bool, error) {
-	if !scope.valid() || eventID == "" || maxRunning == 0 {
+// An admitted event is stamped with limits.MaxRunning: the cap a parked run
+// resumes against (ResumeTriggerCapacity).
+func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID string, scope TriggerCapacityScope, limits TriggerCapacityLimits) (bool, error) {
+	if !scope.valid() || eventID == "" || !limits.valid() {
 		return false, errors.New("invalid trigger capacity policy")
 	}
 	if err := lockTriggerCapacity(ctx, db, scope); err != nil {
 		return false, err
 	}
-	var allowed bool
-	err := db.Bun().NewRaw(`SELECT EXISTS (
- SELECT 1 FROM trigger_events candidate
- WHERE candidate.id = ?0 AND candidate.user_id = ?1
-   AND candidate.capacity_project_id = ?2 AND candidate.capacity_workflow_ref = ?3
-   AND candidate.capacity_order IS NOT NULL AND candidate.outcome = 'pending'
-   AND NOT EXISTS (
-     SELECT 1 FROM trigger_events older
-     WHERE older.user_id = ?1 AND older.capacity_project_id = ?2 AND older.capacity_workflow_ref = ?3
-       AND older.outcome = 'pending' AND older.capacity_order < candidate.capacity_order
-   )
-   AND (SELECT count(*) FROM trigger_events occupied
-     WHERE occupied.user_id = ?1 AND occupied.capacity_project_id = ?2 AND occupied.capacity_workflow_ref = ?3
-       AND `+occupiedForAdmission+`
-   ) < ?4
-)`, eventID, scope.UserID, scope.ProjectID, scope.WorkflowRef, maxRunning).Scan(ctx, &allowed)
+	var next []string
+	err := db.Bun().NewRaw(`SELECT event.id`+nextAdmissibleTriggerCapacitySQL,
+		scope.UserID, scope.ProjectID, scope.WorkflowRef, limits.MaxRunning, limits.MaxRunningPerKey, limits.expiredBefore()).Scan(ctx, &next)
 	if err != nil {
 		return false, fmt.Errorf("check trigger capacity: %w", err)
 	}
+	allowed := len(next) == 1 && next[0] == eventID
 	if allowed {
-		if _, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_limit = ? WHERE id = ?`, maxRunning, eventID).Exec(ctx); err != nil {
+		if _, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_limit = ? WHERE id = ?`, limits.MaxRunning, eventID).Exec(ctx); err != nil {
 			return false, fmt.Errorf("stamp trigger capacity limit: %w", err)
 		}
 	}

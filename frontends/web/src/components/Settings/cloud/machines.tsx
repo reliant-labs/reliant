@@ -121,6 +121,7 @@ import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { useMachineOrgs } from "@/hooks/useMachineOrgs";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -345,7 +346,7 @@ function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-scrim" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -426,8 +427,8 @@ export function MachinesSection() {
   const navigate = useNavigate();
   const selectedId = params.machineId ?? search.daemon ?? null;
   const openMachine = (machineId: string) =>
-    navigate({ to: "/settings/machines/$machineId", params: { machineId } });
-  const backToList = () => navigate({ to: "/settings/$section", params: { section: "machines" } });
+    navigate({ to: machineSettingsPath(machineId) });
+  const backToList = () => navigate({ to: settingsPath("machines") });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather
@@ -592,7 +593,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         <div className="space-y-6">
           {managedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Cloud machines
               </h3>
               <ManagedMachinesTable
@@ -609,7 +610,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           )}
           {selfHostedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Self-hosted machines
               </h3>
               <SelfHostedMachinesTable

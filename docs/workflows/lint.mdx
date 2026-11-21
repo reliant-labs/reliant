@@ -61,7 +61,7 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 
 ### agent-turn-budget-default
 
-**Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50").
+**Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input with a non-zero default, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50"). A child whose `max_turns` defaults to 0 (no limit, as `builtin://agent` and `builtin://structured-agent` do) never runs out of turns, so it is not reported here; in a workflow with `concurrency.max_running`, [slot-unbounded-wait](#slot-unbounded-wait) asks for its bound.
 
 ### loop-unbounded
 
@@ -73,7 +73,9 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 
 ### slot-unbounded-wait
 
-**Error.** A workflow with `concurrency.max_running` holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` node with no `timeout:`, a loop with no bound. (An `approval` or `ask_question` is not one: `max_running` bounds only trigger-launched runs, which are unattended, and an unattended run's human gates resolve at once.) One stuck run then queues every later firing behind it. A `workflow` or `loop` node's child holds the slot too, so lint reads the child (and every ref it reaches) and applies the same check to its steps; a `timeout:` on the node itself does not help ([timeout-ignored](#timeout-ignored)). Give every such step a timeout (or a bound).
+**Error.** A workflow with `concurrency.max_running` (or `max_running_per_key`) holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` node with no `timeout:`, a loop with no bound. (An `approval` or `ask_question` is not one: `max_running` bounds only trigger-launched runs, which are unattended, and an unattended run's human gates resolve at once.) One stuck run then queues every later firing behind it. A `workflow` or `loop` node's child holds the slot too, so lint reads the child (and every ref it reaches) and applies the same check to its steps; a `timeout:` on the node itself does not help ([timeout-ignored](#timeout-ignored)). Give every such step a timeout (or a bound).
+
+An agent is bounded by its `max_turns`: `builtin://agent` and `builtin://structured-agent` have no limit unless the node that runs them sets `args.max_turns` (a template, or a `passthrough:` of `max_turns`, counts as set). Left unset or `0`, the finding names the arg to set and is a **warning**: lint did not read this input before, and a stricter verdict warns before it gates.
 
 ### shared-checkout-fetch
 
@@ -109,6 +111,10 @@ requires:
   repos: [control-plane]        # checkouts that must exist, reach origin, and have no local tag diverged from origin's
 ```
 
+### daemon-machine-pin
+
+**Warning.** A literal `daemon:` on the workflow or on a node pins one machine: by name (`daemon: ci-box-1`, `daemon: {name: ci-box-1}`) or by id (`daemon: {id: …}`). When that box is swapped out, renamed, asleep or busy, every run stalls waiting for it, even while another machine that could do the work is idle. Pin a [machine pool](/machines/choosing#pinning-a-pool-instead-of-a-machine) (`daemon: {pool: ci}`) instead: the run is placed once on the least-loaded member that can take it. A pool, labels alone, a kind (`local`, `cloud`, `any`) and a CEL selector (`"{{ inputs.machine }}"`) are not reported. A name pin keeps working; when the workflow really must run on that one machine, allow the finding with the reason.
+
 ### scenario-none
 
 **Warning.** The workflow has no scenarios under `.reliant/workflows/<name>/scenarios/`, so none of its triggers or endings is tested. See [Testing workflows](/workflows/testing).
@@ -126,11 +132,19 @@ events: [...]
 expect: {...}
 ```
 
-For an integration trigger the payload is merged over a sample of the event's declared payload, so give only the fields the trigger reads. `inputs:`, when also set, apply over the mapped inputs.
+For an integration trigger the payload is merged over a sample of the event's declared payload, so give only the fields the trigger reads. `inputs:`, when also set, apply over the mapped inputs. A schedule firing carries no event, so its scenario needs no payload: `trigger: {name: nightly}`.
 
 ### scenario-terminal-uncovered
 
 **Warning.** No scenario expects a run to end at this terminal node (a node with no outgoing edge). Coverage is read from what scenarios assert: a terminal named in `expect.completed`, `reached`, `node_outputs`, `messages` or `error_node`.
+
+### ask-question-not-ask-user
+
+**Warning.** An `ask_question` node's `metadata` is a JSON object without `"type": "ask_user"`. The app shows such a question with no options, and `reliant workflow answer` cannot answer it, so the run waits on a question nobody can resolve; validation and scenarios pass it. Write the metadata as the question card it is:
+
+```json
+{"type": "ask_user", "questions": [{"question": "Ship this change?", "options": [{"label": "Ship it"}, {"label": "Not yet"}]}]}
+```
 
 ### lint-allow-invalid
 

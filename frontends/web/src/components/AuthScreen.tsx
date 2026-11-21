@@ -12,6 +12,9 @@ import { describeAuthError } from '@/lib/authErrors'
 import { trackEvent } from '@/lib/analytics'
 import { isForgeShell } from '@/lib/shell'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
+import { devSignInEnabled } from '@/lib/devSignIn'
+import { DevSignInPanel } from './DevSignInPanel'
+import { appsPath, homePath } from '@/lib/paths'
 
 /**
  * Sign in with an emailed code. One path for everyone, new or returning.
@@ -92,7 +95,7 @@ export function AuthScreen() {
       window.location.href = redirectParam
       return
     }
-    navigate({ to: '/', search: {} })
+    navigate({ to: homePath(), search: {} })
   }
 
   // Where the magic link in the SAME email should come back to. The link
@@ -193,7 +196,7 @@ export function AuthScreen() {
       await signInAnonymously()
       // The forge host has no onboarding to start: a guest goes to Apps, whose
       // empty state (ForgeFirstRun) is the no-account deploy.
-      navigate({ to: isForgeShell() ? '/apps' : '/', search: {} })
+      navigate({ to: isForgeShell() ? appsPath() : homePath(), search: {} })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to continue as guest')
       setLoading(false)
@@ -387,6 +390,8 @@ export function AuthScreen() {
 
           <AuthLegalLinks />
         </form>
+
+        {devSignInEnabled() && <DevSignInPanel />}
       </div>
     </AuthLayout>
   )

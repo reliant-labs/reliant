@@ -3,6 +3,7 @@ import { LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { AuthLayout, AuthHeader } from './AuthLayout'
 import { EmailCodeForm } from './EmailCodeForm'
+import { authPath, homePath } from '@/lib/paths'
 
 /**
  * The `/verify-email` stop: an account that has an address on file which was
@@ -36,7 +37,7 @@ export function EmailVerification({ email }: { email?: string }) {
     try {
       await signOut()
     } finally {
-      navigate({ to: '/auth', search: { redirect: undefined } })
+      navigate({ to: authPath(), search: { redirect: undefined } })
     }
   }
 
@@ -88,7 +89,7 @@ export function EmailVerification({ email }: { email?: string }) {
           }
           onVerify={async (code) => {
             await verifyEmailOTP(code, emailToVerify)
-            navigate({ to: '/', search: {} })
+            navigate({ to: homePath(), search: {} })
           }}
           onResend={() => resendSignupVerification(emailToVerify)}
           footer={signOutFooter}

@@ -36,6 +36,7 @@ import {
   MobileScreenBody,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { mobileChatsPath } from "@/lib/paths";
 
 /** The scope a row stands for: a project id, or null for All projects. */
 type Scope = string | null;
@@ -63,7 +64,7 @@ export function MobileProjectList() {
         logger.warn("[MobileProjectList] Project filter switch failed", { scope, error });
       });
     }
-    void navigate({ to: "/m/chats" });
+    void navigate({ to: mobileChatsPath() });
   };
 
   const trailing = (scope: Scope) =>
@@ -75,7 +76,7 @@ export function MobileProjectList() {
         title="Projects"
         leading={
           <MobileBackButton
-            onClick={() => void navigate({ to: "/m/chats" })}
+            onClick={() => void navigate({ to: mobileChatsPath() })}
             label="Back to chats"
           />
         }

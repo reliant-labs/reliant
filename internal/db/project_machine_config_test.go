@@ -18,12 +18,14 @@ func (p *twoMachineProject) pushConfig(t *testing.T, daemonID string, at int64, 
 	t.Helper()
 	sj, err := config.EncodeCatalogJSON(skills)
 	require.NoError(t, err)
+	HoldProjectOnMachineForTest(t, p.repo, p.projectID, daemonID)
 	_, err = p.repo.SyncProjectConfigSnapshot(context.Background(), &ProjectConfigRecord{
 		ProjectID: p.projectID, DaemonID: daemonID,
 		UserConfigYAML:    testStringPtr("from " + daemonID),
 		ProjectSkillsJSON: sj, RepoMemoriesJSON: testStringPtr(memories), MCPConfigs: testStringPtr(mcp),
 		PushedAt: time.UnixMilli(at).UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(t, err)
 }
 

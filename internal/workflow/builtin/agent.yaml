@@ -53,6 +53,29 @@ inputs:
     ui: hidden
     description: Most sub-agents the whole run may have running at once, at every depth
 
+  # Bounds and bindings for an agent a workflow runs (ref: builtin://agent).
+  # Both default to today's behaviour: no turn limit, no bound parameters.
+  max_turns:
+    type: integer
+    default: 0
+    min: 0
+    max: 500
+    ui: hidden
+    description: |
+      Most turns (model calls) the agent takes before it stops and the workflow
+      moves on; 0 = no limit. Set it when a workflow must end: under
+      concurrency.max_running it is what bounds the agent, since a timeout: on
+      the workflow node bounds nothing.
+  tool_params:
+    type: object
+    default: {}
+    ui: hidden
+    description: |
+      Per-tool bound parameters (tools_config.tools), keyed by tool name, which
+      the model can neither see nor override, e.g. {shell: {credentials: none}}.
+      They bind this agent's own tools only: a sub-agent it spawns gets its
+      preset's tools unbound, so pass spawn_presets: [] when the binding must hold.
+
   skills:
     type: array
     default: []
@@ -135,6 +158,11 @@ outputs:
   message: "{{nodes.agent_loop.message}}"
   # The final response text (convenience accessor)
   response_text: "{{nodes.agent_loop.response_text}}"
+  # Why the last turn ended (done, tool_use, truncated, refused, ...) and how
+  # many turns ran: turns == max_turns with stop_reason tool_use means the
+  # limit stopped an agent that was still working.
+  stop_reason: "{{nodes.agent_loop.stop_reason}}"
+  turns: "{{nodes.agent_loop._iterations}}"
 
 # Entry point - replaces from: started edge
 entry: [agent_loop]
@@ -155,13 +183,27 @@ nodes:
     #                (OpenAI end_turn:false, Anthropic pause_turn) — chat
     #                b43b41fe ended on "I'll inspect the local dev auth setup…"
     #                with no tool call, and exited here as if finished
-    #   truncated    it hit its output cap mid-thought (chat 2308c394: 868s,
-    #                64000 output tokens, reported as complete)
     #   interrupted  our stream was cut mid-flight (chat 7da3935c, thread
     #                5e3fe370: killed 1.75s in with two edits applied, reported
     #                to its parent as a clean finish)
     #
-    # done / refused / error exit and yield to the user. stop_reason is a fact
+    # continuation is call_llm asking for the turn to be continued with a
+    # hidden nudge, which the next call_llm (args.continuation) sends:
+    #
+    #   truncated       it hit its output cap mid-thought (chat 2308c394: 868s,
+    #                   64000 output tokens, reported as complete). Up to 3
+    #                   nudged continuations in a row; after that continuation
+    #                   is empty and the loop exits with stop_reason truncated.
+    #                   Looping on stop_reason truncated alone did not help:
+    #                   the next call found history ending with the assistant
+    #                   and yielded "done" without calling the provider.
+    #   commentary /    a Codex/OpenAI Responses turn ended on a preamble or on
+    #   reasoning_only  reasoning alone, with no tool call (stop_reason done).
+    #                   One nudged retry per turn; call_llm leaves it empty
+    #                   once that retry was spent.
+    #
+    # done / refused / error (and truncated past its cap) exit and yield to
+    # the user. stop_reason is a fact
     # about the turn that just ran, recomputed every iteration, so a healthy
     # turn always clears it — none of these can wedge the loop open. It is
     # never empty here: the runtime fills a missing value from tool_calls
@@ -184,8 +226,14 @@ nodes:
     # The assistant-tail guard in call_llm is the backstop: a re-entered turn
     # whose history still ends with the assistant yields instead of calling
     # the provider — unless continue_turn says the previous turn was
-    # "incomplete", where that tail is the expected shape.
-    while: outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true
+    # "incomplete", where that tail is the expected shape (a continuation's
+    # nudge ends history with a user message, so it never reaches the guard).
+    #
+    # max_turns bounds all of it, the user's input included (0, the default,
+    # is no limit): a workflow that runs this agent unattended can rely on it
+    # ending, which a timeout: on its workflow node cannot give it. Lint reads
+    # this conjunct to tell a bounded agent node from an unbounded one.
+    while: (outputs.stop_reason in ['tool_use', 'incomplete', 'interrupted'] || outputs.continuation != '' || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -200,6 +248,9 @@ nodes:
         # 'done' when call_llm has not run, so an iteration that never reached
         # it cannot hold the loop open on this term alone.
         stop_reason: "{{has(nodes.call_llm) && has(nodes.call_llm.stop_reason) ? nodes.call_llm.stop_reason : 'done'}}"
+        # The continuation call_llm asked for (see the while-condition). Empty
+        # when call_llm has not run, so it cannot hold the loop open.
+        continuation: "{{has(nodes.call_llm) && has(nodes.call_llm.continuation) ? nodes.call_llm.continuation : ''}}"
 
       entry: [call_llm]
 
@@ -217,6 +268,9 @@ nodes:
             # with the assistant on purpose — call the provider anyway rather
             # than yielding. False on the first iteration (no outputs yet).
             continue_turn: "{{has(outputs.stop_reason) && outputs.stop_reason == 'incomplete'}}"
+            # The previous turn asked to be continued with a nudge (truncated,
+            # or a premature stop). Empty on the first iteration.
+            continuation: "{{has(outputs.continuation) ? outputs.continuation : ''}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
             # Plan mode gets plan-tagged tools plus the shell family — search runs
@@ -250,6 +304,8 @@ nodes:
               loadable_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : ['*']}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: orchestrator
+              # Bound parameters the model never sees (empty by default).
+              tools: "{{inputs.tool_params}}"
 
         - id: approval
           type: approval
@@ -296,7 +352,7 @@ nodes:
         - from: call_llm
           cases:
             - to: ask_question
-              condition: size(nodes.call_llm.tool_calls) == 0 && nodes.call_llm.stop_reason != 'incomplete' && inputs.ask
+              condition: size(nodes.call_llm.tool_calls) == 0 && nodes.call_llm.stop_reason != 'incomplete' && nodes.call_llm.continuation == '' && inputs.ask
               label: "ask_user"
 
         # No edge when denied - iteration ends, loop continues (user can re-prompt)
@@ -344,7 +400,23 @@ nodes:
                 label: auto_approve
 
 
-edges: []
+  # Says why the agent stopped when max_turns ended it; never runs at the
+  # default (0, no limit).
+  - id: max_turns_notification
+    type: save_message
+    args:
+      role: "system"
+      display_style: "warning"
+      content: "Agent reached its turn limit ({{inputs.max_turns}} turns) and stopped."
+
+edges:
+  - from: agent_loop
+    cases:
+      - to: max_turns_notification
+        # The limit ended a loop that would have gone on, not one that
+        # finished on its last allowed turn.
+        condition: inputs.max_turns > 0 && nodes.agent_loop._iterations >= inputs.max_turns && (nodes.agent_loop.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || nodes.agent_loop.has_feedback == true || nodes.agent_loop.pending_inbox == true)
+        label: "max_turns_reached"
 
 ui:
   positions:
@@ -354,3 +426,6 @@ ui:
     agent_loop:
       x: 446
       y: 254
+    max_turns_notification:
+      x: 917
+      y: 283

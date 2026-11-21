@@ -11,6 +11,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { useWorktreeStore } from "@/store/worktreeStore";
 
 import { START_APP } from "./appStart";
+import { homePath, projectPath } from "@/lib/paths";
 
 /** Open a new chat in the current project (or the first one) with the app-building composer. */
 export function useStartBuildingApp(): () => void {
@@ -20,9 +21,9 @@ export function useStartBuildingApp(): () => void {
     // A new chat, not whichever chat the project last had open.
     useChatStore.getState().clearCurrentChat(useWorktreeStore.getState().currentWorktreeId);
     if (project) {
-      void navigate({ to: "/project/$projectId", params: { projectId: project.id }, search: { start: START_APP } });
+      void navigate({ to: projectPath(project.id), search: { start: START_APP } });
     } else {
-      void navigate({ to: "/", search: { start: START_APP } });
+      void navigate({ to: homePath(), search: { start: START_APP } });
     }
   }, [navigate]);
 }

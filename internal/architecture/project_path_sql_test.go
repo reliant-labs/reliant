@@ -17,13 +17,19 @@ import (
 // SQL (`p.path`, `projects.path`), keyed "<file>:<func or decl name>". A query
 // that selects the creation path hands a daemon another machine's directory
 // as surely as a .Path read does; TestProjectPathSQLIsReviewed fails any
-// other. It is empty: the sweep reads a worktree's owner's INSTALLED
-// checkout row and nothing else (store.ownerCheckoutPath), and a row with no
-// owner checkout gets no path at all, never a guess.
+// other. No query selects it for a machine: the sweep reads a worktree's
+// owner's INSTALLED checkout row and nothing else (store.ownerCheckoutPath),
+// and a row with no owner checkout gets no path at all, never a guess. The
+// one entry compares it as the project's identity key.
 var projectPathSQLAllowed = map[string]struct {
 	count  int
 	reason projectPathReason
-}{}
+}{
+	// The lazy backfill leaves unassigned a project whose (org, user, path)
+	// key the default org already holds (projects_org_user_path_key): the
+	// path compared as a key, never handed to a machine.
+	"internal/store/org_scope.go:orgBackfillSteps": {1, reasonProjectRow},
+}
 
 // projectPathSQL matches projects.path named in SQL text.
 var projectPathSQL = regexp.MustCompile(`\b(p|projects)\.path\b`)

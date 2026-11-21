@@ -22,6 +22,7 @@ import { daemonLabel } from "../Automations/daemonChoices";
 import { RunStatusDot } from "./RunStatusIndicator";
 import { formatDuration } from "./runSections";
 import { LaunchKindIcon } from "./LaunchKindIcon";
+import { runPath } from "@/lib/paths";
 
 interface RunRowProps {
   run: RunSummary;
@@ -47,7 +48,7 @@ export function RunListHeader() {
       aria-hidden="true"
       className={cn(
         RUN_ROW_GRID,
-        "hidden border-b border-border/60 bg-background py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid",
+        "hidden border-b border-border/60 bg-background py-2 text-xs font-semibold text-muted-foreground md:grid",
       )}
     >
       <span />
@@ -86,8 +87,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 
       <div className="min-w-0">
         <Link
-          to="/workflows/runs/$runId"
-          params={{ runId: run.chatId }}
+          to={runPath(run.chatId)}
           className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {run.title || "Untitled run"}
@@ -208,7 +208,7 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
 function ArchivedTag() {
   return (
     <span
-      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-xs font-medium uppercase leading-none tracking-wide text-muted-foreground"
+      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-xs font-medium leading-none text-muted-foreground"
       title="Archived. Successful automation runs are archived automatically."
     >
       <Archive className="h-2.5 w-2.5" aria-hidden="true" />

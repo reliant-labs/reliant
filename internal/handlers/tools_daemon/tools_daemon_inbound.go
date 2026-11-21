@@ -140,6 +140,9 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			// loop is consuming the stream.
 			conn.recordDaemonHeartbeat(hb.Heartbeat.GetTimestamp())
 			conn.daemonToolCallsInFlight.Store(hb.Heartbeat.GetToolCallsInFlight())
+			// Here, not on the state worker: tool requests stop going to a
+			// draining daemon the moment it says so (upgrade.go).
+			conn.recordUpgradeStatus(hb.Heartbeat.GetUpgrade())
 			select {
 			case leaseRenew <- struct{}{}:
 			default: // a renewal is already pending; it covers this one
@@ -323,6 +326,9 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 		if hb := m.Heartbeat; hb != nil && hb.Disk != nil && len(hb.Disk.Volumes) > 0 {
 			s.recordDiskReport(ctx, conn, hb.Disk)
 		}
+		// A watched self-hosted machine's load, memory and disk, as the
+		// machine health lines control-plane alerts on (once a minute).
+		s.logMachineStatsLines(ctx, conn, m.Heartbeat, s.now())
 		// Persist heartbeat-carried detected listener ports on the
 		// attachment record (same flow as the memory telemetry above) so
 		// the daemon registry can surface preview affordances. Written

@@ -36,6 +36,7 @@ import {
   usedFraction,
   type NoticeTone,
 } from "./usageModel";
+import { settingsPath } from "@/lib/paths";
 
 const SIGNAL_LABELS: Record<UsageSignal, string> = { logs: "Logs", traces: "Traces", metrics: "Metrics", profiles: "Profiles" };
 
@@ -87,7 +88,7 @@ export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageR
     <p className="mt-2 text-sm">Browser: {gb(u.browserBilledBytes)} of {gb(u.browserCapBytes)} billable; {gb(u.browserBytes > u.browserBilledBytes ? u.browserBytes - u.browserBilledBytes : 0n)} more kept free.</p>
     <p className="mt-2 text-xs text-ink-muted">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
     {u.exempt && <p className="mt-2 text-xs text-ink-muted" data-testid="obs-billing-estimated">{ESTIMATED_SPLIT_NOTE}</p>}
-    <a className="mt-3 inline-block text-sm text-primary-ink underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
+    <a className="mt-3 inline-block text-sm text-primary-ink underline" href={`${settingsPath("billing")}?tab=limits#observability`}>Usage & limits in Billing & usage</a>
   </Card>;
 }
 
@@ -222,7 +223,7 @@ export function UsagePanel({ usage: u }: { usage: ObservabilityUsage }) {
 function Stat({ label, value, hint, testId }: { label: string; value: string; hint: string; testId: string }) {
   return (
     <CardInset>
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dt className="text-xs font-medium text-ink-muted">{label}</dt>
       <dd className="mt-1 text-lg font-semibold tabular-nums text-ink" data-testid={testId}>
         {value}
       </dd>

@@ -52,6 +52,7 @@ import {
   UsagePanel,
   UsageViewHeader,
 } from "./usageParts";
+import { settingsPath } from "@/lib/paths";
 
 export interface LLMUsageViewProps {
   orgId: string;
@@ -59,7 +60,7 @@ export interface LLMUsageViewProps {
   nowMs?: number;
 }
 
-const BILLING_SETTINGS = "/settings/billing";
+const BILLING_SETTINGS = settingsPath("billing");
 
 export function LLMUsageView({ orgId, nowMs: fixedNow }: LLMUsageViewProps) {
   const [range, setRange] = useState<UsageRangeId>("30d");

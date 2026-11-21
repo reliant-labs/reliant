@@ -32,6 +32,7 @@ import { startForIntent } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
 import { isOnboardingReturnTo } from "./onboardingGate";
 import type { OnboardingIntent } from "./types";
+import { authPath, homePath } from "@/lib/paths";
 
 /**
  * The journey picker's `?tour=` value. Finishing onboarding no longer opens it
@@ -111,17 +112,17 @@ export function onboardingExitTarget(
   switch (reason) {
     case "completed_local":
     case "completed_cloud_gate_continue":
-      return { to: "/", search: { start: startForIntent(landing), tour: undefined } };
+      return { to: homePath(), search: { start: startForIntent(landing), tour: undefined } };
     case "already_complete":
     case "returning_user_heal":
-      return { to: "/", search: keepTourHandoff };
+      return { to: homePath(), search: keepTourHandoff };
     case "signed_out":
       // Explicit rather than left to AuthGuard: the guard does bounce an
       // unauthenticated user eventually, but there is a render gap in which
       // this route's own "needs onboarding" logic re-asserts itself and puts
       // the user straight back here.
       // `tour: undefined`: the root route otherwise carries `?tour=` along.
-      return { to: "/auth", search: { redirect: undefined, tour: undefined } };
+      return { to: authPath(), search: { redirect: undefined, tour: undefined } };
   }
 }
 

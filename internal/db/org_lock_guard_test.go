@@ -52,6 +52,10 @@ var orgWritingDecls = map[string]string{
 	// Provenance, not placement: the org of the run a thread's call was paid in. Nothing is
 	// scoped by it; a project move leaves it naming the old org, which only makes it not count.
 	"PutThreadFunding": "records the org a thread's call was paid in (thread_funding); no org lock: it scopes nothing",
+	// A machine's org, mirrored from control-plane at its connect. The org
+	// lock guards a user's rows against the lazy backfill, which never
+	// stamps daemons: nothing races it.
+	"UpsertDaemonRegistration": "mirrors a machine's org (daemons.org_id) from control-plane at connect; no org lock: the backfill never stamps daemons",
 }
 
 var writesOrgID = regexp.MustCompile(`(?i)\bSET\s+org_id\b|\borg_id\s*=\s*COALESCE\(`)

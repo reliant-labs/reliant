@@ -13,16 +13,19 @@
   to that version, building it once; where it cannot, it says so and prints the
   `go run github.com/reliant-labs/forge/cmd/forge@<pin> …` to run instead.
 
-Every task runs the forge `forge.yaml` pins (`go run
-github.com/reliant-labs/forge/cmd/forge@<pin>`), whatever `forge` is on your
-`PATH`. `task --list` names every task.
+Every task runs the forge `forge.yaml` pins, through `scripts/forge.sh`:
+`FORGE_BIN` when set, else a `forge` on your `PATH` (or in `.tools/bin`) only
+when it is the pin, else `reliant forge` (which hands the command to the pin),
+else `go run github.com/reliant-labs/forge/cmd/forge@<pin>`. So a machine with
+only `reliant` installed needs no `forge` at all. `task --list` names every
+task.
 
 ## Development Setup
 
 ```bash
 git clone https://github.com/reliant-labs/reliant.git
 cd reliant
-task deps              # Go modules + the web, electron and protoc-gen-es npm packages
+task deps              # Go modules + the web, electron and protoc-gen-es packages (pnpm)
 forge env up dev       # the whole product on this machine (deploy/kcl/dev)
 ```
 
@@ -55,7 +58,7 @@ checkout; it needs k3d.
 To create a production build of the desktop app:
 
 ```bash
-cd electron && npm run build
+cd electron && pnpm run build
 ```
 
 Generated code is committed, so a fresh clone builds as-is — see
@@ -123,7 +126,7 @@ generator runs comes from the machine:
 | forge | `forge_version` in `forge.yaml` (and the matching `go.mod` require) |
 | buf | the `github.com/bufbuild/buf` line in `go.mod`, built in its own module graph |
 | protoc-gen-go, protoc-gen-connect-go | `tool` directives in `go.mod`, run with `go tool` |
-| protoc-gen-es | `tools/protoc-gen-es/package-lock.json`, installed by `task deps:protoc-gen-es` on first use |
+| protoc-gen-es | `tools/protoc-gen-es/pnpm-lock.yaml`, installed by `task deps:protoc-gen-es` on first use |
 | Go toolchain | `go.mod`: generation sets `GOTOOLCHAIN` to its version |
 
 Every buf plugin is local, so generation never touches the Buf Schema Registry:

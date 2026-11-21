@@ -234,8 +234,7 @@ describe('MobileNewChat', () => {
 
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
-        to: '/m/chats/$chatId',
-        params: { chatId: 'chat-9' },
+        to: '/m/chats/chat-9',
       }),
     )
   })

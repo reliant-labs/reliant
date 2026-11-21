@@ -31,11 +31,14 @@ DOGFOOD_ELECTRON_DAEMON_DATA_DIR="${DOGFOOD_ELECTRON_DAEMON_DATA_DIR:-$RELIANT_D
 DOGFOOD_DAEMON_DATA_DIR="${DOGFOOD_DAEMON_DATA_DIR:-}"
 DOGFOOD_DAEMON_DATA_DIR_SOURCE="explicit"
 BIN="$(go env GOPATH)/bin"
+# The forge control-plane pins, run from its checkout: forge on PATH at that
+# pin, else `reliant forge`, else `go run …@<pin>` (scripts/forge.sh).
+FORGE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/forge.sh"
 
 control_plane_port() {
   local base="$1"
   if [ -d "$CONTROL_PLANE_DIR" ]; then
-    (cd "$CONTROL_PLANE_DIR" && forge env devstack port "$base" 2>/dev/null) || printf '%s\n' "$base"
+    (cd "$CONTROL_PLANE_DIR" && "$FORGE_SH" env devstack port "$base" 2>/dev/null) || printf '%s\n' "$base"
   else
     printf '%s\n' "$base"
   fi
@@ -201,7 +204,7 @@ fi
 # render needs kcl. Report presence up front so a green phase gate can be
 # trusted to be green for the reason it appears to be.
 #
-# This is NOT a health check and must not grow into one — `forge doctor` /
+# This is NOT a health check and must not grow into one — `forge project doctor` /
 # `forge env status` own "is the environment running", per the note below.
 # This answers only "can the gates actually execute", which is prep's job.
 echo
@@ -226,9 +229,9 @@ select_dogfood_daemon_data_dir
 
 # ── Stack readiness ──────────────────────────────────────────────────────────
 #
-# `forge doctor` answers this and it is the ONLY thing that should. Do not add
+# `forge project doctor` answers this and it is the ONLY thing that should. Do not add
 # port probes here: a bespoke prober in this script would be a fourth health
-# mechanism beside `forge doctor`, KCL's `schema HealthCheck`, and serverkit's
+# mechanism beside `forge project doctor`, KCL's `schema HealthCheck`, and serverkit's
 # `FlowChecks` — and the first three would stay half-wired forever. Whatever is
 # missing gets fixed IN forge, where every project gets it.
 #
@@ -263,7 +266,7 @@ select_dogfood_daemon_data_dir
 echo
 echo "── env ──────────────────────────────────────────────────────────────────"
 if [ -d "$CONTROL_PLANE_DIR" ]; then
-  env_out="$(cd "$CONTROL_PLANE_DIR" && forge env status "$DOGFOOD_ENV" 2>&1)" || true
+  env_out="$(cd "$CONTROL_PLANE_DIR" && "$FORGE_SH" env status "$DOGFOOD_ENV" 2>&1)" || true
   printf '%s\n' "$env_out"
 
   # GATE on it, do not merely print it. `forge env status` is a REPORT: it exits
@@ -286,7 +289,7 @@ if [ -d "$CONTROL_PLANE_DIR" ]; then
     echo
     echo "✗ a host service is DOWN — the run would sit PENDING forever:" >&2
     printf '%s\n' "$down" | sed 's/^/    /' >&2
-    echo "  Fix: (cd $CONTROL_PLANE_DIR && forge env up $DOGFOOD_ENV)" >&2
+    echo "  Fix: (cd $CONTROL_PLANE_DIR && $FORGE_SH env up $DOGFOOD_ENV)" >&2
     exit 1
   fi
   echo "✅ every host service reports up"

@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeEach, vi } from 'vitest'
 import { configSchema, resetConfigForTests } from '@/lib/config_gen'
@@ -103,6 +103,13 @@ vi.mock('@/lib/supabase', () => ({
     },
   },
 }))
+
+// The real Monaco (lib/monacoBundle) is megabytes of browser code and web
+// workers that jsdom cannot run. Its import never settles here, so an editor
+// under test keeps its loading fallback, as it did when Monaco came from a
+// CDN script jsdom never loaded. A test that needs Monaco mocks this module
+// itself (lib/__tests__/monacoManager.*.test.ts).
+vi.mock('@/lib/monacoBundle', () => new Promise(() => {}))
 
 // Prevent auth/session bootstrap from making real gRPC calls in unit tests.
 vi.mock('@/api/grpc-unauth', () => ({

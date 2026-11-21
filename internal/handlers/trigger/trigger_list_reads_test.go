@@ -65,9 +65,11 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 	}
 	wj, err := config.EncodeCatalogJSON(stored)
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, env.repo, env.projectID, env.daemonID)
 	_, err = env.repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: env.projectID, DaemonID: env.daemonID, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 
 	for i := 0; i < workflows; i++ {

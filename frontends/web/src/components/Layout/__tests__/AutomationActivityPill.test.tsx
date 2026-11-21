@@ -107,8 +107,10 @@ describe("AutomationActivityPill", () => {
     const onOpenRuns = vi.fn();
     renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} onOpenRuns={onOpenRuns} />);
 
+    // A quiet trail on the Workflows row: "2 running", named in full.
     const running = await screen.findByTestId("automation-activity-pill-running");
-    expect(running).toHaveTextContent("2 automations running");
+    expect(running).toHaveTextContent("2 running");
+    expect(running).toHaveAccessibleName("2 automations running. Open live runs");
     expect(screen.queryByTestId("automation-activity-pill-needs-you")).toBeNull();
 
     fireEvent.click(running);
@@ -124,7 +126,9 @@ describe("AutomationActivityPill", () => {
     });
     renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} onOpenRuns={vi.fn()} />);
 
-    expect(await screen.findByTestId("automation-activity-pill-running")).toHaveTextContent("2 automations running");
+    expect(await screen.findByTestId("automation-activity-pill-running")).toHaveAccessibleName(
+      "2 automations running. Open live runs",
+    );
     expect(screen.queryByTestId("automation-activity-pill-needs-you")).toBeNull();
     expect(screen.queryByText(/need/)).toBeNull();
   });
@@ -133,9 +137,9 @@ describe("AutomationActivityPill", () => {
     listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "next" });
     renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} />);
 
-    expect(await screen.findByTestId("automation-activity-pill-running")).toHaveTextContent(
-      "1+ automation running",
-    );
+    const running = await screen.findByTestId("automation-activity-pill-running");
+    expect(running).toHaveTextContent("1+ running");
+    expect(running).toHaveAccessibleName("1+ automation running. Open live runs");
   });
 
   it("hides at zero, including when the only live run is already a sidebar row", async () => {

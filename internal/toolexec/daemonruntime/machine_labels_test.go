@@ -75,6 +75,9 @@ func TestDaemonDeclaresMachineLabelsOnEveryRegistration(t *testing.T) {
 	for i, reg := range gw.registrations()[:2] {
 		require.Equal(t, map[string]string{"pool": "pipeline", "gate": "yes"}, reg.GetMachineLabels(), "registration %d", i)
 		require.Equal(t, map[string]string{"pool": "pipeline", "gate": "yes"}, reg.GetLabels(), "registration %d", i)
+		// And the drain protocol's capability: without it a gateway never
+		// sends this daemon RestartRequested (upgrade_drain.go).
+		require.True(t, reg.GetDrainsOnRestartRequest(), "registration %d", i)
 	}
 }
 

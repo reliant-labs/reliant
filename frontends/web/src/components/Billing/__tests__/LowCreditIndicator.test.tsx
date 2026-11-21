@@ -119,8 +119,7 @@ describe("the indicator states a real quantity and offers a way out", () => {
 
     screen.getByTestId("low-credit-indicator").click();
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
+      to: "/settings/billing",
     });
   });
 });

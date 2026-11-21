@@ -209,7 +209,7 @@ own themes don't declare**. That's gap F9-7. reliant patched it locally.
 
 P9 work here:
 - **S0:** extend `colorSchemeTokenContract.test.ts` so it collects every token class used under
-  `src/components/forge-ui/**` and asserts each one is declared in the `@theme` block. A future `forge component install`
+  `src/components/forge-ui/**` and asserts each one is declared in the `@theme` block. A future `forge ui component install`
   that brings a new token then fails a test instead of rendering transparent.
 - Fix the `web-styling` skill (it says seven schemes; there are ten).
 

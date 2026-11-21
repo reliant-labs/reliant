@@ -21,9 +21,9 @@
  *     └ signed in already ...... "Claim into my account" → CompleteClaim as
  *     │                          themselves: they join the site's org as its
  *     │                          owner → switch to that org → /apps
- *     │                          If they already hold their one free static site
- *     │                          a dialog asks which site stays live (or sends
- *     │                          them to subscribe and back); the claim waits.
+ *     │                          If the server requires a choice, a dialog asks
+ *     │                          where free hosting stays (or sends them to
+ *     │                          billing and back); the claim waits.
  *     └ not signed in .......... "Sign in to claim" → /auth, which returns here
  *                                (the token stays in storage) → the line above
  *                                No session is released, so the link stays good.
@@ -81,6 +81,7 @@ import { consolePath } from "@/components/Forge/Console/paths";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
+import { appsPath, upgradePath } from "@/lib/paths";
 
 export type ClaimView =
   | { kind: "loading" }
@@ -95,7 +96,7 @@ export type ClaimView =
       situation: ClaimSituation;
       working: boolean;
       error: string | null;
-      /** Claiming into this account would put a second site on their one free slot. */
+      /** The server needs a choice about where free hosting stays before claiming. */
       freeSite: FreeSiteConflict | null;
     }
   | { kind: "finishing" }
@@ -109,13 +110,13 @@ export interface ClaimFlow {
   claim: () => void;
   /**
    * "Claim into my account": CompleteClaim as the signed-in person, who joins
-   * the org as owner. When they already hold their free static site this opens
-   * the dialog instead, so the claim never decides which site stays live.
+   * the org as owner. When the server requires a free hosting choice, this
+   * opens the dialog first so the claimant makes that choice.
    */
   claimIntoAccount: () => void;
   /** The free-site dialog, or null when none is open. */
   freeSiteDialog: FreeSiteConflict | null;
-  /** The person's answer: keep one site live, or leave to subscribe and keep both. */
+  /** The person's choice of where free hosting stays, or a detour to billing. */
   answerFreeSite: (answer: FreeSiteKeep | "subscribe") => void;
   /** Close the dialog. Nothing was changed. */
   cancelFreeSite: () => void;
@@ -172,7 +173,7 @@ export function useClaimFlow(): ClaimFlow {
         void navigate({ href: consolePath(project, { kind: "overview" }), replace: true });
         return;
       }
-      void navigate({ to: "/apps", search, replace: true });
+      void navigate({ to: appsPath(), search, replace: true });
     },
     [navigate],
   );
@@ -248,7 +249,7 @@ export function useClaimFlow(): ClaimFlow {
             return;
           }
           updatePendingClaim({ upgradeSent: true });
-          void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+          void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
           return;
         }
         if (isDeclined(err)) {
@@ -333,7 +334,7 @@ export function useClaimFlow(): ClaimFlow {
     // Asking the server for it again is refused by design.
     if (situation === "resume-upgrade") {
       trackEvent("claim_started", { situation });
-      void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+      void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
       return;
     }
     const fail = (stage: string, err: unknown, message: string) => {
@@ -364,7 +365,7 @@ export function useClaimFlow(): ClaimFlow {
         const adopted = await adoptSession(session);
         released.current = null;
         updatePendingClaim({ anonUserId: adopted.id });
-        void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+        void navigate({ to: upgradePath(), search: { returnTo: CLAIM_RETURN_TO } });
       } catch (err) {
         // The session was released and is only in memory now: say so, and keep
         // it for the retry instead of asking the server for a second one.
@@ -379,8 +380,8 @@ export function useClaimFlow(): ClaimFlow {
       setView({ kind: "no-link" });
       return;
     }
-    // Two free sites cannot both stay live. The person decides which, before
-    // anything is claimed; there is no default.
+    // The server reported a conflict. Ask where free hosting stays before
+    // claiming; don't infer a limit or pick a default on the client.
     if (view.kind === "ready" && view.freeSite) {
       trackEvent("claim_free_site_prompted", { source: "preview" });
       setFreeSiteDialog(view.freeSite);

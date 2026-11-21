@@ -82,6 +82,8 @@ type EventFirer struct {
 	pools     Placer
 	pause     *AutoPause
 	checks    CheckOpener
+	// now is the clock capacity expiry is judged by.
+	now func() time.Time
 }
 
 // WithChecks lets the firer open the GitHub check a workflow's `check:`
@@ -114,7 +116,7 @@ func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
 
 // NewEventFirer builds the inbound fire activity's receiver.
 func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
-	return &EventFirer{repo: repo, launcher: launcher}
+	return &EventFirer{repo: repo, launcher: launcher, now: time.Now}
 }
 
 // WithWorkflows lets the firer read an activation's declaration, whose inputs
@@ -164,6 +166,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, pausedDetail(trigger), nil)
 	}
+	// A trigger that names no workflow runs its owner's default (Firer.Fire).
+	trigger = withDefaultWorkflow(ctx, f.launcher, trigger)
 	// A creator who left the trigger's org: the first event to find out
 	// records the failure and pauses the trigger (Firer.Fire).
 	if !resuming {
@@ -184,7 +188,10 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
-		return f.settle(ctx, ev, nil, core.TriggerEventFailed, detail, err)
+		// The declaration only shapes the check's `trigger.activation`
+		// params here: one that cannot be read leaves them as stored.
+		decl, _ := activationFor(ctx, f.workflows, trigger)
+		return f.refuse(ctx, ev, nil, f.workflows, trigger, decl, detail, err)
 	}
 
 	// A pool-bound trigger reads its declaration and concurrency from the
@@ -204,7 +211,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	// Which definition this fire resolves, recorded on the event whatever the
 	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
 	// trusted from intake, like the declaration below.
-	def, err := firingDefinition(ctx, f.workflows, trigger, ev, resuming)
+	//
+	// Every resolution of this fire reads through one memo (oneFire): the
+	// snapshot it pins is read once, not once per resolution.
+	reads := oneFire(f.workflows)
+	def, err := tracedFiringDefinition(ctx, reads, trigger, ev, resuming)
 	if err != nil {
 		return nil, err
 	}
@@ -214,17 +225,17 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	workflows := PinnedTo(f.workflows, def)
+	workflows := firingWorkflows(reads, def)
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
-			return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
+			return f.refuse(ctx, ev, def, workflows, trigger, nil, err.Error(), err)
 		}
 		return nil, err
 	}
 	spec, err := f.buildSpec(ctx, trigger, ev, decl)
 	if err != nil {
-		return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
+		return f.refuse(ctx, ev, def, workflows, trigger, decl, err.Error(), err)
 	}
 	if def != nil {
 		// The run loads the definition this fire recorded (FiringDefinition).
@@ -238,22 +249,29 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
-		return nil, err
+		if retryableRead(err) || resuming {
+			return nil, err
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, fmt.Sprintf("workflow %q cannot be resolved: %v", trigger.Workflow, err), err)
 	}
-	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
 		return nil, err
 	}
 	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
+	limits.ExpiredBefore = capacityExpiredBefore(f.now())
 	if capped {
-		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
+		capacityAdmission(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
+			}
+			if errors.Is(err, errCapacityExpired) {
+				return f.settle(ctx, ev, def, core.TriggerEventFailed, capacityExpiredDetail, nil)
 			}
 			return nil, err
 		}
@@ -280,7 +298,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	switch {
 	case launchErr == nil:
 		if capped {
-			f.wake.wakeNext(ctx, f.repo, trigger, ev.ID)
+			f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
 		}
 		return &FireOutput{Outcome: string(core.TriggerEventLaunched), ChatID: res.Chat.ID, EventID: res.EventID}, nil
 	case errors.Is(launchErr, launch.ErrAlreadyLaunched):
@@ -297,7 +315,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			reason = declined.Reason
 		}
 		if reason == capacityWaiting || isPoolWaiting(reason) {
-			// The event stays pending; the redriver fires it again.
+			// The event stays pending; the redriver fires it again. A capped
+			// event that is not the one the scope admits next hands its turn on.
+			if reason == capacityWaiting && capped {
+				f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
+			}
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, reason, nil)
@@ -331,6 +353,25 @@ func (f *EventFirer) refuseCreatorLeftOrg(ctx context.Context, ev *core.TriggerE
 		cause = nil
 	}
 	return f.settle(ctx, ev, def, outcome, detail, cause)
+}
+
+// refuse records that ev can never launch as written (settle, failed), after
+// opening the check ev's workflow declares (openRefusedCheck), so the firing's
+// check concludes failure on GitHub like any other ending. workflows is the
+// resolver this fire reads the workflow through: pinned to def once def is
+// read.
+//
+// Every pre-launch failure of a workflow that can be read goes through here
+// (a failure after the check opened needs no second open). The refusals that
+// settle directly open no check: a skip (the trigger is gone or paused), a
+// creator who left the org (the authority the check is written with left with
+// them), and a pool with no agreed catalog or a broken definition, where no
+// workflow can be read to say whether it declares a check.
+func (f *EventFirer) refuse(ctx context.Context, ev *core.TriggerEvent, def *core.TriggerEventDefinition, workflows WorkflowResolver, trigger *core.Trigger, decl *Declaration, detail string, cause error) (*FireOutput, error) {
+	if err := openRefusedCheck(ctx, f.checks, workflows, f.repo, trigger, decl, ev); err != nil {
+		return nil, err
+	}
+	return f.settle(ctx, ev, def, core.TriggerEventFailed, detail, cause)
 }
 
 // settle records a verdict on an event that did not launch. With cause set,
@@ -398,7 +439,7 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, scope)
+	prompt, err := LaunchPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}

@@ -37,6 +37,8 @@ import { cn } from "../../lib/utils";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
+import { appsPath, mobileAccountPath, mobileGitHubPath, mobileInboxPath, mobileMachinesPath, mobileNewChatPath, mobileProjectsPath, mobileSearchPath, mobileSettingsPath, mobileWorkflowsPath } from "@/lib/paths";
+import { orgPath } from "@/components/Forge/Console/paths";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -65,20 +67,20 @@ interface NavItem {
 function navItems(): NavItem[] {
   const forge = isForgeUIEnabled();
   return [
-    { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
+    { to: mobileNewChatPath(), label: "New chat", icon: MessageSquarePlus },
     ...(forge
       ? [
-          { to: "/apps", label: "Apps", icon: Boxes },
-          { to: "/forge/observability", label: "Observability", icon: Activity },
+          { to: appsPath(), label: "Apps", icon: Boxes },
+          { to: orgPath({ kind: "observability" }), label: "Observability", icon: Activity },
         ]
       : []),
-    { to: "/m/inbox", label: "Inbox", icon: Inbox, inboxBadge: true },
-    { to: "/m/search", label: "Search", icon: Search },
-    { to: "/m/workflows", label: "Workflows", icon: Workflow },
-    { to: "/m/daemons", label: "Machines", icon: Server },
-    { to: "/m/github", label: "GitHub", icon: Github },
-    { to: "/m/settings", label: "Settings", icon: Settings },
-    { to: "/m/account", label: "Account", icon: User },
+    { to: mobileInboxPath(), label: "Inbox", icon: Inbox, inboxBadge: true },
+    { to: mobileSearchPath(), label: "Search", icon: Search },
+    { to: mobileWorkflowsPath(), label: "Workflows", icon: Workflow },
+    { to: mobileMachinesPath(), label: "Machines", icon: Server },
+    { to: mobileGitHubPath(), label: "GitHub", icon: Github },
+    { to: mobileSettingsPath(), label: "Settings", icon: Settings },
+    { to: mobileAccountPath(), label: "Account", icon: User },
   ];
 }
 
@@ -201,7 +203,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
     <div className="fixed inset-0 z-[9999] flex">
       <div
         className={cn(
-          "absolute inset-0 bg-black/50 transition-opacity duration-200",
+          "absolute inset-0 bg-scrim transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0",
         )}
         onClick={onClose}
@@ -283,7 +285,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               plain destinations above. */}
           <div className="pt-2">
             <Link
-              to="/m/projects"
+              to={mobileProjectsPath()}
               className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">

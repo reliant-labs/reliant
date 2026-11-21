@@ -15,16 +15,24 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
 	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 func init() {
 	RegisterCommand(gitpublish.CommandPrepare, handleGitPublishPrepare)
 	RegisterCommand(gitpublish.CommandPush, handleGitPublish)
 }
+
+// daemonFeatures are the capabilities this daemon adds to its registration
+// beyond its tool names: behaviour of a command the server must not assume of
+// an older daemon, which would silently ignore the request field it needs.
+var daemonFeatures = []string{gitpublish.CapabilityForceWithLease}
 
 // A git_publish node is two daemon commands so the credential exists for as
 // short a time as it can.
@@ -35,7 +43,10 @@ func init() {
 // What the push never does, by construction:
 //
 //   - force: the refspec is <sha>:refs/heads/<branch> with no "+" and no
-//     --force, so a remote that has moved on is refused, not overwritten;
+//     --force, so a remote that has moved on is refused, not overwritten. The
+//     one exception is a lease the node names (force_with_lease): then the
+//     push carries --force-with-lease=refs/heads/<branch>:<sha>, which the
+//     remote applies only if the branch is still at that exact commit;
 //   - put the credential in an environment variable, an argument or a file: it
 //     arrives in the command payload and is handed to the one git process over
 //     a pipe it inherits as file descriptor 3, which a credential helper reads;
@@ -357,6 +368,10 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	if len(req.ExpectSHA) < 7 {
 		return refuse("no commit to push was named")
 	}
+	lease := req.ForceWithLease
+	if lease != "" && !gitpublish.ValidLeaseSHA(lease) {
+		return refuse("force_with_lease must be the full sha of the commit the branch must still be at, got %q: nothing was pushed", lease)
+	}
 
 	env := isolatedGitEnv()
 	head, err := revParse(ctx, req.Worktree, env, "HEAD")
@@ -366,8 +381,17 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	if head != req.ExpectSHA {
 		return refuse("the checkout moved on after it was prepared (head %s, expected %s): nothing was pushed", short(head), short(req.ExpectSHA))
 	}
-	if key := dangerousKey(ctx, req.Worktree, env); key != "" {
-		return refuse("the checkout's git config sets %s, which could redirect the push or read the credential: nothing was pushed", key)
+	// A clone an older daemon made still carries the credential.helper it wrote
+	// there; remove exactly that before judging the config (git_credential.go).
+	if healManagedCheckoutHelper(ctx, req.Worktree, env) {
+		logging.InfoContext(ctx, logPrefix+" Removed the credential.helper an older release wrote into this clone", "repo", req.Worktree)
+	}
+	key, origin, err := dangerousKey(ctx, req.Worktree, env)
+	if err != nil {
+		return refuse("the checkout's git config could not be read: nothing was pushed")
+	}
+	if key != "" {
+		return refuse("%s", dangerousConfigRefusal(key, origin))
 	}
 
 	// The credential rides a pipe the push inherits as fd 3. Written and closed
@@ -378,10 +402,15 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 		return refuse("could not stage the credential for the push")
 	}
 	defer r.Close()
+	ref := "refs/heads/" + req.Branch
 	args := append(privateGitCredentialArgs(u.Host, ""),
-		"push", "--no-verify", "--no-recurse-submodules", "--porcelain",
-		req.RemoteURL, req.ExpectSHA+":refs/heads/"+req.Branch,
-	)
+		"push", "--no-verify", "--no-recurse-submodules", "--porcelain")
+	if lease != "" {
+		// The remote compares and swaps: the branch is replaced only if it is
+		// still at lease. Still no "+" on the refspec and no --force.
+		args = append(args, "--force-with-lease="+ref+":"+lease)
+	}
+	args = append(args, req.RemoteURL, req.ExpectSHA+":"+ref)
 	res, err := pubRunGit(ctx, req.Worktree, env, "", false, []*os.File{r}, args...)
 	if err != nil {
 		return refuse("could not run git: %v", err)
@@ -389,7 +418,16 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	out := scrub(res.combined(), token)
 
 	if res.exit != 0 {
-		return json.Marshal(gitpublish.PushResponse{Refusal: classifyPushFailure(out), NonFastForward: nonFastForward(out)})
+		if lease != "" && staleLease(out) {
+			// The branch is not where the run built on. Read where it is, so
+			// the refusal names both commits.
+			actual, found := remoteBranchHead(ctx, req.Worktree, env, u.Host, req.RemoteURL, ref, token)
+			return json.Marshal(gitpublish.PushResponse{
+				Refusal:      leaseRefusal(req.Branch, lease, actual, found),
+				LeaseChecked: true, LeaseRefused: true, RemoteSHA: actual,
+			})
+		}
+		return json.Marshal(gitpublish.PushResponse{Refusal: classifyPushFailure(out), NonFastForward: nonFastForward(out), LeaseChecked: lease != ""})
 	}
 	// --porcelain prints one "<flag>\t<from>:<to>\t<summary>" line per ref:
 	// '=' is up to date; ' ' (fast-forward), '*' (new) and '+' are updates.
@@ -400,29 +438,126 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 	if !pushed {
-		return json.Marshal(gitpublish.PushResponse{})
+		return json.Marshal(gitpublish.PushResponse{LeaseChecked: lease != ""})
 	}
 	// Record what was published, so the next prepare of this checkout finds
 	// nothing new. Best effort: a missing tracking ref only makes a repeat
 	// publish push the same commit again, which the remote reports as up to date.
 	_, _ = pubRunGit(ctx, req.Worktree, env, "", false, nil, "update-ref", publishTrackingNamespace+req.Branch, req.ExpectSHA)
-	return json.Marshal(gitpublish.PushResponse{Pushed: true})
+	return json.Marshal(gitpublish.PushResponse{Pushed: true, LeaseChecked: lease != ""})
+}
+
+// staleLease reports whether git refused the push because the lease did not
+// hold: the remote branch is not at the expected commit (or does not exist).
+func staleLease(out string) bool {
+	return strings.Contains(strings.ToLower(out), "stale info")
+}
+
+func leaseRefusal(branch, lease, actual string, found bool) string {
+	var at string
+	switch {
+	case actual != "":
+		at = "is at " + actual
+	case found:
+		at = "has moved (its head could not be read back)"
+	default:
+		at = "does not exist on the remote"
+	}
+	return fmt.Sprintf("the lease did not hold: %s was expected at %s but %s; nothing was pushed", branch, lease, at)
+}
+
+// remoteBranchHead reads ref's head on the remote after a refused lease, with
+// a second, equally private hand-off of the same credential (the first pipe
+// was spent by the push). found is false only when the remote answered and
+// has no such branch; a read that fails returns ("", true).
+func remoteBranchHead(ctx context.Context, dir string, env []string, host, remoteURL, ref, token string) (sha string, found bool) {
+	r, err := credentialPipe(token)
+	if err != nil {
+		return "", true
+	}
+	defer r.Close()
+	args := append(privateGitCredentialArgs(host, ""), "ls-remote", remoteURL, ref)
+	res, err := pubRunGit(ctx, dir, env, "", false, []*os.File{r}, args...)
+	if err != nil || res.exit != 0 {
+		return "", true
+	}
+	for _, line := range strings.Split(res.stdout, "\n") {
+		oid, name, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if ok && name == ref && gitpublish.ValidLeaseSHA(oid) {
+			return oid, true
+		}
+	}
+	return "", false
 }
 
 // dangerousKey returns the first configured key in the checkout that could
-// redirect a push or capture a credential, or "".
-func dangerousKey(ctx context.Context, dir string, env []string) string {
-	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--list", "--null")
-	if err != nil || res.exit != 0 {
-		return "git config could not be read"
+// redirect a push or capture a credential, and where git read it from (its
+// --show-origin, e.g. "file:/repo/.git/config"), or "" when there is none.
+// Values are never returned: one may be a credential.
+func dangerousKey(ctx context.Context, dir string, env []string) (key, origin string, err error) {
+	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--list", "--null", "--show-origin")
+	if err != nil {
+		return "", "", err
 	}
-	for _, entry := range strings.Split(res.stdout, "\x00") {
-		key, _, _ := strings.Cut(entry, "\n")
-		if dangerousConfig.MatchString(strings.ToLower(key)) {
-			return key
+	if res.exit != 0 {
+		return "", "", fmt.Errorf("git config --list exited %d", res.exit)
+	}
+	// With --null --show-origin, each entry is "<origin>\0<key>\n<value>\0".
+	fields := strings.Split(res.stdout, "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		k, _, _ := strings.Cut(fields[i+1], "\n")
+		if dangerousConfig.MatchString(strings.ToLower(k)) {
+			return k, fields[i], nil
 		}
 	}
-	return ""
+	return "", "", nil
+}
+
+// dangerousConfigRefusal tells the user which key refused the publish, where
+// it is set, and how to remove it when it is not needed. It never names the
+// value. The daemon removes only the credential.helper it once wrote itself;
+// anything else is the user's to keep or drop.
+//
+// The key and origin come from the repository's own config, so they are
+// untrusted: one holding a newline or a terminal control character could forge
+// more refusal text, or a command, in a log or the UI. Such a value is shown
+// escaped, and no removal command is offered for it: the user inspects it.
+func dangerousConfigRefusal(key, origin string) string {
+	msg := "the checkout's git config sets " + displayConfigText(key)
+	file, isFile := strings.CutPrefix(origin, "file:")
+	if isFile && file != "" && plainConfigText(file) && plainConfigText(key) {
+		msg += " in " + file + ", which could redirect the push or read the credential: nothing was pushed. " +
+			"A publish never uses a repository's own helpers, proxies or URL rewrites; if this checkout does not need it, remove it with: " +
+			"git config --file " + shellQuote(file) + " --unset-all " + shellQuote(key)
+		return msg
+	}
+	if origin != "" {
+		msg += " (from " + displayConfigText(origin) + ")"
+	}
+	return msg + ", which could redirect the push or read the credential: nothing was pushed"
+}
+
+// plainConfigText reports whether s is valid UTF-8 of printable characters
+// only (spaces allowed), so it can be shown, and shell-quoted, as it is.
+func plainConfigText(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if r != ' ' && !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// displayConfigText is s as it is when plain, otherwise Go-quoted (ASCII,
+// every control character escaped) so it cannot break out of its line.
+func displayConfigText(s string) string {
+	if plainConfigText(s) {
+		return s
+	}
+	return strconv.QuoteToASCII(s)
 }
 
 func short(sha string) string {

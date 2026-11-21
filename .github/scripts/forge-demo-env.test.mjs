@@ -1,10 +1,11 @@
 // The actual hosted demo declaration, evaluated with the project's pinned forge.
-// No deploy, control-plane writes or credentials: `kcl eval` is a local render.
+// No deploy, control-plane writes or credentials: `env kcl eval` is a local render.
 //
 // Which forge: FORGE_CMD, the command `task` resolves from forge.yaml's pin
-// (Taskfile.yml's FORGE: FORGE_BIN, else `go run …/cmd/forge@<pin>`), which
-// `task ci:repo-checks` passes in. A bare `node --test` falls back to the
-// forge on PATH. A missing forge fails the test; it is never skipped.
+// (Taskfile.yml's FORGE: FORGE_BIN, else scripts/forge.sh), which
+// `task ci:repo-checks` passes in. A bare `node --test` runs scripts/forge.sh
+// itself: forge on PATH at the pin, else `reliant forge`, else `go run
+// …/cmd/forge@<pin>`. A missing forge fails the test; it is never skipped.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -12,11 +13,11 @@ import test from "node:test";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
-const [forge, ...forgeArgs] = (process.env.FORGE_CMD || "forge").trim().split(/\s+/);
+const [forge, ...forgeArgs] = (process.env.FORGE_CMD || `${root}scripts/forge.sh`).trim().split(/\s+/);
 
 // `go run …@<pin>` builds forge on a cold cache: allow for it.
 test("demo is exactly one fixtures-only hosted frontend, not the Reliant backend", { timeout: 660_000 }, () => {
-  const bundle = JSON.parse(execFileSync(forge, [...forgeArgs, "kcl", "eval", "deploy/kcl/demo", "--format", "json", "-S", "output"], {
+  const bundle = JSON.parse(execFileSync(forge, [...forgeArgs, "env", "kcl", "eval", "deploy/kcl/demo", "--format", "json", "-S", "output"], {
     cwd: root,
     timeout: 600_000,
     encoding: "utf8",

@@ -228,6 +228,17 @@ func SetLaunchEventRunStatus(ctx context.Context, db orm.Context, chatID, status
 	return nil
 }
 
+// SetLaunchEventRunOutcome records outcome (a core.RunOutcome* value) on
+// chatID's launch event, beside its run_status (the same earliest-event rule).
+// A chat with no launch event is not an error.
+func SetLaunchEventRunOutcome(ctx context.Context, db orm.Context, chatID, outcome string) error {
+	if _, err := db.Bun().NewRaw(`UPDATE trigger_events SET run_outcome = ?0::text
+WHERE id = (SELECT id FROM trigger_events WHERE chat_id = ?1::text ORDER BY created_at ASC, id ASC LIMIT 1)`, outcome, chatID).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to record launch event run outcome: %w", err)
+	}
+	return nil
+}
+
 // The pending-event statements below spell `outcome = 'pending'` into the SQL
 // rather than binding it: it is idx_trigger_events_pending's partial-index
 // predicate, which the planner must see at plan time, and for the claim and
@@ -245,7 +256,10 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	// one head per scope by last-attempt time, so a large blocked pool cannot
 	// monopolize every tenant's redrive or expiry sweep. An unbound launch is a
 	// candidate only while it still holds its slot: a released one has nothing
-	// left to recover, and redriving it forever would starve the heads.
+	// left to recover, and redriving it forever would starve the heads. A
+	// scope's head is in admission order (priority, then arrival); a head held
+	// back by its key's running cap hands its turn on when its fire declines
+	// (triggers.capacityWake.wakeNext), as the redriver does not know the cap.
 	var rows []*TriggerEvent
 	err := db.Bun().NewRaw(`WITH ordinary AS (
  SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
@@ -254,7 +268,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
  SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
  FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
  AND outcome = 'pending'
- ORDER BY user_id,capacity_project_id,capacity_workflow_ref,capacity_order
+ ORDER BY user_id,capacity_project_id,capacity_workflow_ref,COALESCE(capacity_priority,0) DESC,capacity_order
 ), candidates AS (
  SELECT id,capacity_redriven_at,created_at FROM heads
  UNION ALL
@@ -280,6 +294,32 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 		out = append(out, ev)
 	}
 	return out, nil
+}
+
+// ExpirePendingTriggerCapacityEvents settles as failed, with detail, the
+// events still waiting for workflow capacity that were recorded before
+// recordedBefore: at most limit of them, oldest first. It returns how many it
+// settled.
+//
+// It sweeps every waiting event, not the scope heads
+// ListStalePendingTriggerEvents returns: a head is chosen by priority, so a
+// low-priority event behind a steady stream of higher ones is never a head,
+// and would otherwise never expire. A waiting event holds no slot, so settling
+// one frees nothing. Conditional on pending, like SettlePendingTriggerEvent,
+// so it never overwrites a launch that won a race.
+func ExpirePendingTriggerCapacityEvents(ctx context.Context, db orm.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome = ?0, outcome_detail = ?1
+WHERE id IN (
+ SELECT id FROM trigger_events WHERE capacity_order IS NOT NULL AND outcome = 'pending' AND created_at < ?2
+ ORDER BY created_at, id LIMIT ?3
+) AND outcome = 'pending'`, core.TriggerEventFailed, detail, recordedBefore.UTC(), limit).Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to expire waiting trigger events: %w", err)
+	}
+	return res.RowsAffected()
 }
 
 // ClaimPendingTriggerEvent adopts an inbound event the receiver recorded: the
@@ -520,15 +560,24 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 }
 
 // firingsSinceLastSuccessSQL is every firing of each named trigger after its
-// newest SUCCESS (a launched firing whose run completed), newest first, capped
-// at ?2 rows. A trigger with no success returns its whole history up to the
+// newest SUCCESS (a launched firing whose run completed, and did not complete
+// only because its failure path ran), newest first, capped at ?2 rows. A trigger with no success returns its whole history up to the
 // cap. This is the failure episode: Go reads its length and its oldest
 // failure from it, so the episode is not truncated at the 10-firing health
 // window.
 //
 // "Completed" is the run the trigger fired (run_status), not whatever turn the
 // chat is on now — the same rule triggers.resolveFiring applies — so a
-// person's later reply in the chat neither ends nor extends the episode.
+// person's later reply in the chat neither ends nor extends the episode. A run
+// that completed with run_outcome failure_handled — a node failed and the run
+// went on past it (reliant#2753) — is not a success: resolveRecordedRun
+// counts it a failure, so it must not end the episode either, or the streak
+// would restart at every handled failure. A completed run with no outcome
+// (recorded before run_outcome existed) is still a success.
+//
+// The outcome is read on the at most ?2 firings the success search already
+// holds, so it filters those rows and changes nothing about the index walks
+// below.
 //
 // Per trigger, both halves walk idx_trigger_events_trigger_occurred_id newest
 // first, and each reads at most ?2 firings:
@@ -549,22 +598,47 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // Finding the success and the episode with DISTINCT ON and row_number() over
 // the whole history judged every firing the triggers ever had (each joined to
 // its run's display state) on every Inbox read.
-var firingsSinceLastSuccessSQL = `SELECT ` + triggerOutcomeColumns("e") + `,
+var firingsSinceLastSuccessSQL = triggerEpisodeSQL("", "")
+
+// Both the success boundary and returned rows exclude safely managed actors
+// (the AttentionManagedChats predicate). Filtering after LIMIT/cutoff would let
+// a managed success erase an unmanaged failure, or a long managed streak push
+// it out of the episode window. An unfinished observer has no durable backstop.
+// The success search filters inside its ?2 window, so it is still the newest
+// ?2 unmanaged firings the episode itself can reach.
+var firingsSinceLastUnmanagedSuccessSQL = triggerEpisodeSQL(unmanagedAttentionFiringSQL("s"), unmanagedAttentionFiringSQL("x"))
+
+func unmanagedAttentionFiringSQL(alias string) string {
+	return ` AND NOT (` + alias + `.outcome = 'launched' AND EXISTS (
+		SELECT 1 FROM attention_actors a
+		JOIN chats ac ON ac.id = a.chat_id AND ac.user_id = a.user_id AND ac.project_id = a.project_id
+		JOIN projects ap ON ap.id = ac.project_id AND ap.user_id = ac.user_id
+		WHERE a.chat_id = ` + alias + `.chat_id AND a.user_id = ` + alias + `.user_id
+		  AND (a.finished OR (a.start_seen AND a.start_state IN ('recovering', 'action_required')
+		    AND EXISTS (SELECT 1 FROM attention_incidents i
+		      WHERE i.user_id = a.user_id AND i.project_id = a.project_id AND i.incident_key = a.incident_key
+		        AND i.state IN ('recovering', 'action_required'))))
+	))`
+}
+
+func triggerEpisodeSQL(successFilter, firingFilter string) string {
+	return `SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
 FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
 LEFT JOIN LATERAL (
 	SELECT w.occurred_at, w.id
 	FROM (
-		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.chat_id, s.user_id
+		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.run_outcome, s.chat_id, s.user_id
 		FROM trigger_events s
-		WHERE s.trigger_id = t.id AND s.user_id = ?0::text
+		WHERE s.trigger_id = t.id AND s.user_id = ?0::text` + successFilter + `
 		ORDER BY s.occurred_at DESC, s.id DESC
 		LIMIT ?2::integer
 	) w
 	WHERE w.outcome = 'launched'
-		AND (w.run_status = 'completed' OR (w.run_status IS NULL AND (
-			SELECT sc.display_state FROM chats_with_activity sc
-			WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
+		AND ((w.run_status = 'completed' AND (w.run_outcome IS NULL OR w.run_outcome <> 'failure_handled'))
+			OR (w.run_status IS NULL AND (
+				SELECT sc.display_state FROM chats_with_activity sc
+				WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
 	ORDER BY w.occurred_at DESC, w.id DESC
 	LIMIT 1
 ) ls ON true
@@ -572,12 +646,20 @@ CROSS JOIN LATERAL (
 	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
 	WHERE x.trigger_id = t.id
 		AND x.user_id = ?0::text
-		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))
+		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))` + firingFilter + `
 	ORDER BY x.occurred_at DESC, x.id DESC
 	LIMIT ?2::integer
 ) e
 ` + triggerFiringRunJoin + `
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+}
+
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox episode, excluding
+// registered attention-managed launched chats before both the cutoff and cap.
+// RecentTriggerOutcomes and FiringsSinceLastSuccess remain diagnostic reads.
+func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	return triggerFiringsByTrigger(ctx, db, "list unmanaged firings since last success", firingsSinceLastUnmanagedSuccessSQL, userID, triggerIDs, perTrigger)
+}
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
 // newest success (newest first, with their runs, at most perTrigger), keyed by
@@ -741,9 +823,14 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		CapacityProjectID:   row.CapacityProjectID,
 		CapacityWorkflowRef: row.CapacityWorkflowRef,
 		CapacityKey:         row.CapacityKey,
+		CapacityRunningKey:  row.CapacityRunningKey,
+		CapacityPriority:    row.CapacityPriority,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus
+	}
+	if row.RunOutcome != nil {
+		ev.RunOutcome = *row.RunOutcome
 	}
 	return ev, nil
 }

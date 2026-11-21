@@ -171,6 +171,24 @@ nodes:
 	assert.Contains(t, got[0].Message, "project://release → cut → tag")
 }
 
+// A per-key cap is a slot too: a run that never ends holds its key forever, so
+// a workflow with only max_running_per_key gets the same check.
+func TestSlotUnboundedWaitCoversPerKeyCap(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: review
+concurrency: {max_running_per_key: 1, key: '{{ trigger.payload.number }}'}
+entry: [review]
+nodes:
+- id: review
+  type: run
+  args: {command: 'make review'}
+`))
+	require.NoError(t, err)
+	got := findingsOf(Check(Input{Workflow: wf}), RuleSlotUnboundedWait)
+	require.Len(t, got, 1, "%v", got)
+	assert.Equal(t, "review", got[0].Node)
+}
+
 // Cases that are complements cover every value: no default is needed.
 func TestComplementaryCasesNeedNoDefault(t *testing.T) {
 	for _, pair := range [][2]string{
@@ -278,4 +296,37 @@ func TestApprovalPermissionIsReportedOnceAndCoversItsSteps(t *testing.T) {
 	src := []byte("# lint:allow approval-decider — the on-call bot approves staging deploys\npermissions: [approvals:decide]\n")
 	in.Source = src
 	assert.Empty(t, findingsOf(Check(in), RuleApprovalDecider))
+}
+
+// A schedule firing carries no event, so the fix for an unfired schedule
+// trigger must not ask for a payload; an event trigger's fix still does.
+func TestScenarioTriggerFixAsksForAPayloadOnlyForEvents(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: fixture
+triggers:
+- name: nightly
+  schedule: {cron: '0 3 * * *'}
+- name: hook
+  webhook: {}
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: done}
+`))
+	require.NoError(t, err)
+	sc, err := scenario.ParseScenarioYAML([]byte("name: plain\nexpect: {completed: [done]}\n"))
+	require.NoError(t, err)
+	fixes := map[string]string{}
+	for _, f := range findingsOf(Check(Input{Workflow: wf, Scenarios: sc}), RuleScenarioTrigger) {
+		fixes[f.Message] = f.Fix
+	}
+	require.Len(t, fixes, 2, "%v", fixes)
+	for msg, fix := range fixes {
+		if strings.Contains(msg, `"nightly"`) {
+			assert.Equal(t, "add a scenario with `trigger: {name: nightly}` (a schedule firing needs no payload)", fix)
+		} else {
+			assert.Contains(t, fix, "trigger: {name: hook, payload: {...}}")
+		}
+	}
 }

@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger'
 import { mintProxySessionCallbackUrl } from '@/lib/proxy-session'
 import { GradientBackground } from './GradientBackground'
 import Logo from '../assets/logo.svg'
+import { authPath, homePath, proxyAuthPath } from '@/lib/paths'
 
 /**
  * ProxyAuth handles the proxy session authentication flow.
@@ -51,8 +52,8 @@ export function ProxyAuth() {
         // No session — redirect to login, then back here.
         logger.info('[ProxyAuth] No session, redirecting to login')
         navigate({
-          to: '/auth',
-          search: { redirect: `/auth/proxy?return=${encodeURIComponent(returnURL)}` },
+          to: authPath(),
+          search: { redirect: `${proxyAuthPath()}?return=${encodeURIComponent(returnURL)}` },
         })
         return
       }
@@ -88,7 +89,7 @@ export function ProxyAuth() {
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/', search: {} })}
+              onClick={() => navigate({ to: homePath(), search: {} })}
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >
               Go to Dashboard

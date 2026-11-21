@@ -195,6 +195,23 @@ describe("tools", () => {
     expect((s.streaming[CHAT]!.contentBlocks as Array<{ status?: string }>).find((b) => b)?.status).toBe("cancelled");
   });
 
+  it("a tool_cancelled delta closes the card its tool_use_start opened, on a stream that goes on", () => {
+    // The server's half of a call the driver dropped (a function call of a
+    // Responses response that did not complete): the card was opened under
+    // the item id at block 2, and the finished stream cancels it there.
+    let s = apply(
+      fresh(),
+      deltaData("tool_use_start", { block_index: 1, tool_call: { id: "fc_kept", name: "" } }),
+      deltaData("tool_use_start", { block_index: 2, tool_call: { id: "fc_dropped", name: "" } }),
+    );
+    s = apply(s, deltaData("tool_cancelled", { block_index: 2, tool_call: { id: "fc_dropped", name: "bash" } }));
+    const blocks = s.streaming[CHAT]!.contentBlocks as Array<{ index: number; toolCallId?: string; status?: string }>;
+    expect(blocks.find((b) => b.index === 2)).toMatchObject({ toolCallId: "fc_dropped", status: "cancelled" });
+    expect(blocks.find((b) => b.index === 1)?.status).toBeUndefined();
+    expect(s.toolCalls.get("fc_dropped")?.status).toBe("cancelled");
+    expect(s.toolCalls.get("fc_kept")).toBeUndefined();
+  });
+
   it("an inferred cancel yields to the tool's real outcome arriving afterwards", () => {
     let s = apply(fresh(), deltaData("tool_use_start", { tool_call: { id: "t1", name: "shell" } }));
     s = apply(s, finalizedData(1, "m-live", "aborted"));

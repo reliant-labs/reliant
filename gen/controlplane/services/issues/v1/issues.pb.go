@@ -699,6 +699,13 @@ type GetIssueRequest struct {
 	// IssueScope.instance_users: the instances of these people, by email; an
 	// email that names no member matches nothing.
 	InstanceUsers []string `protobuf:"bytes,5,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	// Answer with the issue's stored state alone (status, version, environment,
+	// first and last seen), served from the control plane's database with no
+	// telemetry read, so it spends none of the org's hourly observability query
+	// quota. The response says telemetry_omitted. A triage client reads this
+	// before a write, for the version it sends as expected_version.
+	// time_range, incident_window_seconds and the instance narrowing are ignored.
+	StateOnly     bool `protobuf:"varint,6,opt,name=state_only,json=stateOnly,proto3" json:"state_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -768,6 +775,13 @@ func (x *GetIssueRequest) GetInstanceUsers() []string {
 	return nil
 }
 
+func (x *GetIssueRequest) GetStateOnly() bool {
+	if x != nil {
+		return x.StateOnly
+	}
+	return false
+}
+
 type GetIssueResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Issue *v1.Issue              `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
@@ -791,8 +805,16 @@ type GetIssueResponse struct {
 	// and instance_users, echoed exactly. Unset when the request named none
 	// (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,8,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// True when the answer is the issue's stored state alone: the request said
+	// state_only, or the org's hourly observability query quota was used up.
+	// The state (status, version, environment, first and last seen) is served
+	// from the control plane's database, and everything read from telemetry is
+	// absent (latest_event, frames, by_version, the co-occurring and incident
+	// ids, and the issue's windowed counts and trend). The state alone is what a
+	// triage write needs, so a spent quota never blocks triage.
+	TelemetryOmitted bool `protobuf:"varint,9,opt,name=telemetry_omitted,json=telemetryOmitted,proto3" json:"telemetry_omitted,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetIssueResponse) Reset() {
@@ -879,6 +901,13 @@ func (x *GetIssueResponse) GetInstanceScope() *v1.InstanceScope {
 		return x.InstanceScope
 	}
 	return nil
+}
+
+func (x *GetIssueResponse) GetTelemetryOmitted() bool {
+	if x != nil {
+		return x.TelemetryOmitted
+	}
+	return false
 }
 
 // IssueEvent is one occurrence of an issue.
@@ -3070,14 +3099,16 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xee\x01\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x8d\x02\n" +
 	"\x0fGetIssueRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
 	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x126\n" +
 	"\x17incident_window_seconds\x18\x03 \x01(\x05R\x15incidentWindowSeconds\x12!\n" +
 	"\finstance_ids\x18\x04 \x03(\tR\vinstanceIds\x12%\n" +
-	"\x0einstance_users\x18\x05 \x03(\tR\rinstanceUsers\"\xed\x03\n" +
+	"\x0einstance_users\x18\x05 \x03(\tR\rinstanceUsers\x12\x1d\n" +
+	"\n" +
+	"state_only\x18\x06 \x01(\bR\tstateOnly\"\x9a\x04\n" +
 	"\x10GetIssueResponse\x12,\n" +
 	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue\x12>\n" +
 	"\flatest_event\x18\x02 \x01(\v2\x1b.controlplane.v1.IssueEventR\vlatestEvent\x123\n" +
@@ -3087,7 +3118,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x16co_occurring_issue_ids\x18\x05 \x03(\tR\x13coOccurringIssueIds\x12E\n" +
 	"\rfirst_release\x18\x06 \x01(\v2 .controlplane.v1.IssueReleaseRefR\ffirstRelease\x12,\n" +
 	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\x12E\n" +
-	"\x0einstance_scope\x18\b \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x9a\x04\n" +
+	"\x0einstance_scope\x18\b \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12+\n" +
+	"\x11telemetry_omitted\x18\t \x01(\bR\x10telemetryOmitted\"\x9a\x04\n" +
 	"\n" +
 	"IssueEvent\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x19\n" +

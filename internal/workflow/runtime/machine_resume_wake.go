@@ -61,15 +61,37 @@ const (
 	machineResumeWakeCap = 20 * time.Minute
 )
 
-// machineResumeWaker tracks when the run last used its machine and wakes the
-// machine before a machine step that follows a hold. Deterministic workflow
-// state: rebuilt on replay from the recorded steps and timestamps.
+// machineResumeWaker tracks when the run last used each machine it routes to
+// and wakes a machine before a machine step that follows a hold on it.
+// Deterministic workflow state: rebuilt on replay from the recorded steps and
+// timestamps.
+//
+// The run's own machine (the workflow-level one, else the chat's) is the root
+// target. A step placed on a pool member (run_placement.go) — by its own
+// `daemon: {pool:}` or an enclosing loop's or workflow node's — routes
+// elsewhere, so its member is a target of its own, with its own quiet-stretch
+// clock: waking the root machine would leave the member asleep, and wait on a
+// machine the step never uses. Only placed selectors get their own target, so
+// a history recorded before pools existed wakes exactly as it did.
 type machineResumeWaker struct {
-	// input is the run's machine target, preflight-shaped: chat_id and the
-	// daemon_selector the run resolved.
+	// root is the run's own machine; rootID the daemon id its selector
+	// names ("" when none), which a placement onto the same machine shares.
+	root   *machineWakeTarget
+	rootID string
+	// placed is each pool member a step was placed on, by daemon id.
+	placed map[string]*machineWakeTarget
+}
+
+// machineWakeTarget is one machine the run wakes: its preflight-shaped
+// target, when the run last used it, and the wake in progress.
+type machineWakeTarget struct {
+	// input is the machine target, preflight-shaped: chat_id and the
+	// daemon_selector.
 	input map[string]interface{}
 	// lastMachineStep is the workflow time of the last machine step's
-	// completion (or the run's start, right after preflight).
+	// completion on this machine (or the run's start, right after
+	// preflight, for the root). Zero for a member the run has not used yet:
+	// its first step checks it, since nothing proves it awake.
 	lastMachineStep time.Time
 	// inflight is the wake in progress, which every other thread that needs
 	// the machine meanwhile waits on instead of starting its own.
@@ -77,7 +99,31 @@ type machineResumeWaker struct {
 }
 
 func newMachineResumeWaker(ctx workflow.Context, preflightInput map[string]interface{}) *machineResumeWaker {
-	return &machineResumeWaker{input: preflightInput, lastMachineStep: workflow.Now(ctx)}
+	w := &machineResumeWaker{root: &machineWakeTarget{input: preflightInput, lastMachineStep: workflow.Now(ctx)}}
+	if sel, ok := preflightInput["daemon_selector"].(map[string]interface{}); ok {
+		w.rootID, _ = sel["id"].(string)
+	}
+	return w
+}
+
+// target is the machine a step routed by sel uses: its placed member, or the
+// root for any selector that was not placed (or placed on the root machine).
+func (w *machineResumeWaker) target(sel *DaemonSelectorValue) *machineWakeTarget {
+	if sel == nil || !sel.Placed || sel.ID == "" || sel.ID == w.rootID {
+		return w.root
+	}
+	if t, ok := w.placed[sel.ID]; ok {
+		return t
+	}
+	if w.placed == nil {
+		w.placed = map[string]*machineWakeTarget{}
+	}
+	t := &machineWakeTarget{input: map[string]interface{}{
+		"chat_id":         w.root.input["chat_id"],
+		"daemon_selector": map[string]interface{}{"id": sel.ID},
+	}}
+	w.placed[sel.ID] = t
+	return t
 }
 
 // machineStepTools reports whether a step of this type uses the machine and,
@@ -112,40 +158,42 @@ func machineStepTools(stepType string, evalResult *reliantv1.Node) (machine bool
 	}
 }
 
-// beforeMachineStep wakes the machine if the run has been off it long enough
-// to have been suspended, and waits for it. callerCtx MUST be the calling
-// coroutine's own context; actCtx is the run's cancellable activity context.
-// Never fails the step: whatever the wake could not fix, the step reports.
-func (w *machineResumeWaker) beforeMachineStep(callerCtx, actCtx workflow.Context, toolNames []string, toolsKnown bool) {
+// beforeMachineStep wakes the machine a step routed by sel uses if the run
+// has been off it long enough for it to have been suspended, and waits for
+// it. callerCtx MUST be the calling coroutine's own context; actCtx is the
+// run's cancellable activity context. Never fails the step: whatever the wake
+// could not fix, the step reports.
+func (w *machineResumeWaker) beforeMachineStep(callerCtx, actCtx workflow.Context, sel *DaemonSelectorValue, toolNames []string, toolsKnown bool) {
 	if w == nil {
 		return
 	}
-	if w.inflight != nil {
-		_ = w.inflight.Get(callerCtx, nil)
+	t := w.target(sel)
+	if t.inflight != nil {
+		_ = t.inflight.Get(callerCtx, nil)
 		return
 	}
-	if workflow.Now(callerCtx).Sub(w.lastMachineStep) < machineResumeWakeAfter {
+	if workflow.Now(callerCtx).Sub(t.lastMachineStep) < machineResumeWakeAfter {
 		return
 	}
 	if workflow.GetVersion(callerCtx, machineResumeWakeChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return
 	}
 	future, settable := workflow.NewFuture(callerCtx)
-	w.inflight = future
+	t.inflight = future
 	defer func() {
-		w.inflight = nil
-		w.lastMachineStep = workflow.Now(callerCtx)
+		t.inflight = nil
+		t.lastMachineStep = workflow.Now(callerCtx)
 		settable.Set(nil, nil)
 	}()
-	wakeMachineForResume(callerCtx, actCtx, w.input, toolNames, toolsKnown)
+	wakeMachineForResume(callerCtx, actCtx, t.input, toolNames, toolsKnown)
 }
 
-// machineStepDone records that the run just used its machine.
-func (w *machineResumeWaker) machineStepDone(ctx workflow.Context) {
+// machineStepDone records that the run just used the machine sel routes to.
+func (w *machineResumeWaker) machineStepDone(ctx workflow.Context, sel *DaemonSelectorValue) {
 	if w == nil {
 		return
 	}
-	w.lastMachineStep = workflow.Now(ctx)
+	w.target(sel).lastMachineStep = workflow.Now(ctx)
 }
 
 // wakeMachineForResume runs MachineResumeWake slice by slice until the machine

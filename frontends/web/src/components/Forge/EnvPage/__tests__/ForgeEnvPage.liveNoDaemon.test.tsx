@@ -660,9 +660,10 @@ describe("a queued deploy", () => {
     await user.click(within(banner).getByTestId("queued-deploy-set-up-billing"));
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "/settings/$section",
-        params: { section: "billing" },
-        search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: expect.stringMatching(/^\//) }),
+        to: "/settings/billing",
+        // The hosting tab's agreement card: a queued deploy waits on app hosting billing.
+        search: expect.objectContaining({ tab: "hosting", from: "forge", returnTo: expect.stringMatching(/^\//) }),
+        hash: "app-hosting",
       })
     );
     expect(daemonCalls).toEqual([]);

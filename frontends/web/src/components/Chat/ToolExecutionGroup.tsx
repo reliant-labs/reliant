@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, memo } from "react";
-import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { useEffect, useMemo, memo } from "react";
+import { ListTree, Loader2, XCircle } from "lucide-react";
+import { QuietRow } from "./QuietRow";
 import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
 import { useSurface } from "../../lib/surfaceContext";
 import { useToolGroupExpansion } from "./useToolGroupExpansion";
@@ -55,7 +55,6 @@ interface ToolExecutionGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionGroupComponent({
@@ -64,7 +63,6 @@ function ToolExecutionGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
-  density = "compact",
 }: ToolExecutionGroupProps) {
   const hasPendingApprovals = useMemo(() => {
     return executions.some(execution => execution.approval?.status === ApprovalStatus.PENDING);
@@ -166,8 +164,6 @@ function ToolExecutionGroupComponent({
   }, [executions]);
 
   const hasAnyErrors = summary.errors > 0;
-  const hasAnyCancelled = summary.cancelled > 0;
-  const isAllCompleted = summary.completed === summary.total && summary.total > 0;
 
   // Open while its calls run (what the agent is doing now), closed once they
   // finish — the reverse of the old default, which hid live work behind one
@@ -178,7 +174,6 @@ function ToolExecutionGroupComponent({
     pendingApproval: hasPendingApprovals,
     collapseAll: surface !== "desktop",
   });
-  const panelId = useId();
 
   // An open group reads the bodies its rows were sent without in one batch
   // (see TurnWorkFold).
@@ -188,98 +183,52 @@ function ToolExecutionGroupComponent({
     prefetchContentBlockBodies(chatId, elidedKey.split(","));
   }, [expanded, chatId, elidedKey]);
 
+  // One quiet row for the group, like a tool's own row: what the lead call
+  // did, how many more, and the group's state in its icon.
   return (
-    <div
-      className={cn(
-        "border overflow-hidden",
-        density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
-        density === "minimal" && "rounded-md shadow-none",
-        hasAnyErrors
-          ? "border-destructive/40 bg-destructive/5"
-          : hasAnyCancelled
-          ? "border-muted/60 bg-muted/10"
-          : isAllCompleted
-          // The common case recedes: a green-tinted box per group turned the
-          // transcript into a wall of colour.
-          ? "border-success/15 bg-success/[0.02]"
-          : "border-muted/50 elevation-1"
-      )}
-    >
-      <button
-        type="button"
-        className={cn(
-          "flex w-full items-center justify-between gap-2 text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
-          surface === "mobile" && "min-h-[44px]",
-          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
-        )}
-        onClick={toggle}
-        aria-expanded={expanded}
-        aria-controls={panelId}
-      >
-        <span className="flex min-w-0 items-center gap-1">
-          <ListTree className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-          <span className="truncate text-xs font-medium text-muted-foreground">
-            {headerLabel}
-          </span>
+    <QuietRow
+      as="button"
+      icon={
+        summary.running > 0 ? (
+          <Loader2 className="size-3.5 animate-spin text-primary-ink" />
+        ) : hasAnyErrors ? (
+          <XCircle className="size-4 text-destructive-ink" />
+        ) : (
+          <ListTree className="size-4" />
+        )
+      }
+      expanded={expanded}
+      onToggle={toggle}
+      ariaLabel={headerLabel}
+      trailing={
+        <span className="text-meta tabular-nums">
+          {summary.running > 0 && <span>{summary.running} running</span>}
+          {summary.errors > 0 && <span className="text-destructive-ink">{summary.errors} failed</span>}
+          {summary.cancelled > 0 && <span>{summary.cancelled} cancelled</span>}
+          {summary.completed > 0 && <span className="sr-only">{summary.completed} done</span>}
         </span>
-
-        <span className="flex shrink-0 items-center gap-1">
-          {summary.running > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary-ink">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> {summary.running}
-              <span className="sr-only">running</span>
-            </span>
-          )}
-          {summary.completed > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-success-ink/60">
-              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> {summary.completed}
-              <span className="sr-only">done</span>
-            </span>
-          )}
-          {summary.cancelled > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground">
-              <XCircle className="w-3.5 h-3.5" aria-hidden="true" /> {summary.cancelled}
-              <span className="sr-only">cancelled</span>
-            </span>
-          )}
-          {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-destructive-ink">
-              <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" /> {summary.errors}
-              <span className="sr-only">failed</span>
-            </span>
-          )}
-
-          {expanded ? (
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-          )}
-        </span>
-      </button>
-
-      {/* Show all tool calls when expanded */}
-      {expanded && (
-        <div id={panelId} className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
-          {executions.map((execution) => {
-            return (
-              <ToolExecution
-                key={`${messageId || "msg"}-group-exec-${execution.call.id}`}
-                toolCall={execution.call}
-                toolResult={execution.result}
-                status={execution.status}
-                onCancel={execution.onCancel}
-                onConvertToBackground={execution.onConvertToBackground}
-                approval={execution.approval}
-                chatId={chatId}
-                showRichContent={showRichContent}
-                onSelectThread={onSelectThread}
-                density={density}
-              />
-            );
-          })}
+      }
+      detail={
+        <div className="flex flex-col gap-0.5">
+          {executions.map((execution) => (
+            <ToolExecution
+              key={`${messageId || "msg"}-group-exec-${execution.call.id}`}
+              toolCall={execution.call}
+              toolResult={execution.result}
+              status={execution.status}
+              onCancel={execution.onCancel}
+              onConvertToBackground={execution.onConvertToBackground}
+              approval={execution.approval}
+              chatId={chatId}
+              showRichContent={showRichContent}
+              onSelectThread={onSelectThread}
+            />
+          ))}
         </div>
-      )}
-    </div>
+      }
+    >
+      <span className="truncate">{headerLabel}</span>
+    </QuietRow>
   );
 }
 

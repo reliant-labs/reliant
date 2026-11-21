@@ -145,10 +145,11 @@ Pause workflow execution for user approval
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `approval_id` | string | - |
-| `status` | string | - |
-| `action_taken` | string | - |
-| `data` | object | - |
+| `approval_id` | string | Id of the approval request this step raised |
+| `status` | string | approved, denied, or timeout |
+| `action_taken` | string | The action button the approver clicked, when the approval offered actions |
+| `data` | object | Deprecated: never set, always empty |
+| `denial_reason` | string | Why the approver denied the request, when they gave a reason; absent otherwise |
 
 ---
 
@@ -162,7 +163,7 @@ Pause workflow execution to ask the user a question
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `metadata` | string | No | - | The questions to ask, as JSON: a questions list, each with question text and its options |
+| `metadata` | string | No | - | The questions to ask, as JSON: {"type": "ask_user", "questions": [...]}, each question with its text and options. Without "type": "ask_user" the app shows no options and nothing can answer it |
 
 ### Outputs
 
@@ -220,6 +221,8 @@ Send a prompt to a language model and get a response
 | `capabilities` | object | - |
 | `provider_account_id` | string | - |
 | `trace_parent` | string | - |
+| `thinking_level` | string | - |
+| `continuation` | string | - |
 
 ---
 
@@ -345,7 +348,7 @@ A sequential loop also exposes each output its body declares, by name, from the 
 
 `type: git_publish`
 
-Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
+Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes, unless force_with_lease names the exact commit the remote branch must still be at. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none
 
 ### Inputs
 
@@ -357,6 +360,7 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `pr_head_of` | integer | No | - | A pull request number: push to that pull request's own head branch. The head must be in this repository, not a fork |
 | `allow` | array | No | - | Glob patterns the branch must match, such as autopilot/*. Empty allows any branch the built-in checks accept |
 | `message` | string | No | - | The commit message. Reliant-Run and Reliant-Workflow trailers are appended |
+| `force_with_lease` | string | No | - | Full sha the remote branch must still be at. Set, the push may replace the branch (non-fast-forward) only if it is still there; otherwise it is refused naming the branch's actual head. Unset: never forced |
 
 ### Outputs
 
@@ -371,6 +375,9 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `insertions` | integer | - |
 | `deletions` | integer | - |
 | `base_sha` | string | - |
+| `lease_refused` | boolean | - |
+| `remote_sha` | string | - |
+| `lease_unsupported` | boolean | - |
 
 ---
 
@@ -413,7 +420,7 @@ Execute a shell command
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `command` | string | No | - | The shell command to run in the project directory |
-| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable |
+| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleaned |
 
 ### Outputs
 

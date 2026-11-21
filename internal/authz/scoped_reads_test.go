@@ -82,14 +82,21 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
-	"ListDeletedProjects":          readCallersFilter,
-	"FindProjectOrgMoveByRequest":  readCallersFilter,
-	"ListUnlaunchedTriggerEvents":  readCallersFilter,
-	"ListWorktreeRecoveries":       readCallersFilter,
+	"ListDeletedProjects":         readCallersFilter,
+	"FindProjectOrgMoveByRequest": readCallersFilter,
+	"ListUnlaunchedTriggerEvents": readCallersFilter,
+	"ListWorktreeRecoveries":      readCallersFilter,
+	// The inbox passes each incident through authz.Visible (itemReads.incident:
+	// its chat and its project) before showing it.
+	"ListAttentionIncidents":       readCallersFilter,
 	"SearchChats":                  readCallersFilter,
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
+	// The same lookups kept to one org (a request's or a machine's): its
+	// callers decide the row exactly as they do the unscoped ones.
+	"GetProjectByPathAndUserInScope":      readCallersFilter,
+	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
 	// The shared lists read OTHER users' rows of one org; SharingService
 	// passes each through authz.SharedChatsFor / SharedProjectsFor,
@@ -97,14 +104,15 @@ var userScopedReads = map[string]string{
 	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,
 
-	"FiringsSinceLastSuccess":   readParentAuthorized,
-	"GetPresetBySlugAndProject": readParentAuthorized,
-	"GetWorktreeRecovery":       readParentAuthorized,
-	"ListPresetsByTag":          readParentAuthorized,
-	"ListTriggerChanges":        readParentAuthorized,
-	"ListTriggerRegistrations":  readParentAuthorized,
-	"ListUserPresetsByProject":  readParentAuthorized,
-	"ListWorktrees":             readParentAuthorized,
+	"FiringsSinceLastSuccess":          readParentAuthorized,
+	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
+	"GetPresetBySlugAndProject":        readParentAuthorized,
+	"GetWorktreeRecovery":              readParentAuthorized,
+	"ListPresetsByTag":                 readParentAuthorized,
+	"ListTriggerChanges":               readParentAuthorized,
+	"ListTriggerRegistrations":         readParentAuthorized,
+	"ListUserPresetsByProject":         readParentAuthorized,
+	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"ListChatsForWorktree":  readParentAuthorized,
@@ -112,10 +120,12 @@ var userScopedReads = map[string]string{
 	"RecentTriggerOutcomes": readParentAuthorized,
 	"WorkflowSlugExists":    readParentAuthorized,
 
-	"GetAnalyticsEnabled":             readPersonal,
-	"GetAutomationToken":              readPersonal,
-	"GetIntegrationAccessRefresh":     readPersonal,
-	"GetIntegrationAccessSubject":     readPersonal,
+	"GetAnalyticsEnabled":         readPersonal,
+	"GetAutomationToken":          readPersonal,
+	"GetIntegrationAccessRefresh": readPersonal,
+	"GetIntegrationAccessSubject": readPersonal,
+	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
+	"HasFreshIntegrationAccess":       readPersonal,
 	"GetLatestUserUpdateSequence":     readPersonal,
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,

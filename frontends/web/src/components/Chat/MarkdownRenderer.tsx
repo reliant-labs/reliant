@@ -10,6 +10,7 @@ import { isHttpUrl } from '../../lib/url';
 import { FileLink } from './FileLink';
 import { CodeBlock } from './CodeBlock';
 import { openLink } from '../../lib/open-link';
+import { CHAT_LINK_CLASS } from './LinkifiedText';
 
 interface MarkdownRendererProps {
   content: string;
@@ -36,6 +37,14 @@ interface MarkdownImageProps {
 // so one can serve them all.
 const highlightTransformer = rehypeHighlight();
 const sharedRehypeHighlight = () => highlightTransformer;
+
+/**
+ * An inline code span: mono at the surrounding size, on a faint ink wash, with
+ * no border (a bordered chip per span made prose read as a form).
+ */
+const INLINE_CODE_CLASS = "rounded bg-foreground/[0.06] px-1 py-px font-mono text-[0.875em] font-normal text-foreground";
+/** A file path: mono with no box; it opens in the right panel. */
+const FILE_PATH_CLASS = "font-mono text-[0.875em] decoration-border hover:underline";
 
 const IMAGE_URL_PATTERN = /\bhttps?:\/\/[^\s<>]+?\.(?:jpg|jpeg|png|gif|webp|svg|bmp|ico)(?:\?[^\s<>]*)?\b/gi;
 
@@ -66,7 +75,7 @@ function MarkdownImage({ src, alt, onImageClick, imageErrors, setImageErrors, ..
   const hasError = imageErrors.has(src);
 
   return (
-    <div className="my-4 rounded-lg overflow-hidden border border-border inline-block max-w-full">
+    <div className="my-3 rounded-xl overflow-hidden border border-border inline-block max-w-full">
       {hasError ? (
         <div className="flex items-center justify-center p-8 bg-muted text-muted-foreground text-sm">
           <div className="text-center">
@@ -84,7 +93,7 @@ function MarkdownImage({ src, alt, onImageClick, imageErrors, setImageErrors, ..
           <img
             src={src}
             alt={alt || 'Image'}
-            className="max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+            className="max-h-[480px] max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
             style={{ display: isLoading ? 'none' : 'block' }}
             onClick={() => onImageClick(src, alt || 'Image')}
             onLoad={() => setIsLoading(false)}
@@ -138,7 +147,7 @@ function createMarkdownComponents(
         const text = String(children);
         if (isFilePath(text)) {
           return (
-            <FileLink path={text} worktreeId={worktreeId} inline className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50" />
+            <FileLink path={text} worktreeId={worktreeId} inline prose className={FILE_PATH_CLASS} />
           );
         }
 
@@ -152,7 +161,7 @@ function createMarkdownComponents(
           return (
             <a
               href={url}
-              className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50 text-foreground no-underline hover:underline cursor-pointer"
+              className={cn(INLINE_CODE_CLASS, "no-underline hover:underline cursor-pointer")}
               onClick={(e) => {
                 if (onLinkClick) {
                   e.preventDefault();
@@ -166,7 +175,7 @@ function createMarkdownComponents(
         }
         
         return (
-          <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50 text-foreground whitespace-pre-wrap break-words break-all" {...props}>
+          <code className={cn(INLINE_CODE_CLASS, "whitespace-pre-wrap break-words break-all")} {...props}>
             {children}
           </code>
         );
@@ -182,7 +191,7 @@ function createMarkdownComponents(
 
     blockquote: ({ children, ...props }) => (
       <blockquote
-        className="border-l-4 border-primary/40 pl-4 py-3 bg-primary/5 rounded-r-lg my-4 italic text-muted-foreground"
+        className="my-3 border-l-2 border-border pl-4 text-muted-foreground"
         {...props}
       >
         {children}
@@ -190,21 +199,21 @@ function createMarkdownComponents(
     ),
 
     table: ({ children, ...props }) => (
-      <div className="overflow-x-auto my-4 rounded-lg border border-border">
-        <table className="min-w-full divide-y divide-border" {...props}>
+      <div className="overflow-x-auto my-4">
+        <table className="w-full text-ui" {...props}>
           {children}
         </table>
       </div>
     ),
 
     thead: ({ children, ...props }) => (
-      <thead className="bg-muted/50" {...props}>
+      <thead {...props}>
         {children}
       </thead>
     ),
 
     tbody: ({ children, ...props }) => (
-      <tbody className="divide-y divide-border" {...props}>
+      <tbody {...props}>
         {children}
       </tbody>
     ),
@@ -216,61 +225,61 @@ function createMarkdownComponents(
     ),
 
     th: ({ children, ...props }) => (
-      <th className="px-4 py-2.5 text-left font-semibold text-foreground text-sm" {...props}>
+      <th className="border-b border-border pb-2 pl-0 pr-4 text-left text-meta font-medium text-muted-foreground last:pr-0" {...props}>
         {children}
       </th>
     ),
 
     td: ({ children, ...props }) => (
-      <td className="px-4 py-2 text-foreground text-sm" {...props}>
+      <td className="border-b border-border-subtle py-2 pl-0 pr-4 text-foreground last:pr-0" {...props}>
         {children}
       </td>
     ),
 
     h1: ({ children, ...props }) => (
-      <h1 className="text-2xl font-bold text-foreground mt-6 mb-4 first:mt-0 border-b border-border/30 pb-2" {...props}>
+      <h1 className="text-section text-foreground mt-6 mb-2 first:mt-0" {...props}>
         {children}
       </h1>
     ),
     h2: ({ children, ...props }) => (
-      <h2 className="text-xl font-semibold text-foreground mt-5 mb-3 first:mt-0" {...props}>
+      <h2 className="text-section text-foreground mt-6 mb-2 first:mt-0" {...props}>
         {children}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0" {...props}>
+      <h3 className="text-ui font-semibold text-foreground mt-5 mb-1.5 first:mt-0" {...props}>
         {children}
       </h3>
     ),
     h4: ({ children, ...props }) => (
-      <h4 className="text-base font-semibold text-foreground mt-3 mb-2 first:mt-0" {...props}>
+      <h4 className="text-ui font-semibold text-foreground mt-5 mb-1.5 first:mt-0" {...props}>
         {children}
       </h4>
     ),
     h5: ({ children, ...props }) => (
-      <h5 className="text-sm font-semibold text-foreground mt-3 mb-2 first:mt-0" {...props}>
+      <h5 className="text-ui font-semibold text-foreground mt-5 mb-1.5 first:mt-0" {...props}>
         {children}
       </h5>
     ),
     h6: ({ children, ...props }) => (
-      <h6 className="text-sm font-semibold text-foreground mt-3 mb-2 first:mt-0" {...props}>
+      <h6 className="text-ui font-semibold text-foreground mt-5 mb-1.5 first:mt-0" {...props}>
         {children}
       </h6>
     ),
 
     p: ({ children, ...props }) => (
-      <p className="text-foreground leading-[var(--chat-prose-leading,1.625)] mb-3 last:mb-0" {...props}>
+      <p className="text-foreground leading-[var(--chat-prose-leading,1.625)] my-0 [&+&]:mt-3" {...props}>
         {children}
       </p>
     ),
 
     ul: ({ children, ...props }) => (
-      <ul className="my-1 space-y-1 pl-6" {...props}>
+      <ul className="my-3 list-disc space-y-1.5 pl-5" {...props}>
         {children}
       </ul>
     ),
     ol: ({ children, ...props }) => (
-      <ol className="my-1 space-y-1 pl-6" {...props}>
+      <ol className="my-3 list-decimal space-y-1.5 pl-5" {...props}>
         {children}
       </ol>
     ),
@@ -281,16 +290,13 @@ function createMarkdownComponents(
     ),
 
     hr: ({ ...props }) => (
-      <hr className="border-border/50 my-6" {...props} />
+      <hr className="my-6 border-border-subtle" {...props} />
     ),
 
     a: ({ children, href, ...props }) => (
       <a
         href={href}
-        // --info rather than --primary: primary is the theme accent, which is
-        // mocha/teal/pink/orange depending on the color scheme, so links only
-        // read as blue on some themes. --info is blue in every scheme.
-        className="text-info no-underline hover:underline transition-colors duration-200 cursor-pointer"
+        className={CHAT_LINK_CLASS}
         onClick={(e) => {
           if (href && onLinkClick) {
             e.preventDefault();
@@ -377,30 +383,21 @@ export function MarkdownRenderer({
       // scrolling the whole transcript sideways. break-words (overflow-wrap:
       // break-word), not `anywhere`, so a table keeps its natural column
       // widths and scrolls inside its own container.
-      "prose prose-sm max-w-none min-w-0 break-words",
-      "prose-headings:font-semibold prose-headings:text-foreground prose-headings:mb-3 prose-headings:mt-4",
-      // Paragraph leading is `leading-relaxed` unless the caller sets
-      // --chat-prose-leading (the mobile transcript's larger type, ChatMessage).
-      "prose-p:text-foreground prose-p:leading-[var(--chat-prose-leading,1.625)] prose-p:mb-3",
+      // The element rules are the components above; `prose` only supplies
+      // what they leave alone. No `prose-sm`: the size is the caller's
+      // (`text-copy` for an answer), `text-sm` until it says otherwise.
+      "prose max-w-none min-w-0 break-words text-sm text-foreground",
+      // Paragraph leading is the type role's unless the caller sets
+      // --chat-prose-leading (the mobile transcript, ChatMessage).
+      "prose-p:leading-[var(--chat-prose-leading,1.625)]",
       "prose-strong:text-foreground prose-strong:font-semibold",
       "prose-em:text-foreground",
-      "prose-blockquote:text-muted-foreground prose-blockquote:border-l-border prose-blockquote:my-3",
-      "prose-hr:border-border prose-hr:my-4",
-
-
-      "prose-ul:text-foreground prose-ol:text-foreground prose-ul:my-1 prose-ol:my-1",
-      "prose-li:text-foreground prose-li:marker:text-muted-foreground prose-li:mb-1",
-
-      "prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:border prose-code:border-border/50",
-      "prose-code:whitespace-pre-wrap prose-code:break-words prose-code:break-all",
+      "prose-li:text-foreground prose-li:my-0",
+      "prose-blockquote:font-normal prose-blockquote:not-italic",
+      // The cells draw the table's rules (border-border-subtle), not prose.
+      "prose-thead:border-0 prose-tr:border-0",
       "prose-code:before:content-none prose-code:after:content-none",
-
-      "prose-pre:my-4 prose-pre:p-0 prose-pre:bg-transparent prose-pre:border-0 prose-pre:shadow-none prose-pre:rounded-none",
-      "prose-pre:text-sm prose-pre:leading-relaxed prose-pre:whitespace-pre-wrap prose-pre:break-words",
-
-      "prose-table:text-foreground prose-thead:border-b prose-thead:border-border prose-table:my-3",
-      "prose-th:text-foreground prose-th:font-semibold prose-th:text-left prose-th:py-2 prose-th:px-3",
-      "prose-td:text-foreground prose-tr:border-b prose-tr:border-border prose-td:py-2 prose-td:px-3",
+      "prose-pre:my-3 prose-pre:p-0 prose-pre:bg-transparent prose-pre:border-0 prose-pre:shadow-none prose-pre:rounded-none",
 
       isUser && "prose-invert-0",
 

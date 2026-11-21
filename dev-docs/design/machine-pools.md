@@ -48,7 +48,11 @@ and failover.
 
 The labels a daemon reports when it connects (`toolexec.DaemonInfo.Labels`)
 vanish while it sleeps. A pool must count and wake suspended members, so
-membership comes from the durable column.
+membership comes from the durable column. So does routing: a workflow's
+`daemon: labels:` selector matches a machine's durable labels
+(`toolexec.daemonRecordMatches`), wakes a sleeping machine that carries them,
+and fails closed (ErrNoDaemon, naming the labels) when no machine does — it
+never falls back to an unlabelled machine.
 
 A daemon can also **declare** durable labels when it starts, so a new box
 joins a pool with no person: `reliant daemon start --label pool=pipeline

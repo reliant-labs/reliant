@@ -23,6 +23,7 @@ import { useCallback } from "react";
 import { useRouteProjectResolution } from "../../hooks/useRouteProjectResolution";
 import { getBuilderCloseNavigateOptions } from "../../lib/routeParent";
 import { WorkflowBuilderPage } from "./WorkflowBuilderPage";
+import { settingsPath } from "@/lib/paths";
 
 interface WorkflowPageProps {
   isNew?: boolean;
@@ -60,7 +61,7 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
   }, [navigate, pathname, historyState]);
 
   const onNavigateToSettings = useCallback(() => {
-    navigate({ to: "/settings" });
+    navigate({ to: settingsPath() });
   }, [navigate]);
 
   const onChatIdChange = useCallback(

@@ -25,6 +25,7 @@ import {
   MobileRowIcon,
   MobileScreenBody,
 } from "./MobileChrome";
+import { mobileChatPath, mobileNewChatPath } from "@/lib/paths";
 
 export function MobileChatSearchTab({ query }: { query: string }) {
   // The chat list's scope: the /m/projects filter, or every project.
@@ -52,7 +53,7 @@ export function MobileChatSearchTab({ query }: { query: string }) {
         title="No recent chats"
         description="Chats you open will show up here for quick access."
         action={
-          <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
+          <Link to={mobileNewChatPath()} className={MOBILE_PRIMARY_ACTION}>
             Start a chat
           </Link>
         }
@@ -69,8 +70,7 @@ export function MobileChatSearchTab({ query }: { query: string }) {
         {results.map((result) => (
           <Link
             key={result.chatId}
-            to="/m/chats/$chatId"
-            params={{ chatId: result.chatId }}
+            to={mobileChatPath(result.chatId)}
             className={MOBILE_ROW}
           >
             <MobileRowIcon icon={MessageSquare} />

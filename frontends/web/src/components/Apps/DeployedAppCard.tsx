@@ -15,6 +15,8 @@ import { ArrowRight, Clock, Rocket } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useCloudEnvironments, useCloudEnvStatus } from "@/hooks/forge-queries";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { useOrgScope } from "@/lib/orgScope";
 import { isShellTool } from "@/lib/toolFormatters";
 import { cn } from "@/lib/utils";
 import { appLinksOf, deployedEnvOf } from "@/services/forge/apps";
@@ -22,6 +24,7 @@ import { useProjectStore } from "@/store/projectStore";
 
 import { consolePath } from "../Forge/Console/paths";
 import { LiveLink } from "./appParts";
+import { appsPath } from "@/lib/paths";
 
 /** forge's exit status for a deploy queued on billing: it goes out once billing is set up. */
 const EXIT_QUEUED = 7;
@@ -94,8 +97,14 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
   const status = useCloudEnvStatus(env?.id ?? null);
   const links = status.data ? appLinksOf(status.data.workloads) : [];
   const loading = !!app && (envs.isLoading || (!!env && status.isLoading));
+  // A queued deploy goes out once the org that holds it has hosting billing:
+  // the org the environments above were read in (useCloudEnvironments scopes
+  // by useOrgScope), carried on the link so billing asks before acting in any
+  // other. The chat is the way back.
+  const orgScope = useOrgScope();
+  const goToBilling = useGoToBilling("chat", { tab: "hosting", orgId: orgScope.orgId });
 
-  const target = app ? consolePath(app, { kind: "overview" }) : "/apps";
+  const target = app ? consolePath(app, { kind: "overview" }) : appsPath();
   const Icon = deploy.queued ? Clock : Rocket;
 
   return (
@@ -122,6 +131,16 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
           ))}
           {loading && <span className="inline-block h-3 w-36 animate-pulse rounded bg-muted motion-reduce:animate-none" aria-hidden="true" />}
         </span>
+      )}
+      {deploy.queued && (
+        <button
+          type="button"
+          onClick={goToBilling}
+          className="inline-flex shrink-0 items-center rounded-md text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="deployed-app-billing"
+        >
+          Set up billing
+        </button>
       )}
       <button
         type="button"

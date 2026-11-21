@@ -67,7 +67,8 @@ func evalWhile(t *testing.T, expr string, outputs, inputs map[string]interface{}
 	return got
 }
 
-// agentOutputs mirrors the full set agent.yaml declares.
+// agentOutputs mirrors the full set agent.yaml declares. continuation is what
+// call_llm reports alongside the stop_reason (see agentContinuation).
 func agentOutputs(stopReason string) map[string]interface{} {
 	return map[string]interface{}{
 		"tool_calls":    []interface{}{},
@@ -76,7 +77,16 @@ func agentOutputs(stopReason string) map[string]interface{} {
 		"has_feedback":  false,
 		"pending_inbox": false,
 		"stop_reason":   stopReason,
+		"continuation":  "",
 	}
+}
+
+// truncatedUnderCap is a truncated turn as call_llm reports it below the
+// continuation cap: it asks for a nudged continuation.
+func truncatedUnderCap() map[string]interface{} {
+	out := agentOutputs(stopreason.Truncated)
+	out["continuation"] = "truncated"
+	return out
 }
 
 // structuredOutputs mirrors the full set structured-agent.yaml declares.
@@ -91,7 +101,8 @@ func structuredOutputs(completed bool, stopReason string) map[string]interface{}
 }
 
 var (
-	agentInputs = map[string]interface{}{"mode": "auto", "ask": false}
+	// max_turns 0 is the shipped default and means "no ceiling".
+	agentInputs = map[string]interface{}{"mode": "auto", "ask": false, "max_turns": 0}
 	// max_turns 0 is the shipped default and means "no ceiling".
 	structuredInputs = map[string]interface{}{"max_turns": 0, "response_tool_name": "respond"}
 )
@@ -108,7 +119,7 @@ func TestAgentLoopStopReasonPolicy(t *testing.T) {
 	}{
 		stopreason.ToolUse:     {true, "the tools run and their results are new input"},
 		stopreason.Incomplete:  {true, "the provider paused the turn and expects it handed back (chat b43b41fe announced its next step and then stopped)"},
-		stopreason.Truncated:   {true, "the model ran out of room mid-thought (chat 2308c394: 868s, 64000 tokens, reported complete)"},
+		stopreason.Truncated:   {false, "truncated ALONE no longer loops: call_llm asks for a continuation while under its cap (see below), and a truncated turn past the cap must end the run as truncated"},
 		stopreason.Interrupted: {true, "our stream was cut mid-flight (chat 7da3935c: killed mid-edit, reported as a success)"},
 		stopreason.Done:        {false, "a finished turn must yield to the user; continuing is what once wedged threads"},
 		stopreason.Refused:     {false, "an unchanged request is refused the same way"},
@@ -126,6 +137,22 @@ func TestAgentLoopStopReasonPolicy(t *testing.T) {
 		})
 	}
 
+	t.Run("truncated under the continuation cap continues", func(t *testing.T) {
+		if !evalWhile(t, expr, truncatedUnderCap(), agentInputs, 1) {
+			t.Fatal("a truncated turn call_llm asked to continue must re-enter (chat 2308c394: 868s, 64000 tokens, reported complete)")
+		}
+	})
+
+	t.Run("a premature stop's one retry continues after done", func(t *testing.T) {
+		for _, kind := range []string{"commentary", "reasoning_only"} {
+			out := agentOutputs(stopreason.Done)
+			out["continuation"] = kind
+			if !evalWhile(t, expr, out, agentInputs, 1) {
+				t.Fatalf("continuation=%q must earn the nudged retry even though stop_reason is done", kind)
+			}
+		}
+	})
+
 	t.Run("pending inbox continues even after done", func(t *testing.T) {
 		out := agentOutputs(stopreason.Done)
 		out["pending_inbox"] = true
@@ -139,6 +166,23 @@ func TestAgentLoopStopReasonPolicy(t *testing.T) {
 		out["has_feedback"] = true
 		if !evalWhile(t, expr, out, agentInputs, 1) {
 			t.Fatal("user feedback must earn another turn regardless of how the last one ended")
+		}
+	})
+
+	// max_turns bounds every reason to continue, a queued message included; 0
+	// (the default) bounds nothing.
+	t.Run("max_turns stops a loop that would go on", func(t *testing.T) {
+		inputs := map[string]interface{}{"mode": "auto", "ask": false, "max_turns": 3}
+		out := agentOutputs(stopreason.ToolUse)
+		out["pending_inbox"] = true
+		if !evalWhile(t, expr, out, inputs, 2) {
+			t.Fatal("turn 3 of 3 must still run")
+		}
+		if evalWhile(t, expr, out, inputs, 3) {
+			t.Fatal("max_turns: 3 must stop the loop after its third turn")
+		}
+		if !evalWhile(t, expr, out, agentInputs, 10000) {
+			t.Fatal("max_turns: 0 is no limit")
 		}
 	})
 
@@ -280,7 +324,7 @@ func TestLoopFamiliesDisagreeOnTruncationDeliberately(t *testing.T) {
 
 	agentContinues := evalWhile(t,
 		whileExprOf(t, "agent.yaml", "agent_loop"),
-		agentOutputs(stopreason.Truncated), agentInputs, 1)
+		truncatedUnderCap(), agentInputs, 1)
 
 	sentinelContinues := evalWhile(t,
 		whileExprOf(t, "structured-agent.yaml", "agent_loop"),

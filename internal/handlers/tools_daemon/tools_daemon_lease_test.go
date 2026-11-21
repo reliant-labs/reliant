@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -213,7 +214,7 @@ type leaseRecordingRepo struct {
 
 var _ Repository = (*leaseRecordingRepo)(nil)
 
-func (r *leaseRecordingRepo) GetProjectByPathAndUser(context.Context, string, string) (*db.Project, error) {
+func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
 	r.stateEntered <- struct{}{}
 	<-r.release
 	return nil, nil
@@ -363,6 +364,17 @@ func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.Bi
 // dialDaemonAs is dialDaemon with the registration the test chooses.
 func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
+	stream := sendRegistration(t, svc, userID, reg)
+	msg, err := stream.Receive()
+	require.NoError(t, err)
+	require.NotNil(t, msg.GetRegistrationAck(), "first server message must be the registration ack")
+	return stream
+}
+
+// sendRegistration opens a real ConnectDaemon stream to svc as userID and
+// sends reg, leaving the gateway's answer for the test to read.
+func sendRegistration(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+	t.Helper()
 	routes := http.NewServeMux()
 	svc.Register(routes) // the production mount
 	// Streams.Install is the listener's edge: the abortable request body
@@ -391,9 +403,6 @@ func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.Daem
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: reg,
 	}}))
-	msg, err := stream.Receive()
-	require.NoError(t, err)
-	require.NotNil(t, msg.GetRegistrationAck(), "first server message must be the registration ack")
 	return stream
 }
 

@@ -36,7 +36,7 @@ const maxGrants = 500
 
 // apiKeyProviders are the drivers an org account may be a key of. An org owns API keys only,
 // never a sign-in (provider_accounts_org_api_key_only): a subscription is a person's.
-var apiKeyProviders = map[string]bool{"anthropic": true, "openai": true, "gemini": true, "openrouter": true}
+var apiKeyProviders = map[string]bool{"anthropic": true, "openai": true, "gemini": true, "openrouter": true, "vertexai": true}
 
 func callerID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)

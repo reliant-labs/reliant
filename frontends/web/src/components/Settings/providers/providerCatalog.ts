@@ -9,6 +9,8 @@
  * folded into its name ("Claude subscription", "Codex (ChatGPT)").
  */
 
+import { vertexErrorMessage } from "../../../lib/serviceAccountKey";
+
 /** How a provider is connected: a subscription sign-in, a pasted key, or Reliant's own credits. */
 export type ConnectMethod = "subscription" | "api_key" | "credits";
 
@@ -28,6 +30,12 @@ export interface ProviderConfig {
   docsUrl: string;
   /** A key's visible prefix, for the input placeholder. Empty for sign-in providers. */
   keyFormat: string;
+  /**
+   * What an API-key provider's credential is when it is not a one-line key:
+   * "service_account_json" is a whole Google Cloud service-account key file,
+   * pasted into a multi-line field.
+   */
+  credential?: "service_account_json";
 }
 
 export const providerConfigs = {
@@ -94,6 +102,16 @@ export const providerConfigs = {
     docsUrl: "https://aistudio.google.com/app/apikey",
     keyFormat: "AIza...",
   },
+  vertexai: {
+    name: "Vertex AI",
+    shortName: "Vertex AI",
+    blurb: "Claude and Gemini models, billed to your Google Cloud project",
+    connect: "api_key",
+    usesOAuth: false,
+    docsUrl: "https://console.cloud.google.com/iam-admin/serviceaccounts",
+    keyFormat: "",
+    credential: "service_account_json",
+  },
   openrouter: {
     name: "OpenRouter",
     shortName: "OpenRouter",
@@ -126,6 +144,7 @@ export const VISIBLE_PROVIDERS = [
   "anthropic",
   "openai",
   "gemini",
+  "vertexai",
   "openrouter",
 ] as const satisfies readonly ProviderId[];
 
@@ -146,6 +165,11 @@ export function providerName(id: string, serverName?: string): string {
 /** "account" for a sign-in or managed provider, "key" for an API-key one. */
 export function accountNoun(id: string): "account" | "key" {
   return providerConfig(id)?.connect === "api_key" ? "key" : "account";
+}
+
+/** Whether the provider's credential is a pasted service-account key file (Vertex AI), not a one-line key. */
+export function usesServiceAccountKey(id: string): boolean {
+  return providerConfig(id)?.credential === "service_account_json";
 }
 
 /** "Add another Claude account" / "Add another OpenAI key". */
@@ -234,6 +258,10 @@ export const parseErrorMessage = (errorText: string, provider: string): string =
       return "Google API quota exceeded. Check your quota in the Google Cloud console.";
     }
   }
+
+  // The server says exactly what is wrong with a service-account key (wrong
+  // type, no project, no Vertex AI User role), so its sentence is the message.
+  if (provider === "vertexai") return vertexErrorMessage(errorText);
 
   if (
     lowerError.includes("unauthorized") ||

@@ -18,6 +18,7 @@ import { humanizeField } from "../workflowFindings";
 import { runErrorFieldKey, type RunNodeStatus } from "./builderRun";
 import { MissingConnectionLink } from "./MissingConnectionLink";
 import { useStepRun, type StepRun } from "./BuilderRunContext";
+import { runPath } from "@/lib/paths";
 
 const STATUS_TEXT: Record<RunNodeStatus, string> = {
   running: "Running",
@@ -109,7 +110,7 @@ function Section({ title, children, aside }: { title: string; children: React.Re
   return (
     <section className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
+        <h4 className="text-xs font-semibold text-muted-foreground">{title}</h4>
         {aside}
       </div>
       {children}
@@ -351,8 +352,7 @@ function StepRunBody({ stepRun }: { stepRun: StepRun }) {
       )}
 
       <Link
-        to="/workflows/runs/$runId"
-        params={{ runId: stepRun.chatId }}
+        to={runPath(stepRun.chatId)}
         className="inline-block text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         Open the full run

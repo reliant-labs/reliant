@@ -32,6 +32,9 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"worktree_sweeper",
 		"queued_delivery",
 		"daemon_events_consumer",
+		// The project handler's trigger schedule retries end before the
+		// Temporal client they call closes.
+		"project",
 		"github_access_loop",
 		"workflow_reconciler",
 		"reliant_key_sweep",
@@ -71,6 +74,9 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		}
 		if n.Name == "workflow_reconciler" {
 			require.True(t, n.Close, "the workflow reconciler waits for its pass to stop")
+		}
+		if n.Name == "project" {
+			require.True(t, n.Close, "the project handler ends its trigger schedule retries at shutdown")
 		}
 	}
 }

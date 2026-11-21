@@ -17,9 +17,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -358,9 +355,16 @@ func PollDeviceAuth(ctx context.Context, deviceCode string, interval int) (*GitH
 	}
 }
 
-// resolveGitHubToken finds the GitHub OAuth token to authenticate with, in
-// priority order: the credential passed by the resolver (BearerToken/ApiKey),
-// the GITHUB_TOKEN env var, then the standard GitHub CLI / Copilot config files.
+// errNoCopilotCredential is returned when the resolver passed no Copilot
+// credential. Driver construction runs on the multi-tenant server roles, so
+// there is deliberately no fallback to a credential of the process (the
+// GITHUB_TOKEN env var, ~/.config/github-copilot): that would run one tenant's
+// request on the operator's GitHub account.
+var errNoCopilotCredential = fmt.Errorf("github token is required for Copilot: connect GitHub Copilot from Settings")
+
+// resolveGitHubToken returns the GitHub OAuth token the resolver passed for this
+// account (BearerToken, then ApiKey). It never reads the process environment or
+// the filesystem; a caller with no credential gets errNoCopilotCredential.
 func resolveGitHubToken(opts llm.DriverOptions) (string, error) {
 	if t := strings.TrimSpace(opts.BearerToken); t != "" {
 		return t, nil
@@ -368,55 +372,5 @@ func resolveGitHubToken(opts llm.DriverOptions) (string, error) {
 	if t := strings.TrimSpace(opts.ApiKey); t != "" {
 		return t, nil
 	}
-	if t := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); t != "" { //nolint:forbidigo // GITHUB_TOKEN is the GitHub CLI convention for an ambient credential, not reliant configuration
-		return t, nil
-	}
-	if t, err := loadGitHubTokenFromDisk(); err == nil && t != "" {
-		return t, nil
-	}
-	return "", fmt.Errorf("github token is required for Copilot: connect GitHub Copilot from Settings")
-}
-
-// loadGitHubTokenFromDisk reads the GitHub OAuth token from the standard GitHub
-// CLI / Copilot config locations. Best-effort developer convenience only.
-func loadGitHubTokenFromDisk() (string, error) {
-	var configDir string
-	switch {
-	case os.Getenv("XDG_CONFIG_HOME") != "": //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
-		configDir = os.Getenv("XDG_CONFIG_HOME") //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
-	case runtime.GOOS == "windows":
-		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" { //nolint:forbidigo // ambient OS variable (LOCALAPPDATA), not configuration
-			configDir = localAppData
-		} else {
-			configDir = filepath.Join(os.Getenv("HOME"), "AppData", "Local") //nolint:forbidigo // ambient OS variable (HOME), not configuration
-		}
-	default:
-		configDir = filepath.Join(os.Getenv("HOME"), ".config") //nolint:forbidigo // ambient OS variable (HOME), not configuration
-	}
-
-	filePaths := []string{
-		filepath.Join(configDir, "github-copilot", "hosts.json"),
-		filepath.Join(configDir, "github-copilot", "apps.json"),
-	}
-
-	for _, filePath := range filePaths {
-		data, err := os.ReadFile(filePath) // #nosec G304 -- fixed config paths
-		if err != nil {
-			continue
-		}
-		var config map[string]map[string]interface{}
-		if err := json.Unmarshal(data, &config); err != nil {
-			continue
-		}
-		for key, value := range config {
-			if strings.Contains(key, "github.com") {
-				if oauthToken, ok := value["oauth_token"].(string); ok && oauthToken != "" {
-					return oauthToken, nil
-				}
-			}
-		}
-	}
-
-	logging.Debug("GitHub token not found in standard Copilot config locations")
-	return "", fmt.Errorf("github token not found in standard locations")
+	return "", errNoCopilotCredential
 }

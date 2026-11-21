@@ -14,6 +14,9 @@ import "./lib/configGuard";
 import "./lib/claimLinkBoot";
 // An org invitation link's token, likewise — see lib/inviteLink.ts.
 import "./lib/inviteLinkBoot";
+// A dev sign-in link's token, likewise; a no-op outside a dev server started
+// with VITE_DEV_SIGN_IN=true — see lib/devSignIn.ts.
+import "./lib/devSignInBoot";
 // Finally the landing site's rid / utm_* handoff is held before the router or a
 // sign-in redirect replaces the URL — see lib/landingAttribution.ts.
 import "./lib/attributionBoot";
@@ -32,7 +35,7 @@ import { logger } from "./lib/logger";
 import { Root } from "./components/Root";
 import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 
-import { monacoManager } from "./lib/monacoManager";
+import { prefetchMonaco } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { isDemoShell } from "./lib/shell";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
@@ -87,21 +90,19 @@ if (!isConfigReady()) {
   logger.info('[Main] ✅ Backend configuration already available (dev mode or reload)');
 }
 
-// Pre-initialize Monaco in the background (non-blocking)
-// Monaco will be ready by the time the user opens a code editor/diff view
+// Warm the editor chunk in the background, after the page has loaded and gone
+// idle, so Monaco is ready by the time someone opens a code editor/diff view.
+// It is our own lazy chunk (lib/monacoBundle), never part of first paint.
 //
 // Skipped on the mobile surface and on unauthenticated entry routes such as
 // /oauth/consent — see lib/monacoPreload for why each is excluded. Reading the
 // pathname rather than the router is deliberate: this runs before React
 // mounts, and the predicate is pure.
-// The public demo host has no editor and must reach no other origin (the CDN).
+// The public demo host has no editor.
 if (!isDemoShell() && shouldPreloadMonaco(window.location.pathname)) {
-  logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
-  monacoManager.getMonaco().catch((error) => {
-    logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);
-  });
+  prefetchMonaco();
 } else {
-  logger.info('[Main] ⏭️  Skipping Monaco pre-initialization (non-desktop surface)');
+  logger.info('[Main] ⏭️  Skipping the Monaco prefetch (no editor on this surface)');
 }
 
 // NOTE: Static data prefetch moved to AuthGuard.tsx to run AFTER authentication is ready

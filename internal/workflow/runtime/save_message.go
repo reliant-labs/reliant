@@ -292,6 +292,16 @@ func evaluateSaveMessageConfig(
 		}
 	}
 
+	// The effective thinking level the completion ran at, for the same reason
+	// as the model: the requested level is reconciled with the model's
+	// capabilities inside the activity.
+	var thinkingLevel string
+	if v, ok := activityOutput["thinking_level"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			thinkingLevel = s
+		}
+	}
+
 	// The provider account that served the completion, for the same reason as
 	// the model: it is only known after the activity ran.
 	var providerAccountID string
@@ -384,6 +394,7 @@ func evaluateSaveMessageConfig(
 		TokenCount:        tokenCount,
 		Cost:              cost,
 		Model:             modelName,
+		ThinkingLevel:     thinkingLevel,
 		ProviderAccountID: providerAccountID,
 		Agent:             scope.AgentName,
 		WorkflowID:        scope.WorkflowID,
@@ -798,6 +809,7 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		TokenCount:                int32(input.TokenCount),
 		Cost:                      input.Cost,
 		ResolvedModel:             input.Model,
+		ResolvedThinkingLevel:     input.ThinkingLevel,
 		ResolvedProviderAccountId: input.ProviderAccountID,
 		ResolvedAgent:             input.Agent,
 		ResolvedPhase:             input.Phase,

@@ -96,6 +96,7 @@ const FORKS_POOL_FILES = [
   "src/components/Auth/__tests__/CliLogin.test.tsx",
   "src/components/Auth/__tests__/DevicePairing.test.tsx",
   "src/components/Billing/__tests__/LinkIdentityModal.test.tsx",
+  "src/components/Chat/__tests__/draftSurvivesForcedReload.test.tsx",
   "src/components/Settings/__tests__/ConnectorConsent.defaults.test.tsx",
   "src/components/Settings/__tests__/IntegrationsSettings.test.tsx",
   "src/components/__tests__/AppOutOfDateModal.test.tsx",
@@ -110,6 +111,8 @@ const FORKS_POOL_FILES = [
   "src/lib/__tests__/connect.routing.test.ts",
   "src/lib/__tests__/connection-oauth.test.ts",
   "src/lib/__tests__/github-connect.test.ts",
+  // Watches process 'unhandledRejection', which a vm context's promises do not reach.
+  "src/lib/__tests__/monacoManager.loadFailure.test.ts",
   "src/lib/__tests__/packagedOrigin.test.ts",
   "src/lib/cli-commands.test.ts",
   "src/services/controlPlane/observability/__tests__/rumApi.test.ts",
@@ -165,6 +168,13 @@ const otelBrowserConfig = (): Plugin => ({
     ];
   },
 });
+
+// A Rolldown code-splitting group for whole npm packages: every module under
+// node_modules/<pkg>/ (pnpm's .pnpm store path ends in the same segment).
+function vendorChunk(name: string, packages: string[]): { name: string; test: RegExp } {
+  const pkgs = packages.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("/", "[\\\\/]")).join("|");
+  return { name, test: new RegExp(`[\\\\/]node_modules[\\\\/](?:${pkgs})[\\\\/]`) };
+}
 
 // https://vite.dev/config/
 const appConfig: ViteUserConfig = {
@@ -231,31 +241,38 @@ const appConfig: ViteUserConfig = {
   base: "/",
   build: {
     // Optimize build output
-    rollupOptions: {
+    rolldownOptions: {
       // Two documents: the app, and the desktop app's find bar, which Electron
       // loads into a view of its own over a window (src/findBar/protocol.ts).
       input: {
-        main: path.resolve(__dirname, "index.html"),
+        // Rolldown uses this key for the emitted entry chunk name. Keep the
+        // assets/index-*.js contract checked by the release bundle verifier.
+        index: path.resolve(__dirname, "index.html"),
         findBar: path.resolve(__dirname, "find-bar.html"),
       },
       output: {
-        // Create manual chunks for better code splitting
-        manualChunks: {
-          // Core vendor libraries
-          'vendor-react': ['react', 'react-dom'],
-          // UI libraries
-          'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
-          // Heavy dependencies
-          'vendor-markdown': ['react-markdown', 'remark-gfm', 'rehype-highlight'],
-          'vendor-highlight': ['highlight.js'],
-          // Monaco Editor - separate chunk for lazy loading
-          'vendor-monaco': ['@monaco-editor/react', '@monaco-editor/loader'],
-          // Date and form libraries
-          'vendor-utils': ['date-fns', 'react-hook-form', '@hookform/resolvers'],
-          // State management
-          'vendor-state': ['zustand', '@tanstack/react-query'],
-          // Router
-          'vendor-router': ['@tanstack/react-router'],
+        // Vendor chunks for better code splitting: each group captures its
+        // packages and their dependencies (includeDependenciesRecursively).
+        codeSplitting: {
+          groups: [
+            // Core vendor libraries
+            vendorChunk("vendor-react", ["react", "react-dom"]),
+            // UI libraries
+            vendorChunk("vendor-ui", ["lucide-react", "clsx", "tailwind-merge"]),
+            // Heavy dependencies
+            vendorChunk("vendor-markdown", ["react-markdown", "remark-gfm", "rehype-highlight"]),
+            vendorChunk("vendor-highlight", ["highlight.js"]),
+            // The React wrapper around Monaco, imported only by lib/monacoManager
+            // and components/shared/MonacoEditor, lazily. Monaco itself
+            // (lib/monacoBundle) is left to Rolldown's own lazy chunks.
+            vendorChunk("vendor-monaco", ["@monaco-editor/react", "@monaco-editor/loader"]),
+            // Date and form libraries
+            vendorChunk("vendor-utils", ["date-fns", "react-hook-form", "@hookform/resolvers"]),
+            // State management
+            vendorChunk("vendor-state", ["zustand", "@tanstack/react-query"]),
+            // Router
+            vendorChunk("vendor-router", ["@tanstack/react-router"]),
+          ],
         },
       },
     },
@@ -294,10 +311,15 @@ const appConfig: ViteUserConfig = {
       '@monaco-editor/react',
       '@monaco-editor/loader',
     ],
-    // Exclude Monaco Editor's web workers from optimization
-    // They need to be loaded dynamically as blob URLs
+    // Monaco (lib/monacoBundle) is served unbundled in dev: its ESM build
+    // imports CSS and its workers are separate `?worker` entries.
     exclude: ['monaco-editor'],
   },
+  // Vite 8 bundles workers (Monaco's ts/css/html/json/editor workers) with
+  // Rolldown, which re-prints a worker's iife after terser's renderChunk and
+  // ships it unminified-looking (+20% raw). Rolldown's own minifier on the
+  // worker output restores Vite 7's sizes; terser still runs first.
+  worker: { rolldownOptions: { output: { minify: true } } },
   server: {
     // The SDK is a sibling workspace member compiled from source, outside this
     // directory (and outside pnpm's workspace root, which is where vite's
@@ -412,9 +434,28 @@ const appConfig: ViteUserConfig = {
     // build: the bundle's SDK, and the same instance a test stubs
     // (lib/__tests__/telemetryBuildAttribute.test.ts,
     // api/__tests__/transport.trace.test.ts).
+    //
+    // The runtime (>= 0.13.20) loads the SDK through its package.json import
+    // "#hyperdx-otel-web", whose `node` condition is a pre-bundled copy of the
+    // SDK for runners that load it natively (forge #2344). Inlined, vite
+    // resolves that import with the `node` condition too, so the runtime would
+    // start that copy, not the SDK a test stubs, and every Rum spy would see
+    // nothing (v1.24.0-rc.3..rc.5's release gate). The alias sends it to the
+    // SDK itself, as the bundle does.
     server: { deps: { inline: ["@reliantlabs/forge-web-runtime", "@hyperdx/otel-web"] } },
+    // The runtime loads the SDK through its package.json import map
+    // ("#hyperdx-otel-web", forge-web-runtime >= 0.13.20): `browser` gets
+    // @hyperdx/otel-web, `node` a copy of the SDK pre-bundled into the
+    // runtime's dist. Vitest resolves with `node`, so without the second alias
+    // the runtime starts that copy, not the instance a test stubs, and every
+    // `Rum.init` spy sees no call. Resolve it as the browser bundle does.
     ...(process.env.VITEST
-      ? { alias: [{ find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() }] }
+      ? {
+          alias: [
+            { find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() },
+            { find: /^#hyperdx-otel-web$/, replacement: "@hyperdx/otel-web" },
+          ],
+        }
       : {}),
     // Read by src/test/setup.ts, which configures Testing Library with it.
     env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
@@ -481,9 +522,9 @@ function demoDocument(): Plugin {
 }
 
 function demoConfig(app: ViteUserConfig): ViteUserConfig {
-  // Not the editor's chunk: an object-form manual chunk is built whether or
-  // not anything imports it, and the demo has no editor.
-  const { "vendor-monaco": _monaco, ...manualChunks } = (app.build?.rollupOptions?.output as { manualChunks: Record<string, string[]> }).manualChunks;
+  // Not the editor's chunk: the demo has no editor.
+  const output = app.build?.rolldownOptions?.output as { codeSplitting: { groups: { name: string }[] } };
+  const groups = output.codeSplitting.groups.filter((group) => group.name !== "vendor-monaco");
   return {
     ...app,
     plugins: [demoSubstitutes(), ...(app.plugins ?? []), demoDocument(), demoBundleGuard()],
@@ -491,10 +532,10 @@ function demoConfig(app: ViteUserConfig): ViteUserConfig {
     build: {
       ...app.build,
       outDir: "dist-demo",
-      rollupOptions: {
-        ...app.build?.rollupOptions,
+      rolldownOptions: {
+        ...app.build?.rolldownOptions,
         input: { demo: path.resolve(__dirname, DEMO_HTML) },
-        output: { ...app.build?.rollupOptions?.output, manualChunks },
+        output: { ...output, codeSplitting: { ...output.codeSplitting, groups } },
       },
     },
   };

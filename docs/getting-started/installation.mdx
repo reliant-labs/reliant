@@ -67,6 +67,23 @@ sudo apt install ./Reliant-latest-linux-amd64.deb
 
 The `reliant` CLI is what runs a daemon on a machine you own, such as a workstation, a server or a Raspberry Pi, so your agents can work there. You don't need it if you only use the web app or a Reliant cloud machine. The desktop installs include it and put it on your `PATH`: the Debian package and Windows installer do so at install time, and the other desktop installs do it the first time you open the app. Run `reliant --version` to check, then `reliant daemon start` to connect the machine to your account. See [Your own computer](/machines/your-computer) for the full walkthrough.
 
+### CLI only (headless Linux, CI runners)
+
+From v1.24.0, every release also publishes the `reliant` CLI on its own, for a server with no desktop or a CI runner. Each platform gets one archive, `reliant_<os>_<arch>.tar.gz`, for `linux`, `darwin` and `windows` on `amd64` and `arm64`, holding the `reliant` binary (`reliant.exe` on Windows) at its root. The archive names carry no version, so the latest release's archive is always at the same URL:
+
+```bash
+curl -fsSLO https://github.com/reliant-labs/reliant/releases/latest/download/reliant_linux_amd64.tar.gz
+curl -fsSLO https://github.com/reliant-labs/reliant/releases/latest/download/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf reliant_linux_amd64.tar.gz reliant
+sudo install -m 0755 reliant /usr/local/bin/reliant
+reliant --version
+```
+
+To pin a release, name its tag instead of `latest`: `https://github.com/reliant-labs/reliant/releases/download/<tag>/reliant_<os>_<arch>.tar.gz`. The same files are mirrored at `https://downloads.reliantlabs.io/cli/<tag>/` (for example `https://downloads.reliantlabs.io/cli/v1.24.0/reliant_linux_arm64.tar.gz`, with its `checksums.txt` beside it). Releases before v1.24.0 have no CLI archives.
+
+A machine with no browser signs in with a token instead: an API token in `RELIANT_TOKEN` to run commands, or a daemon credential piped to `reliant daemon start --token` to run a daemon. [Sign in from the terminal](/cli/sign-in#sign-in-where-there-is-no-browser) covers both.
+
 Reliant's source is on [GitHub](https://github.com/reliant-labs/reliant) under the Business Source License 1.1 (see the [License FAQ](/license-faq)). To build it yourself, follow [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md).
 
 ## After installing

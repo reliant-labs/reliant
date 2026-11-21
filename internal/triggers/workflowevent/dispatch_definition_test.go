@@ -80,9 +80,11 @@ func (f *fixture) syncReactor(content string, at time.Time) {
 	f.t.Helper()
 	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "reactor", Name: "reactor", RelativePath: reactorPath, YAMLContent: content}})
 	require.NoError(f.t, err)
+	db.HoldProjectOnMachineForTest(f.t, f.repo, f.projectID, f.daemonID)
 	_, err = f.repo.SyncProjectConfigSnapshot(context.Background(), &db.ProjectConfigRecord{
 		ProjectID: f.projectID, DaemonID: f.daemonID, ProjectWorkflowsJSON: wj, PushedAt: at.UTC(),
-	}, false)
+	}, false, nil)
+
 	require.NoError(f.t, err)
 }
 

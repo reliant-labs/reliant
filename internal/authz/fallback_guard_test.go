@@ -20,13 +20,14 @@ import (
 // something is absent (a nil or "" org, project or gate), with the reason it
 // is not an access decision.
 var absentFallbackAllowed = map[string]string{
-	"internal/handlers/streaming/user_update_orgs.go:allows:g == nil":                                                                                "a nil gate is a filter built without one (a test of the project filter); the stream always installs one",
-	"internal/handlers/mcp/mcp_config.go:IsEnabled:c.Enabled == nil || *c.Enabled":                                                                   "an MCP server's enabled flag defaults on; no caller or resource",
-	"internal/handlers/project/rpc_project_daemons.go:projectDirIsHealable:p.RemoteURL == nil || strings.TrimSpace(*p.RemoteURL) == \"\"":            "whether a directory may be made, of a project already authorized",
-	"internal/handlers/terminal/terminal_ws.go:workingDirMayAppear:c.checkouts == nil || worktreeID == \"\"":                                         "whether a working directory may still appear on disk; no access decision",
-	"internal/handlers/terminal/terminal_ws.go:workingDirMayAppear:err != nil || wt == nil":                                                          "whether a working directory may still appear on disk; no access decision",
-	"internal/handlers/terminal/terminal_ws.go:isMainCheckout:worktreeID == \"\"":                                                                    "the main checkout has no worktree id; no access decision",
-	"internal/daemonplacement/workspace.go:isPlaceholderLabel:label == \"\" || strings.EqualFold(label, daemonID) || uuidPattern.MatchString(label)": "whether a machine's name is worth showing a person; no access decision",
+	"internal/handlers/streaming/user_update_orgs.go:allows:g == nil":                                                                                       "a nil gate is a filter built without one (a test of the project filter); the stream always installs one",
+	"internal/handlers/mcp/mcp_config.go:IsEnabled:c.Enabled == nil || *c.Enabled":                                                                          "an MCP server's enabled flag defaults on; no caller or resource",
+	"internal/handlers/project/project_daemons_helpers.go:projectDirIsHealable:p.RemoteURL == nil || strings.TrimSpace(*p.RemoteURL) == \"\"":               "whether a directory may be made, of a project already authorized",
+	"internal/handlers/terminal/terminal_ws.go:workingDirMayAppear:c.checkouts == nil || worktreeID == \"\"":                                                "whether a working directory may still appear on disk; no access decision",
+	"internal/handlers/terminal/terminal_ws.go:workingDirMayAppear:err != nil || wt == nil":                                                                 "whether a working directory may still appear on disk; no access decision",
+	"internal/handlers/terminal/terminal_ws.go:isMainCheckout:worktreeID == \"\"":                                                                           "the main checkout has no worktree id; no access decision",
+	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:projectRemoteEmpty:project.RemoteURL == nil || strings.TrimSpace(*project.RemoteURL) == \"\"": "whether a project's remote is still to be backfilled; no access decision",
+	"internal/daemonplacement/workspace.go:isPlaceholderLabel:label == \"\" || strings.EqualFold(label, daemonID) || uuidPattern.MatchString(label)":        "whether a machine's name is worth showing a person; no access decision",
 }
 
 // TestNoAbsentFallbackBypassesAuthz fails on a branch that answers true

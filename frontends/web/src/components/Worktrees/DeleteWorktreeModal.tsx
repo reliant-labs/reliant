@@ -5,6 +5,7 @@ import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { usePreferences } from "../../hooks/settings-queries";
 import { type Worktree } from "../../hooks/worktree-queries";
+import { settingsPath } from "@/lib/paths";
 
 interface DeleteWorktreeModalProps {
   isOpen: boolean;
@@ -76,7 +77,7 @@ export function DeleteWorktreeModal({
     onClose();
     // Let the dialog unmount before the route changes underneath it.
     setTimeout(() => {
-      navigate({ to: "/settings/$section", params: { section: "branches" } });
+      navigate({ to: settingsPath("branches") });
     }, 100);
   };
 
@@ -110,7 +111,7 @@ export function DeleteWorktreeModal({
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold text-muted-foreground">
               Also remove
             </h4>
             {!isArchived && (

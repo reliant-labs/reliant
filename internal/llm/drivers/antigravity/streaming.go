@@ -10,11 +10,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -26,14 +25,22 @@ import (
 const maxSSELineBytes = 4 * 1024 * 1024
 
 // StreamResponse POSTs the double-wrapped request and translates the
-// double-wrapped SSE frames into driver events.
+// double-wrapped SSE frames into driver events. A request the server rejects
+// for a thought signature is sent once more with stand-in signatures; see
+// geminiwire.RecoverSignatureRejection.
 func (c *Client) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, toolList []toolsPkg.Tool) <-chan llm.DriverEvent {
+	return geminiwire.RecoverSignatureRejection(ctx, geminiwire.SourceAntigravity, func(standIns bool) <-chan llm.DriverEvent {
+		return c.streamResponse(ctx, prompts, messages, toolList, standIns)
+	})
+}
+
+func (c *Client) streamResponse(ctx context.Context, prompts []string, messages []message.Message, toolList []toolsPkg.Tool, standIns bool) <-chan llm.DriverEvent {
 	eventChan := make(chan llm.DriverEvent)
 
 	go func() {
 		defer close(eventChan)
 
-		body, err := json.Marshal(c.buildEnvelope(messages, prompts, toolList))
+		body, err := json.Marshal(c.buildEnvelopeWith(messages, prompts, toolList, standIns))
 		if err != nil {
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("antigravity: failed to marshal request: %w", err)}
 			return
@@ -44,57 +51,33 @@ func (c *Client) StreamResponse(ctx context.Context, prompts []string, messages 
 			"messageCount", len(messages),
 			"toolCount", len(toolList))
 
-		var resp *http.Response
-		for attempt := 1; ; attempt++ {
+		// The request opens through the shared ladder. Cloud Code states its
+		// wait in a google.rpc.RetryInfo and an exhausted quota in an
+		// ErrorInfo; DescribeGoogle reads both. Each wait is emitted BEFORE
+		// it is slept, so a caller can record that this run is parked rather
+		// than working.
+		emitCancelled := false
+		resp, err := c.retryer().OpenHTTP(ctx, c.httpClient.Do, func() (*http.Request, error) {
 			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(body))
 			if reqErr != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("antigravity: failed to create request: %w", reqErr)}
-				return
+				return nil, fmt.Errorf("antigravity: failed to create request: %w", reqErr)
 			}
 			req.Header.Set("Accept", "text/event-stream")
-
-			resp, err = c.httpClient.Do(req)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("antigravity: request failed: %w", err)}
-				return
-			}
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-
-			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
-			status := resp.StatusCode
-			_ = resp.Body.Close()
-
-			if !isRetryableStatus(status) || attempt > models.MaxRetries {
-				eventChan <- llm.DriverEvent{
-					Type:  llm.EventError,
-					Error: fmt.Errorf("antigravity: API request failed with status %d: %s", status, string(errBody)),
-				}
-				return
-			}
-
-			delay := retryDelay(attempt, resp)
-			logging.WarnContext(ctx, "[ANTIGRAVITY] Retrying stream request",
-				"status", status, "attempt", attempt, "maxRetries", models.MaxRetries, "delay", delay)
-			// Emitted BEFORE the sleep so a caller can record that this run is
-			// parked rather than working.
-			eventChan <- llm.DriverEvent{
-				Type: llm.EventRetryWait,
-				Retry: &llm.RetryWait{
-					Attempt:     attempt,
-					MaxAttempts: models.MaxRetries,
-					Delay:       delay,
-					StatusCode:  status,
-					Reason:      fmt.Sprintf("http_%d", status),
-				},
-			}
+			return req, nil
+		}, antigravityFailure, func(wait llm.RetryWait) error {
 			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
 			case <-ctx.Done():
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-				return
-			case <-time.After(delay):
+				emitCancelled = true
+				return ctx.Err()
 			}
+		})
+		if err != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			}
+			return
 		}
 		defer resp.Body.Close()
 
@@ -121,6 +104,7 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 		thinkingStarted   bool
 		finalResp         *generateResp
 		lastFinishReason  string
+		lastFinishMessage string
 	)
 
 	err := scanFrames(body, func(raw []byte) error {
@@ -150,6 +134,7 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 			}
 			if cand.FinishReason != "" {
 				lastFinishReason = cand.FinishReason
+				lastFinishMessage = cand.FinishMessage
 			}
 			if cand.Content == nil {
 				continue
@@ -250,6 +235,20 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 	if ctx.Err() != nil {
 		eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
 		return
+	}
+
+	// A candidate that stopped with a retryable failure (a malformed tool
+	// call, a missing signature) ends the stream with that error rather than
+	// a completed turn; the usage it billed follows, as after any error.
+	if len(toolCalls) == 0 {
+		if stopErr := geminiwire.StopFailure(geminiwire.SourceAntigravity, lastFinishReason, lastFinishMessage); stopErr != nil {
+			logging.WarnContext(ctx, "[ANTIGRAVITY] Candidate stopped with a failure", "error", stopErr)
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: stopErr}
+			if billed := llm.FailedAttemptUsage(usage(finalResp)); billed != nil {
+				eventChan <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{Usage: *billed}}
+			}
+			return
+		}
 	}
 
 	if thinkingStarted {

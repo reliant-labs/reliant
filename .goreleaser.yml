@@ -1,3 +1,7 @@
+# NOT USED BY THE RELEASE. Nothing invokes goreleaser: release.yml builds the
+# backend (build-backend) and publishes the standalone CLI archives from those
+# same binaries (cli-archives, cli-publish; dev-docs/cli-release-artifacts.md).
+# The ldflags below name internal/builddefaults, which no longer exists.
 version: 2
 project_name: reliant
 
