@@ -40,7 +40,10 @@ var (
 	linkFile = os.Link
 	// renameFile is os.Rename; removeIfSame's tests replace it to act in the
 	// instant between its moves.
-	renameFile   = os.Rename
+	renameFile = os.Rename
+	// restoreFile is renameNoReplace; a test creates a file at the
+	// destination in the instant before it runs.
+	restoreFile  = renameNoReplace
 	writeContent = func(f *os.File, content []byte) error {
 		_, err := f.Write(content)
 		return err
@@ -160,10 +163,11 @@ func writeAndClose(f *os.File, content []byte) (os.FileInfo, error) {
 // its own file at path, and the Remove deletes that one. So the file is first
 // moved, atomically, to a fresh name of this call's own in the same directory;
 // only that name is checked and removed. A file that turns out not to be the
-// one described by info is put back, never replacing one that has appeared at
-// path since: through a hard link, or where there are none, a rename only
-// while path is still free. If neither can put it back it stays under the
-// hidden name, intact, rather than being deleted.
+// one described by info is put back only by a call that refuses a file that
+// has appeared at path since: a hard link, or where there are none, a
+// no-replace rename (renameNoReplace). Never a check that path is free and
+// then a plain rename, which another process can beat. If neither can put it
+// back it stays under the hidden name, intact, rather than being deleted.
 func removeIfSame(path string, info os.FileInfo) {
 	moved, err := unusedSiblingName(path, ".reliant-rm-")
 	if err != nil {
@@ -180,9 +184,7 @@ func removeIfSame(path string, info os.FileInfo) {
 		_ = os.Remove(moved)
 		return
 	}
-	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
-		_ = renameFile(moved, path)
-	}
+	_ = restoreFile(moved, path)
 }
 
 // unusedSiblingName returns a name in path's directory, starting with prefix,

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -273,6 +274,55 @@ func TestRemoveIfSame_AFileThatAppearsDuringTheCleanupSurvives(t *testing.T) {
 				assertOnlyEntries(t, dir, "shot.png")
 			})
 		}
+	}
+}
+
+// Without hard links, a file found not to be ours is put back only by a
+// rename that refuses an existing destination. Here another process creates a
+// file at path in the instant after path was seen free, before that rename:
+// both files survive, the newcomer at path and the moved one under its hidden
+// name. A check-then-rename would have replaced the newcomer.
+func TestRemoveIfSame_WithoutHardLinksNeverRenamesOverAFileCreatedAtPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shot.png")
+	moved := []byte("a file that is not ours")
+	if err := os.WriteFile(path, moved, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ours, err := os.Lstat(t.TempDir()) // anything but the file at path
+	if err != nil {
+		t.Fatal(err)
+	}
+	newcomer := []byte("created at path just before the restore")
+	stubLinkUnsupported(t)
+	orig := restoreFile
+	t.Cleanup(func() { restoreFile = orig })
+	restoreFile = func(oldname, newname string) error {
+		if _, err := os.Lstat(newname); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("path must be free when the restore is tried; Lstat err %v", err)
+		}
+		if err := os.WriteFile(newname, newcomer, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return orig(oldname, newname)
+	}
+	removeIfSame(path, ours)
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, newcomer) {
+		t.Fatalf("the file created at path must survive; read %q, err %v", got, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept bool
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".reliant-rm-") {
+			got, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			kept = err == nil && bytes.Equal(got, moved)
+		}
+	}
+	if len(entries) != 2 || !kept {
+		t.Fatalf("want path and the moved file under a hidden name, got %v (moved file kept: %v)", entries, kept)
 	}
 }
 
