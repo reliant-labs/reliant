@@ -500,7 +500,7 @@ export function ConnectorConsent({
         <h2 className="text-lg font-semibold">{displayName} is connected</h2>
         <p className="text-sm text-muted-foreground">
           You can return to {displayName} and try again. Manage or revoke this
-          access any time from Settings → Machines, under the machine&apos;s
+          access any time from Settings → Agent sandboxes, under the sandbox&apos;s
           Access section.
         </p>
       </div>

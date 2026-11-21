@@ -109,6 +109,23 @@ describe('shouldRedirectToMobile', () => {
     // A prefix match, not a substring one.
     expect(shouldRedirectToMobile(phone({ pathname: '/forgery' }))).toBe(true)
   })
+
+  it('leaves Projects on a phone, and the retired /apps and /sites that redirect there (U6)', () => {
+    // The drawer's Apps opens Projects narrowed to the apps; an old /apps link
+    // redirects there. Handing either off would land the phone on the chat list.
+    for (const pathname of ['/projects', '/o/acme/projects', '/apps', '/o/acme/apps', '/sites', '/o/acme/sites']) {
+      expect(shouldRedirectToMobile(phone({ pathname, search: '?show=apps' })), pathname).toBe(false)
+    }
+    expect(shouldRedirectToMobile(phone({ pathname: '/projectsx' }))).toBe(true)
+  })
+
+  it('leaves Projects and a project page on a phone: one responsive page, no /m twin', () => {
+    for (const pathname of ['/projects', '/projects/p-1', '/projects/p-1/workspaces', '/o/acme/projects/p-1/settings']) {
+      expect(shouldRedirectToMobile(phone({ pathname })), pathname).toBe(false)
+    }
+    // The chat home filtered to a project is still the chat surface.
+    expect(shouldRedirectToMobile(phone({ pathname: '/project/p-1' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {

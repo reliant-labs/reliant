@@ -25,6 +25,7 @@ import { useProjectStore } from "./projectStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useNewChatMachineStore } from "./newChatMachineStore";
+import { useNewChatAppStore } from "./newChatAppStore";
 import { markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
 import type { NewChatSearch } from "../routeSchemas";
 
@@ -108,19 +109,22 @@ export function newChatTargetProjectId(): string | null {
   return useWorkspaceStateStore.getState().lastProjectId;
 }
 
-/** Where a new chat starts: its project, workspace and machine. */
+/** Where a new chat starts: its project, workspace and machine, and the app it is about. */
 export interface NewChatTarget {
   projectId?: string | null;
   worktreeId?: string | null;
   daemonId?: string | null;
+  /** The app the chat is started from (Chat.app_name, newChatAppStore); none for every other new chat. */
+  appName?: string | null;
 }
 
-/** The new-chat route's search for `target` (`/new?project=&machine=&ws=`). */
+/** The new-chat route's search for `target` (`/new?project=&machine=&ws=&app=`). */
 export function newChatSearchOf(target: NewChatTarget): NewChatSearch {
   return {
     project: target.projectId ?? undefined,
     machine: target.daemonId ?? undefined,
     ws: target.worktreeId ?? undefined,
+    app: target.appName ?? undefined,
   };
 }
 
@@ -134,6 +138,8 @@ export function isNewChatApplied(search: NewChatSearch): boolean {
  * and the workspace `worktreeId` (default: the open chat's, when it is in that
  * project; else the project's main workspace). `daemonId` names the machine
  * the chat should run on (newChatMachineStore); without it the view picks.
+ * `appName` tags the chat with the app it is started from (newChatAppStore);
+ * every new chat opened without one carries none, whatever was set before.
  *
  * Goes to `/new` with that context in its search (a push from a chat, a
  * replace when the new-chat view is already on screen), so a refresh keeps
@@ -153,6 +159,7 @@ export async function applyNewChat(target: NewChatTarget = {}): Promise<void> {
   if (projectId && target.daemonId) {
     useNewChatMachineStore.getState().offer({ projectId, daemonId: target.daemonId });
   }
+  useNewChatAppStore.getState().set(projectId && target.appName ? { projectId, appName: target.appName } : null);
   const projectStore = useProjectStore.getState();
   let contextProjectId = projectStore.currentProject?.id;
   const activeChatId = useChatStore.getState().activeChatId;

@@ -183,7 +183,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
               >
                 {/* The public demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
-                {!isDemoShell() && <DemoBanner shell={shell} />}
+                {!isDemoShell() && <DemoBanner />}
                 <div className="space-y-4" data-testid="forge-demo">
                   {isDemoShell() && search.section === DEMO_SECTION_HOME ? (
                     <DemoHome />

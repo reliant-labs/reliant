@@ -38,7 +38,7 @@ describe("LedConsoleProvider", () => {
     expect((await screen.findByTestId("labels")).textContent?.split(",")[0]).toBe("Home");
   });
 
-  it("is the grouped nav on its own, with no Product analytics row when the project has no hub", async () => {
+  it("is the grouped nav on its own, with Product analytics (no Insights) when the project has no hub", async () => {
     renderAt(
       <LedConsoleProvider>
         <NavLabels />
@@ -46,7 +46,7 @@ describe("LedConsoleProvider", () => {
     );
     const labels = (await screen.findByTestId("labels")).textContent?.split(",") ?? [];
     expect(labels.slice(0, 5)).toEqual(["Overview", "Services", "Storage", "Dashboards", "Issues"]);
-    expect(labels).not.toContain("Product analytics");
+    expect(labels).toContain("Product analytics");
   });
 });
 

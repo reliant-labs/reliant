@@ -20,9 +20,9 @@
  *                                             then the scoped environment's tables, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
- *   /forge/p/:project/users                   Users: who can sign in to the scoped environment
- *                                             (its managed identity), `user` and `q` as the
- *                                             environment page's Identity tab takes them
+ *   /forge/p/:project/auth[/:tab]             Auth (U6d): users (who can sign in to the scoped environment,
+ *                                             `user` and `q` as before) · sign-in (how the app signs people in)
+ *   /forge/p/:project/users                   → auth (the old Users page; redirected, search kept)
  *   /forge/p/:project/environments            Environments (Configure)
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
@@ -32,6 +32,18 @@
  *                                             (`view=charts`: each workload's charts, U6e)
  *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
  *                                             database's name redirects to Data (U6e)
+ *   /forge/p/:project/usage                   Usage: what the app's hosting costs this month
+ *   /forge/p/:project/events                  Product analytics › Events & metrics
+ *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
+ *                                             tabs (overview · users · product · acquisition) + events
+ *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
+ *   /forge/p/:project/security/vulnerabilities
+ *                                             Security › Vulnerabilities: the findings of the
+ *                                             scope's releases (`release`, `severity`, `fixable`,
+ *                                             `kev`, `exempt`: Security/vulnModel.ts)
+ *   /forge/p/:project/security/vulnerabilities/:advisory
+ *                                             one advisory, across the project's releases
+ *   /forge/p/:project/security/sboms          Security › SBOMs: each artifact's SBOM and scan (`release`)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -73,6 +85,7 @@ import { orgFreePath } from "@/lib/paths/org";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
+import { consoleNavEntryForSegment } from "./consoleNavRegistry";
 
 /** The console's first segment, for reading a pathname back (consolePageOf, orgPageOf). */
 export const FORGE_ROOT = "/forge";
@@ -165,7 +178,63 @@ export type ConsolePage =
   /** Everything the app runs, live: services, workers, jobs, the site and the database (Services/ServicesPage.tsx). */
   | { kind: "services" }
   /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
-  | { kind: "service"; name: string };
+  | { kind: "service"; name: string }
+  /** What the app costs this month: hosted compute, database storage, CDN (Usage/ProjectUsagePage.tsx). */
+  | { kind: "usage" }
+  /** Product analytics › Events & metrics: the app's custom product events and OTel metrics. */
+  | { kind: "events" }
+  /**
+   * Analytics (U6c): the built-in Product analytics dashboards as tabs, plus
+   * Events & metrics (Analytics/AnalyticsPage.tsx). The tab is a path
+   * segment; omitted, the first (Product overview).
+   */
+  | { kind: "analytics"; tab?: AnalyticsTab }
+  /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
+  | { kind: "speed-insights" }
+  /** Auth (U6d): who can sign in, and how (Users/AuthPage.tsx). Omitted tab: users. */
+  | { kind: "auth"; tab?: AuthTab }
+  /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
+  | { kind: "extension"; id: string; segment: string }
+  /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
+  | { kind: "vulnerabilities" }
+  /** One advisory in the project (Security/VulnerabilityPage.tsx). */
+  | { kind: "vulnerability"; advisory: string }
+  /** Security › SBOMs: each release artifact's SBOM and its scan (Security/SbomsPage.tsx). */
+  | { kind: "sboms" };
+
+/**
+ * The Security section's path segments: `/forge/p/<app>/security/<page>`. The
+ * nav's Security group points its rows at these pages through consolePath;
+ * the segments are exported for a reader of a pathname.
+ */
+export const SECURITY_SEGMENT = "security";
+export const SECURITY_PAGES = { vulnerabilities: "vulnerabilities", sboms: "sboms" } as const;
+/** The Security pages, in nav order. */
+export const SECURITY_PAGE_KINDS = ["vulnerabilities", "sboms"] as const satisfies readonly ConsolePage["kind"][];
+
+/** Auth's tabs (U6d): the people (the old Users page, the default) and how they sign in. */
+export const AUTH_TABS = ["users", "sign-in"] as const;
+export type AuthTab = (typeof AUTH_TABS)[number];
+export const AUTH_TAB_LABELS: Record<AuthTab, string> = { users: "Users", "sign-in": "Sign-in" };
+export function isAuthTab(value: string | undefined): value is AuthTab {
+  return (AUTH_TABS as readonly string[]).includes(value ?? "");
+}
+
+/** The Analytics page's tabs, in order: forge's four built-in Product analytics dashboards, then Events & metrics. */
+export const ANALYTICS_TABS = ["overview", "users", "product", "acquisition", "events"] as const;
+export type AnalyticsTab = (typeof ANALYTICS_TABS)[number];
+
+export const ANALYTICS_TAB_LABELS: Record<AnalyticsTab, string> = {
+  overview: "Product overview",
+  users: "Users",
+  product: "Product",
+  acquisition: "Acquisition",
+  events: "Events & metrics",
+};
+
+export function isAnalyticsTab(value: string | undefined): value is AnalyticsTab {
+  return (ANALYTICS_TABS as readonly string[]).includes(value ?? "");
+}
 
 
 /**
@@ -222,7 +291,10 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
     case "data":
       return `${base}/data`;
     case "users":
-      return `${base}/users`;
+      // The old Users page is Auth's first tab now (U6d); its route only redirects.
+      return `${base}/auth`;
+    case "auth":
+      return !page.tab || page.tab === AUTH_TABS[0] ? `${base}/auth` : `${base}/auth/${page.tab}`;
     case "environments":
       return `${base}/environments`;
     case "environment":
@@ -237,6 +309,22 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/services`;
     case "service":
       return `${base}/services/${encodeURIComponent(page.name)}`;
+    case "usage":
+      return `${base}/usage`;
+    case "events":
+      return `${base}/events`;
+    case "analytics":
+      return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
+    case "speed-insights":
+      return `${base}/speed-insights`;
+    case "extension":
+      return `${base}/${encodeURIComponent(page.segment)}`;
+    case "vulnerabilities":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}`;
+    case "vulnerability":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}/${encodeURIComponent(page.advisory)}`;
+    case "sboms":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.sboms}`;
   }
 }
 
@@ -251,12 +339,17 @@ export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app,
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext) => consolePath(app, { kind: "analytics", tab }, ctx);
 /** Data: the database's home (U6e): its status, backups and metrics as reported, then its tables. */
 export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
 /** Services' charts view (U6e): every workload's charts. */
 export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
+export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
+/** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
+export const authPath = (app: string, tab?: AuthTab, ctx?: PathContext) => consolePath(app, { kind: "auth", tab }, ctx);
+export const projectUsagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "usage" }, ctx);
 
 function safeDecode(segment: string): string {
   try {
@@ -295,15 +388,32 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "services":
         if (!sub) return { kind: "services" };
         return dashKind ? null : { kind: "service", name: safeDecode(sub) };
+      case "auth":
+        if (!sub) return { kind: "auth" };
+        return isAuthTab(sub) && !dashKind ? { kind: "auth", tab: sub } : null;
+      case "analytics":
+        if (!sub) return { kind: "analytics" };
+        return isAnalyticsTab(sub) && !dashKind ? { kind: "analytics", tab: sub } : null;
       case "storage":
       case "data":
       case "users":
       case "secrets":
       case "domains":
       case "activity":
+      case "usage":
+      case "events":
+      case "speed-insights":
         return sub ? null : { kind: section };
-      default:
-        return null;
+      case SECURITY_SEGMENT:
+        if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
+          return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };
+        }
+        return sub === SECURITY_PAGES.sboms && !dashKind ? { kind: "sboms" } : null;
+      default: {
+        // A page registered in the nav, while it is registered.
+        const entry = sub ? undefined : consoleNavEntryForSegment(section);
+        return entry ? { kind: "extension", id: entry.id, segment: entry.segment } : null;
+      }
     }
   })();
   return page ? { project, page } : null;

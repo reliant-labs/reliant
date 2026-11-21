@@ -27,6 +27,8 @@ export interface ProjectRowSummaryProps {
   /** How many chips before "+N" (default 3). */
   maxChips?: number;
   className?: string;
+  /** On the chips' group: a page that lays them out itself at some widths hides them here (`max-sm:hidden`). */
+  chipsClassName?: string;
 }
 
 /** The repos line: names (or the folder for a project with none listed). */
@@ -49,7 +51,7 @@ export function checkoutText(row: ProjectCatalogRow): string {
   return installed.length === 1 ? `On ${first}` : `On ${first} +${installed.length - 1}`;
 }
 
-export function ProjectRowSummary({ row, pinned = false, interactiveChips = false, maxChips = 3, className }: ProjectRowSummaryProps) {
+export function ProjectRowSummary({ row, pinned = false, interactiveChips = false, maxChips = 3, className, chipsClassName }: ProjectRowSummaryProps) {
   const apps = row.kind === "project" ? row.apps : [row.app];
   const shown = apps.slice(0, maxChips);
   const more = apps.length - shown.length;
@@ -80,7 +82,7 @@ export function ProjectRowSummary({ row, pinned = false, interactiveChips = fals
         </span>
       </div>
       {shown.length > 0 ? (
-        <span className="flex min-w-0 shrink items-center justify-end gap-1">
+        <span className={cn("flex min-w-0 shrink items-center justify-end gap-1", chipsClassName)}>
           {shown.map((app) => (
             <AppChip key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} interactive={interactiveChips} />
           ))}

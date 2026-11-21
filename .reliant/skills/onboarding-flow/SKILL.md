@@ -40,12 +40,41 @@ its returning-user heal) is never mounted on the way. The gate carries the
 page as `?returnTo=` and `leaveOnboarding` lands every exit to the app there
 instead of `/`.
 
-The forge host (forge.reliantlabs.io) mounts the same route tree
-(`routes.tsx`) as the forge brand (`isForgeShell()`). On that brand a home
-(`/`, `/o/<org>`, the phone's chat list) sends a person who has not onboarded
-to `/apps` instead of the wizard (`forgeBrandHomeTarget`): `forge login`, claim
-links and every console link forge prints land on non-chat pages anyway, and a
-forge signup is onboarded only when they open a chat. (#2866 sent new forge
-accounts through "Choose your machine" before /apps and was reverted; the
-chat-routes scope is what makes the one router safe for them.) "Why wasn't a
-forge user onboarded?" starts at `forgeBrandHomeTarget`.
+## The daemonless home: Projects first, a machine when they go for a chat
+
+Owner rule (2026-11-19): don't push people through machine setup up front.
+`chatSetup` (`onboardingGate.ts`) says what chats need from the person:
+`onboard` (onboarding not completed), `connect-machine` (completed, but the
+daemon list settled with nothing passing `hasUsableDaemonForOnboarding`,
+`OnboardingFlow/usableDaemon.ts`), `ready`, or `checking`/`unknown` (the user
+record or daemon list is loading or failed — nothing moves on a guess, so
+nothing flaps). On BOTH brands:
+
+- The desktop home (`/`, `/o/<org>`) sends `onboard` and `connect-machine` to
+  Projects (`homeTarget` → `projectsPath()`), unless the URL asks for a chat
+  (`?plan=`, `?start=`, `?reset-onboarding`), which onboards as before.
+  ModernApp runs this through `useChatRouteRedirect` (`useChatSetup.ts`).
+- The nav's Chats section becomes the "Set up chats" card
+  (`SetUpChatsCard`), and so does the top of Projects; New chat goes where
+  the card does (`chatSetupPath`): `/onboarding` for `onboard`, Settings ›
+  Machines for `connect-machine` — never the wizard for someone already
+  complete, because OnboardingRoute leaves at once for them
+  (`useArrivedComplete`) and the home would send them straight back.
+- A project's chats (`/project/<id>`) and a chat by its URL (U5's
+  `/c/<chatId>[/t/<threadId>]`) still send a person who has not onboarded
+  through `/onboarding?returnTo=…` and back; an onboarded person with no
+  machine stays on the chat (it has its own Connect a machine).
+- The new-chat view by its URL (U5's `/new`) is New chat: a person who has
+  not onboarded goes through `/onboarding?returnTo=…`; an onboarded person
+  with no machine goes to Settings › Machines (`chatSetupPath`), held while
+  the daemon list is still loading (`chatRouteAction`).
+- The phone keeps its rule: on the forge brand its chat list (`/m`,
+  `/m/chats`) sends a person who has not onboarded to `/apps`; otherwise the
+  chat-route redirect applies (MobileShell).
+
+None of this mounts OnboardingRoute or calls CompleteOnboarding:
+`src/__tests__/daemonlessShell.routes.test.tsx` renders the production tree on
+both brands × `web.org_routes` off/on and proves it for Projects, Apps, an
+app's console, the Inbox, Workflows, Usage, Settings and the home redirect.
+"Why wasn't a forge user onboarded?" — because they never opened a chat; they
+are onboarded the first time they do.

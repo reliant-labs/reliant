@@ -78,11 +78,13 @@ export interface IdentityTabProps {
    * "tab" (default): the environment page's Identity tab, one column, with a
    * link to the project's Users page. "page": the Users page itself
    * (Users/UsersPage.tsx) — the people first, the sign-in service beside them.
+   * "users" / "service": the Auth page's two tabs (Users/AuthPage.tsx, U6d) —
+   * the people alone, or the sign-in service (issuer, applications, export) alone.
    */
   layout?: IdentityLayout;
 }
 
-export type IdentityLayout = "tab" | "page";
+export type IdentityLayout = "tab" | "page" | "users" | "service";
 
 export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById, layout = "tab" }: IdentityTabProps) {
   if (lifecycle === "local") return <LocalIdentity envName={envName} />;
@@ -194,6 +196,23 @@ function DeployedIdentity({
       You can view this environment&apos;s users. Inviting and changing them needs an organization admin.
     </p>
   );
+
+  if (layout === "users") {
+    return (
+      <div className="space-y-4" data-testid="identity-tab" data-layout="users">
+        {readOnlyNote}
+        <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
+      </div>
+    );
+  }
+  if (layout === "service") {
+    return (
+      <div className="space-y-4" data-testid="identity-tab" data-layout="service">
+        <StatusPanel envId={envId} status={s} envNameById={envNameById} />
+        <ExportPanel orgId={org.orgId} envId={envId} status={s} />
+      </div>
+    );
+  }
 
   if (layout === "page") {
     // The people are the page; the sign-in service that holds them sits beside

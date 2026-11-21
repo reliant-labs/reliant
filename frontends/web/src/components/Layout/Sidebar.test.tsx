@@ -288,11 +288,12 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(within(nav).getByTestId("nav-agents"));
+    fireEvent.click(screen.getByTestId("nav-usage-billing"));
     fireEvent.click(screen.getByRole("link", { name: "Settings" }));
-    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/settings"]);
+    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
   });
 
-  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, then the chats full height", () => {
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {
     sessionStorage.clear();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onNavigate = vi.fn();

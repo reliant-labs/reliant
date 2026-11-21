@@ -5,9 +5,9 @@
  *
  *  - "Take the tour" (hidden while a step is open), and "How it was built"
  *    (the recorded forge run, `?section=built`).
- *  - "Leave the demo" (forge's Apps / the project picker).
+ *  - "Leave the demo" (the person's apps, in Projects).
  *
- * Reliant and the forge shell only: the public demo (lib/shell.ts `demo`) says
+ * The app's tree only (either brand): the public demo (lib/shell.ts `demo`) says
  * the same once, in its action row (DemoScreenActions), with what it records.
  */
 
@@ -15,19 +15,18 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Compass, FlaskConical, Hammer } from "lucide-react";
 
 import { parseTourParam } from "@/components/Onboarding/tourParam";
-import type { TourShell } from "@/components/Onboarding/tourShell";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
 import { trackEvent } from "@/lib/analytics";
 
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
-import { appsPath, forgeLandingPath } from "@/lib/paths";
+import { projectsPath, withSearch } from "@/lib/paths";
 
-/** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
-const exitHref = (shell: TourShell) => (shell === "forge" ? appsPath() : forgeLandingPath());
+/** Where "Leave the demo" goes: the person's apps (Projects, narrowed to them). */
+const EXIT_SEARCH = { show: "apps" } as const;
 
 const LINK = "no-color inline-flex touch-target items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
 
-export function DemoBanner({ shell }: { shell: TourShell }) {
+export function DemoBanner() {
   const navigate = useNavigate();
   const { startJourney } = useTourNavigation();
   const search = useSearch({ strict: false }) as { tour?: unknown; section?: unknown };
@@ -79,12 +78,12 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           </button>
         )}
         <a
-          href={exitHref(shell)}
+          href={withSearch(projectsPath(), EXIT_SEARCH)}
           onClick={(event) => {
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             // Leaving the demo leaves its tour too: the root keeps `?tour=` unless told otherwise.
-            void navigate({ to: exitHref(shell), search: { tour: undefined } } as never);
+            void navigate({ to: projectsPath(), search: { ...EXIT_SEARCH, tour: undefined } } as never);
           }}
           className={LINK}
           data-testid="forge-demo-exit"
