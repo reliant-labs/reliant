@@ -74,7 +74,7 @@ export function MobileWorkflowParamsView({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       {presets.length > 0 && (
         <div className="border-b border-border px-4 py-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="mb-2 text-xs font-medium text-muted-foreground">
             Preset
           </div>
           <PresetPicker

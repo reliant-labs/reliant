@@ -55,6 +55,7 @@ const MARK_FOR: Record<string, string> = {
   openai: "openai",
   antigravity: "google",
   gemini: "gemini",
+  vertexai: "google",
   copilot: "copilot",
   openrouter: "openrouter",
 };

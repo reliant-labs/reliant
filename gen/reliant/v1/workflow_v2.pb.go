@@ -3306,8 +3306,12 @@ type SaveMessageNodeArgs struct {
 	// completion, forwarded from CallLLMOutput.provider_account_id and persisted
 	// onto messages.provider_account_id.
 	ResolvedProviderAccountId string `protobuf:"bytes,33,opt,name=resolved_provider_account_id,json=resolvedProviderAccountId,proto3" json:"resolved_provider_account_id,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// ResolvedThinkingLevel is the effective thinking level the completion ran
+	// at, forwarded from CallLLMOutput.thinking_level and persisted onto
+	// messages.thinking_level.
+	ResolvedThinkingLevel string `protobuf:"bytes,34,opt,name=resolved_thinking_level,json=resolvedThinkingLevel,proto3" json:"resolved_thinking_level,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *SaveMessageNodeArgs) Reset() {
@@ -3476,6 +3480,13 @@ func (x *SaveMessageNodeArgs) GetResolvedPhase() string {
 func (x *SaveMessageNodeArgs) GetResolvedProviderAccountId() string {
 	if x != nil {
 		return x.ResolvedProviderAccountId
+	}
+	return ""
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedThinkingLevel() string {
+	if x != nil {
+		return x.ResolvedThinkingLevel
 	}
 	return ""
 }
@@ -3687,9 +3698,10 @@ type RunArgs struct {
 	// ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
 	// Empty (or "inherit") keeps the daemon's own environment.
 	//
-	// A guard rail against a command that pushes or merges when it should not,
-	// not containment: the command still runs as the daemon's Unix user and can
-	// read that user's files.
+	// On Linux the command also runs in internal/credsandbox's user, mount and
+	// PID namespaces, where the daemon's credential files are absent (refused
+	// where the kernel does not allow them); on macOS and Windows only the
+	// environment is scrubbed.
 	Credentials string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
 	// WritableCheckouts are the shared project checkouts, or directories inside
 	// one, that a credentials: none command writes. On Linux such a command sees
@@ -6252,7 +6264,13 @@ type CallLLMOutput struct {
 	// this turn's tool calls, on whichever worker it lands, opens each call's
 	// span under the turn that asked for it (internal/telemetry/ai_spans.go).
 	// Empty when the turn was not traced.
-	TraceParent   string `protobuf:"bytes,21,opt,name=trace_parent,json=traceParent,proto3" json:"trace_parent,omitempty"`
+	TraceParent string `protobuf:"bytes,21,opt,name=trace_parent,json=traceParent,proto3" json:"trace_parent,omitempty"`
+	// ThinkingLevel is the effective thinking (reasoning-effort) level this
+	// completion was requested at, after the model's capabilities reconciled
+	// the requested one: what the step actually ran at. Empty when the model
+	// takes no level (it cannot reason, or runs at its driver's default). The
+	// inline save_message persists it onto messages.thinking_level.
+	ThinkingLevel string `protobuf:"bytes,22,opt,name=thinking_level,json=thinkingLevel,proto3" json:"thinking_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6416,6 +6434,13 @@ func (x *CallLLMOutput) GetProviderAccountId() string {
 func (x *CallLLMOutput) GetTraceParent() string {
 	if x != nil {
 		return x.TraceParent
+	}
+	return ""
+}
+
+func (x *CallLLMOutput) GetThinkingLevel() string {
+	if x != nil {
+		return x.ThinkingLevel
 	}
 	return ""
 }
@@ -7107,11 +7132,18 @@ func (x *CompactOutput) GetSkippedReason() string {
 
 // ApprovalOutput is the output from the approval activity.
 type ApprovalOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApprovalId    string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
-	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`                              // "approved", "denied", or "timeout"
-	ActionTaken   string                 `protobuf:"bytes,3,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"` // Action button that was clicked
-	Data          *structpb.Struct       `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ApprovalId  string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	Status      string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`                              // "approved", "denied", or "timeout"
+	ActionTaken string                 `protobuf:"bytes,3,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"` // Action button that was clicked
+	// Never set by the approval step. Kept, deprecated, so a workflow that
+	// references it still validates (TL-15).
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
+	Data *structpb.Struct `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	// Why the approver denied the request, when they gave a reason. Absent for
+	// an approval, a timeout, or a denial with no reason.
+	DenialReason  string `protobuf:"bytes,5,opt,name=denial_reason,json=denialReason,proto3" json:"denial_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7167,11 +7199,19 @@ func (x *ApprovalOutput) GetActionTaken() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *ApprovalOutput) GetData() *structpb.Struct {
 	if x != nil {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ApprovalOutput) GetDenialReason() string {
+	if x != nil {
+		return x.DenialReason
+	}
+	return ""
 }
 
 // SaveMessageOutput is the output from the save_message activity.
@@ -9359,11 +9399,11 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"CWhat the approver is asked to decide, shown as the approval's title\x82\x01(Deploy {{inputs.version}} to production?R\x05title\x12\x81\x01\n" +
 	"\atimeout\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBP\x82\xb5\x18L\n" +
 	"9How long to wait for a decision before the step times out\x82\x01\x0330m\x8a\x01\bdurationR\atimeout:Z\x8a\xb5\x18V\n" +
-	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheck\"\x9e\x03\n" +
-	"\x0fAskQuestionArgs\x12\x93\x02\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xdf\x01\x82\xb5\x18\xda\x01\n" +
-	"XThe questions to ask, as JSON: a questions list, each with question text and its options\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xd4\r\n" +
+	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheck\"\x86\x04\n" +
+	"\x0fAskQuestionArgs\x12\xfb\x02\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xc7\x02\x82\xb5\x18\xc2\x02\n" +
+	"\xbf\x01The questions to ask, as JSON: {\"type\": \"ask_user\", \"questions\": [...]}, each question with its text and options. Without \"type\": \"ask_user\" the app shows no options and nothing can answer it\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x94\x0e\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12\xa6\x01\n" +
@@ -9392,7 +9432,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eresolved_model\x18\x1e \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedModel\x12-\n" +
 	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent\x12-\n" +
 	"\x0eresolved_phase\x18  \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedPhase\x12G\n" +
-	"\x1cresolved_provider_account_id\x18! \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x19resolvedProviderAccountId:c\x8a\xb5\x18_\n" +
+	"\x1cresolved_provider_account_id\x18! \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x19resolvedProviderAccountId\x12>\n" +
+	"\x17resolved_thinking_level\x18\" \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x15resolvedThinkingLevel:c\x8a\xb5\x18_\n" +
 	"\fsave_message\x12\fSave Message\x1a)Save a message to the conversation thread*\aagentic2\rMessageSquare\"\\\n" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
@@ -9423,7 +9464,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\x81\b\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xfa\b\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -9432,9 +9473,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\bwork_dir\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB/\x82\xb5\x18+\n" +
 	"'Working directory for command execution \x01R\aworkDir\x12]\n" +
 	"\blog_file\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB+\x82\xb5\x18'\n" +
-	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xca\x01\n" +
-	"\vcredentials\x18\x05 \x01(\tB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
-	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
+	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xc3\x02\n" +
+	"\vcredentials\x18\x05 \x01(\tB\xa0\x02\x82\xb5\x18\x9b\x02\n" +
+	"\x84\x02Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleanedJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
 	"\x12writable_checkouts\x18\x06 \x03(\tB\xe9\x01\x82\xb5\x18\xe4\x01\n" +
 	"\xd5\x01With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own \x01\x82\x01\areliantR\x11writableCheckouts\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
@@ -9715,7 +9756,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xe6\a\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\x9d\b\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -9750,7 +9791,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x13provider_account_id\x18\x14 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\x11providerAccountId\x121\n" +
 	"\ftrace_parent\x18\x15 \x01(\tB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\vtraceParent\"\x82\x06\n" +
+	"Z\badvancedR\vtraceParent\x125\n" +
+	"\x0ethinking_level\x18\x16 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\rthinkingLevel\"\x82\x06\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -9815,13 +9858,19 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"error_code\x18\b \x01(\tR\terrorCode\"k\n" +
 	"\rCompactOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12%\n" +
-	"\x0eskipped_reason\x18\x02 \x01(\tR\rskippedReason\"\x99\x01\n" +
-	"\x0eApprovalOutput\x12\x1f\n" +
-	"\vapproval_id\x18\x01 \x01(\tR\n" +
-	"approvalId\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status\x12!\n" +
-	"\faction_taken\x18\x03 \x01(\tR\vactionTaken\x12+\n" +
-	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04data\"\xc8\x02\n" +
+	"\x0eskipped_reason\x18\x02 \x01(\tR\rskippedReason\"\xe9\x03\n" +
+	"\x0eApprovalOutput\x12R\n" +
+	"\vapproval_id\x18\x01 \x01(\tB1\x82\xb5\x18-\n" +
+	"+Id of the approval request this step raisedR\n" +
+	"approvalId\x12:\n" +
+	"\x06status\x18\x02 \x01(\tB\"\x82\xb5\x18\x1e\n" +
+	"\x1capproved, denied, or timeoutR\x06status\x12r\n" +
+	"\faction_taken\x18\x03 \x01(\tBO\x82\xb5\x18K\n" +
+	"IThe action button the approver clicked, when the approval offered actionsR\vactionTaken\x12X\n" +
+	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructB+\x82\xb5\x18%\n" +
+	"#Deprecated: never set, always empty\x18\x01R\x04data\x12y\n" +
+	"\rdenial_reason\x18\x05 \x01(\tBT\x82\xb5\x18P\n" +
+	"NWhy the approver denied the request, when they gave a reason; absent otherwiseR\fdenialReason\"\xc8\x02\n" +
 	"\x11SaveMessageOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12\x1d\n" +
 	"\n" +

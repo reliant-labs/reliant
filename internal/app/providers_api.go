@@ -153,6 +153,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			PublicKeyPEM:              jwtPublicKey,
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
+			DevJWTSecret:              api.GetAuthDevJwtSecret(),
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -162,6 +163,11 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
 		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
+	}
+	// A dev signer outside the dev tier stops the process here, before it
+	// binds a port (auth.WithDevSigner refuses it again at every validator).
+	if err := auth.CheckDevSigner(s.Auth); err != nil {
+		return nil, err
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -224,6 +230,9 @@ type HTTPRoutesDeps struct {
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// Membership checks the user control-plane names on an internal
+	// ensure-for-app call; nil on a deployment with no orgs.
+	Membership *orgs.Resolver
 }
 
 // NewHTTPRoutes is the API's plain-HTTP routes (grpcserver.APIHTTPRoutes):
@@ -250,7 +259,17 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
+}
+
+// httpRoutesMembership keeps a nil resolver a nil interface (a nil
+// *orgs.Resolver would be a non-nil one), so the handler fails closed.
+func httpRoutesMembership(r *orgs.Resolver) grpcserver.OrgMembership {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // APIListenerDeps is where the API listens and what it serves there.
@@ -815,6 +834,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
+		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an

@@ -275,6 +275,14 @@ type StartOptions struct {
 	// OAuthHelperOrigins are the configured web origins the on-demand OAuth
 	// helper accepts beyond its defaults (oauthhelper.WebOrigins).
 	OAuthHelperOrigins []string
+	// DataDirClaim is a claim on BootstrapConfig.DataDir the caller already
+	// holds (`daemon start` takes it before it resolves credentials). Start
+	// runs under it instead of acquiring its own, so the directory is never
+	// unclaimed between the two: a competing start is refused at its first
+	// check, not after it has logged in or registered. The caller keeps it
+	// and releases it after Start returns, so a retry runs under the same
+	// claim. Nil: Start acquires and releases its own.
+	DataDirClaim *daemonstate.Lock
 }
 
 // Guards is the daemon's policy for heavy commands (internal/heavyjob), a
@@ -336,18 +344,20 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// incumbent on every registration, so the pair evict each other until one
 	// is killed. Refusing to be the second one is the only place that costs
 	// nothing.
-	lock, err := daemonstate.Acquire(opts.BootstrapConfig.DataDir)
-	if err != nil {
-		if errors.Is(err, daemonstate.ErrLocked) {
-			return fmt.Errorf("%s: %w", describeIncumbentDaemon(opts.BootstrapConfig.DataDir), err)
+	if opts.DataDirClaim == nil {
+		lock, err := daemonstate.Acquire(opts.BootstrapConfig.DataDir)
+		if err != nil {
+			if errors.Is(err, daemonstate.ErrLocked) {
+				return fmt.Errorf("%s: %w", describeIncumbentDaemon(opts.BootstrapConfig.DataDir), err)
+			}
+			return err
 		}
-		return err
+		defer func() {
+			if releaseErr := lock.Release(); releaseErr != nil {
+				logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+			}
+		}()
 	}
-	defer func() {
-		if releaseErr := lock.Release(); releaseErr != nil {
-			logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
-		}
-	}()
 
 	// Credentialed scratch directories moved aside more than a day ago have
 	// been kept for inspection long enough (#2823). In the background: there
@@ -600,6 +610,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
 	runtimeType := strings.TrimSpace(host.RuntimeType)
 
+	// The daemon runs in the user's environment, so the ${VAR} references in
+	// their MCP configs resolve from it (mcp/expand.go). Explicit, because a
+	// manager resolves nothing by default.
+	mcpOpts = append([]mcp.ManagerOption{mcp.WithEnvLookup(os.LookupEnv)}, mcpOpts...) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
 	mcpManager := mcp.NewManager(mcp.RoleDaemon, mcpOpts...)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {

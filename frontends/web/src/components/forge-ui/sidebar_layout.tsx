@@ -246,7 +246,7 @@ function Chevron({ open }: { open: boolean }) {
  * on a coarse pointer, and the page gutter tightens to 16px.
  *
  * (Reliant: forge's library copy has this since forge#1230. Reliant's
- * forge pin predates it, so `forge component install` at the pin would drop
+ * forge pin predates it, so `forge ui component install` at the pin would drop
  * it: re-install only from a forge that includes it.)
  *
  * Hover and selection are an ink wash (`bg-ink/5`, `bg-ink/8`), so they read
@@ -482,7 +482,7 @@ export default function SidebarLayout({
         // Escape (above), as in modal.tsx.
         <div
           role="presentation"
-          className="fixed inset-0 z-40 bg-black/50"
+          className="fixed inset-0 z-40 bg-scrim"
           onClick={() => setDrawerOpen(false)}
         />
       )}

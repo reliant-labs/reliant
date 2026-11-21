@@ -82,7 +82,7 @@ Every field you add to `Deps` must be an interface (or a function or plain data)
 | Rule | Catches |
 |---|---|
 | `forgeconv-deps-are-interfaces` | A concrete struct in `Deps`, which defeats the all-mock unit-test surface. |
-| `forgeconv-deps-surface` | An interface field with methods the package never calls. An error when the interface is foreign and has more than ten methods; `forge fix narrow-deps <pkg>` writes the narrow interface for you. |
+| `forgeconv-deps-surface` | An interface field with methods the package never calls. An error when the interface is foreign and has more than ten methods; `forge lint fix narrow-deps <pkg>` writes the narrow interface for you. |
 | `forgeconv-no-container-deps` | A service locator or an `any` field. |
 | `forgeconv-deps-no-downcast` | Type-asserting a dependency back to its concrete type. |
 | `forgeconv-no-getenv` | Reading the process environment inside a component; config arrives through `Deps` instead (see [The config system](/forge/concepts/config-system)). |
@@ -144,7 +144,7 @@ func (o *forgeMiddlewareService) Quote(ctx context.Context, sku string, qty int)
 }
 ```
 
-The decorator records the method name, duration and error status, and captures no arguments or results. You tune the chain in the owned `observe_chain.go`. `// forge:no-observe` on the constructor opts a package out, and on a single method it skips just that method. [Observability](/forge/observability) covers where those spans go.
+The decorator records the method name, duration and error status, and captures no arguments or results. You tune the chain in the owned `observe_chain.go`. `// forge:no-observe` on the constructor opts a package out, and on a single method it skips just that method. [Observability](/hosting/observability) covers where those spans go.
 
 ## Handler `Deps` and `validateDeps`
 

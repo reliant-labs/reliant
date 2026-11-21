@@ -145,7 +145,7 @@ There are four ways to declare it. Pick by what you already have.
   </Tab>
 </Tabs>
 
-What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/forge/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
+What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/hosting/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
 
 On Reliant hosting, every image a workload runs comes from the platform's registry, under your organization's path, `registry.reliantapi.com/<org>/<project>/`. Forge puts it there in each case:
 
@@ -158,7 +158,7 @@ On Reliant hosting, every image a workload runs comes from the platform's regist
 
 A third-party image must include its registry host (`docker.io/traefik/whoami`, not `traefik/whoami`), because a bare name means your own registry path. A private source image is read with the credentials `docker login` stored for its registry. Wrapping an image in a one-line `FROM` Dockerfile with a `forge.DockerBuild` also works, but is only needed when you want to change the image.
 
-A non-forge app reads its credentials from environment variables, so deliver each one in the workload's `env`, for example `env = {JWT_SECRET = forge.ManagedSecret {name = "JWT_SECRET"}}`, and set the value with `forge secret set --env <env> JWT_SECRET`. `config_secrets` delivers nothing by itself: it selects which credentials forge's generated config projection puts in a forge Go service's `env`. A name in `config_secrets` that the workload's `env` does not deliver fails the render, so an app never starts silently on a fallback value.
+A non-forge app reads its credentials from environment variables, so deliver each one in the workload's `env`, for example `env = {JWT_SECRET = forge.ManagedSecret {name = "JWT_SECRET"}}`, and set the value with `forge env secret set --env <env> JWT_SECRET`. `config_secrets` delivers nothing by itself: it selects which credentials forge's generated config projection puts in a forge Go service's `env`. A name in `config_secrets` that the workload's `env` does not deliver fails the render, so an app never starts silently on a fallback value.
 
 <Note>
 `forge.RemoteBuild` is in the schema as a way to build from a pinned git source on a hosted build service, but this forge cannot submit one yet, and the build refuses it with an explanation. Do not rely on it.
@@ -204,12 +204,12 @@ cd my-site                      # the app's root: package.json plus vite.config 
 forge project new --in-place --kind site --name my-site
 ```
 
-That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/forge/hosting) covers what static hosting serves.
+That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/hosting/overview) covers what static hosting serves.
 
-A server in another language, such as Node, Python, Ruby or Java, keeps every file. It is not scaffolded: there is no `forge project new` kind for it, and `forge project new --in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. Instead, your agent writes the declarations, following a skill:
+A server in another language, such as Node, Python, Ruby or Java, keeps every file too. `forge project new --in-place --kind app` (forge v1.5 or later) reads its Dockerfile and compose file and writes `forge.yaml` and `deploy/kcl/` declaring it; without `--kind app`, `--in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. [Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language) walks through it. For what the declarations mean and the tiers after them, load the skill:
 
 ```bash
-forge skill load adopt
+forge agent skill load adopt
 ```
 
 The skill is organised as tiers. Each tier is complete, so you can stop after any of them:
@@ -229,7 +229,47 @@ Tier 1 is copy-paste templates for `forge.yaml` and `deploy/kcl/`:
 
 The skill ends Tier 1 with the commands that prove it works: `forge lint`, `forge env up dev`, `forge env deploy staging --plan-only`, the deploy, and `forge obs check`. It also lists the gotchas that came up when it was tested on a real Express and Prisma app. For example, the Dockerfile must build on its own, and `obs check` stays INCONCLUSIVE with `reason_code: no_request_telemetry` until Tier 2.
 
-A Go server that already has its own protos and handlers adopts in place with `forge project new --in-place --kind service`, one service per pull request, using `// forge:unmanaged`. That path is Tier 4, and `forge skill load migration` covers it.
+A Go server that already has its own protos and handlers adopts in place with `forge project new --in-place --kind service`, one service per pull request, using `// forge:unmanaged`. That path is Tier 4, and `forge agent skill load migration` covers it.
+
+## Bring your own database, identity provider or telemetry backend
+
+Each of the three is a binding in an environment's KCL, so you can swap one per environment and keep the rest.
+
+### Your own database
+
+Point the app's `DATABASE_URL` at your Postgres instead of a `forge.ManagedDatabase`, and declare it as a `forge.ExternalDatabase` if you want `forge db query` to read it. [Managed Postgres](/hosting/managed-postgres#bring-your-own-database) has the steps. On Reliant hosting a workload's outbound traffic is limited to ports 80 and 443, so an outside Postgres on 5432 is reachable only from workloads on a cluster you operate.
+
+### Your own identity provider
+
+An environment that declares no `identity` takes its token issuer from its own `config.k`. In `deploy/kcl/<env>/main.k`, delete the `identity = idn.IDENTITY` line, then set the issuer on the API's config in `deploy/kcl/<env>/config.k`:
+
+```python
+app_config: config_gen.AppConfig = {
+    jwt_issuer = "https://your-tenant.us.auth0.com/"
+    jwt_audience = "https://api.example.com"
+}
+```
+
+That is a config change, not a code change, for any standards-compliant issuer (Auth0, Okta, Keycloak, a Zitadel you run, Supabase). The API discovers the issuer's signing keys from its `/.well-known/openid-configuration`; set `jwt_jwks_url` as well when discovery can't describe them. Keys are fetched at startup and refreshed in the background, and an API that can't reach the issuer at startup refuses to start rather than accepting nothing. Roles are read from the token's flat `roles` claim (or a Zitadel role map) unless `jwt_roles_claim` names another claim. A provider with its own claim shape, such as Clerk or Firebase, needs its validator chosen in `internal/app/auth.go`, which is yours. Keep one source per field: setting `JWT_ISSUER` or `OIDC_CLIENT_ID` on a workload in an environment that still declares `identity` fails the render. The frontend's sign-in must name the same issuer (`oidc_client_id` and `oidc_redirect_uri`); have your agent run `forge agent skill load auth/external-provider` for both halves.
+
+### Your own telemetry backend
+
+Where an environment's telemetry goes is the `destination` of its `forge.Observability`. The app keeps exporting OTLP to the endpoint forge gives it, and never learns the backend:
+
+```python
+observability = forge.Observability {
+    destination = forge.ObservabilityDestination {
+        endpoint = "https://otlp.example.com"
+        headers_secret = forge.ObservabilitySecretRef {name = "otlp", key = "OTLP_HEADERS"}
+    }
+}
+```
+
+- **Locally** (`forge env up`), the destination replaces the local ClickStack with a small forwarder. Its headers come from the secret store: `forge env secret set --env dev OTLP_HEADERS` with a JSON object such as `{"authorization": "<key>"}` on stdin. The scaffolded `deploy/kcl/dev/main.k` has a commented `_destination` ready to fill in.
+- **On a cluster you operate**, forge renders a node agent (a DaemonSet in its own namespace) that forwards to the destination. The headers Secret must exist in that namespace, so the environment declares who provides it with a `forge.ExternalSecret` in `required_secrets`, and the deploy checks it.
+- **On Reliant hosting**, the endpoint is the platform's: hosted workloads report to [Reliant observability](/hosting/observability), and a `destination` there sets only the protocol and which signals are on.
+
+`forge agent skill load observability/destination` has every field, including sampling, retention and a token that renews without a restart.
 
 ## Turn features off
 
@@ -249,4 +289,4 @@ Leaving hosting is the same kind of edit. Rebind a workload from `_hosted(...)` 
 
 ## Related topics
 
-[What gets deployed](/forge/deploy/what-gets-deployed) shows what an override or a raw manifest lands in. [Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to a cluster you run. Agents can run `forge skill load deploy/overrides`, `deploy/byo-yaml` and `deploy/build-contexts` for the full reference.
+[What gets deployed](/forge/deploy/what-gets-deployed) shows what an override or a raw manifest lands in. [Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to a cluster you run. Agents can run `forge agent skill load deploy/overrides`, `deploy/byo-yaml` and `deploy/build-contexts` for the full reference.

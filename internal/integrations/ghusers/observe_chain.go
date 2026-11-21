@@ -1,6 +1,6 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
 // The OWNED observability extension seam for this package. Canonical pattern
-// in `forge skill load observability`.
+// in `forge agent skill load observability`.
 package ghusers
 
 import (

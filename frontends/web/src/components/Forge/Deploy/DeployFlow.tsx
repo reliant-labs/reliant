@@ -538,10 +538,10 @@ function BlockedNotice({
 /**
  * FORGE ISN'T AUTHORIZED. There is no control-plane credential on this machine.
  *
- * THE FIX IS SIGNING IN TO RELIANT, not `forge login`. Signing in deposits the
+ * THE FIX IS SIGNING IN TO RELIANT, not `forge cloud login`. Signing in deposits the
  * user's token into forge's own credential store (internal/cliauth's
  * DepositForForge, over forge/pkg/cloudcred), which is what makes "logged in to
- * Reliant" mean "forge is logged in". Telling the user to run `forge login`
+ * Reliant" mean "forge is logged in". Telling the user to run `forge cloud login`
  * instead would be a dead end in the case that matters most: a managed daemon
  * on a remote pod, where the loopback browser flow that command needs cannot
  * happen at all.

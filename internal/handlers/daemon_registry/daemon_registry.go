@@ -6,21 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -34,46 +30,6 @@ import (
 // status dot flip to DISCONNECTED for a live daemon. Clean disconnects delete
 // the row immediately; this window only bounds crashed-gateway detection.
 const AttachmentStaleThreshold = 90 * time.Second
-
-func (s *Service) ListDaemons(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListDaemonsRequest],
-) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
-	_ = req
-
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	// Trigger daemon connection check and wait briefly for it to register
-	// before querying the DB. No-op in cloud mode where the daemon is external.
-	if s.deps.Router != nil {
-		_, _ = s.deps.Router.IsDaemonOnline(ctx, userID, nil)
-	}
-
-	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list daemons"))
-	}
-
-	attached, err := s.attachedDaemonSet(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	inventories := s.storedLocalModels(ctx, userID)
-	disks := s.storedDiskReports(ctx, userID)
-
-	resp := &reliantv1.ListDaemonsResponse{Daemons: make([]*reliantv1.DaemonInfo, 0, len(daemons))}
-	for _, d := range daemons {
-		info := daemonToProto(d, attached[d.ID])
-		info.LocalModels = localModelsFromJSON(inventories[d.ID])
-		info.Disk = diskwatch.Decode(disks[d.ID])
-		resp.Daemons = append(resp.Daemons, info)
-	}
-
-	return connect.NewResponse(resp), nil
-}
 
 // attachedDaemonSet returns the user's fresh daemon_attachment rows keyed by
 // daemon ID. A daemon is attached (routable) iff its entry is non-nil; the
@@ -98,36 +54,6 @@ func (s *Service) attachedDaemonSet(ctx context.Context, userID string) (map[str
 	return attached, nil
 }
 
-func (s *Service) GetDaemon(
-	ctx context.Context,
-	req *connect.Request[reliantv1.GetDaemonRequest],
-) (*connect.Response[reliantv1.GetDaemonResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-	if req.Msg.GetDaemonId() == "" {
-		return nil, svcerr.InvalidArgument("daemon_id is required")
-	}
-
-	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.GetDaemonId())
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
-	}
-	if !authz.CanReadMachine(ctx, userID, daemon) {
-		return nil, svcerr.NotFound("daemon")
-	}
-
-	attached, err := s.attachedDaemonSet(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	info := daemonToProto(daemon, attached[daemon.ID])
-	info.LocalModels = localModelsFromJSON(s.storedLocalModels(ctx, userID)[daemon.ID])
-	info.Disk = diskwatch.Decode(s.storedDiskReports(ctx, userID)[daemon.ID])
-	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: info}), nil
-}
-
 // storedDiskReports returns the user's stored disk reports (heartbeat
 // telemetry the gateway keeps on the daemon row) keyed by daemon id. A read
 // failure is logged and treated as "none reported" so it cannot break the
@@ -139,43 +65,6 @@ func (s *Service) storedDiskReports(ctx context.Context, userID string) map[stri
 		return map[string]string{}
 	}
 	return reports
-}
-
-// ClearMachineCaches relays a confirmed cache clean-up to the machine. The
-// daemon decides what is safe (diskwatch.ClearCaches) and starts it in the
-// background; this returns what started and what it refused.
-func (s *Service) ClearMachineCaches(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ClearMachineCachesRequest],
-) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
-	daemonID := req.Msg.GetDaemonId()
-	if len(req.Msg.GetKinds()) == 0 {
-		return nil, svcerr.InvalidArgument("kinds is required")
-	}
-	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(diskwatch.ClearCachesRequest{Kinds: req.Msg.GetKinds()})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-	raw, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, diskwatch.ClearCachesCommand, payload, 15000)
-	if err != nil {
-		return nil, localModelRelayError("daemon command "+diskwatch.ClearCachesCommand, err)
-	}
-	var out diskwatch.ClearCachesResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("decode %s response", diskwatch.ClearCachesCommand)))
-	}
-	resp := &reliantv1.ClearMachineCachesResponse{Started: out.Started}
-	for _, sk := range out.Skipped {
-		resp.Skipped = append(resp.Skipped, &reliantv1.ClearMachineCachesSkip{Kind: sk.Kind, Reason: sk.Reason})
-	}
-	if len(resp.Started) == 0 {
-		activity.Skip(ctx) // the machine refused every kind: nothing is being cleared
-	}
-	return connect.NewResponse(resp), nil
 }
 
 // storedLocalModels returns the user's stored inventories keyed by daemon id.
@@ -257,146 +146,6 @@ func localModelRelayError(doing string, err error) error {
 		msg += ": " + text
 	}
 	return svcerr.WrapOr(err, svcerr.Internal(msg))
-}
-
-func (s *Service) RefreshLocalModels(
-	ctx context.Context,
-	req *connect.Request[reliantv1.RefreshLocalModelsRequest],
-) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error) {
-	userID, router, err := s.ownedOnlineDaemon(ctx, req.Msg.GetDaemonId())
-	if err != nil {
-		return nil, err
-	}
-	inv, err := router.RefreshLocalModels(ctx, userID, req.Msg.GetDaemonId())
-	if err != nil {
-		return nil, localModelRelayError("refresh local models", err)
-	}
-	return connect.NewResponse(&reliantv1.RefreshLocalModelsResponse{LocalModels: inv}), nil
-}
-
-func (s *Service) SetLocalModelEndpoints(
-	ctx context.Context,
-	req *connect.Request[reliantv1.SetLocalModelEndpointsRequest],
-) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error) {
-	daemonID := req.Msg.GetDaemonId()
-	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
-	if err != nil {
-		return nil, err
-	}
-	baseURLs := req.Msg.GetBaseUrls()
-	if baseURLs == nil {
-		baseURLs = []string{}
-	}
-	payload, err := json.Marshal(map[string][]string{"base_urls": baseURLs})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-	if _, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, toolexec.CommandLocalModelsSetEndpoints, payload, 15000); err != nil {
-		return nil, localModelRelayError("write local model endpoints", err)
-	}
-	inv, err := router.RefreshLocalModels(ctx, userID, daemonID)
-	if err != nil {
-		return nil, localModelRelayError("refresh local models", err)
-	}
-	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: inv}), nil
-}
-
-func (s *Service) ResolveDaemon(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ResolveDaemonRequest],
-) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("listing daemons"))
-	}
-
-	attached, err := s.attachedDaemonSet(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	var best *db.Daemon
-	// A request that names no machine gets the user's default, in any state,
-	// exactly as toolexec's default resolution does.
-	if req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
-		if i := slices.IndexFunc(daemons, func(d *db.Daemon) bool { return d.IsDefault }); i >= 0 {
-			best = daemons[i]
-		}
-	}
-	for _, d := range daemons {
-		if best != nil && best.IsDefault && req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
-			break // the default chosen above
-		}
-		if req.Msg.DaemonId != "" && d.ID != req.Msg.DaemonId {
-			continue
-		}
-		if req.Msg.DaemonName != "" && !daemonAnswersToName(d, req.Msg.DaemonName) {
-			continue
-		}
-		// Prefer attached (routable) daemons, but accept any match.
-		if best == nil || attached[d.ID] != nil {
-			best = d
-		}
-		if attached[d.ID] != nil {
-			break
-		}
-	}
-
-	if best == nil {
-		return connect.NewResponse(&reliantv1.ResolveDaemonResponse{Found: false}), nil
-	}
-
-	return connect.NewResponse(&reliantv1.ResolveDaemonResponse{
-		Daemon: daemonToProto(best, attached[best.ID]),
-		Found:  true,
-	}), nil
-}
-
-func (s *Service) ResumeDaemon(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ResumeDaemonRequest],
-) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	if req.Msg.DaemonId == "" {
-		return nil, svcerr.InvalidArgument("daemon_id is required")
-	}
-
-	// Verify ownership.
-	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
-	}
-	if !authz.CanWriteMachine(ctx, userID, daemon) {
-		return nil, svcerr.NotFound("daemon")
-	}
-
-	// If the daemon currently has a fresh attachment row, it's already routable.
-	attached, err := s.attachedDaemonSet(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if attached[daemon.ID] != nil {
-		return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
-	}
-
-	// This service cannot wake a machine: resuming a suspended managed daemon
-	// is control-plane's (controlplane.v1.DaemonService/ResumeDaemon, which
-	// the router's EnsureAwake and the web client call directly). Nothing
-	// overrides this RPC any more — control-plane deleted its
-	// reliant.v1.DaemonRegistryService adapter (docs/design/one-daemon-list.md).
-	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{
-		Resumed:      false,
-		ErrorMessage: fmt.Sprintf("daemon %s has no active attachment; automatic resume not available in OSS mode", req.Msg.DaemonId),
-	}), nil
 }
 
 // daemonAnswersToName reports whether a daemon is the one a caller means by
