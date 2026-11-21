@@ -1,26 +1,34 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The ONLY file that knows VulnerabilityService's wire shape: the response
- * messages, as protobuf-es generates them, mapped to the plain types in
- * types.ts, and the requests built from them.
- *
- * THE WIRE TYPES BELOW ARE DECLARED BY HAND, FOR NOW. The generated client
- * comes from proto-vendor/controlplane/, which takes only the services
- * control-plane's proto/public-api.txt EXPORTS, and VulnerabilityService is
- * withheld there until control-plane mounts it on platform-api (control-plane
- * #3160). Each interface here is the structural subset of the generated
- * message of the same name (control-plane#3147's
+ * The ONLY file that knows VulnerabilityService's wire shape: the generated
+ * response messages (proto-vendor/controlplane, control-plane's
  * proto/services/vulnerability/v1/vulnerability.proto and
- * proto/controlplane/v1/vulnerability.proto): field names as protobuf-es
- * writes them, enums as their numbers, timestamps as google.protobuf.Timestamp.
- * So once `task contract:controlplane:sync` brings the service in, the
- * generated messages are assignable to these, and the swap is
- * vulnerabilityApi.ts calling the generated client; these declarations can
- * then be replaced by imports of the generated types.
+ * proto/controlplane/v1/vulnerability.proto) mapped to the plain types in
+ * types.ts, and the requests built for the generated client.
  */
 
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
+
+import { VulnerabilityFixState, VulnerabilityScanState, VulnerabilitySeverity, type VulnerabilityDatabase } from "@/gen/controlplane/controlplane/v1/vulnerability_pb";
+import type {
+  EnvironmentVulnerabilitySummary,
+  GetReleaseVulnerabilitiesRequestSchema,
+  GetReleaseVulnerabilitiesResponse,
+  GetVulnerabilityRequestSchema,
+  GetVulnerabilityResponse,
+  GetVulnerabilitySummaryRequestSchema,
+  GetVulnerabilitySummaryResponse,
+  ListVulnerabilitiesRequestSchema,
+  ListVulnerabilitiesResponse,
+  VulnerabilityAdvisory,
+  VulnerabilityCoverage,
+  VulnerabilityExemption,
+  VulnerabilityFinding,
+  VulnerabilitySeverityCounts,
+  VulnerablePackage,
+} from "@/gen/controlplane/services/vulnerability/v1/vulnerability_pb";
 
 import type {
   Advisory,
@@ -49,171 +57,6 @@ import type {
   VulnerabilityDetail,
 } from "./types";
 
-// ── Enums (controlplane/v1/vulnerability.proto) ──────────────────────────────
-
-/** controlplane.v1.VulnerabilitySeverity. Ordered: a higher number is more severe. */
-export const WireSeverity = { UNSPECIFIED: 0, UNKNOWN: 1, NEGLIGIBLE: 2, LOW: 3, MEDIUM: 4, HIGH: 5, CRITICAL: 6 } as const;
-/** controlplane.v1.VulnerabilityFixState. */
-export const WireFixState = { UNSPECIFIED: 0, FIXED: 1, NOT_FIXED: 2, WONT_FIX: 3, UNKNOWN: 4 } as const;
-/** controlplane.v1.VulnerabilityScanState. */
-export const WireScanState = { UNSPECIFIED: 0, NO_SBOM: 1, PENDING: 2, SCANNED: 3, FAILED: 4, STALE: 5 } as const;
-
-// ── Messages ────────────────────────────────────────────────────────────────
-
-export interface WireDatabase {
-  scanner: string;
-  scannerVersion: string;
-  schema: string;
-  builtAt?: Timestamp;
-  stale: boolean;
-}
-
-export interface WireSeverityCounts {
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  negligible: number;
-  unknown: number;
-}
-
-export interface WireCoverage {
-  artifacts: number;
-  withSbom: number;
-  scanned: number;
-}
-
-export interface WireEnvSummary {
-  environmentId: string;
-  environmentName: string;
-  releaseId: string;
-  releaseVersion: string;
-  counts?: WireSeverityCounts;
-  kevCount: number;
-  fixableCount: number;
-  blockingCount: number;
-  exemptCount: number;
-  coverage?: WireCoverage;
-  lastScannedAt?: Timestamp;
-  scanState: number;
-  failingSince?: Timestamp;
-}
-
-export interface WireSummaryResponse {
-  environments: WireEnvSummary[];
-  database?: WireDatabase;
-}
-
-export interface WireAdvisory {
-  id: string;
-  aliases: string[];
-  severity: number;
-  cvssScore?: number;
-  kev: boolean;
-  epss?: number;
-  summary: string;
-  references: string[];
-}
-
-export interface WirePackage {
-  name: string;
-  version: string;
-  type: string;
-  purl: string;
-  location: string;
-}
-
-export interface WireExemption {
-  environmentId: string;
-  advisoryId: string;
-  reason: string;
-  expiresAt?: Timestamp;
-}
-
-export interface WireFinding {
-  advisory?: WireAdvisory;
-  package?: WirePackage;
-  fixedVersions: string[];
-  fixState: number;
-  artifactNames: string[];
-  environmentIds: string[];
-  firstSeenAt?: Timestamp;
-  exemption?: WireExemption;
-  blocking: boolean;
-}
-
-export interface WireListResponse {
-  findings: WireFinding[];
-  nextPageToken: string;
-  database?: WireDatabase;
-}
-
-export interface WireOccurrence {
-  releaseId: string;
-  releaseVersion: string;
-  artifactName: string;
-  sbomDigest: string;
-  package?: WirePackage;
-  fixedVersions: string[];
-  fixState: number;
-  environmentIds: string[];
-}
-
-export interface WireObservation {
-  environmentId: string;
-  purl: string;
-  firstSeenAt?: Timestamp;
-  lastSeenAt?: Timestamp;
-  resolvedAt?: Timestamp;
-  firstReleaseVersion: string;
-}
-
-export interface WireGateVerdict {
-  promotionId: string;
-  environmentId: string;
-  releaseVersion: string;
-  mode: string;
-  verdict: string;
-  overrideReason: string;
-  createdAt?: Timestamp;
-}
-
-export interface WireDetailResponse {
-  advisory?: WireAdvisory;
-  occurrences: WireOccurrence[];
-  observations: WireObservation[];
-  exemptions: WireExemption[];
-  gateVerdicts: WireGateVerdict[];
-}
-
-export interface WireArtifactSbom {
-  artifactName: string;
-  sbomDigest: string;
-  format: string;
-  generator: string;
-  source: string;
-  referrer: string;
-  componentCount: number;
-  scanState: number;
-  lastScannedAt?: Timestamp;
-  scanError: string;
-}
-
-export interface WireReleaseResponse {
-  releaseId: string;
-  releaseVersion: string;
-  artifacts: WireArtifactSbom[];
-  coverage?: WireCoverage;
-  counts?: WireSeverityCounts;
-  kevCount: number;
-  fixableCount: number;
-  blockingCount: number;
-  exemptCount: number;
-  findings: WireFinding[];
-  nextPageToken: string;
-  database?: WireDatabase;
-}
-
 // ── Responses → plain types ─────────────────────────────────────────────────
 
 function ms(ts: Timestamp | undefined): number | null {
@@ -223,30 +66,30 @@ function ms(ts: Timestamp | undefined): number | null {
   return value > 0 ? value : null;
 }
 
-export function severityOf(value: number): Severity {
+export function severityOf(value: VulnerabilitySeverity): Severity {
   switch (value) {
-    case WireSeverity.CRITICAL:
+    case VulnerabilitySeverity.CRITICAL:
       return "critical";
-    case WireSeverity.HIGH:
+    case VulnerabilitySeverity.HIGH:
       return "high";
-    case WireSeverity.MEDIUM:
+    case VulnerabilitySeverity.MEDIUM:
       return "medium";
-    case WireSeverity.LOW:
+    case VulnerabilitySeverity.LOW:
       return "low";
-    case WireSeverity.NEGLIGIBLE:
+    case VulnerabilitySeverity.NEGLIGIBLE:
       return "negligible";
     default:
       return "unknown";
   }
 }
 
-export function fixStateOf(value: number): FixState {
+export function fixStateOf(value: VulnerabilityFixState): FixState {
   switch (value) {
-    case WireFixState.FIXED:
+    case VulnerabilityFixState.FIXED:
       return "fixed";
-    case WireFixState.NOT_FIXED:
+    case VulnerabilityFixState.NOT_FIXED:
       return "not-fixed";
-    case WireFixState.WONT_FIX:
+    case VulnerabilityFixState.WONT_FIX:
       return "wont-fix";
     default:
       return "unknown";
@@ -257,40 +100,40 @@ export function fixStateOf(value: number): FixState {
  * A scan state a newer server adds, that this client does not know, reads as
  * "pending": it is not "scanned", and so never shows as clean.
  */
-export function scanStateOf(value: number): ScanState {
+export function scanStateOf(value: VulnerabilityScanState): ScanState {
   switch (value) {
-    case WireScanState.UNSPECIFIED:
+    case VulnerabilityScanState.UNSPECIFIED:
       return "none";
-    case WireScanState.NO_SBOM:
+    case VulnerabilityScanState.NO_SBOM:
       return "no-sbom";
-    case WireScanState.SCANNED:
+    case VulnerabilityScanState.SCANNED:
       return "scanned";
-    case WireScanState.FAILED:
+    case VulnerabilityScanState.FAILED:
       return "failed";
-    case WireScanState.STALE:
+    case VulnerabilityScanState.STALE:
       return "stale";
     default:
       return "pending";
   }
 }
 
-function databaseOf(db: WireDatabase | undefined): VulnDatabase | null {
+function databaseOf(db: VulnerabilityDatabase | undefined): VulnDatabase | null {
   if (!db) return null;
   return { scanner: db.scanner, scannerVersion: db.scannerVersion, schema: db.schema, builtAtMs: ms(db.builtAt), stale: db.stale };
 }
 
 const ZERO_COUNTS: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0 };
 
-function countsOf(counts: WireSeverityCounts | undefined): SeverityCounts {
+function countsOf(counts: VulnerabilitySeverityCounts | undefined): SeverityCounts {
   if (!counts) return { ...ZERO_COUNTS };
   return { critical: counts.critical, high: counts.high, medium: counts.medium, low: counts.low, negligible: counts.negligible, unknown: counts.unknown };
 }
 
-function coverageOf(coverage: WireCoverage | undefined): VulnCoverage {
+function coverageOf(coverage: VulnerabilityCoverage | undefined): VulnCoverage {
   return { artifacts: coverage?.artifacts ?? 0, withSbom: coverage?.withSbom ?? 0, scanned: coverage?.scanned ?? 0 };
 }
 
-function envSummaryOf(env: WireEnvSummary): EnvVulnSummary {
+function envSummaryOf(env: EnvironmentVulnerabilitySummary): EnvVulnSummary {
   return {
     environmentId: env.environmentId,
     environmentName: env.environmentName,
@@ -309,15 +152,15 @@ function envSummaryOf(env: WireEnvSummary): EnvVulnSummary {
   };
 }
 
-export function summaryOf(res: WireSummaryResponse): VulnSummary {
+export function summaryOf(res: GetVulnerabilitySummaryResponse): VulnSummary {
   return { environments: res.environments.map(envSummaryOf), database: databaseOf(res.database) };
 }
 
-function advisoryOf(a: WireAdvisory | undefined): Advisory {
+function advisoryOf(a: VulnerabilityAdvisory | undefined): Advisory {
   return {
     id: a?.id ?? "",
     aliases: a?.aliases ?? [],
-    severity: severityOf(a?.severity ?? 0),
+    severity: severityOf(a?.severity ?? VulnerabilitySeverity.UNSPECIFIED),
     cvss: a?.cvssScore ?? null,
     kev: a?.kev ?? false,
     epss: a?.epss ?? null,
@@ -326,15 +169,15 @@ function advisoryOf(a: WireAdvisory | undefined): Advisory {
   };
 }
 
-function packageOf(p: WirePackage | undefined): VulnPackage {
+function packageOf(p: VulnerablePackage | undefined): VulnPackage {
   return { name: p?.name ?? "", version: p?.version ?? "", type: p?.type ?? "", purl: p?.purl ?? "", location: p?.location ?? "" };
 }
 
-function exemptionOf(x: WireExemption): VulnExemption {
+function exemptionOf(x: VulnerabilityExemption): VulnExemption {
   return { environmentId: x.environmentId, advisoryId: x.advisoryId, reason: x.reason, expiresMs: ms(x.expiresAt) };
 }
 
-function findingOf(f: WireFinding): Finding {
+function findingOf(f: VulnerabilityFinding): Finding {
   return {
     advisory: advisoryOf(f.advisory),
     package: packageOf(f.package),
@@ -348,11 +191,11 @@ function findingOf(f: WireFinding): Finding {
   };
 }
 
-export function findingPageOf(res: WireListResponse): FindingPage {
+export function findingPageOf(res: ListVulnerabilitiesResponse): FindingPage {
   return { findings: res.findings.map(findingOf), nextPageToken: res.nextPageToken, database: databaseOf(res.database) };
 }
 
-export function detailOf(res: WireDetailResponse): VulnerabilityDetail {
+export function detailOf(res: GetVulnerabilityResponse): VulnerabilityDetail {
   return {
     advisory: advisoryOf(res.advisory),
     occurrences: res.occurrences.map(
@@ -392,7 +235,7 @@ export function detailOf(res: WireDetailResponse): VulnerabilityDetail {
   };
 }
 
-export function releaseOf(res: WireReleaseResponse): ReleaseVulnerabilities {
+export function releaseOf(res: GetReleaseVulnerabilitiesResponse): ReleaseVulnerabilities {
   return {
     releaseId: res.releaseId,
     releaseVersion: res.releaseVersion,
@@ -425,50 +268,47 @@ export function releaseOf(res: WireReleaseResponse): ReleaseVulnerabilities {
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
-const MIN_SEVERITY_WIRE: Record<MinSeverity, number> = {
-  critical: WireSeverity.CRITICAL,
-  high: WireSeverity.HIGH,
-  medium: WireSeverity.MEDIUM,
-  low: WireSeverity.LOW,
+const MIN_SEVERITY_WIRE: Record<MinSeverity, VulnerabilitySeverity> = {
+  critical: VulnerabilitySeverity.CRITICAL,
+  high: VulnerabilitySeverity.HIGH,
+  medium: VulnerabilitySeverity.MEDIUM,
+  low: VulnerabilitySeverity.LOW,
 };
 
-/** Only the fields that are set: every filter is proto3 `optional`, so an absent field means "no filter". */
-function defined<T extends Record<string, unknown>>(fields: T): Partial<T> {
-  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "")) as Partial<T>;
+// Every filter and scope field is proto3 `optional`: undefined leaves it absent ("no filter"), a
+// present false is a filter. An empty string or a null org is absent too.
+
+export function summaryRequest(req: SummaryRequest): MessageInitShape<typeof GetVulnerabilitySummaryRequestSchema> {
+  return { project: req.project, environmentId: req.environmentId || undefined, orgId: req.orgId || undefined };
 }
 
-export function summaryRequest(req: SummaryRequest) {
-  return { project: req.project, ...defined({ environmentId: req.environmentId, orgId: req.orgId ?? undefined }) };
-}
-
-export function listRequest(req: ListRequest) {
+export function listRequest(req: ListRequest): MessageInitShape<typeof ListVulnerabilitiesRequestSchema> {
   const f = req.filters;
   return {
     project: req.project,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-    ...defined({
-      environmentId: f.environmentId,
-      releaseVersion: f.releaseVersion,
-      minSeverity: f.minSeverity ? MIN_SEVERITY_WIRE[f.minSeverity] : undefined,
-      fixable: f.fixable,
-      kev: f.kev,
-      includeExempt: f.includeExempt || undefined,
-      orgId: req.orgId ?? undefined,
-    }),
+    environmentId: f.environmentId || undefined,
+    releaseVersion: f.releaseVersion || undefined,
+    minSeverity: f.minSeverity ? MIN_SEVERITY_WIRE[f.minSeverity] : undefined,
+    fixable: f.fixable,
+    kev: f.kev,
+    includeExempt: f.includeExempt || undefined,
+    orgId: req.orgId || undefined,
   };
 }
 
-export function detailRequest(req: DetailRequest) {
-  return { project: req.project, advisoryId: req.advisoryId, ...defined({ orgId: req.orgId ?? undefined }) };
+export function detailRequest(req: DetailRequest): MessageInitShape<typeof GetVulnerabilityRequestSchema> {
+  return { project: req.project, advisoryId: req.advisoryId, orgId: req.orgId || undefined };
 }
 
-export function releaseRequest(req: ReleaseRequest) {
+export function releaseRequest(req: ReleaseRequest): MessageInitShape<typeof GetReleaseVulnerabilitiesRequestSchema> {
   return {
     project: req.project,
     version: req.version,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-    ...defined({ environmentId: req.environmentId, orgId: req.orgId ?? undefined }),
+    environmentId: req.environmentId || undefined,
+    orgId: req.orgId || undefined,
   };
 }

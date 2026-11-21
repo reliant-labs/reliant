@@ -292,7 +292,7 @@ describe("Vulnerabilities: refusals", () => {
     expect(state).toHaveTextContent("Nothing here means this project is clean");
   });
 
-  it("is what this build's real client says until the service is vendored", async () => {
+  it("is what the real client says with no control plane configured", async () => {
     const { controlPlaneVulnerabilityApi } = await import("@/services/controlPlane/vulnerabilities/VulnerabilityApiContext");
     renderVulnerabilities(controlPlaneVulnerabilityApi);
     expect(await screen.findByTestId("vuln-error-not-configured")).toBeInTheDocument();
