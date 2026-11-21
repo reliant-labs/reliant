@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -1110,30 +1109,47 @@ func (s *Service) nextFireTimes(ctx context.Context, stored []*core.Trigger) map
 		failed   int
 		firstErr error
 	)
-	var g errgroup.Group
-	g.SetLimit(nextFireWorkers)
-	for _, id := range ids {
-		g.Go(func() error {
-			// Past the budget, the rest are not asked at all.
-			err := budget.Err()
-			var next *time.Time
-			if err == nil {
-				next, err = s.deps.Syncer.NextFireAt(budget, id)
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
-				return nil
-			}
-			out[id] = next
-			return nil
-		})
+	fail := func(n int, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		failed += n
+		if firstErr == nil {
+			firstErr = err
+		}
 	}
-	_ = g.Wait()
+	// A fixed pool of workers drains the ids; the feeder hands them over only
+	// while the budget lasts, so an expired budget stops the submission too
+	// and the request never walks the rest of a long list.
+	work := make(chan string)
+	var wg sync.WaitGroup
+	for range min(nextFireWorkers, len(ids)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range work {
+				next, err := s.deps.Syncer.NextFireAt(budget, id)
+				if err != nil {
+					fail(1, err)
+					continue
+				}
+				mu.Lock()
+				out[id] = next
+				mu.Unlock()
+			}
+		}()
+	}
+feed:
+	for i, id := range ids {
+		select {
+		case work <- id:
+		case <-budget.Done():
+			// Past the budget, the rest are not asked at all.
+			fail(len(ids)-i, budget.Err())
+			break feed
+		}
+	}
+	close(work)
+	wg.Wait()
 	span.SetAttributes(attribute.Int("trigger.next_fire_failures", failed))
 	if failed > 0 {
 		logging.WarnContext(ctx, "could not resolve some triggers' next fire times",
