@@ -23,6 +23,9 @@ type mcpManagerRuntime interface {
 	AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
 	RemoveProjectServer(projectPath, serverName string) error
 	RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
+	// StartProjectServerFromProjectConfig starts a server from the machine's
+	// current project config, cfg being the fallback (RestartServer).
+	StartProjectServerFromProjectConfig(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
 }
 
 // mcpManagerForUser returns an mcpManagerRuntime that proxies through the daemon

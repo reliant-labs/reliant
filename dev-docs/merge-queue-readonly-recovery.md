@@ -24,21 +24,21 @@ archive, then re-enable it via the same menu or
 
 ## Verify the gate and recover from public API faults
 
-On the first normal merge group, confirm the `golangci (changed) passed`
-step reads **its own run attempt** and permits a success. A non-success,
-ambiguous state, or unavailable verdict must not pass. For an approved
-incompatibility case, check the gate logs attribute approval to the owner
-on that PR, not just the presence of a label. An unreadable later page must
-leave the incompatibility blocked.
+`CI result` reads no API: it `needs:` the `Merge gate` and
+`golangci (changed)` jobs and passes only when both results are `success`
+(a failed, cancelled, skipped or missing job does not pass). The lint
+verdict used to be polled from the anonymous Actions jobs API, which
+answered 403 and turned green groups red (reliant #3095); that poll is gone.
+For an approved incompatibility case, check the gate logs attribute approval
+to the owner on that PR, not just the presence of a label. An unreadable
+later page must leave the incompatibility blocked.
 
-If the public API returns a transient 403, 429, or 5xx, let the normal
-merge-queue retry path rerun the unchanged entry after GitHub recovers; do
-not override the required check or use a manual merge. The lint verdict
-uses at most eight anonymous requests, with its final request reserved for
-the original deadline. If anonymous Actions reads are persistently failing,
-open a forward-fix PR replacing the poll with native job dependencies and
-aggregating both outcomes under the same `CI result` check name. Keep the
-candidate jobs read-only and the issue writer separate. For a persistent
+The remaining public API reads are the compatibility check's label and
+event reads and the non-gating budget step's run read. If they return a
+transient 403, 429, or 5xx, let the normal merge-queue retry path rerun the
+unchanged entry after GitHub recovers; do not override the required check or
+use a manual merge. Keep the candidate jobs read-only and the issue writer
+separate. For a persistent
 compatibility API fault, defer approved-incompatibility changes until the
 owner-approved evidence can be read again; a forward fix can move just the
 approval check to a trusted read-only step, but may not infer approval from

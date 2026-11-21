@@ -86,6 +86,8 @@ Then open **Settings → AI providers → Local & custom**. Reliant looks for mo
 | llama.cpp | `http://localhost:8080/v1` |
 | vLLM | `http://localhost:8000/v1` |
 
+A local model's id is its name on the server plus `@local`, for example `qwen3:latest@local`: use that as a workflow step's model id ([use local models](/guides/machines/use-local-models)). From the CLI, `reliant models list --local` lists each local model with the machine serving it, and `reliant models endpoint add <url> --machine <machine>` does what **Add endpoint** does.
+
 Agents need a long context window. Ollama defaults to a small one, and the page tells you when it's too small to be useful; the fix is to raise **Context length** in the Ollama app's settings. The prompt and the model's reply still pass through Reliant's servers and are stored in your chat; only the inference runs on your hardware. For defining your own models and tags, see [Model Configuration](/settings/model-config).
 
 ## Which models can I use?

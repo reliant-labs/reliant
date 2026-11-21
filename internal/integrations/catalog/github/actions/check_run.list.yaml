@@ -54,9 +54,12 @@ request:
   query:
     per_page: "100"
     filter: "{{ params.filter }}"
+  # app_id goes through int() first: a workflow's `with:` and a tool call deliver numbers
+  # JSON-decoded, as doubles, and string(1041943.0) is "1.041943e+06", which GitHub
+  # matches to no App, so the filtered list came back empty.
   query_expr: >-
     {?"check_name": params.?check_name,
-     ?"app_id": has(params.app_id) ? optional.of(string(params.app_id)) : optional.none(),
+     ?"app_id": has(params.app_id) ? optional.of(string(int(params.app_id))) : optional.none(),
      ?"status": params.?status}
   pagination: { style: link_header, max_pages: 10 }
   max_response_bytes: 5242880

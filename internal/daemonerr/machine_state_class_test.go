@@ -35,6 +35,8 @@ func TestMachineRefusalsAreUserErrorsAndDaemonFailuresAreNot(t *testing.T) {
 		"still starting":                    {machineStates[1].err, errreason.DaemonStarting},
 		"asleep":                            {suspended, errreason.DaemonSuspended},
 		"reconnecting (fe2d2455)":           {toolexec.ErrDaemonReconnecting, errreason.DaemonReconnecting},
+		"recovering a worktree (1ada7020)": {toolexec.DaemonReportedFailure("exec.bg_list", toolexec.ErrRecoveryFinalizing.Error()),
+			errreason.WorktreeRecovering},
 	}
 	for name, tc := range refusals {
 		wrapped := fmt.Errorf("daemon command %q: %w", "fs.get_tree", tc.err)
@@ -66,6 +68,16 @@ func TestMachineRefusalsAreUserErrorsAndDaemonFailuresAreNot(t *testing.T) {
 			assert.Equal(t, slog.LevelError, observe.LevelForErrorContext(context.Background(), got))
 		})
 	}
+}
+
+// A refusal while the daemon finalizes a worktree's recovery keeps the
+// daemon's own words, never the router's plumbing.
+func TestRecoveryRefusalKeepsTheDaemonsWords(t *testing.T) {
+	refusal := toolexec.DaemonReportedFailure("exec.bg_list", toolexec.ErrRecoveryFinalizing.Error())
+	state, ok := MachineState("daemon command exec.bg_list failed", refusal)
+	assert.True(t, ok)
+	assert.Equal(t, "daemon command exec.bg_list failed: "+toolexec.ErrRecoveryFinalizing.Error(), svcerr.ToConnect(state).Message())
+	assert.False(t, Unreachable(refusal), "the machine is up: nothing to wake")
 }
 
 // A reconnecting machine is awake: it is a machine state, but not one that
