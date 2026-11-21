@@ -7,7 +7,7 @@ description: |
   autopilot-agent loop: a shell with no credentials, nothing loadable) finishes a vulnerability patch that
   `reliant forge vuln patch` could not: it fixes the build or tests the bump broke, or applies a bump the
   patcher had no deterministic route for. After every attempt the workflow itself, not the agent, checks
-  the result with no credentials: no test deleted or skipped and no exemption added, the verify command
+  the result with no credentials: no test file changed and no skip or exemption added, the verify command
   passes, and `reliant forge vuln scan . --json` no longer reports any targeted finding. It stops when that
   check passes, when the agent reports blocked, or after max_iterations attempts. It never commits, pushes
   or opens anything: vuln-patch does that, and only when `passed` is true.
@@ -100,7 +100,7 @@ nodes:
                 {{ inputs.targets.map(t, '- ' + string(t.id) + (has(t.names) && size(t.names) > 1 ? ' (' + t.names.filter(n, n != t.id).join(', ') + ')' : '') + ': ' + (has(t.package) ? string(t.package) : '?') + ' ' + (has(t.installed) ? string(t.installed) : '') + (has(t.fixed_in) && string(t.fixed_in) != '' ? ', fixed in ' + string(t.fixed_in) : '') + (has(t.status) && string(t.status) != '' ? '; patcher: ' + string(t.status) : '') + (has(t.reason) && string(t.reason) != '' ? ' (' + untrustedText(string(t.reason), 300) + ')' : '')).join('\n') }}
 
                 When you submit `done`, the workflow checks your work itself, with no credentials, in `{{ inputs.dir }}`:
-                1. No test file deleted, no test skipped, no vulnerability exemption added.
+                1. No test file changed (including assertions), no test skipped, no vulnerability exemption added.
                 2. Verify: this must exit 0.
                    ```
                    {{ inputs.verify_command.trim() }}
@@ -146,15 +146,16 @@ nodes:
               4. Run the verify command and `reliant forge vuln scan . --json` yourself before you submit.
 
               Hard rules. The workflow checks the first three after you and refuses the patch when one is broken:
-              - NEVER weaken a test: do not delete, skip (t.Skip, it.skip, xit, pytest.mark.skip), loosen an assertion in, or exclude a test to make it pass. A test that fails because behaviour changed is a real failure: fix the code, or report blocked.
+              - NEVER change a test file: the guard rejects all test-file edits, additions, deletions and renames, including assertion changes. Do not skip (t.Skip, it.skip, xit, pytest.mark.skip), loosen an assertion in, or exclude a test to make it pass. A test that fails because behaviour changed is a real failure: fix the code, or report blocked.
               - NEVER add a vulnerability exemption (`reliant forge vuln exempt`, forge.VulnExemption, ci.vuln_scan.exemptions) or pin a package below its fix.
               - NEVER touch CI (.github/), deploy configuration (deploy/, KCL, Helm), releases, or another repository.
               - Do not commit, push, create branches or open PRs. vuln-patch publishes the branch and opens the PR only when its own check passes.
               - Your shell has no credentials, on purpose. Do not look for tokens or credential files, and do not use gh, the GitHub API or git remotes.
               - Work only inside this worktree. Never run the repo's full lanes (`task ci`, `task test`): run the verify command named in the brief.
 
-        # What the attempt changed, read by the workflow: every changed file, test files deleted, and added
-        # lines that skip a test or exempt a finding.
+        # Reject all test-file changes, not just recognizable assertion/skip edits: integrity is
+        # checked independently of the agent. Disable rename detection so moving a test cannot hide it.
+        # Also check added lines that skip a test or exempt a finding.
         - id: guard
           type: run
           condition: "nodes.?fix.completed.orValue(false) == true && nodes.?fix.response.outcome.orValue('') == 'done'"
@@ -164,8 +165,7 @@ nodes:
               cd '{{ inputs.dir }}' || exit 2
               root=$(git rev-parse --show-toplevel) || exit 2
               cd "$root" || exit 2
-              { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | sed 's/^/file:/'
-              git diff --name-only --diff-filter=D HEAD | sed 's/^/deleted:/'
+              { git -c core.quotePath=false diff --no-renames --name-only HEAD; git -c core.quotePath=false ls-files --others --exclude-standard; } | sort -u | sed 's/^/file:/'
               git diff -U0 HEAD | grep -E '^\+[^+]' \
                 | grep -E 't\.Skip|\.skip\(|\bxit\(|\bxdescribe\(|\bxtest\(|pytest\.mark\.(skip|xfail)|unittest\.skip|\.only\(|VulnExemption|vuln_scan|exemptions' \
                 | cut -c1-200 | sed 's/^/added:/'
@@ -201,7 +201,7 @@ nodes:
                    .filter(f, !f.matches('(^|/)(go\\.mod|go\\.sum|go\\.work|go\\.work\\.sum|package\\.json|package-lock\\.json|npm-shrinkwrap\\.json|pnpm-lock\\.yaml|yarn\\.lock|requirements[^/]*\\.(txt|in)|pyproject\\.toml|poetry\\.lock|uv\\.lock|[^/]*Dockerfile[^/]*)$')) }}
             weakened: >-
               {{ nodes.?guard.stdout.orValue('').split('\n')
-                   .filter(l, l.startsWith('added:') || (l.startsWith('deleted:') && l.matches('(_test\\.go|\\.(test|spec)\\.[cm]?[jt]sx?|(^|/)test_[^/]*\\.py|_test\\.py)$'))) }}
+                   .filter(l, l.startsWith('added:') || (l.startsWith('file:') && l.substring(5).matches('(_test\\.go|\\.(test|spec)\\.[cm]?[jt]sx?|(^|/)test_[^/]*\\.py|_test\\.py)$|(^|/)(__tests__|tests?|specs?)/'))) }}
             guard_ok: "{{ nodes.?guard.exit_code.orValue(-1) == 0 }}"
             verify_ok: "{{ nodes.?verify.exit_code.orValue(-1) == 0 }}"
             verify_tail: >-
@@ -234,7 +234,7 @@ nodes:
               {{ nodes.facts.done != true
                  ? [nodes.?fix.completed.orValue(false) == true ? 'the agent reported blocked' : 'the agent ended without a result']
                  : (nodes.facts.guard_ok != true ? ['the workflow could not read the changes in the worktree'] : [])
-                   + (size(nodes.facts.weakened) > 0 ? ['a test was deleted or skipped, or an exemption added, which is not allowed; revert it: ' + nodes.facts.weakened.join('; ')] : [])
+                   + (size(nodes.facts.weakened) > 0 ? ['a test file was changed or a skip/exemption added, which is not allowed; revert it: ' + nodes.facts.weakened.join('; ')] : [])
                    + (nodes.facts.verify_ok != true ? ['the verify command failed' + (inputs.verify_command.contains('\n') ? '' : ' (`' + inputs.verify_command.trim() + '`)')] : [])
                    + (nodes.facts.scan_error != '' ? [nodes.facts.scan_error] : [])
                    + (nodes.facts.scan_ok == true && size(nodes.facts.still_present) > 0 ? ['the rescan still reports ' + nodes.facts.still_present.join(', ')] : []) }}

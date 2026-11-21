@@ -25,5 +25,5 @@ expect:
     passed: false
     iterations: 1
     reasons:
-      - "a test was deleted or skipped, or an exemption added, which is not allowed; revert it: added:+\tt.Skip(\"flaky after bump\")"
+      - "a test file was changed or a skip/exemption added, which is not allowed; revert it: file:internal/feed/parse_test.go; added:+\tt.Skip(\"flaky after bump\")"
       - "the rescan could not run (exit 2): vulnerability database missing: forge vuln db pull"
