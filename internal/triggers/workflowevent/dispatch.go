@@ -438,6 +438,15 @@ func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchE
 	if err != nil {
 		return launch.Spec{}, fmt.Errorf("trigger params are not representable: %w", err)
 	}
+	// The activation's message, else its declaration's prompt rendered for
+	// this event (triggers.LaunchPrompt): the same seed every other trigger
+	// kind starts from. Reading
+	// trigger.Message alone dropped a declared prompt, and the launch then
+	// failed with "at least one user message is required".
+	prompt, err := triggers.LaunchPrompt(trigger, spec.Declaration, scope)
+	if err != nil {
+		return launch.Spec{}, err
+	}
 	source := ev.WorkflowName
 	if source == "" {
 		source = "a workflow"
@@ -458,7 +467,7 @@ func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchE
 		Presets:    trigger.Presets,
 		Params:     params,
 		Messages: []launch.SeedMessage{
-			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: trigger.Message},
+			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: prompt},
 			{
 				// The agent cannot infer from inputs it never sees that it is
 				// unattended or why it started. The source run's own text is

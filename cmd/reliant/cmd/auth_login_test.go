@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -42,14 +43,23 @@ type fakeCP struct {
 	// grantScope, when set, is the scope every token reply grants instead of
 	// the one requested, as a control plane that grants more or less does.
 	grantScope string
+	// honorExpiresIn grants the lifetime the request's expires_in asked for,
+	// as a control plane with control-plane#3213 does; unset, every token
+	// lives 90 days whatever was asked, as an older one does.
+	honorExpiresIn bool
 }
 
-// tokenReply is the token endpoint's success body.
-func (cp *fakeCP) tokenReply(scope string) map[string]any {
+// tokenReply is the token endpoint's success body. requested is the
+// authorization request, for its expires_in.
+func (cp *fakeCP) tokenReply(scope string, requested url.Values) map[string]any {
 	if cp.grantScope != "" {
 		scope = cp.grantScope
 	}
-	reply := map[string]any{"access_token": cp.token, "token_type": "Bearer", "expires_in": 7776000, "scope": scope}
+	lifetime := 7776000
+	if n, err := strconv.Atoi(requested.Get(cliauth.ExpiresInParam)); err == nil && cp.honorExpiresIn && n < lifetime {
+		lifetime = n
+	}
+	reply := map[string]any{"access_token": cp.token, "token_type": "Bearer", "expires_in": lifetime, "scope": scope}
 	if cp.account.Known() {
 		reply["account_id"] = cp.account.ID
 		reply["account_email"] = cp.account.Email
@@ -89,13 +99,14 @@ func newFakeCP(t *testing.T, token string) *fakeCP {
 				cp.mu.Lock()
 				ok := cp.deviceForm != nil && r.PostForm.Get("device_code") == "dc-secret" && r.PostForm.Get("client_id") == cliauth.ClientID
 				scope := cp.deviceForm.Get("scope")
+				requested := cp.deviceForm
 				cp.mu.Unlock()
 				if !ok {
 					w.WriteHeader(400)
 					_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 					return
 				}
-				_ = json.NewEncoder(w).Encode(cp.tokenReply(scope))
+				_ = json.NewEncoder(w).Encode(cp.tokenReply(scope, requested))
 				return
 			}
 			cp.browserToken(w, r)
@@ -123,8 +134,10 @@ func (cp *fakeCP) browserToken(w http.ResponseWriter, r *http.Request) {
 	cp.mu.Lock()
 	ok := len(cp.requests) > 0 && base64.RawURLEncoding.EncodeToString(sum[:]) == cp.challenge && r.PostForm.Get("client_id") == cliauth.ClientID
 	var scope string
+	var requested url.Values
 	if ok {
-		scope = cp.requests[len(cp.requests)-1].Get("scope")
+		requested = cp.requests[len(cp.requests)-1]
+		scope = requested.Get("scope")
 	}
 	cp.mu.Unlock()
 	if !ok {
@@ -133,7 +146,7 @@ func (cp *fakeCP) browserToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(cp.tokenReply(scope))
+	_ = json.NewEncoder(w).Encode(cp.tokenReply(scope, requested))
 }
 
 func (cp *fakeCP) lastRequest() url.Values {

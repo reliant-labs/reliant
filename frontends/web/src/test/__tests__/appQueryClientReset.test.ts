@@ -15,6 +15,10 @@ import { CancelledError } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import { queryClient } from '@/lib/query-client'
 
+// The second test deliberately checks calls made by the first. Keep that
+// history across Vitest 5's default per-test mock clearing.
+vi.setConfig({ clearMocks: false })
+
 const queryKey = ['appQueryClientReset', 'left-retrying']
 const failing = vi.fn(() => Promise.reject(new Error('unavailable')))
 const PENDING = Symbol('pending')
