@@ -46,8 +46,7 @@ events:
 
   # Compact node runs due to high token count
   - node: agent_loop.compact
-    output:
-      result: "Context compacted successfully."
+    output: {}
 
   # Next iteration: LLM provides final response
   - node: agent_loop.call_llm

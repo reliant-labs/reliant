@@ -73,6 +73,10 @@ type SaveMessageOpts struct {
 	// Model is the concrete model that served the completion, captured after tag
 	// resolution (e.g. "claude-4.8-opus"). Persisted to messages.model.
 	Model string
+	// ThinkingLevel is the effective thinking level the completion ran at,
+	// after the model reconciled the requested one. Persisted to
+	// messages.thinking_level; empty records nothing.
+	ThinkingLevel string
 	// ProviderAccountID is the provider account that served the completion
 	// (messages.provider_account_id). Empty for local / one-shot drivers and
 	// for every non-assistant message.
@@ -275,6 +279,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		Role:              reliantv1.MessageRole(opts.Role),
 		DisplayStyle:      displayStylePtrIfNonZero(opts.DisplayStyle),
 		Model:             ptr.StringIfNotEmpty(opts.Model),
+		ThinkingLevel:     ptr.StringIfNotEmpty(opts.ThinkingLevel),
 		Agent:             ptr.StringIfNotEmpty(opts.Agent),
 		ProviderAccountID: ptr.StringIfNotEmpty(opts.ProviderAccountID),
 		SenderThreadID:    ptr.StringIfNotEmpty(opts.SenderThreadID),

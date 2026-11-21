@@ -228,7 +228,7 @@ params:
 
 ## Provider Configuration
 
-Models require the appropriate provider to be configured in Settings → AI:
+Models require their provider to be connected in the Reliant app's AI settings:
 
 | Provider | Models |
 |----------|--------|
