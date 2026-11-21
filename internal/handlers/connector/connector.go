@@ -9,14 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
-	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/ospath"
@@ -58,35 +55,6 @@ func (s *Service) createGrantWithCredential(ctx context.Context, grant *connecto
 		return "", err
 	}
 	return minted.Plaintext, nil
-}
-
-// CreateConnector mints a credential bound to one daemon.
-func (s *Service) CreateConnector(
-	ctx context.Context,
-	req *connect.Request[reliantv1.CreateConnectorRequest],
-) (*connect.Response[reliantv1.CreateConnectorResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	msg := req.Msg
-	grant, err := s.buildGrant(userID, msg)
-	if err != nil {
-		return nil, err
-	}
-
-	raw, err := s.createGrantWithCredential(ctx, grant)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create connector"))
-	}
-
-	return connect.NewResponse(&reliantv1.CreateConnectorResponse{
-		Connector: toProtoConnector(grant),
-		// Returned exactly once; the authority holds only its hash.
-		Credential: raw,
-		McpUrl:     s.mcpURLFor(grant.KindOrDefault()),
-	}), nil
 }
 
 // buildGrant validates a create request and assembles the grant.
@@ -371,149 +339,6 @@ func validateExec(
 		cleaned = nil
 	}
 	return execMode, cleaned, nil
-}
-
-// ListConnectors returns the caller's connectors.
-func (s *Service) ListConnectors(
-	ctx context.Context,
-	_ *connect.Request[reliantv1.ListConnectorsRequest],
-) (*connect.Response[reliantv1.ListConnectorsResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	grants, err := s.deps.Grants.ListGrantsByUser(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list connectors"))
-	}
-
-	out := make([]*reliantv1.Connector, 0, len(grants))
-	for _, g := range grants {
-		out = append(out, toProtoConnector(g))
-	}
-	return connect.NewResponse(&reliantv1.ListConnectorsResponse{Connectors: out}), nil
-}
-
-// RevokeConnector revokes one of the caller's connectors.
-func (s *Service) RevokeConnector(
-	ctx context.Context,
-	req *connect.Request[reliantv1.RevokeConnectorRequest],
-) (*connect.Response[reliantv1.RevokeConnectorResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	id := strings.TrimSpace(req.Msg.GetId())
-	if id == "" {
-		return nil, svcerr.InvalidArgument("connector id is required")
-	}
-
-	// Scoped by user in the store, so a guessed id cannot revoke someone
-	// else's connector.
-	revoked, err := s.deps.Grants.RevokeGrant(ctx, userID, id)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to revoke connector"))
-	}
-	// Kill the credential too, not only the policy: the grant is re-checked
-	// per call, but a revoked grant must leave no live token behind.
-	if revoked {
-		if _, err := s.deps.Tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
-			return nil, svcerr.WrapOr(err, svcerr.Unavailable("failed to revoke connector credential"))
-		}
-	} else {
-		activity.Skip(ctx) // already revoked: nothing changed
-	}
-	return connect.NewResponse(&reliantv1.RevokeConnectorResponse{Revoked: revoked}), nil
-}
-
-// ListConnectorActivity returns the audit log.
-func (s *Service) ListConnectorActivity(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListConnectorActivityRequest],
-) (*connect.Response[reliantv1.ListConnectorActivityResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	limit := int(req.Msg.GetLimit())
-
-	var (
-		records []*connectorgrant.AuditRecord
-		err     error
-	)
-	if grantID := strings.TrimSpace(req.Msg.GetGrantId()); grantID != "" {
-		records, err = s.deps.Grants.ListAuditByGrant(ctx, userID, grantID, limit)
-	} else {
-		records, err = s.deps.Grants.ListAuditByUser(ctx, userID, limit)
-	}
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list connector activity"))
-	}
-
-	out := make([]*reliantv1.ConnectorActivity, 0, len(records))
-	for _, r := range records {
-		out = append(out, &reliantv1.ConnectorActivity{
-			Id:           r.ID,
-			GrantId:      r.GrantID,
-			DaemonId:     r.DaemonID,
-			ToolName:     r.ToolName,
-			CommandType:  r.CommandType,
-			Arguments:    string(r.Arguments),
-			Denied:       r.Denied,
-			ErrorMessage: r.ErrorMsg,
-			DurationMs:   int32(r.DurationMS),
-			Status:       r.Status,
-			CreatedAt:    r.CreatedAt.UTC().Format(time.RFC3339),
-		})
-	}
-	return connect.NewResponse(&reliantv1.ListConnectorActivityResponse{Activity: out}), nil
-}
-
-// ListAvailableTools returns the grantable catalog, so the UI never hardcodes
-// a list that drifts from the server's.
-func (s *Service) ListAvailableTools(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListAvailableToolsRequest],
-) (*connect.Response[reliantv1.ListAvailableToolsResponse], error) {
-	if _, ok := auth.GetUserIDFromContext(ctx); !ok {
-		return nil, svcerr.ErrUnauthenticated
-	}
-
-	if req.Msg.GetKind() == reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE {
-		forge := mcpserver.ForgeTools()
-		tools := make([]*reliantv1.ConnectorTool, 0, len(forge))
-		for _, t := range forge {
-			tools = append(tools, &reliantv1.ConnectorTool{Name: t.Name, Description: t.Description, Mutating: t.Mutating})
-		}
-		return connect.NewResponse(&reliantv1.ListAvailableToolsResponse{Tools: tools}), nil
-	}
-
-	catalog := mcpserver.Tools()
-	tools := make([]*reliantv1.ConnectorTool, 0, len(catalog))
-	for _, t := range catalog {
-		tools = append(tools, &reliantv1.ConnectorTool{
-			Name:        t.Name,
-			Description: t.Description,
-			Mutating:    t.Mutating,
-			NeedsExec:   t.NeedsExec,
-		})
-	}
-	return connect.NewResponse(&reliantv1.ListAvailableToolsResponse{Tools: tools}), nil
-}
-
-// mcpURLFor is the endpoint the user pastes into their MCP client for a
-// connector of kind.
-func (s *Service) mcpURLFor(kind connectorgrant.Kind) string {
-	path := mcpserver.MountPath
-	if kind == connectorgrant.KindForge {
-		path = mcpserver.ForgeMountPath
-	}
-	// Without a configured public URL, return the path alone rather than
-	// inventing a hostname that would silently be wrong.
-	return s.publicURL + path
 }
 
 // toProtoConnector converts a grant for display. It never carries credential

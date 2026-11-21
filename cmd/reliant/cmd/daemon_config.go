@@ -47,6 +47,18 @@ func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
 	return cfg, nil
 }
 
+// effectiveDaemonType is the daemon type `daemon start` declares:
+// machine.daemon_type (RELIANT_DAEMON_TYPE, or the CLIConfig file) when set,
+// else DaemonConfig's deprecated top-level daemon_type, which a `daemon start
+// --config` file written before machine.daemon_type existed still carries.
+// Both are checked against the same allowed values by their loaders.
+func effectiveDaemonType(cfg *config.DaemonConfig, machineDaemonType string) string {
+	if machineDaemonType != "" {
+		return machineDaemonType
+	}
+	return cfg.GetDaemonType() //nolint:staticcheck // SA1019: the deprecated field is kept working for v1
+}
+
 // labelsFlag is a repeatable key=value flag (`--label pool=pipeline --label
 // gate=yes`, or `--label pool=pipeline,gate=yes`). Each use is checked as it
 // is parsed, so a bad label is refused before the command runs.
@@ -91,11 +103,11 @@ func daemonMachineLabels(cmd *cobra.Command, cfg *config.DaemonConfig, flag *lab
 
 // daemonHost is what the platform declared about where this daemon runs, in
 // the shape the daemon runtime takes: `daemon start`'s own settings, and the
-// machine's daemon type (CLIConfig's machine.daemon_type, which every `daemon`
-// command loads).
-func daemonHost(cfg *config.DaemonConfig, daemonType string) daemonruntime.Host {
+// machine's daemon type (machineDaemonType: CLIConfig's machine.daemon_type,
+// which every `daemon` command loads and RELIANT_DAEMON_TYPE sets).
+func daemonHost(cfg *config.DaemonConfig, machineDaemonType string) daemonruntime.Host {
 	return daemonruntime.Host{
-		DaemonType:   daemonType,
+		DaemonType:   effectiveDaemonType(cfg, machineDaemonType),
 		WorkingDir:   cfg.GetWorkingDir(),
 		RuntimeType:  cfg.GetRuntimeType(),
 		FrontendPort: int(cfg.GetFrontendPort()),

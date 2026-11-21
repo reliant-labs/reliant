@@ -443,7 +443,7 @@ func TestExecReaperRefusesToRunTheTestBinary(t *testing.T) {
 
 func TestReaperCommandArgs(t *testing.T) {
 	got := reaperCommandArgs("/var/cache/workspace/forge-storage.json")
-	want := []string{"forge", "storage", "auto-gc", "--policy", "/var/cache/workspace/forge-storage.json"}
+	want := []string{"forge", "machine", "storage", "auto-gc", "--policy", "/var/cache/workspace/forge-storage.json"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv = %v, want %v", got, want)
 	}
@@ -657,7 +657,7 @@ func TestReaper_GoCacheTrimThatStoppedShortIsAWarning(t *testing.T) {
 // applied, under the reaper's budget and policy.
 func TestGoCacheCommandArgs(t *testing.T) {
 	got := goCacheCommandArgs("/var/cache/workspace/forge-storage.json")
-	want := []string{"forge", "storage", "gocache", "--apply", "--budget", "10m0s", "--policy", "/var/cache/workspace/forge-storage.json"}
+	want := []string{"forge", "machine", "storage", "gocache", "--apply", "--budget", "10m0s", "--policy", "/var/cache/workspace/forge-storage.json"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %q, want %q", got, want)
 	}

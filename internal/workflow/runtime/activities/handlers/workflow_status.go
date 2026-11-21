@@ -67,6 +67,15 @@ type WorkflowStatusInput struct {
 	// newest attempt is marked failed (MarkDeclaredFailureNode), so the run's
 	// diagnostics name where it ended instead of finding no failed node.
 	OutcomeNode string `json:"outcome_node,omitempty"`
+	// RunStartedAtMs is when the run began (unix ms), on a "completed"
+	// status: its outcome is judged from the node attempts since then
+	// (run_outcome.go). Zero reads every attempt the run has.
+	RunStartedAtMs int64 `json:"run_started_at_ms,omitempty"`
+	// RunID is the run's id (forge.ai.run.id), on a "completed" status: its
+	// outcome is judged from the node attempts recorded under it
+	// (step_executions.run_id) and no other. Empty from a workflow that
+	// predates it: then every attempt is judged by RunStartedAtMs.
+	RunID string `json:"run_id,omitempty"`
 	// Error is why the run failed, on a "failed" status. It becomes the
 	// source run's error in a workflow-event trigger's payload.
 	Error string `json:"error,omitempty"`
@@ -81,6 +90,14 @@ type WorkflowStatusInput struct {
 	// machine connects. A pause without it is someone else's and clears the
 	// mark.
 	PausedForMachine bool `json:"paused_for_machine,omitempty"`
+
+	// resolved is the run's outcome, judged by Execute before anything is
+	// written (resolveRunOutcome). Never sent.
+	resolved runOutcome
+
+	// Attention is independent of execution status and outcome. Older workers
+	// and activities omit it and retain their existing notification behavior.
+	Attention *core.AttentionUpdate `json:"attention,omitempty"`
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -116,9 +133,34 @@ func (a *WorkflowStatusActivity) Name() string {
 
 // Execute writes workflow status to chat_updates table, updates chat state, and tracks workflow hierarchy
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
+	// How the run ended, judged before the status write it lands with.
+	input.resolved = a.resolveRunOutcome(ctx, input)
+
+	var attention core.AttentionResult
+	var trackErr error
+	if input.Attention != nil {
+		// One commit owns lifecycle, semantic receipt, failure routing AND
+		// attention. Neither a successful action_required terminal nor a failed
+		// job may commit without the durable item it promised its owner.
+		// Existing nested RunTx calls join this transaction; row locks in the
+		// attention store serialize incident actors; SERIALIZABLE preserves
+		// the pre-existing terminal transaction's isolation and retries a
+		// waiter that raced a newer actor's commit.
+		trackErr = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+			attention = core.AttentionResult{} // reset on a retried transaction
+			if err := a.trackWorkflow(txCtx, input); err != nil {
+				return err
+			}
+			var err error
+			attention, err = a.recordAttention(txCtx, input)
+			return err
+		})
+	} else {
+		trackErr = a.trackWorkflow(ctx, input)
+	}
 	// Track workflow in database for parent-child hierarchy
-	if err := a.trackWorkflow(ctx, input); err != nil {
-		if terminalWriteMustRetry(input.Status, err) {
+	if err := trackErr; err != nil {
+		if input.Attention != nil || terminalWriteMustRetry(input.Status, err) {
 			// The row's last status write did not happen, and nothing will
 			// write it after this one: report it, so Temporal retries this
 			// activity (workflowStatusActivityOptions gives a terminal status
@@ -129,6 +171,12 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 		}
 		// Log but don't fail - chat_update is more important for UI
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to track workflow", "error", err)
+	}
+
+	// Preserve semantic failure in the launch receipt even when the separate
+	// attention write fails: legacy projection is that write's fail-safe.
+	if input.ParentWorkflowID == "" {
+		a.recordLaunchRunStatus(ctx, input)
 	}
 
 	// Track workflow analytics (non-blocking). After the status write, so a
@@ -160,7 +208,6 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 		if input.LaunchRun && (input.Status == "failed" || input.Status == "completed" && input.Outcome == model.OutcomeFailure) {
 			a.ensureAutomationFailureMessage(ctx, input)
 		}
-		a.recordLaunchRunStatus(ctx, input)
 		a.pauseTriggerRefusedByPolicy(ctx, input)
 		reason := ""
 		switch {
@@ -170,6 +217,14 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 			}
 		case input.Status == "completed" && a.completionNotifies(ctx, input):
 			reason = "workflow_completed"
+		}
+		if attention.Managed {
+			// Diagnostic failures and RunEventFailed are still recorded above.
+			// Only incident actionability governs this opt-in run's attention.
+			reason = ""
+		}
+		if attention.Notify {
+			reason = "workflow_failed"
 		}
 		if reason != "" {
 			if err := a.repo.UpdateChatUnread(ctx, input.ChatID, true, reason); err != nil {
@@ -349,6 +404,29 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 	if err := a.repo.SetLaunchEventRunStatus(ctx, input.ChatID, status); err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's status", "chat_id", input.ChatID, "status", status, "error", err)
 	}
+	// Beside the status, how the run ended for the trigger's health: a run
+	// that completed only because its failure path ran is not a success
+	// (reliant#2753), and the node it went on past is the failure's detail.
+	if input.resolved.outcome == "" {
+		return
+	}
+	if err := a.repo.SetLaunchEventRunOutcome(ctx, input.ChatID, input.resolved.outcome); err != nil {
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's outcome", "chat_id", input.ChatID, "outcome", input.resolved.outcome, "error", err)
+	}
+	if detail := handledFailureDetail(input.resolved.handled); detail != "" {
+		if err := a.repo.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's handled failure", "chat_id", input.ChatID, "error", err)
+		}
+	}
+}
+
+// setRunOutcome writes the run's judged outcome on its row, in the terminal
+// status's transaction. Nothing to write for a status with no outcome.
+func (a *WorkflowStatusActivity) setRunOutcome(ctx context.Context, input WorkflowStatusInput) error {
+	if input.resolved.outcome == "" {
+		return nil
+	}
+	return a.repo.SetWorkflowRunOutcome(ctx, input.WorkflowID, input.resolved.outcome)
 }
 
 // policyTriggerPauser pauses a trigger with a system reason; paused is false
@@ -532,6 +610,9 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 			// carry it (no node attempt), and every surface that reads the
 			// run (GetRun, get_run, the run page) reads it from here.
 			if err := a.repo.SetWorkflowFailureDetail(txCtx, input.WorkflowID, rundiagnostics.ErrorText(input.Error)); err != nil {
+				return err
+			}
+			if err := a.setRunOutcome(txCtx, input); err != nil {
 				return err
 			}
 			if err := a.cascadeTerminalStatus(txCtx, input.WorkflowID, db.StopReasonFailed); err != nil {
@@ -748,6 +829,23 @@ func (a *WorkflowStatusActivity) markWorkflowCompleted(ctx context.Context, inpu
 				return err
 			}
 		}
+		// So does how it ended for its health (run_outcome.go).
+		if err := a.setRunOutcome(txCtx, input); err != nil {
+			return err
+		}
+		if input.Attention != nil && input.LaunchRun && input.ParentWorkflowID == "" {
+			// The opt-in failure fallback must not commit a completed lifecycle
+			// without its semantic launch receipt. Attention has a separate
+			// durable transaction; if it fails later this receipt keeps legacy
+			// visibility honest even after terminal retries are exhausted.
+			status := core.TriggerRunCompleted
+			if input.Outcome == model.OutcomeFailure {
+				status = core.TriggerRunFailed
+			}
+			if err := a.repo.SetLaunchEventRunStatus(txCtx, input.ChatID, status); err != nil {
+				return fmt.Errorf("record attention launch receipt: %w", err)
+			}
+		}
 		// Only the chat's active root workflow transitions the chat; a
 		// completing child (spawn/fork) must never switch the chat out from
 		// under its parent.
@@ -814,12 +912,27 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 		RunID:        temporalRunID(ctx),
 		Outcome:      outcome,
 		Summary:      summary,
-		Error:        input.Error,
+		Error:        terminalEventError(input, outcome),
 	}, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("record run event: %w", err)
 	}
 	return nil
+}
+
+// terminalEventError is a failed run event's trigger.payload.error. A run that
+// completed at a node declaring `outcome: failure` returned no error, so
+// input.Error is empty; a trigger chained on its failure was handed an empty
+// error with nothing to say where or why the source failed. It names the node,
+// in the words the on_failure handler uses (runtime.Failure).
+func terminalEventError(input WorkflowStatusInput, outcome core.RunEventOutcome) string {
+	if input.Error != "" || outcome != core.RunEventFailed {
+		return input.Error
+	}
+	if input.OutcomeNode != "" {
+		return fmt.Sprintf("the run reached node %q, which declares outcome: failure", input.OutcomeNode)
+	}
+	return "the run reached a node that declares outcome: failure"
 }
 
 // recordRootRunID keeps chats.run_id naming the run that is executing the

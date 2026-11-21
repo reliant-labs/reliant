@@ -10,6 +10,7 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -261,7 +262,12 @@ func (c *CodexClient) logRequestShape(params *responses.ResponseNewParams) {
 // The echoed model and effort are authoritative in a way the request is not:
 // they reflect any server-side substitution or clamping. When these disagree
 // with the request line above, that difference IS the bug report.
-func (c *CodexClient) logServedResponse(resp *responses.Response, upstreamRequestID string) {
+//
+// A premature stop (responseswire.PrematureStop: commentary with no final
+// answer, or reasoning only, and no tool call) is logged at INFO rather than
+// DEBUG, so how often Codex ends a turn that way can be counted from
+// production logs.
+func (c *CodexClient) logServedResponse(resp *responses.Response, upstreamRequestID string, premature llm.PrematureStop) {
 	if resp == nil {
 		return
 	}
@@ -289,7 +295,12 @@ func (c *CodexClient) logServedResponse(resp *responses.Response, upstreamReques
 		endTurn = strconv.FormatBool(value)
 	}
 
-	logging.Debug("[Codex] Served",
+	logServed := logging.Debug
+	if premature != "" {
+		logServed = logging.Info
+	}
+	logServed("[Codex] Served",
+		"prematureStop", string(premature),
 		"model", string(c.options.Model.ID),
 		"servedModel", served,
 		"servedEffort", string(resp.Reasoning.Effort),

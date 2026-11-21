@@ -138,13 +138,25 @@ message DaemonConfig {
     description: "Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead"
   }];
 
-  // Deprecated: read nowhere, and bound to no variable. RELIANT_DAEMON_TYPE
-  // describes the machine, and the end-user commands (`auth login`, `auth
-  // logout`) act on it too, so it is CLIConfig's machine.daemon_type, which
-  // every `daemon` command loads. A process may not declare one variable
-  // twice, so this field kept its number and name but lost its
-  // (forge.v1.config) binding.
-  string daemon_type = 10 [deprecated = true];
+  // Deprecated: use CLIConfig's machine.daemon_type. What the platform says
+  // this daemon is. The workspace operator sets "managed" on the pods it
+  // creates; nothing sets it on a user's machine. Unset: the transport
+  // decides what the daemon reports (see daemonruntime.resolveDaemonType).
+  // Kept working for v1: a `daemon start --config` file that sets
+  // daemon_type still declares the daemon type, and machine.daemon_type
+  // (RELIANT_DAEMON_TYPE) wins when both are set (daemonHost). It binds no
+  // variable: `daemon start` also loads CLIConfig, and forge refuses one
+  // variable declared by two configs one process loads.
+  string daemon_type = 10 [
+    deprecated = true,
+    (forge.v1.config) = {
+      allowed_values: [
+        "managed",
+        "self_hosted"
+      ]
+      description: "Deprecated: use machine.daemon_type. Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted"
+    }
+  ];
 
   // Pod-only settings the workspace operator stamps; a daemon on a user's
   // machine leaves them unset.

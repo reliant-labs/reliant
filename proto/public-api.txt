@@ -91,6 +91,7 @@ withhold PlanService              # not part of the first public surface
 withhold PresetService            # not part of the first public surface
 withhold ProjectService           # not part of the first public surface
 withhold ProviderAccountService   # not part of the first public surface
+withhold PullRequestRecordService # PR records, phase 1 (a shadow read); published once pipelines decide from it
 withhold RepoService              # not part of the first public surface
 withhold ScenarioService          # not part of the first public surface
 withhold SettingsService          # not part of the first public surface

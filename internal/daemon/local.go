@@ -182,6 +182,15 @@ func (c *LocalClient) WriteBinaryFile(ctx context.Context, path string, content 
 	}, nil
 }
 
+// CreateBinaryFile writes raw bytes to a new file (WriteNewFile).
+func (c *LocalClient) CreateBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error) {
+	modTime, err := WriteNewFile(path, content)
+	if err != nil {
+		return nil, err
+	}
+	return &WriteResult{Created: true, ModTime: modTime, BytesWritten: len(content)}, nil
+}
+
 // PatchFile applies a set of edits to a file.
 func (c *LocalClient) PatchFile(ctx context.Context, path string, edits []PatchEdit) (*PatchResult, error) {
 	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
@@ -872,14 +881,10 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
-	err = cmd.Start()
+	err = tree.Start(deadline.Context(), cmd)
 	// The child holds its own copies of the sandbox's descriptors now.
 	credsandbox.Release(cmd)
-	if err != nil {
-		tree.Started(0)
-	}
 	if err == nil {
-		tree.Started(cmd.Process.Pid)
 		// Steer the kernel OOM killer toward the workload (and descendants,
 		// which inherit the score) rather than the daemon. No-op outside
 		// Linux; best-effort everywhere.

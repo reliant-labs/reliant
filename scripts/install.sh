@@ -68,7 +68,7 @@ check_prerequisites() {
         print_success "npm $(npm --version) found"
     fi
 
-    # Check pnpm (frontends/web installs with it)
+    # Check pnpm (frontends/web and electron install with it)
     if ! command -v pnpm &> /dev/null; then
         missing+=("pnpm (npm install -g pnpm@12.15.0)")
     else
@@ -110,7 +110,7 @@ check_prerequisites() {
     fi
 }
 
-# Install npm dependencies
+# Install the web and electron dependencies (pnpm)
 install_dependencies() {
     print_step "Installing dependencies..."
     
@@ -128,7 +128,7 @@ install_dependencies() {
     if [ ! -d "$ELECTRON_DIR/node_modules" ]; then
         print_step "Installing Electron dependencies..."
         cd "$ELECTRON_DIR"
-        npm ci || npm install
+        pnpm install --frozen-lockfile
         print_success "Electron dependencies installed"
     else
         print_success "Electron dependencies already installed"
@@ -154,7 +154,7 @@ build_web() {
     print_step "Building web application..."
     cd "$WEB_DIR"
     
-    npm run build
+    pnpm run build
     if [ ! -d "dist" ]; then
         print_error "Failed to build web application"
         exit 1
@@ -169,13 +169,13 @@ build_electron() {
     
     case $OS in
         mac)
-            npm run dist:mac
+            pnpm run dist:mac
             ;;
         linux)
-            npm run dist:linux
+            pnpm run dist:linux
             ;;
         win)
-            npm run dist:win
+            pnpm run dist:win
             ;;
     esac
     
@@ -277,7 +277,7 @@ main() {
     # Ask for confirmation
     echo ""
     echo -e "${YELLOW}This will:${NC}"
-    echo "  1. Install npm dependencies"
+    echo "  1. Install the web and electron dependencies (pnpm)"
     echo "  2. Build the backend (Go)"
     echo "  3. Build the web application"
     echo "  4. Package the Electron app"

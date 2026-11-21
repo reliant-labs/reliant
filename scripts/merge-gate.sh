@@ -5,7 +5,7 @@
 # release gate (scripts/release-gate.sh), on main, before a release is cut.
 # dev-docs/merge-and-release-gates.md is the design and the trade-offs.
 #
-#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--skip-golangci] [--queue]
+#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--skip-golangci] [--skip-vitest] [--queue]
 #
 #   --base <rev>  diff base (default: the merge-base of HEAD and origin/main)
 #   --amend       a regenerate that changes only generated paths is amended
@@ -22,6 +22,12 @@
 #   --skip-golangci  leave golangci to a golangci (changed) job beside this
 #                 gate (ci.yml's ci:run pull request runs one); nothing else
 #                 changes. --queue implies it.
+#   --skip-vitest leave the selected vitest files to the merge queue's `vitest`
+#                 job beside this gate: 4 legs, each `scripts/vitest-shard.sh`,
+#                 vitest --shard over the SAME plan's file list (#2935 reached
+#                 ~1100 files, more than one runner runs in 30 minutes). The
+#                 test phase keeps the Go and electron lanes; typecheck stays.
+#                 Only where that job runs: `CI result` requires it.
 #   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
 #                 whose budget is five minutes of wall time (owner, 2026-11-01):
 #                 vet is left to the release gate and golangci to the queue's
@@ -39,7 +45,7 @@
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
-#   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
+#   pnpm-*     pnpm install --frozen-lockfile where a selected lane needs node_modules it lacks
 #   pgtest     tools/pgtest-check: forge pgtest's shared Postgres serves a
 #              scratch database, before generate or a Go test needs one; when
 #              it cannot, the gate stops there (MG_PGTEST_TIMEOUT, default 150s)
@@ -98,7 +104,7 @@
 # checkouts beside the other phases, except on a host under 32 GiB (a hosted
 # runner), where forge generate runs first and alone (the memory budget below).
 #
-# The whole gate holds ONE host heavy slot (forge slot run), taken here; every
+# The whole gate holds ONE host heavy slot (forge machine slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
 # (MG_CPUS) instead of each spawning one thread per core of a host whose other
 # slots are busy too. MG_LOGDIR=<dir> keeps the
@@ -108,7 +114,7 @@ set -uo pipefail
 # `set -u` an empty array expands as unbound unless written ${a[@]+"${a[@]}"}.
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
-base="" amend=0 regen=0 queue=0 skip_lint=0 skip_golangci=0
+base="" amend=0 regen=0 queue=0 skip_lint=0 skip_golangci=0 skip_vitest=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
@@ -117,6 +123,8 @@ while [ $# -gt 0 ]; do
     --skip-lint) skip_lint=1; shift ;;
     # A golangci (changed) job runs beside the gate: the queue's, or ci.yml's.
     --skip-golangci) skip_golangci=1; shift ;;
+    # The merge queue's vitest job runs the selected files, in shards.
+    --skip-vitest) skip_vitest=1; shift ;;
     # The queue tier skips vet (below), never forge lint.
     --queue) queue=1; shift ;;
     -h|--help) awk 'NR > 1 && /^set -uo pipefail/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -134,12 +142,12 @@ export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.c
 export FORGE_NO_MERGE_DRIVER=1
 
 # ── one heavy slot for the whole gate ─────────────────────────────────────
-# Slots are machine-wide, so any forge with `forge slot` will do: FORGE_BIN
+# Slots are machine-wide, so any forge with `forge machine slot` will do: FORGE_BIN
 # (the pin) when set, else the forge on PATH, else `reliant forge`
 # (scripts/forge.sh --machine; never a `go run`).
 read -r -a slotforge <<<"$(scripts/forge.sh --machine --which 2>/dev/null || true)"
-if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
+if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$skip_vitest" = 1 ] && echo --skip-vitest) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -204,12 +212,24 @@ rows=() notes=() fail=0
 # Each phase is recorded in $L/expected BEFORE it launches and leaves its .row
 # only when it finishes, so a phase that was started and cut off (queued past a
 # timeout, cancelled, killed) has no row and fails the gate (gate-verify below).
+# A rise in the cgroup's oom_kill count while it ran goes to $L/<name>.oom:
+# gate-report marks a failed phase the kernel's OOM killer ended (its own
+# process SIGKILLed, its log naming no failure, and this rise or the gate's
+# memory peak to corroborate it) as infrastructure (GATE-INFRA: oom,
+# control-plane #2862), so the merge queue re-runs it once rather than
+# blaming the PR. The count is the whole cgroup's, so it never qualifies a
+# phase alone.
+cg_dir="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)"
+oom_kills() { awk '$1 == "oom_kill" { print $2 }' "$cg_dir/memory.events" 2>/dev/null || true; }
 phase() {
-  local n=$1 s e rc; shift
+  local n=$1 s e rc o0 o1; shift
   echo "$n" >>"$L/expected"
+  o0=$(oom_kills)
   s=$(date +%s)
   "$@" >"$L/$n.log" 2>&1; rc=$?
   e=$(date +%s)
+  o1=$(oom_kills)
+  case "$o0,$o1" in ,*|*,|*[!0-9,]*) ;; *) [ "$o1" -gt "$o0" ] && echo $((o1 - o0)) >"$L/$n.oom" ;; esac
   echo "$n $rc $((e - s)) $((s - t0))" >"$L/$n.row"
   return $rc
 }
@@ -255,11 +275,12 @@ scratch() {
   for d in tools/protoc-gen-es; do
     [ -d "$root/$d/node_modules" ] || continue
     # A copy, not a link: an install in the scratch checkout must never
-    # reach through into the gate's own tree. The fresh checkout's lockfile
-    # is newer than the copied install's stamp, which would make
+    # reach through into the gate's own tree (pnpm's links inside it are
+    # relative, so the copy resolves within itself). The fresh checkout's
+    # lockfile is newer than the copied install's stamp, which would make
     # deps:protoc-gen-es reinstall: give it the original's mtime.
     cp -a "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
-    touch -r "$root/$d/package-lock.json" "$SCRATCH/$d/package-lock.json"
+    touch -r "$root/$d/pnpm-lock.yaml" "$SCRATCH/$d/pnpm-lock.yaml"
   done
   return 0
 }
@@ -335,37 +356,34 @@ load_selection() {
 load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
-# ── npm installs a selected lane needs ────────────────────────────────────
-# npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
-# frozen install for a pnpm project (frontends/web).
+# ── pnpm installs a selected lane needs ───────────────────────────────────
+# npm_install <dir>: pnpm's frozen install in <dir> unless its install is
+# current. Every Node project here is a pnpm project (frontends/web, electron,
+# tools/protoc-gen-es), each its own workspace root.
 npm_install() {
   local d=$1 n scripts
-  if [ -f "$d/pnpm-lock.yaml" ]; then
-    # pnpm rewrites node_modules/.modules.yaml on every install it completes.
-    [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] && return 0
-    n=pnpm-$(echo "$d" | tr '/.' '-r')
-    phase "$n" pnpm install --dir "$d" --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
-    return
-  fi
-  [ -f "$d/package-lock.json" ] || return 0
-  # An install is current when npm's lockfile copy is newer than the lockfile,
+  [ -f "$d/pnpm-lock.yaml" ] || return 0
+  # Current when node_modules/.modules.yaml is newer than the lockfile (the
+  # touch below dates it after a no-op install, which pnpm 12 leaves alone),
   # and, for electron, its postinstall also fetched the binary: an interrupted
   # install leaves node_modules current but no node_modules/electron/path.txt,
   # and every electron test then fails "Electron failed to install correctly".
-  if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+  if [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] \
     && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
     return 0
   fi
-  n=npm-$(echo "$d" | tr '/.' '-r')
-  # electron's own install script fetches the Electron binary its tests load.
+  n=pnpm-$(echo "$d" | tr '/.' '-r')
+  # electron's own install script fetches the Electron binary its tests load
+  # (electron/pnpm-workspace.yaml's allowBuilds names what may run).
   scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
-  phase "$n" npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error
+  phase "$n" pnpm install --dir "$d" --frozen-lockfile $scripts --config.confirmModulesPurge=false --reporter=silent \
+    && touch "$d/node_modules/.modules.yaml"
 }
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(. frontends/web); fi
-  if [ "$elec" = true ]; then need+=(. electron); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(frontends/web); fi
+  if [ "$elec" = true ]; then need+=(electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
     npm_install "$d" & npm_pids+=($!)
@@ -512,7 +530,12 @@ lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-mark
 # package.json changes made the lane FULL. The rest run in the release gate's
 # `task test` (dev-docs/testing-affected.md, "A FULL web lane in the merge gate").
 test_lanes=go,web,electron
-if [ "$webfull" = true ]; then
+if [ "$skip_vitest" = 1 ]; then
+  # --skip-vitest: the merge queue's vitest job (scripts/vitest-shard.sh)
+  # runs the same plan's files, split across its legs.
+  test_lanes=go,electron
+  notes+=("web: the $nweb vitest file(s) the plan selects run in the merge queue's vitest job (vitest --shard, scripts/vitest-shard.sh); tsc -b runs here")
+elif [ "$webfull" = true ]; then
   notes+=("web: FULL fallback; tsc -b and the $nweb vitest file(s) the diff's modules reach run here, the whole vitest suite in the release gate")
 fi
 # demo_build: the forge demo bundle (frontends/web/vite.config.ts's demo
@@ -532,13 +555,26 @@ if [ "$fail" = 0 ]; then
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
-  if [ "$webdemo" = true ]; then
-    phase demo demo_build & pids+=($!)
-  fi
-  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
-  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
-  if [ "$webbuild" = true ]; then
-    phase webbuild scripts/web-release-build.sh & pids+=($!)
+  # The two vite builds are the gate's largest phases: on reliant#2935's merge
+  # with main the demo bundle peaked at 9.1 GB RSS and the renderer's release
+  # bundle at 11.8 GB, each on its own. Beside test, tsc -b and lint on the
+  # queue's 16 GiB runner the demo build alone took the gate to 14.6 GiB
+  # (cgroup memory.peak); with both, the runner ran out (#2935 twice, #3009
+  # twice: "The runner has received a shutdown signal", or a job with no log
+  # at its 30-minute timeout). So on a small host (gen_alone, the memory
+  # budget above) they run after every other phase, one at a time
+  # (run_bundles, below); on a bigger host, beside the rest.
+  if [ "$gen_alone" = 1 ]; then
+    bundles_after=1
+  else
+    if [ "$webdemo" = true ]; then
+      phase demo demo_build & pids+=($!)
+    fi
+    # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+    # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+    if [ "$webbuild" = true ]; then
+      phase webbuild scripts/web-release-build.sh & pids+=($!)
+    fi
   fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
@@ -577,8 +613,9 @@ if [ "$fail" = 0 ]; then
   fi
   if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
     # buf lint, then buf breaking against the diff base: semver at major 1 (owner,
-    # 2026-11-05), so a wire break fails unless the owner applied breaking:approved
-    # (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
+    # 2026-11-05), so a wire break fails unless the owner accepted it with
+    # breaking:approved, applied by the owner or by the Reliant bot on the owner's
+    # instruction (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
     # CI_QUEUE_ENTRY judges only this entry's squash, against its own PR's labels.
     phase proto env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
   fi
@@ -592,7 +629,8 @@ if [ "$fail" = 0 ]; then
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
-    # migration:breaks-rollback-approved label (scripts/check-compat.sh).
+    # migration:breaks-rollback-approved label, applied by the owner or by the
+    # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator
@@ -605,6 +643,18 @@ fi
 # Every launched phase is waited for, the generators too when the gate failed
 # before build: cleanup must not remove a checkout a generator still writes.
 for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done
+# run_bundles: a small host's vite builds, deferred above, one at a time now
+# that nothing else runs. They run even when another phase failed, so the
+# summary names every failure, and before an --amend failure resets the tree.
+run_bundles() {
+  local rc=0
+  [ "$webdemo" = true ] || [ "$webbuild" = true ] || return 0
+  notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; the vite builds (demo, release) ran one at a time after the other phases")
+  if [ "$webdemo" = true ]; then phase demo demo_build || rc=1; fi
+  if [ "$webbuild" = true ]; then phase webbuild scripts/web-release-build.sh || rc=1; fi
+  return "$rc"
+}
+if [ "${bundles_after:-0}" = 1 ]; then run_bundles || fail=1; fi
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq
@@ -613,8 +663,13 @@ fi
 # The peak memory of the gate's cgroup (cgroup v2 memory.peak, where the host
 # has it), so the summary shows how close a small host came to its limit: the
 # rollout check of the prewarm beside a generate running alone reads it.
-cg_peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)/memory.peak" 2>/dev/null || true)
-case "$cg_peak" in ''|*[!0-9]*) ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
+cg_peak=$(cat "$cg_dir/memory.peak" 2>/dev/null || true)
+case "$cg_peak" in ''|*[!0-9]*) cg_peak=0 ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
+# The limit that peak is judged against for GATE-INFRA: oom (gate-report): the
+# detected size above, or the gate's own cgroup's memory.max when smaller.
+mem_limit=$(( mem_kib * 1024 ))
+cg_own_max=$(cat "$cg_dir/memory.max" 2>/dev/null || echo max)
+case "$cg_own_max" in ''|max|*[!0-9]*) ;; *) [ "$cg_own_max" -lt "$mem_limit" ] && mem_limit=$cg_own_max ;; esac
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
 # A selected lane that never ran (queued for a slot, cancelled, timed out, tool
@@ -630,13 +685,13 @@ fi
 # ── summary ───────────────────────────────────────────────────────────────
 end=$(date +%s)
 {
-  go run ./tools/test-affected gate-report -dir "$L" -wall "$((end - t0))" || { echo 'GATE-HEALTH: report failed'; fail=1; }
+  go run ./tools/test-affected gate-report -dir "$L" -wall "$((end - t0))" -mem-peak "$cg_peak" -mem-limit "$mem_limit" || { echo 'GATE-HEALTH: report failed'; fail=1; }
   echo "### merge-gate: checks $([ "$fail" = 0 ] && echo PASSED || echo FAILED) (timing reported separately)"
   echo
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

@@ -35,7 +35,7 @@ type ClaimableState int32
 
 const (
 	ClaimableState_CLAIMABLE_STATE_UNSPECIFIED ClaimableState = 0
-	// Serving; unclaimed; before expires_at.
+	// Active claim; unclaimed; before expires_at. Does not establish publication or readiness.
 	ClaimableState_CLAIMABLE_STATE_LIVE ClaimableState = 1
 	// Past expires_at: unpublished, kept until purge_after. Still claimable.
 	ClaimableState_CLAIMABLE_STATE_SUSPENDED ClaimableState = 2
@@ -217,9 +217,12 @@ type StartClaimableDeployRequest struct {
 	// The challenge from GetClaimableChallenge, returned verbatim.
 	PowChallenge string `protobuf:"bytes,4,opt,name=pow_challenge,json=powChallenge,proto3" json:"pow_challenge,omitempty"`
 	// The solution. See GetClaimableChallengeResponse for the exact rule.
-	PowNonce      string `protobuf:"bytes,5,opt,name=pow_nonce,json=powNonce,proto3" json:"pow_nonce,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PowNonce string `protobuf:"bytes,5,opt,name=pow_nonce,json=powNonce,proto3" json:"pow_nonce,omitempty"`
+	// Stable forge.yaml project identity. Empty preserves the legacy name/env namespace.
+	// A canonical UUID; does not change the per-device abuse limits.
+	ProjectInstanceId string `protobuf:"bytes,6,opt,name=project_instance_id,json=projectInstanceId,proto3" json:"project_instance_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StartClaimableDeployRequest) Reset() {
@@ -283,6 +286,13 @@ func (x *StartClaimableDeployRequest) GetPowChallenge() string {
 func (x *StartClaimableDeployRequest) GetPowNonce() string {
 	if x != nil {
 		return x.PowNonce
+	}
+	return ""
+}
+
+func (x *StartClaimableDeployRequest) GetProjectInstanceId() string {
+	if x != nil {
+		return x.ProjectInstanceId
 	}
 	return ""
 }
@@ -532,9 +542,11 @@ type GetClaimableAvailabilityResponse struct {
 	// enforce. forge reads them here rather than compiling its own copy, so
 	// its checks and the platform's cannot disagree. Set whether or not a
 	// deploy is available.
-	Limits        *ClaimableLimits `protobuf:"bytes,5,opt,name=limits,proto3" json:"limits,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Limits *ClaimableLimits `protobuf:"bytes,5,opt,name=limits,proto3" json:"limits,omitempty"`
+	// Whether project_instance_id is supported by both the API and its schema.
+	ProjectInstanceIds bool `protobuf:"varint,6,opt,name=project_instance_ids,json=projectInstanceIds,proto3" json:"project_instance_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetClaimableAvailabilityResponse) Reset() {
@@ -600,6 +612,13 @@ func (x *GetClaimableAvailabilityResponse) GetLimits() *ClaimableLimits {
 		return x.Limits
 	}
 	return nil
+}
+
+func (x *GetClaimableAvailabilityResponse) GetProjectInstanceIds() bool {
+	if x != nil {
+		return x.ProjectInstanceIds
+	}
+	return false
 }
 
 // ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
@@ -1588,13 +1607,14 @@ var File_services_claimable_v1_claimable_proto protoreflect.FileDescriptor
 
 const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\n" +
-	"%services/claimable/v1/claimable.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x01\n" +
+	"%services/claimable/v1/claimable.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd8\x01\n" +
 	"\x1bStartClaimableDeployRequest\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12\x1b\n" +
 	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId\x12#\n" +
 	"\rpow_challenge\x18\x04 \x01(\tR\fpowChallenge\x12\x1b\n" +
-	"\tpow_nonce\x18\x05 \x01(\tR\bpowNonce\"\x85\x02\n" +
+	"\tpow_nonce\x18\x05 \x01(\tR\bpowNonce\x12.\n" +
+	"\x13project_instance_id\x18\x06 \x01(\tR\x11projectInstanceId\"\x85\x02\n" +
 	"\x1cStartClaimableDeployResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x1b\n" +
@@ -1608,13 +1628,14 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\x13retry_after_seconds\x18\x01 \x01(\x03R\x11retryAfterSeconds\x12\x14\n" +
 	"\x05scope\x18\x02 \x01(\tR\x05scope\"\x1e\n" +
 	"\x1cGetClaimableChallengeRequest\"!\n" +
-	"\x1fGetClaimableAvailabilityRequest\"\xbe\x02\n" +
+	"\x1fGetClaimableAvailabilityRequest\"\xf0\x02\n" +
 	" GetClaimableAvailabilityResponse\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12B\n" +
 	"\x06causes\x18\x02 \x03(\v2*.controlplane.v1.ClaimableUnavailableCauseR\x06causes\x12+\n" +
 	"\x11compute_available\x18\x03 \x01(\bR\x10computeAvailable\x12Q\n" +
 	"\x0ecompute_causes\x18\x04 \x03(\v2*.controlplane.v1.ClaimableUnavailableCauseR\rcomputeCauses\x128\n" +
-	"\x06limits\x18\x05 \x01(\v2 .controlplane.v1.ClaimableLimitsR\x06limits\"\xfa\x05\n" +
+	"\x06limits\x18\x05 \x01(\v2 .controlplane.v1.ClaimableLimitsR\x06limits\x120\n" +
+	"\x14project_instance_ids\x18\x06 \x01(\bR\x12projectInstanceIds\"\xfa\x05\n" +
 	"\x0fClaimableLimits\x12(\n" +
 	"\x10max_static_sites\x18\x01 \x01(\x05R\x0emaxStaticSites\x121\n" +
 	"\x15max_static_stored_mib\x18\x02 \x01(\x05R\x12maxStaticStoredMib\x12!\n" +

@@ -1,15 +1,40 @@
 ---
 title: "Self-hosted delivery"
-description: "Deploy to a cluster you run, with no control plane: direct apply by default, or opt in to a Flux that forge installs in your cluster with applier = flux"
+description: "Deploy to a cluster you run, with no control plane: direct apply from your machine with applier = forge, or a Flux that forge installs in your cluster with applier = flux"
 ---
 
-An environment that declares no `forge.ControlPlane` is **self-hosted**: nothing of Reliant's sits between you and the cluster. This page covers the two ways forge delivers to such a cluster, how to pick between them, and what each costs you. If you are deploying to [Reliant hosting](/forge/hosting), or to a cluster you registered with `forge cluster connect`, delivery is handled for you and you can skip this page.
+An environment that declares no `forge.ControlPlane` is **self-hosted**: nothing of Reliant's sits between you and the cluster. This page covers the two ways forge delivers to such a cluster, how to pick between them, and what each costs you. If you are deploying to [Reliant hosting](/hosting/overview), or to a cluster you registered with `forge cloud cluster connect`, delivery is handled for you and you can skip this page.
 
-## Direct apply, the default
+## Direct apply
 
-With no `applier` declared, `forge env deploy` renders the new release and applies it from the machine you run it on, using the kubectl context the environment's KCL names. It never falls back to the context your shell has selected, so a stray `kubectl config use-context` cannot send a deploy to the wrong cluster.
+With direct apply, `forge env deploy` renders the new release and applies it from the machine you run it on, using the kubectl context the environment's KCL names. It never falls back to the context your shell has selected, so a stray `kubectl config use-context` cannot send a deploy to the wrong cluster.
 
-Before it writes anything forge checks, live, that every Secret key and image the release references actually exists on the target, and refuses if one is missing. Then it applies migrations first, waits for each Deployment and Job to become ready, and exits non-zero if any does not. That per-resource wait is the health gate, and `--rollout-timeout` sets each resource's budget (five minutes by default).
+Declare it, rather than leaving `applier` out:
+
+```python
+output = forge.render(forge.Bundle {
+    project = "acme"
+    env = "prod"
+    cluster_target = _prod
+    applier = "forge"      # forge applies this env from the machine that deploys it
+    workloads = [...]
+})
+```
+
+An environment that targets a cluster and declares none of `applier`, `lifecycle` or `hub_converges` still deploys by direct apply today, but every deploy prints a notice that direct apply to it will be refused once that refusal lands. Forge treats an environment that declares nothing as a real one, not a scratch cluster, and wants it to say who applies it. `applier = "forge"` is that statement for a real environment you deploy yourself. A developer's own k3d cluster or a throwaway CI cluster declares `lifecycle = "local"` or `lifecycle = "ephemeral"` instead, and forge checks that such a cluster is one it stands up. The scaffolded `dev` environment already declares `lifecycle = "local"`.
+
+Before it writes anything forge checks, live, that every Secret key and image the release references actually exists on the target, and refuses if one is missing. A Secret you create yourself, such as the one holding `DATABASE_URL`, must also be declared, or the check refuses it as mounted but undeclared. Declare it in the Bundle's `required_secrets` with the keys the workloads read; forge never reads the values:
+
+```python
+    required_secrets = [forge.ExternalSecret {
+        name = "acme-secrets"
+        namespace = "acme-prod"
+        keys = ["database_url"]       # the scaffolded API reads DATABASE_URL from this lowercase key
+        reason = "the API's DATABASE_URL"
+    }]
+```
+
+[Deploy a Forge app to your own Kubernetes cluster](/guides/hosting/deploy-to-your-own-kubernetes) walks through creating that Secret. Then forge applies migrations first, waits for each Deployment and Job to become ready, and exits non-zero if any does not. That per-resource wait is the health gate, and `--rollout-timeout` sets each resource's budget (five minutes by default).
 
 Direct apply is where every environment starts, and it is the right end state for `dev` and for throwaway CI clusters. For a real environment it has two limits. The machine that runs `forge env deploy` needs write access to the cluster, so that credential lives wherever your deploys run. And nothing keeps the cluster matching the release between deploys: forge applies when you ask, and drift is yours to notice. `forge env deploy <env> <release> --live-diff` runs a client-side `kubectl diff` against the cluster when you want to see it.
 
@@ -98,8 +123,8 @@ Also not available in this mode: the opt-in [health gate](/forge/deploy/releases
 
 ### Choosing
 
-Stay on direct apply when the cluster is yours alone, deploys run from one trusted place, and you are content to apply when you ask. Choose `applier = "flux"` when a deploy credential should not be able to write to the cluster, when several people or pipelines deploy and need one ordering, or when you want the cluster to converge to the recorded release by itself. Moving later costs one declaration and one bootstrap.
+Stay on direct apply (`applier = "forge"`) when the cluster is yours alone, deploys run from one trusted place, and you are content to apply when you ask. Choose `applier = "flux"` when a deploy credential should not be able to write to the cluster, when several people or pipelines deploy and need one ordering, or when you want the cluster to converge to the recorded release by itself. Moving later costs one declaration and one bootstrap.
 
 ## Related topics
 
-[Releases and promotion](/forge/deploy/releases-and-promotion) covers plans, approvals and the ledger that both modes share. [What gets deployed](/forge/deploy/what-gets-deployed) shows the objects that land on the cluster. Agents can run `forge skill load deploy/flux/self-hosted` and `deploy/flux` for the full reference, including the Flux hardening table.
+[Releases and promotion](/forge/deploy/releases-and-promotion) covers plans, approvals and the ledger that both modes share. [What gets deployed](/forge/deploy/what-gets-deployed) shows the objects that land on the cluster. Agents can run `forge agent skill load deploy/flux/self-hosted` and `deploy/flux` for the full reference, including the Flux hardening table.

@@ -169,6 +169,62 @@ func TestWorkflowRun_InputsKeepTheirType(t *testing.T) {
 	assert.Equal(t, "main", params["ref"].AsInterface())
 }
 
+type fakeRunWorkflows struct {
+	reliantv1connect.UnimplementedWorkflowServiceHandler
+	got *reliantv1.GetWorkflowRequest
+	wf  *reliantv1.Workflow
+}
+
+func (f *fakeRunWorkflows) GetWorkflow(_ context.Context, r *connect.Request[reliantv1.GetWorkflowRequest]) (*connect.Response[reliantv1.GetWorkflowResponse], error) {
+	f.got = r.Msg
+	return connect.NewResponse(&reliantv1.GetWorkflowResponse{Workflow: f.wf}), nil
+}
+
+// Bug 4b5ed947: `--input test_command=false` sent a boolean to a string input,
+// which the run refused ("expects string, got bool"). Each value is now read
+// as the type the workflow declares for it, which the CLI asks the server.
+func TestWorkflowRun_InputsAreReadAsTheirDeclaredType(t *testing.T) {
+	text := func() *reliantv1.Input {
+		return &reliantv1.Input{Type: "string", Config: &reliantv1.Input_StringInput{StringInput: &reliantv1.StringInputConfig{}}}
+	}
+	workflows := &fakeRunWorkflows{wf: &reliantv1.Workflow{Name: "run-tests", Inputs: map[string]*reliantv1.Input{
+		"test_command": text(),
+		"version":      text(),
+		"sha":          text(),
+		"unattended":   {Type: "boolean", Config: &reliantv1.Input_BooleanInput{BooleanInput: &reliantv1.BooleanInputConfig{}}},
+		"attempts":     {Type: "integer", Config: &reliantv1.Input_IntegerInput{IntegerInput: &reliantv1.IntegerInputConfig{}}},
+		"ratio":        {Type: "number", Config: &reliantv1.Input_NumberInput{NumberInput: &reliantv1.NumberInputConfig{}}},
+		"skills":       {Type: "array", Config: &reliantv1.Input_ArrayInput{ArrayInput: &reliantv1.ArrayInputConfig{}}},
+	}}}
+	got, _, err := execWorkflowRunCmd(t, func(mux *http.ServeMux) {
+		mux.Handle(reliantv1connect.NewWorkflowServiceHandler(workflows))
+	}, "--project-id", "p1", "run-tests",
+		"-i", "test_command=false", "-i", "version=10", "-i", `sha="0123"`,
+		"-i", "unattended=false", "-i", "attempts=3", "-i", "ratio=1e3",
+		"-i", `skills=["forge/forge"]`, "-i", "undeclared=true")
+	require.NoError(t, err)
+	assert.Equal(t, "p1", workflows.got.GetProjectId())
+	assert.Equal(t, "run-tests", workflows.got.GetName())
+	params := got.GetWorkflowParams()
+	assert.Equal(t, "false", params["test_command"].AsInterface(), "a string input keeps the text")
+	assert.Equal(t, "10", params["version"].AsInterface())
+	assert.Equal(t, "0123", params["sha"].AsInterface(), "a quoted value is still unquoted")
+	assert.Equal(t, false, params["unattended"].AsInterface())
+	assert.Equal(t, float64(3), params["attempts"].AsInterface())
+	assert.Equal(t, float64(1000), params["ratio"].AsInterface(), "a number input reads 1e3 as a number")
+	assert.Equal(t, []interface{}{"forge/forge"}, params["skills"].AsInterface())
+	assert.Equal(t, true, params["undeclared"].AsInterface(), "an undeclared input is read as before")
+}
+
+// A builtin's inputs are read from this binary when the server cannot say (an
+// older server without the lookup, here no WorkflowService at all).
+func TestWorkflowRun_BuiltinInputTypesWithoutTheServer(t *testing.T) {
+	req, _ := runWorkflowRunCmd(t, "agent", "-i", "system_prompt=false", "-i", "max_turns=5")
+	assert.Equal(t, "builtin://agent", req.GetWorkflow())
+	assert.Equal(t, "false", req.GetWorkflowParams()["system_prompt"].AsInterface())
+	assert.Equal(t, float64(5), req.GetWorkflowParams()["max_turns"].AsInterface())
+}
+
 func TestWorkflowRun_KeepsAnExplicitTitle(t *testing.T) {
 	req, _ := runWorkflowRunCmd(t, "cicd-probe", "--title", "probe: kube access")
 	assert.Equal(t, "probe: kube access", req.GetTitle())

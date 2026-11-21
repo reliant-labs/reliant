@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -33,6 +33,9 @@ import (
 type GeminiClient struct {
 	options llm.DriverOptions
 	client  *genai.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
@@ -276,11 +279,10 @@ func (g *GeminiClient) convertTools(tools []tools.Tool) []*genai.Tool {
 	geminiTool.FunctionDeclarations = make([]*genai.FunctionDeclaration, 0, len(tools))
 
 	for _, tool := range tools {
-		schema := tool.ParamSchema()
 		declaration := &genai.FunctionDeclaration{
 			Name:        tool.Name(),
 			Description: tool.Description(),
-			Parameters:  convertToSchema(schema),
+			Parameters:  geminiwire.ToolParameters(tool),
 		}
 
 		geminiTool.FunctionDeclarations = append(geminiTool.FunctionDeclarations, declaration)
@@ -319,7 +321,47 @@ func (g *GeminiClient) finishReason(reason genai.FinishReason) message.FinishRea
 	return geminiwire.FinishReason(geminiwire.SourceGemini, string(reason))
 }
 
+// prepareSignatures readies the thought signatures of a converted request.
+// Normally that is stamping the documented stand-in on steps that have no
+// signature at all, on the models that validate them. With standIns — the
+// one retry after Gemini rejected a signature — every signature is replaced
+// by the stand-in. See geminiwire.RecoverSignatureRejection.
+func (g *GeminiClient) prepareSignatures(ctx context.Context, contents []*genai.Content, standIns bool) {
+	if standIns {
+		removed := geminiwire.ReplaceSignaturesWithStandIns(contents)
+		logging.DebugContext(ctx, "[GEMINI] Replaced thought signatures with the stand-in", "removed", removed)
+		return
+	}
+	if !geminiwire.ValidatesThoughtSignatures(g.options.Model.APIModel) {
+		return
+	}
+	if stamped := geminiwire.StampUnsignedSteps(contents); stamped > 0 {
+		logging.DebugContext(ctx, "[GEMINI] Replaying unsigned function calls with the documented stand-in signature",
+			"steps", stamped)
+	}
+}
+
+// candidateStopFailure is the error a response must end with instead of
+// completing, when its candidate stopped with a failure that can be retried
+// (geminiwire.StopFailure), or nil. A candidate that produced tool calls
+// completes with them.
+func candidateStopFailure(resp *genai.GenerateContentResponse, toolCalls int) error {
+	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || toolCalls > 0 {
+		return nil
+	}
+	cand := resp.Candidates[0]
+	return geminiwire.StopFailure(geminiwire.SourceGemini, string(cand.FinishReason), cand.FinishMessage)
+}
+
+// SendMessages returns a complete response, retried once with stand-in
+// thought signatures if Gemini rejects one.
 func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
+	return geminiwire.RecoverSignatureRejectionSync(ctx, geminiwire.SourceGemini, func(standIns bool) (*llm.DriverResponse, error) {
+		return g.sendMessages(ctx, prompts, messages, tools, standIns)
+	})
+}
+
+func (g *GeminiClient) sendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool, standIns bool) (*llm.DriverResponse, error) {
 	var remaining time.Duration
 	deadline, ok := ctx.Deadline()
 	if ok {
@@ -373,6 +415,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 			"originalCount", len(messages))
 		return nil, fmt.Errorf("message conversion resulted in zero messages (received %d messages)", len(messages))
 	}
+	g.prepareSignatures(ctx, geminiMessages, standIns)
 
 	systemParts := []*genai.Part{}
 	for _, prompt := range prompts {
@@ -441,82 +484,81 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 		return nil, fmt.Errorf("gemini chat creation returned nil")
 	}
 
-	attempts := 0
-	for {
-		attempts++
-		var toolCalls []message.ToolCall
-
-		var lastMsgParts []genai.Part
-		for _, part := range lastMsg.Parts {
-			lastMsgParts = append(lastMsgParts, *part)
-		}
-		resp, err := chat.SendMessage(ctx, lastMsgParts...)
-		// If there is an error we are going to see if we can retry the call
-		if err != nil {
-			retry, after, retryErr := g.shouldRetry(attempts, err)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				logging.WarnContext(ctx, fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
-			}
-			return nil, retryErr
-		}
-
-		content := ""
-
-		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-			for _, part := range resp.Candidates[0].Content.Parts {
-				switch {
-				case part.Text != "":
-					content = string(part.Text)
-				case part.FunctionCall != nil:
-					id := "call_" + uuid.New().String()
-					args, _ := json.Marshal(part.FunctionCall.Args)
-					toolCall := message.ToolCall{
-						ID:       id,
-						Name:     part.FunctionCall.Name,
-						Input:    string(args),
-						Type:     "function",
-						Finished: true,
-					}
-					// Capture thought signature if present (Gemini 3.x)
-					// Encode as base64 to preserve binary data through string storage
-					if len(part.ThoughtSignature) > 0 {
-						toolCall.ThoughtSignature = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
-					}
-					toolCalls = append(toolCalls, toolCall)
-				}
-			}
-		}
-
-		logging.DebugContext(ctx, "[GEMINI] Response received",
-			"contentLength", len(content),
-			"toolCallCount", len(toolCalls))
-		finishReason := message.FinishReasonEndTurn
-		if len(resp.Candidates) > 0 {
-			finishReason = g.finishReason(resp.Candidates[0].FinishReason)
-		}
-		if len(toolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
-
-		return &llm.DriverResponse{
-			Content:      content,
-			ToolCalls:    toolCalls,
-			Usage:        g.usage(resp),
-			FinishReason: finishReason,
-		}, nil
+	var lastMsgParts []genai.Part
+	for _, part := range lastMsg.Parts {
+		lastMsgParts = append(lastMsgParts, *part)
 	}
+	var resp *genai.GenerateContentResponse
+	if err := g.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var sendErr error
+		resp, sendErr = chat.SendMessage(ctx, lastMsgParts...)
+		if sendErr != nil {
+			return geminiFailure(sendErr), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
+		return nil, err
+	}
+	var toolCalls []message.ToolCall
+
+	content := ""
+
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			switch {
+			case part.Text != "":
+				content = string(part.Text)
+			case part.FunctionCall != nil:
+				id := "call_" + uuid.New().String()
+				args, _ := json.Marshal(part.FunctionCall.Args)
+				toolCall := message.ToolCall{
+					ID:       id,
+					Name:     part.FunctionCall.Name,
+					Input:    string(args),
+					Type:     "function",
+					Finished: true,
+				}
+				// Capture thought signature if present (Gemini 3.x)
+				// Encode as base64 to preserve binary data through string storage
+				if len(part.ThoughtSignature) > 0 {
+					toolCall.ThoughtSignature = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
+				}
+				toolCalls = append(toolCalls, toolCall)
+			}
+		}
+	}
+
+	logging.DebugContext(ctx, "[GEMINI] Response received",
+		"contentLength", len(content),
+		"toolCallCount", len(toolCalls))
+	if stopErr := candidateStopFailure(resp, len(toolCalls)); stopErr != nil {
+		return nil, stopErr
+	}
+	finishReason := message.FinishReasonEndTurn
+	if len(resp.Candidates) > 0 {
+		finishReason = g.finishReason(resp.Candidates[0].FinishReason)
+	}
+	if len(toolCalls) > 0 {
+		finishReason = message.FinishReasonToolUse
+	}
+
+	return &llm.DriverResponse{
+		Content:      content,
+		ToolCalls:    toolCalls,
+		Usage:        g.usage(resp),
+		FinishReason: finishReason,
+	}, nil
 }
 
+// StreamResponse streams a response, retried once with stand-in thought
+// signatures if Gemini rejects one before streaming anything.
 func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
+	return geminiwire.RecoverSignatureRejection(ctx, geminiwire.SourceGemini, func(standIns bool) <-chan llm.DriverEvent {
+		return g.streamResponse(ctx, prompts, messages, tools, standIns)
+	})
+}
+
+func (g *GeminiClient) streamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool, standIns bool) <-chan llm.DriverEvent {
 	eventChan := make(chan llm.DriverEvent)
 
 	go func() {
@@ -578,6 +620,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			}
 			return
 		}
+		g.prepareSignatures(ctx, geminiMessages, standIns)
 
 		// Build system instruction
 		systemParts := []*genai.Part{}
@@ -659,68 +702,54 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			return
 		}
 
-		// === ROBUSTNESS: Retry loop with proper error handling ===
-		attempts := 0
-		for {
-			attempts++
-			if attempts > 1 {
-				logging.DebugContext(ctx, "[GEMINI] Retry attempt", "attempt", attempts)
-			}
-
+		// The request retries through the shared ladder until the stream
+		// opens. Once a chunk has arrived, a failure is not retried here: its
+		// events already reached the consumer, and a second attempt would
+		// replay them. CallLLM's own retry owns a stream that broke mid-way.
+		var lastMsgParts []genai.Part
+		for _, part := range lastMsg.Parts {
+			lastMsgParts = append(lastMsgParts, *part)
+		}
+		emitCancelled := false
+		streamErr := g.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
 			// Reset per-attempt state
 			currentContent = ""
 			toolCalls = []message.ToolCall{}
 			finalResp = nil
 			contentStarted = false
 
-			// Send message stream
-			var lastMsgParts []genai.Part
-			for _, part := range lastMsg.Parts {
-				lastMsgParts = append(lastMsgParts, *part)
+			err := g.processStreamResponses(ctx, chat, lastMsgParts, eventChan, &currentContent, &toolCalls, &finalResp, &contentStarted)
+			if err == nil || errors.Is(err, io.EOF) {
+				return ratelimit.Failure{}, true
 			}
-
-			streamErr := g.processStreamResponses(ctx, chat, lastMsgParts, eventChan, &currentContent, &toolCalls, &finalResp, &contentStarted)
-
-			// === ROBUSTNESS: Error recovery ===
-			if streamErr != nil {
-				if errors.Is(streamErr, io.EOF) {
-					// Normal EOF - stream completed
-					logging.DebugContext(ctx, "[GEMINI] Stream completed (EOF)")
-					break
-				}
-
-				// Check if we should retry
-				retry, after, retryErr := g.shouldRetry(attempts, streamErr)
-				if retryErr != nil {
-					logging.ErrorContext(ctx, "[GEMINI] Non-retriable error", "error", retryErr)
-					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-					return
-				}
-
-				if retry {
-					logging.WarnContext(ctx, "[GEMINI] Retriable error, backing off",
-						"attempt", attempts,
-						"maxRetries", models.MaxRetries,
-						"backoffMs", after)
-
-					select {
-					case <-ctx.Done():
-						logging.DebugContext(ctx, "[GEMINI] Context cancelled during retry backoff")
-						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-						return
-					case <-time.After(time.Duration(after) * time.Millisecond):
-						continue // Retry
-					}
-				}
-
-				// Not retriable, emit error and exit
+			if finalResp != nil {
+				return ratelimit.Failure{Err: err, Fatal: true}, false
+			}
+			return geminiFailure(err), false
+		}, func(wait llm.RetryWait) error {
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if streamErr != nil {
+			if !emitCancelled {
 				logging.ErrorContext(ctx, "[GEMINI] Stream error", "error", streamErr)
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
-				return
 			}
+			return
+		}
 
-			// Stream completed successfully
-			break
+		// A candidate that stopped with a retryable failure (a malformed tool
+		// call, a missing signature) ends the stream with that error, not a
+		// completed turn. The deferred fallback still sends the usage.
+		if stopErr := candidateStopFailure(finalResp, len(toolCalls)); stopErr != nil {
+			logging.WarnContext(ctx, "[GEMINI] Candidate stopped with a failure", "error", stopErr)
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: stopErr}
+			return
 		}
 
 		// Only emit ContentStop if we started content
@@ -875,50 +904,14 @@ func (g *GeminiClient) processStreamResponses(
 	return nil
 }
 
-func (g *GeminiClient) shouldRetry(attempts int, err error) (bool, int64, error) {
-	// Check if error is a rate limit error
-	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
-	}
-
-	// Gemini doesn't have a standard error type we can check against
-	// So we'll check the error message for rate limit indicators
-	if errors.Is(err, io.EOF) {
-		return false, 0, err
-	}
-
-	errMsg := err.Error()
-	// Check for common retryable error messages.
-	// Gemini can intermittently return INTERNAL/500 mid-stream.
-	// Also retry on 503/UNAVAILABLE (overloaded) errors - these are temporary service issues
-	isRateLimit := contains(errMsg, "rate limit", "quota exceeded", "too many requests")
-	isInternal := contains(errMsg, "Internal error encountered", "Status: INTERNAL")
-	isUnavailable := contains(errMsg, "Status: UNAVAILABLE", "503", "overloaded", "try again later")
-
-	if !isRateLimit && !isInternal && !isUnavailable {
-		return false, 0, err
-	}
-
-	// Calculate backoff with jitter
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs := backoffMs + jitterMs
-
-	return true, int64(retryMs), nil
-}
-
-// usage returns token usage from Gemini's response.
-// usage returns token usage from Gemini's response.
-// Gemini's TotalTokenCount is the total of prompt + response + tool tokens.
+// usage returns token usage from Gemini's response, with the cached prefix
+// split out of the prompt and thoughts counted as output; see
+// geminiwire.Usage.TokenUsage.
 func (g *GeminiClient) usage(resp *genai.GenerateContentResponse) llm.TokenUsage {
-	if resp == nil || resp.UsageMetadata == nil {
+	if resp == nil {
 		return llm.TokenUsage{}
 	}
-
-	// TokenCount = TotalTokenCount (prompt + response + tool tokens)
-	return llm.TokenUsage{
-		TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
-	}
+	return geminiwire.UsageFromGenAI(resp.UsageMetadata).TokenUsage()
 }
 
 func (g *GeminiClient) Model() models.Model {
@@ -958,52 +951,6 @@ func parseJsonToMap(jsonStr string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal([]byte(jsonStr), &result)
 	return result, err
-}
-
-func convertToSchema(param *jsonschema.Schema) *genai.Schema {
-	schema := &genai.Schema{
-		Type:        genai.Type(param.Type),
-		Description: param.Description,
-	}
-
-	// Handle enum values
-	if len(param.Enum) > 0 {
-		schema.Enum = make([]string, len(param.Enum))
-		for i, v := range param.Enum {
-			schema.Enum[i] = fmt.Sprint(v)
-		}
-	}
-
-	switch param.Type {
-	case "array":
-		if param.Items != nil {
-			schema.Items = convertToSchema(param.Items)
-		}
-	case "object":
-		if param.Properties != nil {
-			schema.Properties = make(map[string]*genai.Schema)
-			for pair := param.Properties.Oldest(); pair != nil; pair = pair.Next() {
-				key := pair.Key
-				value := pair.Value
-				schema.Properties[key] = convertToSchema(value)
-			}
-		}
-		// CRITICAL: Set required fields for Gemini
-		if len(param.Required) > 0 {
-			schema.Required = param.Required
-		}
-	}
-
-	return schema
-}
-
-func contains(s string, substrs ...string) bool {
-	for _, substr := range substrs {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(substr)) {
-			return true
-		}
-	}
-	return false
 }
 
 // buildThinkingConfig creates appropriate thinking configuration based on model version

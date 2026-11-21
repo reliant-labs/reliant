@@ -26,10 +26,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, skipToken, useQuery } from "@tanstack/react-query";
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
+import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { listProjectsResponse } from "@/test/projectList";
 import userEvent from "@testing-library/user-event";
 import {
@@ -102,13 +103,14 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
 // roster.test.ts); here it names the environments and records the scope it
 // was asked for. A project with no persisted name reports one through its
 // daemon's topology.
-const roster = vi.hoisted(() => ({ calls: [] as unknown[][], prodHolds: [] as unknown[] }));
+const roster = vi.hoisted(() => ({ calls: [] as unknown[][], prodHolds: [] as unknown[], load: undefined as (() => Promise<boolean>) | undefined }));
 vi.mock("@/hooks/forge-queries", () => ({
   useForgeRoster: (...args: unknown[]) => {
     roster.calls.push(args);
+    const lookup = useQuery({ queryKey: ["test-roster", args[1]], queryFn: roster.load ?? skipToken });
     const live = (name: string, kind: string, holds: unknown[] = []) => ({ id: `env-${name}`, name, kind, holds });
     return {
-      envs: [
+      envs: lookup.isLoading ? [] : [
         { name: "prod", lifecycle: "deployed", source: "backend", live: live("prod", "persistent", roster.prodHolds), forge: null },
         { name: "e2e", lifecycle: "deployed", source: "backend", live: live("e2e", "persistent"), forge: null },
         { name: "dev", lifecycle: "local", source: "backend", live: live("dev", "local"), forge: null },
@@ -117,7 +119,7 @@ vi.mock("@/hooks/forge-queries", () => ({
       live: { data: undefined },
       topology: { isLoading: false },
       projectName: { name: args[1] ?? null, source: "project" },
-      isLoading: false,
+      isLoading: lookup.isLoading,
       resolvingName: false,
     };
   },
@@ -126,6 +128,7 @@ vi.mock("@/hooks/forge-queries", () => ({
     error: null,
     data: projectId === "project-c" ? { kind: "report", report: { project: "gamma" } } : undefined,
   }),
+  useEnvironmentShapes: () => new Map(),
 }));
 
 // The app switcher's list (the Apps page's query) is covered on its own.
@@ -134,7 +137,8 @@ vi.mock("@/hooks/apps-queries", () => ({
 }));
 
 vi.mock("@/hooks/observability-session-queries", () => ({ useSessions: () => ({ isSuccess: false }) }));
-vi.mock("@/hooks/observability-queries", () => ({
+vi.mock("@/hooks/observability-queries", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/hooks/observability-queries")>(),
   useServiceSignals: () => ({ isSuccess: false }),
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
@@ -182,6 +186,10 @@ import {
   OrgObservabilityRoute,
 } from "../ForgeEntryRoutes";
 import { ForgeLayout } from "../../ForgeLayout";
+import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
+import { MetricsExplorerPage } from "../../Observability/Metrics/MetricsExplorerPage";
+
+vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 
 /** Stands in for the org chrome around the org pages. */
 function OrgLayoutStub() {
@@ -204,7 +212,7 @@ function probe(name: string): RouteComponent {
   };
 }
 
-function renderAt(initialEntry: string) {
+function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean } = {}) {
   const root = createRootRoute({ component: () => <Outlet /> });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const forge = createForgeConsoleRoutes(() => authenticated, {
@@ -214,12 +222,15 @@ function renderAt(initialEntry: string) {
     workload: probe("workload"),
     releases: probe("releases"),
     release: probe("release"),
-    observabilityView: probe("observability-view"),
+    observabilityView: options.metrics ? MetricsExplorerPage : probe("observability-view"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
     users: probe("users"),
+    vulnerabilities: probe("vulnerabilities"),
+    vulnerability: probe("vulnerability"),
+    sboms: probe("sboms"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -240,7 +251,9 @@ function renderAt(initialEntry: string) {
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ObservabilityApiProvider api={createFixtureApi({ onCall: options.onObsCall })}>
+        <RouterProvider router={router} />
+      </ObservabilityApiProvider>
     </QueryClientProvider>,
   );
   return router;
@@ -257,6 +270,7 @@ beforeEach(() => {
   state.lastProjectId = null;
   roster.calls.length = 0;
   roster.prodHolds = [];
+  roster.load = undefined;
   window.localStorage.clear();
   vi.clearAllMocks();
 });
@@ -335,6 +349,76 @@ describe("the org's Observability: /forge/observability", () => {
   it("resolves ?forgeProject= to that app's page for the view", async () => {
     const router = renderAt("/forge/observability?forgeProject=elsewhere&view=logs&q=timeout");
     await landsOn(router, "/forge/p/elsewhere/observability/logs", { env: "all", q: "timeout" });
+  });
+});
+
+describe("the project Metrics catalog", () => {
+  it("starts the exact All catalog while both lookups are pending and reuses it in the explorer", async () => {
+    let finishProjects!: (result: ReturnType<typeof listProjectsResponse>) => void;
+    const projects = new Promise<ReturnType<typeof listProjectsResponse>>((resolve) => { finishProjects = resolve; });
+    const listProjects = vi.fn(() => projects);
+    setTransport(mockTransport({ "ProjectService.ListProjects": listProjects }));
+    let finishRoster!: (result: boolean) => void;
+    const live = new Promise<boolean>((resolve) => { finishRoster = resolve; });
+    const loadRoster = vi.fn(() => live);
+    roster.load = loadRoster;
+    const onObsCall = vi.fn();
+
+    renderAt("/forge/p/barkshop/observability/metrics?env=all&range=6h&f=%5B%22status%3Aok%22%5D", { metrics: true, onObsCall });
+    await waitFor(() => expect(onObsCall).toHaveBeenCalledWith("ListMetrics", expect.objectContaining({
+      orgId: "org-1",
+      projectId: "barkshop",
+      envIds: [],
+      filters: [{ key: "status", op: "eq", value: "ok" }],
+    })));
+    const request = onObsCall.mock.calls.find(([rpc]) => rpc === "ListMetrics")?.[1];
+    expect(request.window.endMs - request.window.startMs).toBe(6 * 60 * 60_000);
+    expect(listProjects).toHaveBeenCalled();
+    expect(loadRoster).toHaveBeenCalled();
+    expect(screen.getByTestId("forge-console-loading")).toBeInTheDocument();
+
+    finishProjects(listProjectsResponse(PROJECTS));
+    expect(await screen.findByTestId("metrics-explorer-loading")).toBeInTheDocument();
+    finishRoster(true);
+    expect(await screen.findByTestId("metrics-catalog-list")).toBeInTheDocument();
+    expect(onObsCall.mock.calls.filter(([rpc]) => rpc === "ListMetrics")).toHaveLength(1);
+  });
+
+  it("can start a named catalog with its recorded ID before the project list answers", async () => {
+    let finishProjects!: (result: ReturnType<typeof listProjectsResponse>) => void;
+    const projects = new Promise<ReturnType<typeof listProjectsResponse>>((resolve) => { finishProjects = resolve; });
+    setTransport(mockTransport({ "ProjectService.ListProjects": () => projects }));
+    const onObsCall = vi.fn();
+
+    renderAt("/forge/p/barkshop/observability/metrics", { metrics: true, onObsCall });
+    await waitFor(() => expect(onObsCall).toHaveBeenCalledWith("ListMetrics", expect.objectContaining({
+      orgId: "org-1", projectId: "barkshop", envIds: ["env-prod"],
+    })));
+    expect(screen.getByTestId("forge-console-loading")).toBeInTheDocument();
+    finishProjects(listProjectsResponse(PROJECTS));
+    expect(await screen.findByTestId("metrics-catalog-list")).toBeInTheDocument();
+    expect(onObsCall.mock.calls.filter(([rpc]) => rpc === "ListMetrics")).toHaveLength(1);
+  });
+
+  it.each(["prod", "dev"])("does not broaden a pending named environment (%s) to All", async (env) => {
+    let finishRoster!: (result: boolean) => void;
+    const live = new Promise<boolean>((resolve) => { finishRoster = resolve; });
+    roster.load = () => live;
+    const onObsCall = vi.fn();
+
+    renderAt(`/forge/p/barkshop/observability/metrics?env=${env}`, { metrics: true, onObsCall });
+    expect(await screen.findByTestId("metrics-explorer-loading")).toBeInTheDocument();
+    expect(onObsCall).not.toHaveBeenCalledWith("ListMetrics", expect.anything());
+    finishRoster(true);
+    if (env === "dev") {
+      expect(await screen.findByTestId("metrics-local-env")).toBeInTheDocument();
+      expect(onObsCall).not.toHaveBeenCalledWith("ListMetrics", expect.anything());
+    } else {
+      expect(await screen.findByTestId("metrics-catalog-list")).toBeInTheDocument();
+      expect(onObsCall.mock.calls.filter(([rpc]) => rpc === "ListMetrics")).toEqual([
+        ["ListMetrics", expect.objectContaining({ orgId: "org-1", projectId: "barkshop", envIds: ["env-prod"] })],
+      ]);
+    }
   });
 });
 
@@ -436,6 +520,27 @@ describe("the environment scope", () => {
     );
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("routes Security › Vulnerabilities with its filters in the URL", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities?env=e2e&severity=high&fixable=yes&kev=1&exempt=1&release=v1.4.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerabilities");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities", { env: "e2e", severity: "high", fixable: "yes", kev: "1", exempt: "1", release: "v1.4.0" });
+  });
+
+  it("routes one advisory, and lands /security on Vulnerabilities", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities/CVE-2026-4101?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerability");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities/CVE-2026-4101", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/security?env=e2e");
+    await landsOn(redirected, "/forge/p/alpha/security/vulnerabilities", { env: "e2e" });
+  });
+
+  it("routes Security › SBOMs", async () => {
+    const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
+    await landsOn(router, "/forge/p/alpha/security/sboms", { env: "e2e", release: "v1.5.0" });
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {

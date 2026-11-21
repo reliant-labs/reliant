@@ -17,22 +17,19 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 )
 
-// A Chat Completions stream that reported usage and then failed is retried by
-// the driver, which drops that attempt's accumulator. The wait it announces
-// carries what the failed request was billed, so the usage ledger can count it.
-func TestChatStream_RetryWaitCarriesTheFailedAttemptsUsage(t *testing.T) {
+// A Chat Completions stream that already delivered a chunk is not retried by
+// the driver: its events reached the consumer, and a second request would
+// replay them. The failure goes out with what the request was billed, and
+// CallLLM's own retry takes it from there.
+func TestChatStream_FailureAfterTheFirstChunkIsNotRetried(t *testing.T) {
 	const chunk = `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-4o",%s}`
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
-		if hits.Add(1) == 1 {
-			fmt.Fprintf(w, "data: "+chunk+"\n\n", `"choices":[],"usage":{"prompt_tokens":500,"completion_tokens":120,"total_tokens":620}`)
-			fmt.Fprint(w, "data: {\"error\":{\"message\":\"upstream reset\",\"type\":\"server_error\"}}\n\n")
-			return
-		}
-		fmt.Fprintf(w, "data: "+chunk+"\n\n", `"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]`)
-		fmt.Fprintf(w, "data: "+chunk+"\n\n", `"choices":[],"usage":{"prompt_tokens":40,"completion_tokens":7,"total_tokens":47}`)
-		fmt.Fprint(w, "data: [DONE]\n\n")
+		fmt.Fprintf(w, "data: "+chunk+"\n\n", `"choices":[{"index":0,"delta":{"content":"par"}}]`)
+		fmt.Fprintf(w, "data: "+chunk+"\n\n", `"choices":[],"usage":{"prompt_tokens":500,"completion_tokens":120,"total_tokens":620}`)
+		fmt.Fprint(w, "data: {\"error\":{\"message\":\"upstream reset\",\"type\":\"server_error\"}}\n\n")
 	}))
 	defer srv.Close()
 
@@ -40,19 +37,20 @@ func TestChatStream_RetryWaitCarriesTheFailedAttemptsUsage(t *testing.T) {
 	c.ladder = ratelimit.Retryer{MaxBackoff: time.Millisecond, Jitter: func(time.Duration) time.Duration { return 0 }}
 	events := drainOpenAI(t, c)
 
-	require.EqualValues(t, 2, hits.Load())
-	var waits []llm.RetryWait
+	require.EqualValues(t, 1, hits.Load(), "a stream that already delivered content must not be re-requested")
+	var deltas int
 	for _, ev := range events {
-		if ev.Type == llm.EventRetryWait {
-			waits = append(waits, *ev.Retry)
+		require.NotEqual(t, llm.EventRetryWait, ev.Type, "%+v", events)
+		if ev.Type == llm.EventContentDelta {
+			deltas++
 		}
 	}
-	require.Len(t, waits, 1)
-	require.NotNil(t, waits[0].Usage, "the failed attempt reported usage")
-	assert.Equal(t, [2]int64{500, 120}, [2]int64{waits[0].Usage.InputTokens, waits[0].Usage.OutputTokens})
-	last := events[len(events)-1]
+	assert.Equal(t, 1, deltas, "the delta is delivered once")
+	errEv, last := events[len(events)-2], events[len(events)-1]
+	require.Equal(t, llm.EventError, errEv.Type, "%+v", events)
+	assert.ErrorContains(t, errEv.Error, "upstream reset")
 	require.Equal(t, llm.EventComplete, last.Type)
-	assert.EqualValues(t, 40, last.Response.Usage.InputTokens, "the answer reports only its own request")
+	assert.Equal(t, [2]int64{500, 120}, [2]int64{last.Response.Usage.InputTokens, last.Response.Usage.OutputTokens})
 }
 
 // The request that ends the stream can fail too: the ladder runs out, or the

@@ -145,10 +145,11 @@ Pause workflow execution for user approval
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `approval_id` | string | - |
-| `status` | string | - |
-| `action_taken` | string | - |
-| `data` | object | - |
+| `approval_id` | string | Id of the approval request this step raised |
+| `status` | string | approved, denied, or timeout |
+| `action_taken` | string | The action button the approver clicked, when the approval offered actions |
+| `data` | object | Deprecated: never set, always empty |
+| `denial_reason` | string | Why the approver denied the request, when they gave a reason; absent otherwise |
 
 ---
 
@@ -162,7 +163,7 @@ Pause workflow execution to ask the user a question
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `metadata` | string | No | - | The questions to ask, as JSON: a questions list, each with question text and its options |
+| `metadata` | string | No | - | The questions to ask, as JSON: {"type": "ask_user", "questions": [...]}, each question with its text and options. Without "type": "ask_user" the app shows no options and nothing can answer it |
 
 ### Outputs
 
@@ -220,6 +221,8 @@ Send a prompt to a language model and get a response
 | `capabilities` | object | - |
 | `provider_account_id` | string | - |
 | `trace_parent` | string | - |
+| `thinking_level` | string | - |
+| `continuation` | string | - |
 
 ---
 
@@ -417,7 +420,7 @@ Execute a shell command
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `command` | string | No | - | The shell command to run in the project directory |
-| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable |
+| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleaned |
 
 ### Outputs
 

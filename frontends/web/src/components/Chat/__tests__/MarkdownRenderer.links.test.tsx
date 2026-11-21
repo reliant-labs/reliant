@@ -29,9 +29,9 @@ describe("MarkdownRenderer links", () => {
     );
   });
 
-  it("colors a bare autolink with the link color", () => {
+  it("colors a bare autolink with the link ink, underlined", () => {
     render(<MarkdownRenderer content="see https://example.com/foo for details" />);
-    expect(screen.getByRole("link").className).toContain("text-info");
+    expect(screen.getByRole("link")).toHaveClass("text-primary-ink", "underline");
   });
 
   it("links a URL wrapped in backticks", () => {

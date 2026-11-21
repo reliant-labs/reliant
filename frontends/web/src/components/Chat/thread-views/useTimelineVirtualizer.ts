@@ -56,8 +56,14 @@ export const END_THRESHOLD_PX = 4;
  */
 const SUSPENDED_THRESHOLD_PX = -1;
 
-/** Starting height guess for an unmeasured row; corrected on first measure. */
-const ESTIMATED_ROW_PX = 160;
+/**
+ * Starting height guess for an unmeasured row; corrected on first measure.
+ * Measured on the visual baseline's fixture chat in the one chat style
+ * (simplified, 1440×900): median row 48px, mean 125px (a fold or a short
+ * answer is 37–67px; a long answer with a code block runs to 800). 96 sits
+ * between them, so a scroll-back lands nearer than the old 160 did.
+ */
+const ESTIMATED_ROW_PX = 96;
 
 /**
  * Rows rendered beyond the viewport each way.

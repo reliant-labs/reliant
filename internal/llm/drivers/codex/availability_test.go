@@ -110,6 +110,22 @@ func TestParseCodexModels_HiddenAndUnknownSlugsAreNotOffered(t *testing.T) {
 	assert.False(t, report.For("gpt-5.5").Disabled)
 }
 
+func TestParseCodexModels_ChatCatalogDoesNotDisableSeparateImageEndpoint(t *testing.T) {
+	report := recordedReport(t)
+	reg := models.MustGetRegistry()
+	avail := registry.BuildAvailabilityFunc(reg, map[string]registry.ProviderAvailability{"codex": report})
+	resolved, err := reg.WithAvailability(avail).Resolve(models.ModelSelector{
+		Tags: []string{"image-gen"}, RequireOutputModality: models.ModalityImage,
+	}, []string{"codex"})
+	require.NoError(t, err, "a Codex-only account can discover image generation without a chat-catalog entry")
+	assert.Equal(t, "codex", resolved.Provider.Driver)
+	assert.True(t, report.For("gpt-5.2-codex").Disabled, "unlisted chat models are still disabled")
+
+	hidden, err := parseCodexModels([]byte(`{"models":[{"slug":"gpt-image-2.5-flare","visibility":"hide"}]}`))
+	require.NoError(t, err)
+	assert.True(t, hidden.For("gpt-image-2.5-flare").Disabled, "an explicit upstream refusal still wins")
+}
+
 func TestParseCodexModels_HideDisablesACatalogModel(t *testing.T) {
 	report, err := parseCodexModels([]byte(`{"models":[
 		{"slug":"gpt-5.5","visibility":"hide","context_window":272000,"supported_reasoning_levels":[{"effort":"low"}]},

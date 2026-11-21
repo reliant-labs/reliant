@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -193,6 +194,9 @@ type loginRequest struct {
 	Server string
 	Scopes []string
 	Name   string
+	// ExpiresIn, when positive, asks for a token that lives that long
+	// (cliauth.ExpiresInParam).
+	ExpiresIn time.Duration
 }
 
 // runLogin gets a token by flow: `reliant auth login`'s own, or an API token
@@ -206,13 +210,14 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 			fmt.Fprintf(out, "Signing in with a device code: %s, so a browser login's callback could not reach your browser (--browser overrides).\n", flow.Remote)
 		}
 		dev := cliauth.DeviceLogin{
-			Server:   server,
-			Scopes:   scopes,
-			Name:     req.Name,
-			Hostname: instanceid.Hostname(),
-			Platform: runtime.GOOS + "/" + runtime.GOARCH,
-			Out:      out,
-			Sleep:    deviceLoginSleep,
+			Server:    server,
+			Scopes:    scopes,
+			Name:      req.Name,
+			Hostname:  instanceid.Hostname(),
+			Platform:  runtime.GOOS + "/" + runtime.GOARCH,
+			Out:       out,
+			Sleep:     deviceLoginSleep,
+			ExpiresIn: req.ExpiresIn,
 		}
 		// Only where a browser here could show it: on a remote host an
 		// opener at best fails and at worst starts a terminal browser over
@@ -231,11 +236,12 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 		fmt.Fprintf(out, "%s does not offer device-code sign-in; approving in your browser instead.\n", server)
 	}
 	return cliauth.Login{
-		Server:  server,
-		Scopes:  scopes,
-		Name:    req.Name,
-		Out:     out,
-		OpenURL: loginOpener,
+		Server:    server,
+		Scopes:    scopes,
+		Name:      req.Name,
+		Out:       out,
+		OpenURL:   loginOpener,
+		ExpiresIn: req.ExpiresIn,
 	}.Run(ctx)
 }
 
@@ -329,6 +335,13 @@ Purely local: no network call.`,
 			}
 			info["token_prefix"] = cred.TokenPrefix
 			info["scopes"] = cred.Scopes
+			// "Logged in" said nothing of what the login may do, so a login
+			// without daemon:manage (a forge sign-in, or one older than the
+			// scope) looked fine until `machine list` refused it (TL-46).
+			machinesRefused := len(cred.Scopes) > 0 && !slices.Contains(cred.Scopes, cliauth.ScopeMachines)
+			if len(cred.Scopes) > 0 {
+				info["can_manage_machines"] = !machinesRefused
+			}
 			if cred.ExpiresAt != nil {
 				info["expires_at"] = cred.ExpiresAt.Format(time.RFC3339)
 			}
@@ -346,6 +359,10 @@ Purely local: no network call.`,
 				fmt.Fprintf(out, "  Expires:     %s\n", cred.ExpiresAt.Format(time.RFC3339))
 			}
 			fmt.Fprintf(out, "  Credentials: %s\n", path)
+			if machinesRefused {
+				fmt.Fprintf(out, "  Machines:    this login cannot list or manage machines (it lacks %s); 'reliant auth login%s' makes one that can\n",
+					cliauth.ScopeMachines, target.serverFlagHint())
+			}
 			return nil
 		},
 	}
@@ -409,7 +426,7 @@ Settings → Access Tokens in the app.`,
 			// Logging out of Reliant logs forge out of Reliant cloud: the
 			// short-lived tokens exchanged from this server's sessions are
 			// forgotten, so none outlives the sign-out on this machine. A
-			// credential the user created with `forge login` is forge's own
+			// credential the user created with `forge cloud login` is forge's own
 			// and is left alone.
 			if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
 				logging.Warn("could not clear cached forge tokens", "error", err)

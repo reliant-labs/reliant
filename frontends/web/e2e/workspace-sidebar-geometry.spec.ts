@@ -44,6 +44,8 @@ for (const { width, electron } of [200, 240].flatMap((width) =>
       if (desktop) window.RELIANT_CONFIG = { isElectron: true, isDev: true } as typeof window.RELIANT_CONFIG;
     }, { desktop: electron, panelWidth: width });
     await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
+    // The right panel is closed by default (#3010): open it the way a person does.
+    await page.getByRole('button', { name: 'Toggle File Browser' }).click();
     const sidebar = page.locator('[data-onboarding="right-sidebar"]');
     const tabs = sidebar.getByRole('tab');
     await expect(tabs).toHaveCount(electron ? 5 : 4);

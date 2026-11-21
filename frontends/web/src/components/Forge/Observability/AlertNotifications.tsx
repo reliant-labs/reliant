@@ -111,7 +111,7 @@ function NotificationItem({ notification: n, env, onRead }: { notification: Noti
       />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn("text-2xs font-medium uppercase tracking-wide", n.status === "firing" ? "text-danger-ink" : "text-success-ink")}>
+          <span className={cn("text-2xs font-medium", n.status === "firing" ? "text-danger-ink" : "text-success-ink")}>
             {n.status}
           </span>
           <span className="font-mono text-xs font-medium text-ink">{n.alertname}</span>

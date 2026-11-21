@@ -3,10 +3,13 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // The daemon's process-wide settings load from DaemonConfig, with their
@@ -165,4 +168,92 @@ func TestDaemonStartRefusesInvalidConfiguredLabels(t *testing.T) {
 	_, err := executeRoot(t, "daemon", "start", "--data-dir", t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "RELIANT_DAEMON_LABELS")
+}
+
+// unsetDaemonTypeEnv clears RELIANT_DAEMON_TYPE for the test (restored after).
+func unsetDaemonTypeEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("RELIANT_DAEMON_TYPE", "")
+	require.NoError(t, os.Unsetenv("RELIANT_DAEMON_TYPE"))
+}
+
+// daemonStartTypeFrom is the daemon type `daemon start --config file`
+// declares, through the same loaders and precedence the command uses.
+func daemonStartTypeFrom(t *testing.T, file string) (string, error) {
+	t.Helper()
+	cmd := daemonCommandWithArgs(t, "start", "--config", file)
+	dcfg, err := loadDaemonConfig(cmd)
+	if err != nil {
+		return "", err
+	}
+	cliCfg, err := config.LoadCLIConfig(cmd)
+	if err != nil {
+		return "", err
+	}
+	return daemonHost(dcfg, cliCfg.GetMachine().GetDaemonType()).DaemonType, nil
+}
+
+// RELIANT_DAEMON_TYPE moved to CLIConfig's machine.daemon_type, but a
+// `daemon start --config` file written for the old top-level daemon_type
+// still declares the daemon type (deprecated, v1), with the old allowed
+// values; machine.daemon_type wins when both are set.
+func TestDaemonStartKeepsTheDeprecatedConfigFileDaemonType(t *testing.T) {
+	unsetDaemonTypeEnv(t)
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
+		return p
+	}
+
+	old := write("old.yaml", "daemonType: managed\n")
+	got, err := daemonStartTypeFrom(t, old)
+	require.NoError(t, err)
+	assert.Equal(t, "managed", got, "the old top-level daemon_type no longer declares the type")
+
+	got, err = daemonStartTypeFrom(t, write("snake.yaml", "daemon_type: managed\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "managed", got)
+
+	got, err = daemonStartTypeFrom(t, write("new.yaml", "machine:\n  daemonType: managed\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "managed", got)
+
+	t.Setenv("RELIANT_DAEMON_TYPE", "self_hosted")
+	got, err = daemonStartTypeFrom(t, old)
+	require.NoError(t, err)
+	assert.Equal(t, "self_hosted", got, "machine.daemon_type (RELIANT_DAEMON_TYPE) wins over the deprecated field")
+
+	unsetDaemonTypeEnv(t)
+	_, err = daemonStartTypeFrom(t, write("bad.yaml", "daemonType: cloud\n"))
+	require.Error(t, err, "the deprecated field keeps its allowed values")
+}
+
+// RELIANT_DAEMON_TYPE keeps working exactly as before for `auth login` and
+// `auth logout`: managed is a cloud machine, anything else allowed is not,
+// and a value outside the allowed set is refused.
+func TestAuthCommandsReadRELIANTDaemonType(t *testing.T) {
+	for _, path := range [][]string{{"auth", "login"}, {"auth", "logout"}} {
+		cmd, _, err := NewRootCmd().Find(path)
+		require.NoError(t, err)
+
+		unsetDaemonTypeEnv(t)
+		managed, err := isManagedMachine(cmd)
+		require.NoError(t, err, path)
+		assert.False(t, managed, path)
+
+		t.Setenv("RELIANT_DAEMON_TYPE", "managed")
+		managed, err = isManagedMachine(cmd)
+		require.NoError(t, err, path)
+		assert.True(t, managed, path)
+
+		t.Setenv("RELIANT_DAEMON_TYPE", "self_hosted")
+		managed, err = isManagedMachine(cmd)
+		require.NoError(t, err, path)
+		assert.False(t, managed, path)
+
+		t.Setenv("RELIANT_DAEMON_TYPE", "cloud")
+		_, err = isManagedMachine(cmd)
+		require.Error(t, err, path)
+	}
 }
