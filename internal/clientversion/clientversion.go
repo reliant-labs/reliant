@@ -61,7 +61,7 @@ var ErrMissing = errors.New("no Reliant-Client header")
 // accept the shorthands "1" and "1.2", which no client sends and no floor may
 // name. It is the same pattern buf.validate holds min_version to
 // (proto/reliant/config/v1/client_version_config.proto).
-var semverRe = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+var semverRe = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 // ValidVersion reports whether v is semver without a leading v.
 func ValidVersion(v string) bool { return semverRe.MatchString(v) }

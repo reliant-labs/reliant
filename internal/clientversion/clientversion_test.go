@@ -33,6 +33,12 @@ func TestParse(t *testing.T) {
 		{value: "web/latest", wantErr: true},
 		{value: "toaster/1.0.0", wantErr: true},
 		{value: "/1.0.0", wantErr: true},
+		// A numeric prerelease identifier has no leading zero (semver 2.0.0 §9),
+		// the same rule the config floors are validated by.
+		{value: "web/1.9.0-0", want: Client{Kind: KindWeb, Version: "1.9.0-0"}},
+		{value: "web/1.9.0-0rc", want: Client{Kind: KindWeb, Version: "1.9.0-0rc"}},
+		{value: "web/1.9.0-01", wantErr: true},
+		{value: "web/1.9.0-rc.01", wantErr: true},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
 			t.Parallel()

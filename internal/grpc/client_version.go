@@ -93,7 +93,7 @@ func (g clientVersionGate) check(ctx context.Context, procedure string, header h
 	raw := header.Get(clientversion.Header)
 	client, err := clientversion.Parse(raw)
 	switch {
-	case errors.Is(err, clientversion.ErrMissing):
+	case isUnidentified(err):
 		if g.policy.GetRefuseUnidentified() {
 			countClient(clientKindNone, clientOutcomeUnidentifiedRefused)
 			logging.InfoContext(ctx, "refused a call with no Reliant-Client header (refuse_unidentified)",
@@ -159,6 +159,16 @@ func (g clientVersionGate) WrapStreamingHandler(next connect.StreamingHandlerFun
 	}
 }
 
+// unidentified reports whether a call carries no Reliant-Client header (absent
+// or blank). It is the one predicate both the interceptor and the API edge
+// refuse on; an unparseable header is identified, and served.
+func unidentified(header http.Header) bool {
+	_, err := clientversion.Parse(header.Get(clientversion.Header))
+	return isUnidentified(err)
+}
+
+func isUnidentified(parseErr error) bool { return errors.Is(parseErr, clientversion.ErrMissing) }
+
 func countClient(kind, outcome string) {
 	observability.ClientVersionTotal.WithLabelValues(kind, outcome).Inc()
 }
@@ -210,6 +220,13 @@ func upgradeRequired(msg, kind, version string, floor clientversion.Floor) error
 // date" modal. Nothing else reaches an old tab. It sits inside CORS, so the
 // browser lets the page see the 404 instead of a CORS failure; a preflight
 // never reaches it.
+//
+// "No header" is exactly what the interceptor calls unidentified
+// (unidentified, clientversion.ErrMissing): a header that is present but does
+// not parse is served here as it is there, under every policy. A bundle that
+// names itself is not a pre-header bundle, and an unknown kind or version
+// format may be a newer client this server cannot read; refusing it would
+// lock that client out with no floor to point it at.
 func refuseLegacyUnidentified(policy *configv1.ClientVersionPolicy) func(http.Handler) http.Handler {
 	if !policy.GetEnforceLegacyUnidentified() && !policy.GetRefuseUnidentified() {
 		return func(next http.Handler) http.Handler { return next }
@@ -218,7 +235,7 @@ func refuseLegacyUnidentified(policy *configv1.ClientVersionPolicy) func(http.Ha
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodOptions &&
 				r.Header.Get("Origin") != "" &&
-				strings.TrimSpace(r.Header.Get(clientversion.Header)) == "" &&
+				unidentified(r.Header) &&
 				clientVersionGated(r.URL.Path) {
 				countClient(clientKindNone, clientOutcomeLegacyNotFound)
 				http.NotFound(w, r)

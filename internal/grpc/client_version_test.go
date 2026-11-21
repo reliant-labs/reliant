@@ -219,6 +219,12 @@ func TestRefuseUnidentified(t *testing.T) {
 		require.Equal(t, connect.CodeUnimplemented, connectErr.Code(), "got %v", err)
 		require.Empty(t, connectErr.Meta().Get(svcerr.ReasonHeader), "a bare 404, not a Connect error")
 	})
+	t.Run("a browser-origin call with an unparseable header is served, at the edge and in the interceptor", func(t *testing.T) {
+		for _, v := range []string{"web/latest", "toaster/1.0.0", "garbage"} {
+			_, err := forge.GetTopology(context.Background(), asClient(&reliantv1.GetForgeTopologyRequest{}, v, testBrowserOrigin))
+			requireReachedHandler(t, err)
+		}
+	})
 	t.Run("a call that names itself passes, with no floor configured", func(t *testing.T) {
 		for _, v := range []string{"sdk-go/0.0.0-20261120010203-abcdef123456", "sdk-ts/0.1.0", "web/1.0.0"} {
 			_, err := forge.GetTopology(context.Background(), asClient(&reliantv1.GetForgeTopologyRequest{}, v, testBrowserOrigin))
@@ -282,6 +288,16 @@ func TestEnforceLegacyUnidentified(t *testing.T) {
 	t.Run("browser origin with the header is served", func(t *testing.T) {
 		resp := post(t, topology, testBrowserOrigin, "web/1.0.0")
 		require.NotEqual(t, http.StatusNotFound, resp.StatusCode)
+	})
+	t.Run("browser origin with an unparseable header is served, as the interceptor serves it", func(t *testing.T) {
+		for _, client := range []string{"web/latest", "toaster/1.0.0", "garbage"} {
+			resp := post(t, topology, testBrowserOrigin, client)
+			require.NotEqual(t, http.StatusNotFound, resp.StatusCode, client)
+		}
+	})
+	t.Run("browser origin with a blank header is unidentified: the 404", func(t *testing.T) {
+		resp := post(t, topology, testBrowserOrigin, "   ")
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 	t.Run("no origin, no header (CLI, SDK, curl) is served", func(t *testing.T) {
 		resp := post(t, topology, "", "")
