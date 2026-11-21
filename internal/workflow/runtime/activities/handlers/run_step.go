@@ -356,6 +356,16 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 				"failed to execute command: "+unavailable.Error(),
 				activitytypes.RunStepMachineUnavailableErrType, nil)
 		}
+		// The step was told to stop (a cancel, a pause, a reset) while it
+		// waited for its command, here or in a reattach: whatever the wait
+		// returned, the activity ends as that stop, so the workflow stops
+		// the step instead of recording a final outcome-unknown failure.
+		if stoppedByRequest(ctx) {
+			activity.GetLogger(ctx).Info("[RunStep] step stopped while waiting for its command",
+				"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt,
+				"request_id", requestID, "cause", context.Cause(ctx), "error", err)
+			return ExecuteRunStepOutput{}, context.Cause(ctx)
+		}
 		// A transport failure is not a command verdict: fail the activity
 		// rather than return a synthetic exit code the workflow would read
 		// as one. Not retryable — see runStepTransportFailure — unless this
@@ -653,6 +663,13 @@ func attemptReleased(ctx context.Context) bool {
 	return !temporal.IsCanceledError(cause) &&
 		!errors.Is(cause, activity.ErrActivityPaused) &&
 		!errors.Is(cause, activity.ErrActivityReset)
+}
+
+// stoppedByRequest reports whether ctx ended because the step was told to
+// stop — a server cancel, a pause, a reset — the cancellations attemptReleased
+// excludes. The step's own timeout is neither.
+func stoppedByRequest(ctx context.Context) bool {
+	return errors.Is(ctx.Err(), context.Canceled) && !attemptReleased(ctx)
 }
 
 // runStepReleased is the activity error for an attempt released while its

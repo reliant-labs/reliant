@@ -530,3 +530,56 @@ func (e *recordingToolExecutor) requests() []*toolexec.ToolRequest {
 	defer e.mu.Unlock()
 	return append([]*toolexec.ToolRequest(nil), e.reqs...)
 }
+
+type stopAttemptKey struct{}
+
+// stopDuringReattach is a machine whose reattach wait is cut short by the step
+// being told to stop, and which then reports the canceled wait as a transport
+// error, as the real router does.
+type stopDuringReattach struct{}
+
+func (stopDuringReattach) ExecuteCommand(context.Context, string, string, int, map[string]string) (CommandResult, error) {
+	return CommandResult{}, errors.New("a retry never runs the command again")
+}
+
+func (stopDuringReattach) ReattachCommand(ctx context.Context, _ string, _ int) (CommandResult, bool, error) {
+	ctx.Value(stopAttemptKey{}).(func())()
+	<-ctx.Done()
+	return CommandResult{ExitCode: -1}, true, &toolexec.TransportError{Code: toolexec.ErrorCodeDaemonUnreached, Detail: "tool status wait: context canceled"}
+}
+
+// A step stopped while a retry waits on its reattached command ends as that
+// stop, not as a final outcome-unknown transport failure.
+func TestRunStep_StopDuringReattachIsAStopNotOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		cause error
+	}{
+		{name: "server cancel", cause: temporal.NewCanceledError()},
+		{name: "paused", cause: activity.ErrActivityPaused},
+		{name: "reset", cause: activity.ErrActivityReset},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			act, chatID := newRunStepOn(t, stopDuringReattach{})
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+			var got error
+			env.RegisterActivityWithOptions(func(ctx context.Context, in ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
+				ctx, stop := context.WithCancelCause(ctx)
+				defer stop(nil)
+				ctx = context.WithValue(ctx, stopAttemptKey{}, func() { stop(tc.cause) })
+				out, err := act.execute(ctx, in, 2, stepRequestID)
+				got = err
+				return out, err
+			}, activity.RegisterOptions{Name: "RunStepStopped"})
+			_, err := env.ExecuteActivity("RunStepStopped", ExecuteRunStepInput{WorkflowID: "wf-1", ChatID: chatID, StepID: "gate", Command: "task ci"})
+			require.Error(t, err)
+			require.ErrorIs(t, got, tc.cause, "the activity returns the stop itself")
+			var appErr *temporal.ApplicationError
+			if errors.As(got, &appErr) {
+				assert.NotEqual(t, runStepOutcomeUnknownErrType, appErr.Type())
+			}
+		})
+	}
+}
