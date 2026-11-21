@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -43,15 +44,21 @@ func (r *levelRecorder) WithGroup(string) slog.Handler      { return r }
 // The prod line of reliant#2429: ListProcesses polled exec.bg_list while the
 // daemon finalized a worktree's recovery, answered Internal, and the RPC edge
 // logged "rpc failed" at ERROR ~170 times for a refusal every caller retries.
-// It now logs at INFO; the wire is unchanged (Internal, the daemon's words).
-// A genuine daemon failure on the same path stays an ERROR.
+// It logs at INFO, and answers Unavailable with the worktree_recovering
+// reason (the web reported each Internal poll as a bug: prod 1ada7020), in
+// the daemon's words. A genuine daemon failure on the same path stays an
+// Internal ERROR.
 func TestBackgroundProxy_RecoveryRefusalLogsBelowError(t *testing.T) {
 	for name, tc := range map[string]struct {
-		text      string
-		wantLevel slog.Level
+		text       string
+		wantLevel  slog.Level
+		wantCode   connect.Code
+		wantReason string
 	}{
-		"recovery finalizing": {text: toolexec.ErrRecoveryFinalizing.Error(), wantLevel: slog.LevelInfo},
-		"genuine failure":     {text: "process table unreadable: permission denied", wantLevel: slog.LevelError},
+		"recovery finalizing": {text: toolexec.ErrRecoveryFinalizing.Error(), wantLevel: slog.LevelInfo,
+			wantCode: connect.CodeUnavailable, wantReason: errreason.WorktreeRecovering},
+		"genuine failure": {text: "process table unreadable: permission denied", wantLevel: slog.LevelError,
+			wantCode: connect.CodeInternal},
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: &reportingCommandRouter{text: tc.text}}))
@@ -64,7 +71,8 @@ func TestBackgroundProxy_RecoveryRefusalLogsBelowError(t *testing.T) {
 
 			_, err := handler(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInternal, svcerr.Code(err), "the code the web already handles")
+			assert.Equal(t, tc.wantCode, svcerr.Code(err))
+			assert.Equal(t, tc.wantReason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
 			assert.Contains(t, svcerr.ToConnect(err).Message(), tc.text, "the daemon's words reach the user")
 			assert.Equal(t, []slog.Level{tc.wantLevel}, rec.levels)
 		})

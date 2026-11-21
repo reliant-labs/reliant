@@ -38,7 +38,7 @@ var entryPoints = []struct {
 	{"internal/launch/workflows.go", "workflowsource.Resolve(", "app: run start"},
 	{"internal/handlers/scenario/scenario_workflow_loader.go", "workflowsource.Loader(", "app: the scenario RPCs"},
 	{"internal/llm/tools/scenario_tools.go", "workflowsource.Loader(", "app: the scenario agent tools"},
-	{"internal/handlers/scenario/scenario.go", "workflowref.ScenarioPath(", "app: UploadScenario writes where the locator reads"},
+	{"internal/handlers/scenario/rpc_upload_scenario.go", "workflowref.ScenarioPath(", "app: UploadScenario writes where the locator reads"},
 	{"internal/workflow/scenario/runner/backend.go", "workflowref.Resolve(", "scenario runner: builtin refs"},
 }
 

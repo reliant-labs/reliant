@@ -127,7 +127,7 @@ func TestBuildSeededSkillMessages_SameNameDifferentSkillsBothArrive(t *testing.T
 
 // The end-to-end property the harness promises: in a forge project, an agent
 // preloading general-agent ALSO receives forge's start-here skill, and the
-// body it receives is byte-for-byte what `<binary> forge skill load forge`
+// body it receives is byte-for-byte what `<binary> forge agent skill load forge`
 // prints — rendered from the forge linked into this binary, not from any copy
 // on disk — undelivered bytes included: it must arrive whole, not windowed.
 //
@@ -146,11 +146,11 @@ func TestForgeStartHerePreload_IsWhatTheCLIPrints(t *testing.T) {
 	require.Empty(t, oversized, "the start-here skill must arrive whole; a windowed copy hides most of it")
 	seed := msgs[0].Content().Text
 
-	// What `reliant forge skill load forge` prints, run in the project.
+	// What `reliant forge agent skill load forge` prints, run in the project.
 	cli := runEmbeddedForge(t, dir, "skill", "load", "forge")
 	// The heading is forge's to word ("# Forge — start here", "# Reliant Forge — start here").
 	require.Regexp(t, `(?m)^# (Reliant )?Forge — start here$`, cli)
-	require.Contains(t, seed, cli, "the preloaded body must be exactly what `reliant forge skill load forge` prints")
+	require.Contains(t, seed, cli, "the preloaded body must be exactly what `reliant forge agent skill load forge` prints")
 
 	// Commands are spelled for the mount that serves them, so an agent never
 	// runs a `forge` from PATH that is a different build (or absent).

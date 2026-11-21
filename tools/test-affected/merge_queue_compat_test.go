@@ -14,7 +14,7 @@ func TestMergeQueuePublicCompatReadsCompleteOwnerHistory(t *testing.T) {
 	requireShellTools(t)
 	wf := loadMergeQueue(t)
 	var run string
-	for _, step := range wf.Jobs["ci-result"].Steps {
+	for _, step := range wf.Jobs["merge-gate"].Steps {
 		if step.Name == "task ci:merge -- --queue" {
 			run = step.Run
 		}

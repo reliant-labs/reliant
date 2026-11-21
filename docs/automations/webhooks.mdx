@@ -34,11 +34,16 @@ triggers:
 
 The signature is an HMAC of the raw body under a shared secret that is kept out of the definition, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
 
-<Warning>
-The server needs the shared secret when the automation is enabled, and neither the app's Enable dialog nor `reliant trigger` takes one today. Enabling a webhook that declares `hmac` is refused with `webhook_hmac_secret is required to verify signatures`. Use the token instead.
-</Warning>
+The server needs the shared secret when the automation is enabled. Give it to `reliant trigger activate` from a file, keyed by the trigger's name (`-` reads it from standard input):
 
-The token is stored hashed and shown once. If it leaks, **rotate** it from the automation's page: the old token stops working immediately.
+```bash
+reliant trigger activate --workflow deploy-hooks --machine build-box \
+  --hmac-secret-file signed=./signing-secret.txt
+```
+
+The secret is stored sealed and is never shown again; run `activate` again with a new file to replace it. Without one, enabling a webhook that declares `hmac` is refused with `webhook_hmac_secret is required to verify signatures`. The app's Enable dialog does not take a secret yet; until it does, enable a signed webhook from the CLI, or use the token.
+
+The token is stored hashed and shown once: `reliant trigger activate` prints it with the URL when it creates the activation. If it leaks, **rotate** it with `reliant trigger rotate <name>`, or from the automation's page: the old token stops working immediately, and the new one is printed once.
 
 ## Your organization's alerts
 
@@ -66,7 +71,7 @@ On Reliant's hosted platform, enabling it connects the automation to your organi
 | `413` | Body larger than 1 MiB |
 | `503` | The delivery could not be recorded; retry |
 
-Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry. On Reliant's hosted service that fallback does not apply today: the proxy in front of the webhook endpoint adds an `X-Request-Id` to every delivery, so two identical posts are two events. To make a sender's retry one run there, send an `Idempotency-Key`, or name the event with `dedupe_key` (below).
+Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry. `X-Request-Id` is not a key: it names a request rather than an event, and a proxy in front of the endpoint (the hosted service's included) sets a fresh one on every delivery. To make retries with changing bodies one run, send an `Idempotency-Key`, or name the event with `dedupe_key` (below).
 
 ### Deduplicating by what the event is about
 

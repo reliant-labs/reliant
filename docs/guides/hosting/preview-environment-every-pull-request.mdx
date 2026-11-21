@@ -209,7 +209,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
 ## What this does not do
 
 - **No data is copied.** A preview gets a new database with your migrations applied and no rows from staging or prod.
-- **Secrets are not copied.** Set them per preview with `reliant forge secret set --env preview-pr-<n>` ([Secrets](/hosting/secrets)).
+- **Secrets are not copied.** Set them per preview with `reliant forge env secret set --env preview-pr-<n>` ([Secrets](/hosting/secrets)).
 - **CI uses a stored token.** There is no OIDC or other short-lived credential path from GitHub Actions to Reliant today. Give the token an expiry, and revoke it with `forge cloud token revoke`.
 - **It is not a dev-server link.** [Preview a running app](/cli/previews) shares a server running on a machine, a separate feature.
 

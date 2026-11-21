@@ -65,6 +65,13 @@ type StatusNode struct {
 	DurationMs int64
 	Iteration  *int32
 	Children   []StatusNode
+	// Origin is how the thread came to exist: "node" (a graph node ran a
+	// child workflow), "spawn" (an agent spawned a sub-agent), "fork" or
+	// "main". Empty from a server older than the field.
+	Origin string
+	// Title is the thread's human title, when it has one: what tells one
+	// spawned sub-agent from another, since all of them run builtin://agent.
+	Title string
 }
 
 // StatusStep is one step of a thread, aggregated over every time it ran.
@@ -191,16 +198,15 @@ func dash(s string) string {
 
 func buildStatusNode(wf *reliantv1.WorkflowExecution, gateByThread map[string]string) StatusNode {
 	node := StatusNode{
-		NodeID:    wf.GetSpawnedByNodeId(),
+		NodeID:    statusNodeLabel(wf),
 		Record:    wf.GetWorkflowName(),
 		Thread:    wf.GetThread(),
 		Status:    StatusLabel(wf.GetState(), wf.GetStopReason()),
 		Gate:      gateByThread[wf.GetThread()],
 		Started:   wf.GetCreatedAt(),
 		Completed: wf.GetCompletedAt(),
-	}
-	if node.NodeID == "" {
-		node.NodeID = wf.GetWorkflowName()
+		Origin:    wf.GetOrigin(),
+		Title:     wf.GetThreadTitle(),
 	}
 	if wf.Iteration != nil {
 		it := wf.GetIteration()
@@ -211,6 +217,21 @@ func buildStatusNode(wf *reliantv1.WorkflowExecution, gateByThread map[string]st
 		node.Children = append(node.Children, buildStatusNode(child, gateByThread))
 	}
 	return node
+}
+
+// statusNodeLabel names a node thread by the graph node that made it: the node
+// that spawned its workflow, else the node that created its thread. Only a
+// thread neither names (a sub-agent an agent spawned) falls back to its title,
+// and last to the workflow it ran. Naming every thread by its workflow
+// labelled each sub-agent "builtin://agent", and each node of a run by the
+// run's own workflow name, so no line said which step it was.
+func statusNodeLabel(wf *reliantv1.WorkflowExecution) string {
+	for _, label := range []string{wf.GetSpawnedByNodeId(), wf.GetOriginNodeId(), wf.GetThreadTitle()} {
+		if label != "" {
+			return label
+		}
+	}
+	return wf.GetWorkflowName()
 }
 
 // SummarizeSteps groups step executions by the node thread that recorded them,
@@ -295,10 +316,7 @@ func SummarizeSteps(root *reliantv1.WorkflowExecution) []StatusStepGroup {
 		}
 
 		for _, c := range wf.GetChildren() {
-			childNode := c.GetSpawnedByNodeId()
-			if childNode == "" {
-				childNode = c.GetWorkflowName()
-			}
+			childNode := statusNodeLabel(c)
 			record(g, childNode, c.GetWorkflowName(), c.GetCreatedAt(),
 				durationMs(c.GetCreatedAt(), c.GetCompletedAt()), childWorkflowResult(c), nil)
 			walk(c, childNodePath(node, childNode))

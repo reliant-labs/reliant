@@ -1122,7 +1122,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		}
 
 		// Wait for step completions
-		if len(runningSteps) > 0 {
+		if len(runningSteps) > 0 && !routePendingFirst(e.ctx, len(events)) {
 			completedSteps := waitForStepCompletions(e.ctx, runningSteps)
 
 			for _, running := range completedSteps {
@@ -1289,7 +1289,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(e.ctx, &errorResult)
 
 					// Update DB status to paused
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
+					_ = notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
 
 					// Self-pause and block until resume
 					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
@@ -1303,7 +1303,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
+					_ = notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
 
 					e.logger.Info("[InlineWorkflow] Resumed after pause, retrying step",
 						"nodeID", e.nodeID,

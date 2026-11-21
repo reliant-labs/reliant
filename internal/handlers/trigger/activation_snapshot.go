@@ -27,6 +27,10 @@ import (
 const maxApprovalDependencies = 64
 const maxApprovalSnapshotBytes = 2 * 1024 * 1024
 
+// analyzeClosure is the validation an approval snapshot runs; a test counts
+// its passes.
+var analyzeClosure = validation.StaticAnalysisWithOptions
+
 // A snapshot is request-local, never stored in approval.title/audit. Validation's
 // loader walks ALL referenced children (including spawn and inline/failure
 // branches); memoization terminates self-spawn cycles. Limits fail closed.
@@ -127,13 +131,34 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	}
 	// Use the same full-tree validator/runtime loaders, but capture everything
 	// they read rather than pretending the returned root is the executable tree.
-	result := validation.StaticAnalysisWithOptions(wf, &validation.ValidationOptions{CanonicalWorkflowRef: def.Workflow, WorkflowLoader: load, PresetLoader: func(name string) (map[string]interface{}, error) {
-		p, err := loadPreset(name)
-		if err != nil {
-			return nil, err
+	//
+	// A pass validates its root and every definition it loads, and what it
+	// finds depends on the definitions alone, never on the inputs a context
+	// walks them with. So each definition is validated once per snapshot:
+	// validated holds every key a clean pass covered. Re-validating per
+	// context took pr-review-priority (three repos over an 8,000-line
+	// pr-review) past the preview's 30s timeout, every attempt (2026-11-20).
+	validated := map[string]bool{}
+	analyze := func(w *pb.Workflow, ref string) *validation.Result {
+		covered := []string{workflowref.RefKey(ref)}
+		result := analyzeClosure(w, &validation.ValidationOptions{CanonicalWorkflowRef: ref, WorkflowLoader: func(ref string) (*pb.Workflow, error) {
+			covered = append(covered, workflowref.RefKey(ref))
+			return load(ref)
+		}, PresetLoader: func(name string) (map[string]interface{}, error) {
+			p, err := loadPreset(name)
+			if err != nil {
+				return nil, err
+			}
+			return p.Params, nil
+		}})
+		if limitErr == nil && !result.HasErrors() {
+			for _, k := range covered {
+				validated[k] = true
+			}
 		}
-		return p.Params, nil
-	}})
+		return result
+	}
+	result := analyze(wf, def.Workflow)
 	if limitErr != nil {
 		return nil, limitErr
 	}
@@ -205,22 +230,23 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 			if visited[k] >= len(contexts[k]) {
 				continue
 			}
+			// A preview past its deadline is answered already; stop spending
+			// the worker's CPU on it.
+			if err := ctx.Err(); err != nil {
+				return nil, svcerr.Wrap(err)
+			}
 			progress = true
 			valuesForContext := contexts[k][visited[k]]
 			visited[k]++
 			w := loaded[k]
-			checked := validation.StaticAnalysisWithOptions(w, &validation.ValidationOptions{CanonicalWorkflowRef: k, WorkflowLoader: load, PresetLoader: func(name string) (map[string]interface{}, error) {
-				p, err := loadPreset(name)
-				if err != nil {
-					return nil, err
+			if !validated[k] {
+				checked := analyze(w, k)
+				if limitErr != nil {
+					return nil, limitErr
 				}
-				return p.Params, nil
-			}})
-			if limitErr != nil {
-				return nil, limitErr
-			}
-			if checked.HasErrors() {
-				return nil, refusedPrecondition("Referenced workflow dependency validation failed during approval")
+				if checked.HasErrors() {
+					return nil, refusedPrecondition("Referenced workflow dependency validation failed during approval")
+				}
 			}
 			var walk func(*pb.Workflow, int) error
 			walk = func(w *pb.Workflow, depth int) error {

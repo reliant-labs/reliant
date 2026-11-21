@@ -9,7 +9,7 @@ import (
 )
 
 // What a confirmed clean-up does: it runs forge's storage reaper
-// (`forge storage auto-gc`, see reaper.go) once, the same pass the daemon
+// (`forge machine storage auto-gc`, see reaper.go) once, the same pass the daemon
 // schedules. forge owns what may be removed and how — the Go-format caches
 // trimmed to their budget and age (never `go clean -cache`, which under a
 // running build produces "link: cannot open file …/go-build/…-d", and whose

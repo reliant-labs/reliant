@@ -96,6 +96,9 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 		}
 		hasSecret := existing != nil && existing.Kind == core.TriggerKindWebhook && s.storedSecret(ctx, existing.ID)
 		if src.HMAC && def.WebhookHmacSecret == nil && !hasSecret {
+			if name := def.GetWorkflowTrigger(); name != "" {
+				return svcerr.InvalidArgument(fmt.Sprintf("webhook_hmac_secret is required to verify signatures: trigger %q declares hmac:, so give it the secret the sender signs with (reliant trigger activate --hmac-secret-file %s=<file>)", name, name))
+			}
 			return svcerr.InvalidArgument("webhook_hmac_secret is required to verify signatures")
 		}
 	case core.TriggerKindIntegration:
@@ -214,7 +217,13 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	if access == nil {
 		return nil
 	}
-	if err := access.Refresh(ctx, trigger.UserID); err != nil {
+	refresh := func() error { return access.Refresh(ctx, trigger.UserID) }
+	if memo := accessRefreshMemoFrom(ctx); memo != nil {
+		err = memo.refresh(accessRefreshKey{integration: cfg.Integration, userID: trigger.UserID}, refresh)
+	} else {
+		err = refresh()
+	}
+	if err != nil {
 		if access.IsPermanent(err) {
 			// The reason is the access check's own sentence (not connected,
 			// needs reconnecting): what the owner has to fix.
