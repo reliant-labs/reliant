@@ -46,6 +46,9 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Domains", shows: "The addresses your app answers on" };
     case "activity":
       return { title: "Activity", shows: "Every deploy, change and alert, newest first" };
+    case "services":
+    case "service":
+      return { title: "Services", shows: PAGE_SUBTITLES.services };
     default:
       // A page kind this list does not name yet (main may add one before this
       // list learns it): a generic description, so a new kind still compiles.

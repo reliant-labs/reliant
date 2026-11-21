@@ -254,6 +254,10 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "services":
+      return [{ label: "Services" }];
+    case "service":
+      return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
   }
 }
 

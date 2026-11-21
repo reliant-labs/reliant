@@ -239,6 +239,8 @@ function renderAt(
     secrets: probe("secrets"),
     domains: probe("domains"),
     activity: probe("activity"),
+    services: probe("services"),
+    service: probe("service"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

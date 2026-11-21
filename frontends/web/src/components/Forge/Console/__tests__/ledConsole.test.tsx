@@ -45,7 +45,7 @@ describe("LedConsoleProvider", () => {
       </LedConsoleProvider>
     );
     const labels = (await screen.findByTestId("labels")).textContent?.split(",") ?? [];
-    expect(labels.slice(0, 4)).toEqual(["Overview", "Storage", "Dashboards", "Issues"]);
+    expect(labels.slice(0, 5)).toEqual(["Overview", "Services", "Storage", "Dashboards", "Issues"]);
     expect(labels).not.toContain("Product analytics");
   });
 });

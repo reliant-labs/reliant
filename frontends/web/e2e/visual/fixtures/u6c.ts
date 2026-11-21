@@ -15,6 +15,7 @@
 import type { Fixtures } from '../rpc'
 import { DAY, FIXED_NOW, HOUR, IDS, iso } from './base'
 import { queryPanel } from './console'
+import { servicesFixtures, servicesQueryPanel } from './services'
 
 const bucket = (name: string, runtime: string, publicRead = false) => ({ name, runtime, publicRead, reachable: true, unreachableReason: '' })
 
@@ -112,10 +113,33 @@ function invoices() {
   })
 }
 
+/** ledger's month so far (GetProjectCost): one small backend and its database, so Usage & billing lists two projects. */
+function ledgerCost() {
+  const monthStart = Date.UTC(2026, 10, 1)
+  const days = Math.floor((FIXED_NOW - monthStart) / DAY) + 1
+  const amount = (dollars: number, basis = 'estimated') => ({ usdNanos: String(Math.round(dollars * NANOS)), basis, lowerBound: false, unpricedDimensions: [], allocated: false })
+  const daily = Array.from({ length: days }, (_, d) =>
+    ([['compute', 0.36], ['databases', 0.14]] as const).map(([category, perDay]) => ({
+      day: new Date(monthStart + d * DAY).toISOString(), category, environmentId: 'env-ledger-prod',
+      list: amount(perDay * (1 + 0.08 * Math.sin(d / 1.7)), 'list'), quantities: [], partial: d === days - 1,
+    })),
+  ).flat()
+  return {
+    currency: 'USD', generatedAt: iso(5 * 60_000), periodStart: new Date(monthStart).toISOString(), periodEnd: new Date(Date.UTC(2026, 11, 1)).toISOString(),
+    measuredThrough: iso(40 * 60_000), monthToDate: amount(8.94), monthToDateList: amount(9.1, 'list'), samePointLastPeriod: amount(8.2),
+    forecast: { amount: amount(14.9), lowUsdNanos: String(13 * NANOS), highUsdNanos: String(16 * NANOS), method: 'run_rate_and_trailing_7d', measuredHours: 168, unavailableReason: '', list: amount(15.2, 'list') },
+    lastPeriod: amount(13.6, 'invoiced'), daily, drivers: [], allowances: [], caps: [],
+  }
+}
+
+const shopfrontCost = servicesFixtures['controlplane.v1.BillingService/GetProjectCost']
+
 export const u6cFixtures: Fixtures = {
+  'controlplane.v1.BillingService/GetProjectCost': (req) =>
+    req.projectId === 'ledger' ? ledgerCost() : typeof shopfrontCost === 'function' ? shopfrontCost(req) : shopfrontCost,
   'controlplane.v1.BillingService/ListOrganizationUsage': organizationUsage,
   'controlplane.v1.BillingService/ListCurrentUserInvoices': () => ({ invoices: invoices() }),
   'controlplane.v1.StorageBrowserService/ListBrowsableBuckets': (req) => ({ buckets: BUCKETS[String(req.environmentId)] ?? [], policy: 'STORAGE_ACCESS_POLICY_OPEN' }),
   'controlplane.v1.StorageBrowserService/ListObjects': listObjects,
-  'controlplane.v1.ObservabilityService/QueryPanel': queryPanel,
+  'controlplane.v1.ObservabilityService/QueryPanel': (req) => servicesQueryPanel(req) ?? queryPanel(req),
 }

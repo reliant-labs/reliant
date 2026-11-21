@@ -6,7 +6,7 @@
  *   Find · switcher (the shell draws them above)
  *   Overview · Inbox (count) · Agents › ·
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
- *   Deployments ▾ (Releases, Environments, Previews) ·
+ *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Users ·
  *   Configure ▾ (Secrets, Domains, Activity)
  *   footer: Settings

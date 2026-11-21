@@ -22,6 +22,7 @@
  *       /users                              who can sign in to the scope (its managed identity)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
+ *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -59,6 +60,7 @@ import {
   forgeConsoleSearchSchema,
   forgeConsoleEnvironmentsSearchSchema,
   forgeConsoleSecretsSearchSchema,
+  forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
   forgeConsoleWorkloadSearchSchema,
@@ -93,6 +95,10 @@ export interface ForgeConsoleComponents {
   secrets: RouteComponent
   domains: RouteComponent
   activity: RouteComponent
+  /** Services: every workload, the site and the database, live. */
+  services: RouteComponent
+  /** One of them. */
+  service: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -305,6 +311,18 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
+  const servicesRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'services',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.services,
+  })
+  const serviceRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'services/$name',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.service,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -346,6 +364,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       monitoringRoute,
       settingsRoute,
       activityRoute,
+      servicesRoute,
+      serviceRoute,
     ]),
   ])
 }

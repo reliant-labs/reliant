@@ -25,6 +25,9 @@
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
+ *   /forge/p/:project/services                Services: every workload, the site and the database, live
+ *                                             (`view=charts`: each workload's charts, U6e)
+ *   /forge/p/:project/services/:name          one of them, across the environments in scope
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -152,7 +155,11 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** Everything the app runs, live: services, workers, jobs, the site and the database (Services/ServicesPage.tsx). */
+  | { kind: "services" }
+  /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
+  | { kind: "service"; name: string };
 
 
 /**
@@ -218,6 +225,10 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "services":
+      return `${base}/services`;
+    case "service":
+      return `${base}/services/${encodeURIComponent(page.name)}`;
   }
 }
 
@@ -225,10 +236,13 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
 
 /** The project's landing page: Home and Overview, merged. */
 export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "overview" }, ctx);
+export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "services" }, ctx);
 /** Storage: the app's buckets. */
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+/** Services' charts view (U6e): every workload's charts. */
+export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 
@@ -266,6 +280,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
+      case "services":
+        if (!sub) return { kind: "services" };
+        return dashKind ? null : { kind: "service", name: safeDecode(sub) };
       case "storage":
       case "data":
       case "users":
