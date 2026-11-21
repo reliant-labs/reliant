@@ -114,8 +114,13 @@ export interface ListMetricExemplarsRequest {
   limit?: number;
 }
 
-/** Prefixes obsquery's IsBuiltinMetric treats as forge's own runtime metrics (rpc., go., forge.). */
-const BUILTIN_PREFIXES = ["rpc.", "go.", "forge."] as const;
+/**
+ * Prefixes obsquery's IsBuiltinMetric treats as forge's own runtime metrics:
+ * rpc., go. and forge., plus process. and system., which forge's resource
+ * sampler (pkg/resmetrics) emits under the OpenTelemetry semantic-convention
+ * names.
+ */
+const BUILTIN_PREFIXES = ["rpc.", "go.", "forge.", "process.", "system."] as const;
 /** Node-agent and kubelet telemetry (k8s.*, container.*): what the catalog files under Infra. */
 const INFRA_PREFIXES = ["k8s.", "container."] as const;
 
@@ -123,8 +128,9 @@ const INFRA_PREFIXES = ["k8s.", "container."] as const;
  * Which catalog group a metric belongs to: a declared one first (the release's
  * own schema), then forge's built-ins, then infrastructure, then everything
  * else. Mirrors obsquery's IsBuiltinMetric (pkg/obsquery/catalog.go): the
- * `rpc.`, `go.` and `forge.` prefixes, matched on the dot so `rpcx.thing` is not
- * one, and followed by a name — a bare `rpc.` is not a built-in.
+ * `rpc.`, `go.`, `forge.`, `process.` and `system.` prefixes, matched on the dot
+ * so `rpcx.thing` is not one, and followed by a name — a bare `rpc.` is not a
+ * built-in.
  */
 export function catalogGroup(name: string, declared: boolean): MetricGroup {
   if (BUILTIN_PREFIXES.some((p) => name.startsWith(p) && name.length > p.length)) return "runtime";
