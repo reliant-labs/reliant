@@ -500,11 +500,16 @@ const SURFACES: Surface[] = [
     ready: (page) => page.locator('[data-testid="connectors-page"][data-tab="mcp"]'),
   },
   {
-    // Agents with no sandbox to run a chat: ListDaemons answers empty.
+    // Agents with no sandbox to run a chat: ListDaemons answers empty. The
+    // project's Agents page, not `/`: with no daemon the desktop home is
+    // Projects (shell-daemonless-home), outside the Agents drill-in.
     name: 'shell-agents-no-sandbox',
-    path: '/',
+    path: `/project/${IDS.project}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('nav-drill-in'),
+    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+  },
+  {
     // The daemonless home (U6 3/4): an onboarded person whose daemon list is
     // empty. The desktop home sends them to Projects, with the Set up chats
     // card there and in place of the nav's chat list. The phone keeps its chat
