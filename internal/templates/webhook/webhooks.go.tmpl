@@ -1,0 +1,186 @@
+//go:build ignore
+
+package {{.ServicePackage}}
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/middleware"
+)
+
+// {{.Name | camelCase}}Dedupe remembers which {{.Name}} deliveries were already
+// processed, so a redelivery is acknowledged instead of applied twice. It is
+// bounded (least-recently-marked key evicted past MaxKeys) and TTL'd, so it
+// cannot grow for the life of the process.
+//
+// Size TTL to the provider's retry window: a provider that keeps retrying a
+// failed delivery for 24h needs a 24h window to still recognise the
+// redelivery as a duplicate.
+//
+// PER-PROCESS: every replica keeps its own copy, so a duplicate delivery
+// routed to a different replica IS processed again. For at-most-once across
+// replicas, keep this call shape and point the two methods below at shared
+// storage — a webhook_events table with a UNIQUE constraint on event_id,
+// where "is processed" is a SELECT and "mark processed" an INSERT the
+// constraint rejects the second time.
+var {{.Name | camelCase}}Dedupe = middleware.NewDedupeStore(middleware.DedupeConfig{
+	MaxKeys: 10_000,
+	TTL:     24 * time.Hour,
+})
+
+// handleWebhook{{.Name | pascalCase}} handles incoming {{.Name}} webhooks.
+//
+// Routes are auto-registered via webhook_routes_gen.go AND auto-wired by
+// internal/app/mounts_services_gen.go (which calls s.RegisterWebhookRoutes(mux, stack)
+// after the user-owned RegisterHTTP). No manual wiring required.
+func (s *Service) handleWebhook{{.Name | pascalCase}}(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, middleware.DefaultWebhookMaxBodySize))
+	if err != nil {
+		s.deps.Logger.ErrorContext(r.Context(), "failed to read webhook body", "error", err)
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the signature FIRST — everything below trusts the body, and the
+	// sender is anonymous until the signature checks out.
+	if err := s.verify{{.Name | pascalCase}}Signature(r.Header, body); err != nil {
+		s.deps.Logger.WarnContext(r.Context(), "webhook signature verification failed", "error", err)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Extract event ID for idempotency. middleware.WebhookEventID covers the
+	// common provider headers (X-Event-ID / X-Webhook-ID / X-Request-ID,
+	// Stripe-Event-Id, X-GitHub-Delivery); if {{.Name}} stamps something else,
+	// read that header directly and fall back to the helper.
+	eventID := middleware.WebhookEventID(r.Header)
+	if eventID == "" {
+		s.deps.Logger.WarnContext(r.Context(), "webhook missing event ID")
+		http.Error(w, "missing event ID", http.StatusBadRequest)
+		return
+	}
+
+	// Idempotency check.
+	processed, err := s.is{{.Name | pascalCase}}WebhookProcessed(r.Context(), eventID)
+	if err != nil {
+		s.deps.Logger.ErrorContext(r.Context(), "failed to check webhook idempotency", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if processed {
+		s.deps.Logger.DebugContext(r.Context(), "webhook already processed", "event_id", eventID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	event := middleware.WebhookEvent{
+		ID:         eventID,
+		Source:     "{{.Name}}",
+		Headers:    r.Header,
+		Body:       body,
+		ReceivedAt: time.Now(),
+	}
+
+	// Process the webhook.
+	if err := s.process{{.Name | pascalCase}}Webhook(r.Context(), event); err != nil {
+		s.deps.Logger.ErrorContext(r.Context(), "webhook processing failed", "event_id", eventID, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Mark as processed — only now, after processing SUCCEEDED, so the
+	// provider's retry of a failed delivery is reprocessed rather than
+	// acknowledged as a duplicate.
+	if err := s.mark{{.Name | pascalCase}}WebhookProcessed(r.Context(), eventID); err != nil {
+		s.deps.Logger.ErrorContext(r.Context(), "failed to mark webhook as processed", "event_id", eventID, "error", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// is{{.Name | pascalCase}}WebhookProcessed reports whether this delivery was
+// already applied. Swap the body for a lookup against shared storage to make
+// deduplication hold across replicas; the error return exists so that lookup
+// can fail loudly instead of silently reprocessing.
+func (s *Service) is{{.Name | pascalCase}}WebhookProcessed(_ context.Context, eventID string) (bool, error) {
+	return {{.Name | camelCase}}Dedupe.Seen(eventID), nil
+}
+
+// mark{{.Name | pascalCase}}WebhookProcessed records a successfully processed
+// delivery. Swap the body for an INSERT into the same shared storage
+// is{{.Name | pascalCase}}WebhookProcessed reads.
+func (s *Service) mark{{.Name | pascalCase}}WebhookProcessed(_ context.Context, eventID string) error {
+	{{.Name | camelCase}}Dedupe.Mark(eventID)
+	return nil
+}
+
+// {{.Name | camelCase}}WebhookSecret is the shared secret {{.Name}} signs its
+// deliveries with. It is EMPTY on purpose: an unconfigured secret rejects
+// every delivery (see verify{{.Name | pascalCase}}Signature), so the webhook
+// fails closed until you wire this up rather than trusting unsigned payloads.
+//
+// TODO: source this from config instead of a literal. Declare the secret in
+// proto/<project>/config/v1/config.proto with the (forge.v1.config) annotation, run
+// `forge generate`, and read it off s.deps.Config — that gets you per-env
+// values and secret-manager wiring for free. See `forge skill load secrets`.
+var {{.Name | camelCase}}WebhookSecret = ""
+
+// verify{{.Name | pascalCase}}Signature checks that the delivery really came
+// from {{.Name}}, using the HMAC-SHA256 scheme most providers implement:
+// the provider signs the RAW body with a shared secret and sends the digest
+// in a header.
+//
+// It FAILS CLOSED. An unset secret, a missing header and a bad digest all
+// reject, so a webhook that has not been configured yet cannot be tricked
+// into accepting anonymous input. Adjust the header name and the scheme to
+// whatever {{.Name}} actually sends — the shape below is the common case,
+// not a universal one.
+func (s *Service) verify{{.Name | pascalCase}}Signature(headers http.Header, body []byte) error {
+	secret := {{.Name | camelCase}}WebhookSecret
+	if secret == "" {
+		return fmt.Errorf("{{.Name}} webhook secret is not configured — refusing to trust an unverified payload")
+	}
+
+	// TODO: confirm the header {{.Name}} signs with; X-Signature-256 is the
+	// most common spelling (GitHub uses X-Hub-Signature-256, Stripe uses
+	// Stripe-Signature with its own timestamped format).
+	signature := headers.Get("X-Signature-256")
+	if signature == "" {
+		return fmt.Errorf("{{.Name}} webhook: missing signature header")
+	}
+
+	// VerifyHMACSHA256 compares in constant time and tolerates the
+	// "sha256=" prefix some providers prepend.
+	if !middleware.VerifyHMACSHA256(body, signature, secret) {
+		return fmt.Errorf("{{.Name}} webhook: invalid signature")
+	}
+	return nil
+}
+
+// process{{.Name | pascalCase}}Webhook processes a verified webhook event.
+// TODO: Implement your webhook processing logic.
+func (s *Service) process{{.Name | pascalCase}}Webhook(ctx context.Context, event middleware.WebhookEvent) error {
+	s.deps.Logger.InfoContext(ctx, "processing webhook", "source", event.Source, "event_id", event.ID)
+
+	// TODO: Parse event.Body and handle different event types.
+	// Example:
+	//   var payload MyEventPayload
+	//   if err := json.Unmarshal(event.Body, &payload); err != nil {
+	//       return fmt.Errorf("unmarshal payload: %w", err)
+	//   }
+	//   switch payload.Type {
+	//   case "order.created":
+	//       return s.handleOrderCreated(ctx, payload)
+	//   }
+
+	return nil
+}

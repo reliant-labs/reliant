@@ -1,0 +1,15 @@
+# Response headers for this site, read by Reliant static hosting at deploy
+# time (Netlify / Cloudflare Pages format; the file itself is never served).
+# It ships in the build, so a promoted release serves the same headers in
+# every env. Reference: `forge skill load deploy/static-site`, "Response
+# headers".
+#
+# Only this site may frame its pages: another origin cannot put a sign-in or
+# settings page under a transparent iframe and click it for the user
+# (clickjacking). To allow an embedder, list it, e.g.
+#   Content-Security-Policy: frame-ancestors 'self' https://partner.example
+# and delete the X-Frame-Options line (browsers that know frame-ancestors
+# ignore it; older ones would still refuse the embedder).
+/*
+  Content-Security-Policy: frame-ancestors 'self'
+  X-Frame-Options: SAMEORIGIN

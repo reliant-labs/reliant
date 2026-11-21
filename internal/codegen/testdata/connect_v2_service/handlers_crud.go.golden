@@ -1,0 +1,96 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Each method delegates to github.com/reliant-labs/forge/pkg/crud (error mapping, cursor
+// pagination, page-size clamping, ordering, total counts, update masks); the per-entity wiring is
+// regenerated in handlers_crud_ops_gen.go.
+// pkg/crud never reads the caller. The interceptor already turned away anyone without a valid
+// token (unless the rpc declares auth_required: false; pkg/middleware/procedures_gen.go), but WHO
+// MAY DO WHAT and WHICH ROWS THEY MAY SEE are yours: import "example.com/v2app/pkg/middleware",
+// resolve the caller with middleware.GetUser(ctx), and wrap the op's Filters in a WHERE on those
+// claims. See `forge skill load auth`.
+// EACH METHOD'S `Auth:` LINE says which case it is, read from its rpc's auth_required and its
+// table's forge:owner column:
+// AUTHENTICATED, UNSCOPED — only a valid token reaches it, and nothing in its body reads who that
+// is yet: the paragraph above is the to-do.
+// Customize an RPC by replacing its delegation here; CRUD RPCs added later are appended by `forge
+// generate`, and your content is never modified.
+package items
+
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	pb "example.com/v2app/gen/services/items/v1"
+	"example.com/v2app/internal/db"
+	"example.com/v2app/internal/metrics"
+)
+
+// GetItem delegates CRUD get to pkg/crud.
+// Auth: AUTHENTICATED, UNSCOPED — nothing reads the caller; scope with middleware.GetUser(ctx) (see file header).
+func (s *Service) GetItem(
+	ctx context.Context,
+	req *pb.GetItemRequest,
+) (*pb.GetItemResponse, error) {
+	return crud.Get(s.crudGetItemOp())(ctx, req)
+}
+
+// CreateItem delegates CRUD create to pkg/crud.
+// Auth: AUTHENTICATED, UNSCOPED — nothing reads the caller; scope with middleware.GetUser(ctx) (see file header).
+func (s *Service) CreateItem(
+	ctx context.Context,
+	req *pb.CreateItemRequest,
+) (*pb.CreateItemResponse, error) {
+	resp, err := crud.Create(s.crudCreateItemOp())(ctx, req)
+	metrics.RecordCreated(ctx, "Item", err)
+	return resp, err
+}
+
+// SearchItems implements the SearchItems RPC.
+//
+// forge:custom-read-shape: request has no page_size
+//
+// This RPC diverges from AIP-158 CRUD, so the body is yours to refine.
+// forge scaffolded a WIRED (if naive) Item query as a starting
+// point. Compose pkg/crud + pkg/orm helpers, or drop to raw SQL via
+// s.deps.DB. `forge project audit` lists this under crud_stubs until you finish
+// wiring the response (remove the TODO below). See the forge `db` skill.
+//
+// UNSCOPED: the scaffolded query reads the caller's claims nowhere. The
+// interceptor has already enforced this RPC's auth_required declaration;
+// what it cannot know is which rows this caller may see — resolve the
+// principal with middleware.GetUser(ctx) before the query and scope the filters
+// to those claims.
+func (s *Service) SearchItems(
+	ctx context.Context,
+	req *pb.SearchItemsRequest,
+) (*pb.SearchItemsResponse, error) {
+	_ = req
+	// Best-effort filters mapped from the request's scalar fields onto
+	// declared columns. Refine or replace these for your real query.
+	var opts []orm.QueryOption
+	if req.Name != nil {
+		opts = append(opts, orm.WhereEq("name", *req.Name))
+	}
+	if req.Q != "" {
+		opts = append(opts, orm.WhereILikeAny([]string{"name"}, "%"+req.Q+"%"))
+	}
+
+	rows, err := db.ListItem(ctx, s.deps.DB, opts...)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+
+	items := make([]*pb.Item, 0, len(rows))
+	for _, row := range rows {
+		m, err := itemToProto(row)
+		if err != nil {
+			return nil, svcerr.Wrap(err)
+		}
+		items = append(items, m)
+	}
+	_ = items // TODO: refine this query and place items onto pb.SearchItemsResponse.
+
+	return &pb.SearchItemsResponse{}, nil
+}

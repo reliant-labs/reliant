@@ -1,0 +1,110 @@
+{
+  "schema": "forge.dev/vuln-patch/v1",
+  "env": "prod",
+  "release": "v1.0.0",
+  "dir": "/repo",
+  "allow_major": false,
+  "changed": true,
+  "findings": [
+    {
+      "id": "GO-2026-0001",
+      "severity": "high",
+      "package": {
+        "name": "example.com/lib",
+        "version": "v1.2.0",
+        "purl": "pkg:golang/example.com/lib@v1.2.0",
+        "type": "go-module"
+      },
+      "ecosystem": "go",
+      "installed": "v1.2.0",
+      "target": "v1.2.5",
+      "manifests": [
+        "go.mod"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "GHSA-96hv-2xvq-fx4p",
+      "severity": "high",
+      "package": {
+        "name": "ws",
+        "version": "8.20.0",
+        "purl": "pkg:npm/ws@8.20.0",
+        "type": "npm"
+      },
+      "ecosystem": "npm",
+      "installed": "8.20.0",
+      "target": "8.21.0",
+      "manifests": [
+        "web/package-lock.json"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "CVE-2026-4738",
+      "severity": "high",
+      "package": {
+        "name": "zlib",
+        "version": "1.3.2-r1",
+        "type": "apk"
+      },
+      "installed": "1.3.2-r1",
+      "status": "skipped",
+      "reason": "an OS package (apk): refreshing the image's base has no patcher yet"
+    }
+  ],
+  "bumps": [
+    {
+      "ecosystem": "go",
+      "manifest": "go.mod",
+      "package": "example.com/lib",
+      "from": "v1.2.0",
+      "to": "v1.2.5",
+      "direct": true,
+      "commands": [
+        [
+          "go",
+          "get",
+          "example.com/lib@v1.2.5"
+        ],
+        [
+          "go",
+          "mod",
+          "tidy"
+        ]
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "manifest": "web/package-lock.json",
+      "package": "ws",
+      "from": "8.20.0",
+      "to": "8.21.0",
+      "direct": true,
+      "commands": [
+        [
+          "npm",
+          "install",
+          "ws@8.21.0"
+        ]
+      ]
+    }
+  ],
+  "verify": {
+    "command": "task test:short",
+    "source": "taskfile",
+    "passed": true,
+    "rescanned": [
+      ".",
+      "web"
+    ]
+  },
+  "summary": {
+    "fixed": 2,
+    "still_present": 0,
+    "bumped": 0,
+    "failed": 0,
+    "skipped": 1
+  },
+  "exit_code": 2
+}

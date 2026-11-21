@@ -1,0 +1,438 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/reliant-labs/forge/main/schema/vuln-list.v1.schema.json",
+  "title": "forge vuln list document (forge.dev/vuln-list/v1)",
+  "description": "What a release's artifacts are known to be vulnerable to, and what the env's vuln_gate makes of it: the output of `forge vuln list|show|scan --json`. Generated from the Go type forge encodes it with.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "description": "Schema is DocumentSchema.",
+      "type": "string"
+    },
+    "env": {
+      "description": "Env is the env whose policy judged the findings; \"\" for a scan that named no env (it is judged by the default policy).",
+      "type": "string"
+    },
+    "release": {
+      "description": "Release is the release scanned; \"\" for a directory or image scan.",
+      "type": "string"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage",
+      "description": "Coverage says how much of the release was scanned."
+    },
+    "db": {
+      "$ref": "#/$defs/DocumentDB",
+      "description": "DB says which scanner and database build the findings came from."
+    },
+    "gate": {
+      "$ref": "#/$defs/GateResult",
+      "description": "Gate is the env's vuln_gate verdict over every finding, whatever the filters: a filter narrows what is listed, never what is judged."
+    },
+    "counts": {
+      "$ref": "#/$defs/Counts",
+      "description": "Counts are the listed findings by severity (negligible counts as low)."
+    },
+    "findings": {
+      "description": "Findings are the listed findings, strongest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DocumentFinding"
+      }
+    },
+    "notes": {
+      "description": "Notes say what the reader should know about the data: why nothing could be rescanned (no scanner, no database, a stale database), and why the verdict is undetermined.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "env",
+    "release",
+    "coverage",
+    "db",
+    "gate",
+    "counts",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Counts": {
+      "description": "Counts are findings by severity.",
+      "type": "object",
+      "properties": {
+        "critical": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "high": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "medium": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "low": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "unknown": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Coverage": {
+      "description": "Coverage is how much of a release was scanned.",
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "description": "Artifacts is how many artifacts the release has.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "with_sbom": {
+          "description": "WithSBOM is how many of them have a stored SBOM.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scanned": {
+          "description": "Scanned is how many of those have a scan.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "unscanned": {
+          "description": "Unscanned names each artifact with no SBOM or no scan, with why.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/UnscannedArtifact"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DocumentDB": {
+      "description": "DocumentDB is the freshness of a document's findings.",
+      "type": "object",
+      "properties": {
+        "scanner": {
+          "description": "Scanner and Version name the tool (\"grype\", \"v0.122.1\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema": {
+          "description": "Schema is the database schema (\"v6.1.10\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "built_at": {
+          "description": "BuiltAt is the build of the OLDEST database any listed artifact was scanned with: the document is only as fresh as that.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "stale": {
+          "description": "Stale reports that BuiltAt is older than five days (StaleAfter): the verdict is then \"stale\", exit 2, whatever the findings say.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DocumentFinding": {
+      "description": "DocumentFinding is one advisory on one package, across the release's artifacts.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "ID is the advisory the scanner matched (CVE-…, GHSA-…, GO-…).",
+          "type": "string"
+        },
+        "aliases": {
+          "description": "Aliases are the other identifiers of the same advisory (the CVE of a GHSA). An exemption of any of them covers the finding.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "severity": {
+          "description": "Severity is the scanner's label, normalized.",
+          "type": "string"
+        },
+        "cvss": {
+          "description": "CVSS is the highest CVSS base score the database records for the advisory, absent when it records none.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "kev": {
+          "description": "KEV reports that the advisory is on CISA's Known Exploited Vulnerabilities list.",
+          "type": "boolean"
+        },
+        "epss": {
+          "description": "EPSS is the probability of exploitation in the next 30 days (0..1), and EPSSPercentile its percentile, when the database has a score.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "epss_percentile": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "package": {
+          "$ref": "#/$defs/Package",
+          "description": "Package is the component the advisory matched."
+        },
+        "fixed_in": {
+          "description": "FixedIn are the versions that fix it, when a fix exists.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "fix_state": {
+          "description": "FixState is fixed, not-fixed, wont-fix, or \"\" when unknown.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "match_type": {
+          "description": "MatchType is the strongest way the scanner matched it: exact-direct-match, exact-indirect-match or cpe-match.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "Confidence is high for an exact match and low for a CPE-only one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "locations": {
+          "description": "Locations are where in the scanned artifact the package was found.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "description": "URL is the advisory's page in the source the match came from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifacts": {
+          "description": "Artifacts are the release artifacts the package is in.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "first_seen": {
+          "description": "FirstSeen is the first stored scan that reported it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "exemption": {
+          "description": "Exemption is the env's exemption that covers it, when one does.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Exemption"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "description": "Action is what the vuln_gate rule makes of it: block, warn or none.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "severity",
+        "kev",
+        "package",
+        "artifacts",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "Exemption": {
+      "description": "Exemption is an accepted advisory, as the env declares it (forge.VulnExemption): time-boxed, with its reason.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expires": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "GateResult": {
+      "description": "GateResult is the gate block of the vuln-list document.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Mode is the env's vuln_gate mode: off, audit or enforce.",
+          "type": "string"
+        },
+        "graded_as": {
+          "description": "GradedAs is the mode the gate is judged at: the declared mode, except that the warn-first rollout grades an enforce as audit until the project's forge pin reaches the vuln-gate rule's GatesFrom release (internal/cli/lint/rollout_grade.go). The caller grades; Evaluate records what it was told (EvaluateInput.GradedAs).",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "Verdict is the gate's answer.",
+          "type": "string"
+        },
+        "blocking": {
+          "description": "Blocking are the ids of the advisories that block, sorted, each once.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "determined": {
+          "description": "Determined is false when the verdict is \"could not determine\" (stale, unscanned): the exit code is 2, and the document's notes say why.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "graded_as",
+        "verdict",
+        "blocking",
+        "determined"
+      ],
+      "additionalProperties": false
+    },
+    "Package": {
+      "description": "Package is the component a finding is in.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name and Version as the SBOM names them.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "purl": {
+          "description": "PURL is the package URL, when the SBOM gives one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "description": "Type is the ecosystem: go-module, npm, apk, deb, python, binary, ...",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "UnscannedArtifact": {
+      "description": "UnscannedArtifact is an artifact the verdict could not cover.",
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
