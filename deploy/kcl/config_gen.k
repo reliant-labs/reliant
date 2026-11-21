@@ -25,7 +25,7 @@ schema ApiServerConfigOrgs:
     provider_workspace_seats_enabled: bool = False
 
 # forge:section schema ApiServerConfig
-# forge:hash=4fb6cb6cef0d4f6d96b0c6f2b4578f8cf6d8641b87ad30e2bb4513f818557552
+# forge:hash=c4b706dbb0b53b6f49bf288806c2e7e5e1d4a11442fc90cbd3a1bcfb2baa900d
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -53,6 +53,28 @@ schema ApiServerConfig:
     jwt_jwks_snapshot: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "jwt_jwks_snapshot" }
     # How old a JWKS snapshot may be and still be used
     jwt_jwks_snapshot_max_age: str = "168h"
+    # The identity's native-broker OIDC client id (a PKCE public client: not a secret)
+    oidc_client_id: str = ""
+    # The redirect URI registered for the broker's OIDC client
+    oidc_redirect_uri: str = ""
+    # Comma-separated scopes the broker asks for; offline_access earns the refresh token sessions are renewed with
+    oidc_scopes: str = "openid,profile,email,offline_access"
+    # The app's sign-in route the identity redirects an authorization request to (the app's origin is derived from it)
+    idp_login_uri: str = ""
+    # The identity's origin the server dials for the session and finalize calls
+    idp_base: str = ""
+    # Host header for the identity when idp_base is not the host its instance is registered under
+    idp_host: str = ""
+    # The login broker's service-account token (sensitive, highly privileged)
+    idp_broker_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "idp_broker_token" }
+    # A file holding the broker token, re-read on every use so it rotates without a restart
+    idp_broker_token_file: str = ""
+    # The LOGIN_POLICY document the broker enforces (sign-up mode, methods, social providers); empty is the legacy policy
+    idp_login_policy: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "idp_login_policy" }
+    # Reverse proxies in front of this server that append to X-Forwarded-For (the sign-in rate limits' client address)
+    trusted_proxy_hops: int = 0
+    # Serve POST /auth/register outside development (with no delivered login policy)
+    auth_self_signup: bool = False
     # Comma-separated email domains allowed to sign in (none allows all)
     allowed_email_domains: str = ""
     # Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)
@@ -112,6 +134,7 @@ schema ApiServerConfig:
         jwt_signing_method != "", "jwt_signing_method = \"\" cannot reach the process: an empty JWT_SIGNING_METHOD counts as unset, so it would load the default \"RS256\" — set a value, or pass --jwt-signing-method= in the workload's args to make it empty"
         jwt_roles_claim != "", "jwt_roles_claim = \"\" cannot reach the process: an empty JWT_ROLES_CLAIM counts as unset, so it would load the default \"auto\" — set a value, or pass --jwt-roles-claim= in the workload's args to make it empty"
         jwt_jwks_snapshot_max_age != "", "jwt_jwks_snapshot_max_age = \"\" cannot reach the process: an empty JWT_JWKS_SNAPSHOT_MAX_AGE counts as unset, so it would load the default \"168h\" — set a value"
+        oidc_scopes != "", "oidc_scopes = \"\" cannot reach the process: an empty OIDC_SCOPES counts as unset, so it would load the default \"openid,profile,email,offline_access\" — set a value, or change its default in the proto"
         bind_address != "", "bind_address = \"\" cannot reach the process: an empty BIND_ADDRESS counts as unset, so it would load the default \"0.0.0.0\" — set a value, or pass --bind-address= in the workload's args to make it empty"
         cors_allowed_origins != "", "cors_allowed_origins = \"\" cannot reach the process: an empty CORS_ALLOWED_ORIGINS counts as unset, so it would load the default \"*\" — set a value, or pass --cors-origins= in the workload's args to make it empty"
         auth_mode != "", "auth_mode = \"\" cannot reach the process: an empty AUTH_MODE counts as unset, so it would load the default \"supabase\" — set a value, or change its default in the proto"
@@ -137,8 +160,10 @@ schema ApiServerConfig:
 # every pod. Declare what a workload reads in its `config_secrets` instead.
 API_SERVER_CONFIG_SENSITIVE_ENV: [str] = [
     # forge:section API_SERVER_CONFIG_SENSITIVE_ENV (root)
-    # forge:hash=802e725f32c1c459bb8015fad14fb54e20b32e2d81c89f287dc9f20e1c94a879
+    # forge:hash=2bb459c9ad4bb56db23f94e0bdd9fcb927f98118c0812b9bf924d7f37d5b6e4c
     "JWT_JWKS_SNAPSHOT"
+    "IDP_BROKER_TOKEN"
+    "IDP_LOGIN_POLICY"
     "AUTH_API_KEY"
     "AUTH_DEV_JWT_SECRET"
 
@@ -153,8 +178,10 @@ API_SERVER_CONFIG_SENSITIVE_ENV: [str] = [
 # credential only some environments own).
 API_SERVER_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     # forge:section API_SERVER_CONFIG_OPTIONAL_SECRET_ENV (root)
-    # forge:hash=9cb8d28cafd6209c5d710a8765b601c44803fbc8c539cc89286fc2b0b9a3e4c8
+    # forge:hash=9d5bcb2fbec59147256c4ba75d0e0452b57841fa697d80082b442c620b183551
     "JWT_JWKS_SNAPSHOT"
+    "IDP_BROKER_TOKEN"
+    "IDP_LOGIN_POLICY"
     "AUTH_API_KEY"
     "AUTH_DEV_JWT_SECRET"
 
@@ -179,8 +206,10 @@ API_SERVER_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
 apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
     _sensitive: {str: forge.SecretRef} = {
         # forge:section apiServerConfigEnvMap secrets (root)
-        # forge:hash=9a9a3f73a8cac6a66e5848fdbffc0fcf6c2b18229ec6624ffa4e649fd007bb5c
+        # forge:hash=c922a7b192ca08b0f0c78b28936dd24fd784479238603c50532f5d76d94e64ac
         "JWT_JWKS_SNAPSHOT" = forge.SecretRef {name = c.jwt_jwks_snapshot.name, key = c.jwt_jwks_snapshot.key, store_key = "JWT_JWKS_SNAPSHOT", optional = True}
+        "IDP_BROKER_TOKEN" = forge.SecretRef {name = c.idp_broker_token.name, key = c.idp_broker_token.key, store_key = "IDP_BROKER_TOKEN", optional = True}
+        "IDP_LOGIN_POLICY" = forge.SecretRef {name = c.idp_login_policy.name, key = c.idp_login_policy.key, store_key = "IDP_LOGIN_POLICY", optional = True}
         "AUTH_API_KEY" = forge.SecretRef {name = c.auth_api_key.name, key = c.auth_api_key.key, store_key = "AUTH_API_KEY", optional = True}
         "AUTH_DEV_JWT_SECRET" = forge.SecretRef {name = c.auth_dev_jwt_secret.name, key = c.auth_dev_jwt_secret.key, store_key = "AUTH_DEV_JWT_SECRET", optional = True}
 
@@ -191,7 +220,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "apiServerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of ApiServerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section apiServerConfigEnvMap values (root)
-        # forge:hash=0047a67bd52f76d31de113478ba01bc53f9e985b23727d7a46e25c1e857106dc
+        # forge:hash=301f58cb0debeffbd221d930a759b372cef648e20c700d3f757151a031352d30
         "JWT_PUBLIC_KEY" = c.jwt_public_key
         "JWT_PUBLIC_KEY_FILE" = c.jwt_public_key_file
         "RELIANT_JWKS_URL" = c.jwks_url
@@ -204,6 +233,15 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "JWT_ROLES_CLAIM" = c.jwt_roles_claim
         "JWT_JWKS_SNAPSHOT_FILE" = c.jwt_jwks_snapshot_file
         "JWT_JWKS_SNAPSHOT_MAX_AGE" = c.jwt_jwks_snapshot_max_age
+        "OIDC_CLIENT_ID" = c.oidc_client_id
+        "OIDC_REDIRECT_URI" = c.oidc_redirect_uri
+        "OIDC_SCOPES" = c.oidc_scopes
+        "IDP_LOGIN_URI" = c.idp_login_uri
+        "IDP_BASE" = c.idp_base
+        "IDP_HOST" = c.idp_host
+        "IDP_BROKER_TOKEN_FILE" = c.idp_broker_token_file
+        "TRUSTED_PROXY_HOPS" = str(c.trusted_proxy_hops)
+        "AUTH_SELF_SIGNUP" = "true" if c.auth_self_signup else "false"
         "ALLOWED_EMAIL_DOMAINS" = c.allowed_email_domains
         "RELIANT_DISABLE_FORGE_API" = "true" if c.disable_forge_api else "false"
         "GRPC_PORT" = str(c.grpc_port)
@@ -1874,7 +1912,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=8db42e2598935dc150c9cb04d1f15f1a40304ea04614247fc744774ea83d017e
+# forge:hash=0ed14553415c2b835a0a99cf1831861dfd1df404a06b9f5280ed7a8f24ed0b4d
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1993,8 +2031,8 @@ schema RootFamily:
 ROOTS: {str: Root} = {
     "api" = Root {
         args = ["server", "api"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "SUPABASE_JWT_ISSUER", "SUPABASE_JWT_AUDIENCE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_JWKS_URL", "JWT_SIGNING_METHOD", "JWT_ROLES_CLAIM", "JWT_JWKS_SNAPSHOT_FILE", "JWT_JWKS_SNAPSHOT_MAX_AGE", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
-        secrets = ["JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "SUPABASE_JWT_ISSUER", "SUPABASE_JWT_AUDIENCE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_JWKS_URL", "JWT_SIGNING_METHOD", "JWT_ROLES_CLAIM", "JWT_JWKS_SNAPSHOT_FILE", "JWT_JWKS_SNAPSHOT_MAX_AGE", "OIDC_CLIENT_ID", "OIDC_REDIRECT_URI", "OIDC_SCOPES", "IDP_LOGIN_URI", "IDP_BASE", "IDP_HOST", "IDP_BROKER_TOKEN_FILE", "TRUSTED_PROXY_HOPS", "AUTH_SELF_SIGNUP", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
+        secrets = ["JWT_JWKS_SNAPSHOT", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
     }

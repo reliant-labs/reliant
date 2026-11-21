@@ -39,6 +39,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"workflow_reconciler",
 		"reliant_key_sweep",
 		"payload_gc",
+		"sign_in_sessions",
 		"llm_usage_retention",
 		"org_credential_sweep",
 		"chat_update_heads_backfill",
@@ -57,7 +58,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 
 	loops := []string{
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "llm_usage_retention",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "sign_in_sessions", "llm_usage_retention",
 		"chat_update_heads_backfill",
 	}
 	for _, n := range plan {
@@ -125,7 +126,7 @@ func TestAPIVariantsStayInTheAPI(t *testing.T) {
 		"user_auth", "user_chain", "user_routes", "http_routes", "api_listener", "api_debug_server",
 		"reset_guard", "queued_deliverer", "github_access", "trigger_inbound", "trigger_senders",
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "llm_usage_retention",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "sign_in_sessions", "llm_usage_retention",
 		"chat_update_heads_backfill",
 	} {
 		require.Contains(t, api, name)

@@ -120,6 +120,72 @@ message ApiServerConfig {
     description: "How old a JWKS snapshot may be and still be used"
   }];
 
+  // ── Native sign-in: the login broker (internal/app/login_broker.go) ────
+  //
+  // The managed identity's sign-in, served by reliant-api on /auth/*: the
+  // browser posts credentials to this server, which runs the OIDC flow
+  // against the identity and answers with an HttpOnly cookie holding a
+  // server-side session id. forge.IdentityRef fills every one of these from
+  // the env's forge.ManagedIdentity (an IdentityOnHost in dev, the control
+  // plane's instance when hosted); nothing is mounted until oidc_client_id
+  // and the broker token are set (LoginBrokerConfigured).
+  string oidc_client_id = 97 [(forge.v1.config) = {
+    env_var: "OIDC_CLIENT_ID"
+    description: "The identity's native-broker OIDC client id (a PKCE public client: not a secret)"
+  }];
+  string oidc_redirect_uri = 98 [(forge.v1.config) = {
+    env_var: "OIDC_REDIRECT_URI"
+    description: "The redirect URI registered for the broker's OIDC client"
+  }];
+  string oidc_scopes = 99 [(forge.v1.config) = {
+    env_var: "OIDC_SCOPES"
+    default_value: "openid,profile,email,offline_access"
+    description: "Comma-separated scopes the broker asks for; offline_access earns the refresh token sessions are renewed with"
+  }];
+  string idp_login_uri = 100 [(forge.v1.config) = {
+    env_var: "IDP_LOGIN_URI"
+    description: "The app's sign-in route the identity redirects an authorization request to (the app's origin is derived from it)"
+  }];
+  string idp_base = 101 [(forge.v1.config) = {
+    env_var: "IDP_BASE"
+    description: "The identity's origin the server dials for the session and finalize calls"
+  }];
+  string idp_host = 102 [(forge.v1.config) = {
+    env_var: "IDP_HOST"
+    description: "Host header for the identity when idp_base is not the host its instance is registered under"
+  }];
+  // HIGHLY PRIVILEGED: it can complete a sign-in for any user of the
+  // instance. It belongs to this server alone.
+  string idp_broker_token = 103 [(forge.v1.config) = {
+    env_var: "IDP_BROKER_TOKEN"
+    sensitive: true
+    optional: true
+    description: "The login broker's service-account token (sensitive, highly privileged)"
+  }];
+  string idp_broker_token_file = 104 [(forge.v1.config) = {
+    env_var: "IDP_BROKER_TOKEN_FILE"
+    description: "A file holding the broker token, re-read on every use so it rotates without a restart"
+  }];
+  // DELIVERED by the identity's converge, never hand-written.
+  string idp_login_policy = 105 [(forge.v1.config) = {
+    env_var: "IDP_LOGIN_POLICY"
+    sensitive: true
+    optional: true
+    description: "The LOGIN_POLICY document the broker enforces (sign-up mode, methods, social providers); empty is the legacy policy"
+  }];
+  int32 trusted_proxy_hops = 106 [
+    (forge.v1.config) = {
+      env_var: "TRUSTED_PROXY_HOPS"
+      default_value: "0"
+      description: "Reverse proxies in front of this server that append to X-Forwarded-For (the sign-in rate limits' client address)"
+    },
+    (buf.validate.field).int32.gte = 0
+  ];
+  bool auth_self_signup = 107 [(forge.v1.config) = {
+    env_var: "AUTH_SELF_SIGNUP"
+    description: "Serve POST /auth/register outside development (with no delivered login policy)"
+  }];
+
   // The email domains allowed to sign in, comma-separated; none allows every
   // domain. The loader trims each element and drops blank ones, which the
   // domain whitelist already did to every entry, so " B.com," still means
