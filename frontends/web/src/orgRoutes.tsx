@@ -1,17 +1,15 @@
 /**
  * The `/o/$org` layout route (control-plane
  * docs/design/unified-shell-and-projects.md §3), as a factory so the route
- * trees (routes.tsx, forgeShellRoutes.tsx) and their tests mount the SAME
- * definition: its path, its beforeLoad, its pages for every answer.
+ * tree (routes.tsx, on both hosts) and its tests mount the SAME definition:
+ * its path, its beforeLoad, its pages for every answer.
  *
  *   /o/$org                 beforeLoad: resolveOrgRoute (lib/orgRouting.ts) —
  *                           the org, before any child loads; an org id → the
  *                           slug form; anyone else's or no such org → the one
  *                           "no access" page. Nothing takes effect until the
  *                           navigation commits (lib/routeOrg.ts).
- *     …                     the org's pages: each tree mounts the pages its
- *                           host serves, and createOrgHandoffRoute hands the
- *                           rest to the host that serves them
+ *     …                     the org's pages (routes.tsx, createOrgScopedRoutes)
  *
  * Always mounted, whatever the flag `web.org_routes` says (D12): an org URL
  * never 404s, and turning the flag off is the rollback.
@@ -25,7 +23,6 @@ import { type ComponentType, type ReactNode } from 'react'
 import { createRoute, Navigate, useRouterState, type AnyRoute } from '@tanstack/react-router'
 
 import { LoadingSpinner } from './components/Layout/LoadingSpinner'
-import { OrgHandoff, type OrgHandoffHost } from './components/Orgs/OrgHandoff'
 import { OrgLayout } from './components/Orgs/OrgLayout'
 import { defaultOrgRoutingDeps, resolveOrgRoute, type OrgRoutingDeps } from './lib/orgRouting'
 import { homePath } from './lib/paths'
@@ -64,17 +61,4 @@ export function createOrgLayoutRoute<TParent extends AnyRoute>(getParentRoute: (
     },
   })
   return route
-}
-
-/**
- * An org page this host does not serve, handed to the host that does (OrgHandoff):
- * the forge host's Sites and Usage on Reliant, Reliant's pages on the forge
- * host. Its component renders only inside a member org.
- */
-export function createOrgHandoffRoute<TParent extends AnyRoute>(getParentRoute: () => TParent, path: string, to: OrgHandoffHost) {
-  return createRoute({
-    getParentRoute,
-    path,
-    component: () => <OrgHandoff to={to} />,
-  })
 }

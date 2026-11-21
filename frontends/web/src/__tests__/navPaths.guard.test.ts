@@ -61,8 +61,8 @@ const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> =
     texts: ["/auth", "/oauth", "/reset-password", "/verify-email", "/upgrade", "/claim"],
   },
   "components/OnboardingFlow/onboardingGate.ts": {
-    why: "Matchers: the path prefixes the onboarding gate lets through.",
-    texts: ["/onboarding", "/settings", "/m", "/forge/demo", "/apps"],
+    why: "Matchers: the chat routes the onboarding gate guards, and the homes the forge brand sends to Apps.",
+    texts: ["/project", "/m/chats", "/m/new", "/m"],
   },
   "components/Onboarding/journeys/workflows.tsx": {
     why: "Tour step route prefixes, matched against the pathname (useTourNavigation isOnRoute, org-less). The step's link is built by its `open`.",
