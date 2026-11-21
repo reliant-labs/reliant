@@ -625,7 +625,7 @@ export default function Modal({
       // React portals keep context but not DOM order: a child portal can be
       // inserted before its parent on first mount. Give nested layers depth.
       style={ancestors.length ? { zIndex: 50 + ancestors.length } : undefined}
-      className={`fixed inset-x-0 top-[var(--modal-vv-top,0px)] z-50 flex h-[var(--modal-vv-height,100dvh)] items-center justify-center bg-black/50 px-[max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:p-6 ${
+      className={`fixed inset-x-0 top-[var(--modal-vv-top,0px)] z-50 flex h-[var(--modal-vv-height,100dvh)] items-center justify-center bg-scrim px-[max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:p-6 ${
         sheet ? "max-sm:p-0" : ""
       } ${overlayClassName ?? ""}`}
       onClick={(e) => {

@@ -10,12 +10,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -53,57 +51,33 @@ func (c *Client) streamResponse(ctx context.Context, prompts []string, messages 
 			"messageCount", len(messages),
 			"toolCount", len(toolList))
 
-		var resp *http.Response
-		for attempt := 1; ; attempt++ {
+		// The request opens through the shared ladder. Cloud Code states its
+		// wait in a google.rpc.RetryInfo and an exhausted quota in an
+		// ErrorInfo; DescribeGoogle reads both. Each wait is emitted BEFORE
+		// it is slept, so a caller can record that this run is parked rather
+		// than working.
+		emitCancelled := false
+		resp, err := c.retryer().OpenHTTP(ctx, c.httpClient.Do, func() (*http.Request, error) {
 			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(body))
 			if reqErr != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("antigravity: failed to create request: %w", reqErr)}
-				return
+				return nil, fmt.Errorf("antigravity: failed to create request: %w", reqErr)
 			}
 			req.Header.Set("Accept", "text/event-stream")
-
-			resp, err = c.httpClient.Do(req)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("antigravity: request failed: %w", err)}
-				return
-			}
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-
-			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
-			status := resp.StatusCode
-			_ = resp.Body.Close()
-
-			if !isRetryableStatus(status) || attempt > models.MaxRetries {
-				eventChan <- llm.DriverEvent{
-					Type:  llm.EventError,
-					Error: fmt.Errorf("antigravity: API request failed with status %d: %s", status, string(errBody)),
-				}
-				return
-			}
-
-			delay := retryDelay(attempt, resp)
-			logging.WarnContext(ctx, "[ANTIGRAVITY] Retrying stream request",
-				"status", status, "attempt", attempt, "maxRetries", models.MaxRetries, "delay", delay)
-			// Emitted BEFORE the sleep so a caller can record that this run is
-			// parked rather than working.
-			eventChan <- llm.DriverEvent{
-				Type: llm.EventRetryWait,
-				Retry: &llm.RetryWait{
-					Attempt:     attempt,
-					MaxAttempts: models.MaxRetries,
-					Delay:       delay,
-					StatusCode:  status,
-					Reason:      fmt.Sprintf("http_%d", status),
-				},
-			}
+			return req, nil
+		}, antigravityFailure, func(wait llm.RetryWait) error {
 			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
 			case <-ctx.Done():
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-				return
-			case <-time.After(delay):
+				emitCancelled = true
+				return ctx.Err()
 			}
+		})
+		if err != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			}
+			return
 		}
 		defer resp.Body.Close()
 

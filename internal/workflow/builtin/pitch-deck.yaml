@@ -1082,7 +1082,7 @@ nodes:
               You are running inside an automated pipeline. Do NOT wait for user input.
 
               ## Before Writing Any Code
-              Load the design discipline first: run `reliant forge skill load frontend/design`
+              Load the design discipline first: run `reliant forge agent skill load frontend/design`
               and follow it for all slide UI — declared type/color system, scale floors, no
               hand-drawn SVGs. If the `reliant` CLI is unavailable here, continue without it.
 

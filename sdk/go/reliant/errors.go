@@ -85,8 +85,9 @@ type Error struct {
 	// Scopes is, with Reason "scope_missing", the scopes the call needs.
 	Scopes []string
 
-	kind  error
-	cause error
+	kind    error
+	cause   error
+	upgrade *UpgradeRequiredError
 }
 
 func (e *Error) Error() string {
@@ -102,8 +103,21 @@ func (e *Error) Is(target error) bool {
 	if target == e.kind {
 		return true
 	}
+	if target == ErrUpgradeRequired && e.upgrade != nil {
+		return true
+	}
 	k, ok := reasonKinds[e.Reason]
 	return ok && target == k
+}
+
+// As makes errors.As(err, &upgradeErr) work for an *UpgradeRequiredError
+// when the server refused this client as too old.
+func (e *Error) As(target any) bool {
+	if p, ok := target.(**UpgradeRequiredError); ok && e.upgrade != nil {
+		*p = e.upgrade
+		return true
+	}
+	return false
 }
 
 // Unwrap exposes the underlying Connect error, so connect.CodeOf works through
@@ -128,6 +142,12 @@ func (c *Client) wrap(op string, err error) error {
 	e.Reason = ce.Meta().Get(headerErrorReason)
 	if v := ce.Meta().Get(headerErrorScopes); v != "" {
 		e.Scopes = strings.Split(v, ",")
+	}
+	if u := upgradeRequired(ce); u != nil {
+		e.upgrade = u
+		if e.Reason == "" {
+			e.Reason = reasonUpgradeRequired
+		}
 	}
 	switch ce.Code() {
 	case connect.CodeNotFound:

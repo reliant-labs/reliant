@@ -22,9 +22,13 @@ message CLIConfig {
     binary: "reliant"
     subtrees: [
       {path: ["auth"]},
+      {path: ["chat"]},
       {path: ["daemon"]},
       {path: ["github"]},
+      {path: ["integrations"]},
       {path: ["machine"]},
+      {path: ["mcp"]},
+      {path: ["models"]},
       {path: ["project"]},
       {path: ["providers"]},
       {path: ["trigger"]},

@@ -40,6 +40,14 @@ describe("QuestionPrompt", () => {
       expect(screen.getByPlaceholderText("Or type your own answer...")).toBeInTheDocument();
     });
 
+    // The restyle dropped the freetext's focus ring, leaving only a border
+    // colour change: a keyboard user could not see where focus was.
+    it("draws the focus ring on the freetext input", () => {
+      render(<QuestionPrompt questions={[makeQuestion()]} onSubmit={vi.fn()} />);
+      const freetext = screen.getByPlaceholderText("Or type your own answer...");
+      expect(freetext).toHaveClass("focus-visible:ring-2", "focus-visible:ring-ring");
+    });
+
     it("submit button is disabled until an option is selected", () => {
       const onSubmit = vi.fn();
       render(

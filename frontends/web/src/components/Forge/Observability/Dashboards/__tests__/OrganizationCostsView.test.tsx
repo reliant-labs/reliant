@@ -97,8 +97,11 @@ describe("OrganizationCostsView", () => {
     cleanup();
     getSummary.mockResolvedValue({ ...summary, orgId: "someone-else" });
     view();
-    expect(await screen.findByRole("alert")).toHaveTextContent("does not match this organization");
+    // Asked twice, then a plain failure: never the other org's figures, never a word about it.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Billing data is unavailable");
+    expect(getSummary).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("USD 12.34")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/does not match|different organization|someone-else/i);
   });
 
   it("does not query without an organization", () => {

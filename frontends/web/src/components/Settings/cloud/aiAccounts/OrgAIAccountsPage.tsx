@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Settings › Organization › AI accounts: what the active org pays for that its
+ * Settings › AI › Organization accounts: what the active org pays for that its
  * members' chats run on (control-plane docs/design/org-provider-accounts.md §7).
  *
  *   API keys          the org's own keys: add, rotate, pause, rename, who may
@@ -36,7 +36,7 @@ import { AddOrgKeyDialog } from "./OrgKeyDialogs";
 import { OrgKeysSection } from "./OrgKeysSection";
 import { TeamWorkspacesSection } from "./TeamWorkspacesSection";
 
-const TITLE = "AI accounts";
+const TITLE = "Organization accounts";
 
 export function OrgAIAccountsPage() {
   const { active, isLoading } = useActiveOrg();

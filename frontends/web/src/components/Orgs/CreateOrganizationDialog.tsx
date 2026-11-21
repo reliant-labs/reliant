@@ -1,10 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useEffect, useId, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import Button from "@/components/forge-ui/button";
 import Input from "@/components/forge-ui/input";
 import Modal from "@/components/forge-ui/modal";
+import { settingsPath } from "@/lib/paths";
 import { toast } from "@/lib/toast-manager";
 import { createOrganization, memberErrorMessage } from "@/services/controlPlane/members";
 import { switchToJoinedOrg } from "@/services/controlPlane/orgs";
@@ -14,20 +16,46 @@ const MAX_NAME = 80;
 /**
  * Create an organization: the caller becomes its owner, and the app switches
  * to it at once (a view choice, like the switcher; the server-side default
- * moves only when the person had none). Inviting people is the next step, in
- * Settings › Members.
+ * moves only when the person had none).
+ *
+ * Then a next step in the same dialog: a new org hosts one static site free,
+ * and anything more (a backend, a second site) waits on app hosting billing,
+ * so the dialog offers it now rather than at the first queued deploy. It
+ * never blocks: "Not now" closes, and the org exists either way. Inviting
+ * people stays in Settings › Members (the closing toast says so).
  */
 export function CreateOrganizationDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   const nameId = useId();
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setError(null);
+    setCreated(null);
   }, [open]);
+
+  // Closing the next step any way but "Set up hosting billing" is "Not now".
+  const notNow = () => {
+    if (created) toast.success(`Created ${created.name}. Invite people to it from Settings › Members.`);
+    onClose();
+  };
+
+  const setUpHostingBilling = () => {
+    if (!created) return;
+    // The org is the active one already (switchToJoinedOrg); `org` still
+    // names it, so billing's gate asks if the person switched away meanwhile.
+    void navigate({
+      to: settingsPath("billing"),
+      search: { tab: "hosting", org: created.id },
+      hash: "app-hosting",
+    });
+    onClose();
+  };
 
   const trimmed = name.trim();
   const valid = trimmed.length > 0 && trimmed.length <= MAX_NAME;
@@ -39,14 +67,39 @@ export function CreateOrganizationDialog({ open, onClose }: { open: boolean; onC
     try {
       const org = await createOrganization(trimmed);
       await switchToJoinedOrg(org.id);
-      toast.success(`Created ${org.name || trimmed}. Invite people to it from Settings › Members.`);
-      onClose();
+      setCreated({ id: org.id, name: org.name || trimmed });
     } catch (err) {
       setError(memberErrorMessage(err, "create", "Could not create the organization. Try again."));
     } finally {
       setBusy(false);
     }
   };
+
+  if (created) {
+    return (
+      <Modal
+        open={open}
+        onClose={notNow}
+        title={`Created ${created.name}`}
+        description="Next: set up app hosting billing, so this organization can host backends and more than the free static site."
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={notNow} data-testid="create-org-not-now">
+              Not now
+            </Button>
+            <Button variant="primary" onClick={setUpHostingBilling} data-testid="create-org-hosting-billing">
+              Set up hosting billing
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground" data-testid="create-org-next-step">
+          It isn't required to use the organization: you can set it up any time from Settings › Billing › App hosting.
+        </p>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

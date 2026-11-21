@@ -740,7 +740,7 @@ func (x *ListForgeSecretsRequest) GetOrgId() string {
 // ListForgeSecretsResponse is CONSTRAINED BY DESIGN: meta plus forge's
 // document, and nothing else.
 //
-// `forge secret list --json` is built so that no field in its report can carry
+// `forge env secret list --json` is built so that no field in its report can carry
 // a secret VALUE — the report type graph holds only names, booleans and
 // coordinates, and forge pins that with a reflection test over an allow-list.
 // The daemon layer preserves it by withholding forge's stderr entirely on this

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -291,6 +292,12 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		workingDir = worktreePath
 	}
 	commandDir := runCommandDir(workingDir, input.WorkDir)
+	foreignMachine, foreign := foreignWorkspaceRunMachine(execCtx, commandDir)
+	if foreign {
+		logging.WarnContext(ctx, "[RunStep] the step's machine selector routes a command in a branch workspace away from the workspace's machine",
+			"chat_id", input.ChatID, "step_id", input.StepID, "worktree_id", worktreeID,
+			"owner", execCtx.WorktreeDaemonID, "selected", foreignMachine, "command_dir", commandDir)
+	}
 
 	// Pick executor: test override or remote via daemon
 	executor := a.runExecutor
@@ -324,9 +331,13 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	} else {
 		observe := a.observeMachine(execCtx)
 		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
+		result, err = reattachAfterTransportDrop(ctx, executor, input, requestID, timeout, result, err)
 	}
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
+	if err == nil && foreign && exitCode != 0 && !interrupted {
+		stderr = foreignWorkspaceRunNote(ctx, a.repo, worktreePath, execCtx.WorktreeDaemonID, foreignMachine) + stderr
+	}
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
 		// the step fails saying which machine and for how long.
@@ -345,11 +356,32 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 				"failed to execute command: "+unavailable.Error(),
 				activitytypes.RunStepMachineUnavailableErrType, nil)
 		}
+		// The step was told to stop (a cancel, a pause, a reset) while it
+		// waited for its command, here or in a reattach: whatever the wait
+		// returned, the activity ends as that stop, so the workflow stops
+		// the step instead of recording a final outcome-unknown failure.
+		if stoppedByRequest(ctx) {
+			activity.GetLogger(ctx).Info("[RunStep] step stopped while waiting for its command",
+				"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt,
+				"request_id", requestID, "cause", context.Cause(ctx), "error", err)
+			return ExecuteRunStepOutput{}, context.Cause(ctx)
+		}
 		// A transport failure is not a command verdict: fail the activity
 		// rather than return a synthetic exit code the workflow would read
-		// as one. Not retryable either way — see runStepTransportFailure.
+		// as one. Not retryable — see runStepTransportFailure — unless this
+		// attempt itself was released while it waited (runStepReleased).
 		var transportErr *toolexec.TransportError
 		if errors.As(err, &transportErr) {
+			if attemptReleased(ctx) {
+				activity.GetLogger(ctx).Info("[RunStep] attempt released while its command runs; the retry reattaches to it",
+					"chat_id", input.ChatID,
+					"step_id", input.StepID,
+					"attempt", attempt,
+					"request_id", requestID,
+					"cause", context.Cause(ctx),
+				)
+				return ExecuteRunStepOutput{}, runStepReleased(transportErr)
+			}
 			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
 				"chat_id", input.ChatID,
 				"step_id", input.StepID,
@@ -562,7 +594,96 @@ const (
 	// runStepOutcomeUnknownErrType: the command was sent and no result came
 	// back; it may have run.
 	runStepOutcomeUnknownErrType = "RunStepOutcomeUnknown"
+	// runStepReleasedErrType: the attempt was released (its worker stopped)
+	// while the command ran. Retryable: the retry reattaches to it.
+	runStepReleasedErrType = "RunStepReleased"
 )
+
+// A command outlives the attempt waiting for it.
+//
+// The machine runs every command decoupled from the request that sent it, and
+// keeps its result until a gateway acknowledges it (toolexec's
+// tool_result_redelivery.go). So "no result came back" is rarely the end:
+//
+//   - The wait broke but this attempt is still live (a round trip that timed
+//     out, a stream that dropped for longer than the router rides out): the
+//     attempt asks the machine about the command it sent, by its request id,
+//     and waits for that command's real verdict (reattachAfterTransportDrop).
+//   - The attempt itself was released while waiting — a worker rollout
+//     drains its activities, which is what every prod deploy does to the
+//     run step that deploys it (2026-11-19, rc-train's `deploy`): the step
+//     fails RETRYABLY (runStepReleased), and the retry reattaches
+//     (ReattachCommand). Before, that attempt reported "outcome unknown,
+//     retryable: false" and only the worker-shutdown rewrite in the
+//     ActivityWrapper kept it from pausing the run.
+//
+// A machine that cannot vouch for the command — it restarted, no longer holds
+// the result, or is too old to be asked (no tool.status) — leaves today's
+// verdict: outcome unknown, not retried.
+
+// reattachAfterTransportDrop is the first half of that: given what
+// executeUntilDelivered returned, it waits for the command's own verdict when
+// the command may have run, no result came back, and this attempt is still
+// live. Anything else is returned unchanged.
+func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (CommandResult, error) {
+	var transportErr *toolexec.TransportError
+	if err == nil || !errors.As(err, &transportErr) || transportErr.NotDispatched || ctx.Err() != nil || requestID == "" {
+		return result, err
+	}
+	reattacher, ok := executor.(RunReattacher)
+	if !ok {
+		return result, err
+	}
+	logger := activity.GetLogger(ctx)
+	logger.Info("[RunStep] no result came back; asking the machine about the command it was sent",
+		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
+		"code", transportErr.Code, "detail", transportErr.Detail)
+	reattached, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
+	if !attached {
+		logger.Info("[RunStep] the machine cannot vouch for the command; its outcome is unknown",
+			"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID)
+		return result, err
+	}
+	logger.Info("[RunStep] reattached to the command after the transport dropped",
+		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
+		"exit_code", reattached.ExitCode, "error", reattachErr)
+	return reattached, reattachErr
+}
+
+// attemptReleased reports whether ctx ended because this attempt was let go —
+// its worker stopping, a heartbeat RPC that failed, an attempt the server has
+// already timed out — rather than because the step was told to stop (a
+// cancel, a pause, a reset). Only a released attempt leaves its command to a
+// retry.
+func attemptReleased(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	return !temporal.IsCanceledError(cause) &&
+		!errors.Is(cause, activity.ErrActivityPaused) &&
+		!errors.Is(cause, activity.ErrActivityReset)
+}
+
+// stoppedByRequest reports whether ctx ended because the step was told to
+// stop — a server cancel, a pause, a reset — the cancellations attemptReleased
+// excludes. The step's own timeout is neither.
+func stoppedByRequest(ctx context.Context) bool {
+	return errors.Is(ctx.Err(), context.Canceled) && !attemptReleased(ctx)
+}
+
+// runStepReleased is the activity error for an attempt released while its
+// command ran: retryable, so the retry reattaches to the command (and is
+// refused, as any retry is, if the machine cannot vouch for it).
+func runStepReleased(transportErr *toolexec.TransportError) error {
+	return temporal.NewApplicationErrorWithOptions(
+		"this attempt was released before the command's result came back; the command keeps running on its machine and the retry reattaches to it",
+		runStepReleasedErrType, temporal.ApplicationErrorOptions{
+			Cause: transportErr,
+			// Benign: a worker rollout is not a fault of the step.
+			Category: temporal.ApplicationErrorCategoryBenign,
+		})
+}
 
 // A command that provably never reached a machine (TransportError.
 // NotDispatched) is held, inside the attempt that knows it never ran, until
@@ -801,6 +922,47 @@ func shellQuote(s string) string {
 // node's resolved `work_dir`) when it names one, joined onto checkout when it
 // is relative; else checkout. A directory that does not exist fails the
 // command on its machine, saying so, rather than running it elsewhere.
+// foreignWorkspaceRunMachine reports the machine a run node's command is
+// pinned to when it is not the machine its branch workspace lives on, and the
+// command runs inside that workspace: an explicit node or workflow `daemon:`
+// selector keeps its precedence over the workspace's owner
+// (toolDaemonSelector), so the command is sent to a machine whose disk most
+// likely has no such directory.
+//
+// The command still runs, unlike an agent's tool calls (ensureBatchWorkspace
+// refuses those): a run node could always target another machine, and two
+// daemons sharing one disk do have the directory. Refusing would break a
+// workflow that works today; the step's failure is explained instead
+// (foreignWorkspaceRunNote). A work_dir outside the workspace (an absolute
+// path on the selected machine) is not a conflict at all.
+func foreignWorkspaceRunMachine(execCtx RunExecutorContext, commandDir string) (string, bool) {
+	owner, workspace := execCtx.WorktreeDaemonID, execCtx.WorktreePath
+	if owner == "" || workspace == "" || execCtx.DaemonSelector == nil {
+		return "", false
+	}
+	selected := execCtx.DaemonSelector.ID
+	if selected == "" || selected == owner || !pathWithin(workspace, commandDir) {
+		return "", false
+	}
+	return selected, true
+}
+
+// foreignWorkspaceRunNote leads the stderr of a failed command that ran on
+// another machine than its branch workspace's (foreignWorkspaceRunMachine),
+// naming both machines, so the failure ("working directory does not exist")
+// says why and what to change rather than sending the reader to look for a
+// workspace that was never deleted. Only a failure carries it: a command that
+// succeeded keeps its output byte for byte.
+func foreignWorkspaceRunNote(ctx context.Context, repo any, workspacePath, owner, selected string) string {
+	reader, _ := repo.(daemonplacement.DaemonReader)
+	ownerName := daemonplacement.MachineName(ctx, reader, owner)
+	selectedName := daemonplacement.MachineName(ctx, reader, selected)
+	return fmt.Sprintf("[Workspace elsewhere] This step ran on %s, the machine its `daemon:` selector picked, but this chat's workspace %s lives on %s, "+
+		"so the command's directory may not exist where it ran. Run the step on %s (or drop the step's `daemon:` selector) to run it in the workspace, "+
+		"or give it a work_dir that exists on %s.\n",
+		selectedName, workspacePath, ownerName, ownerName, selectedName)
+}
+
 func runCommandDir(checkout, workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	switch {

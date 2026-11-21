@@ -128,6 +128,11 @@ actions:
   - $ref: actions/check_run.create.yaml
   - $ref: actions/check_run.update.yaml
   - $ref: actions/check_run.list.yaml
+  - $ref: actions/branch.rules.yaml
+  - $ref: actions/compare.yaml
+  - $ref: actions/commit.statuses.yaml
+  - $ref: actions/release.create.yaml
+  - $ref: actions/release.update.yaml
 
 triggers:
   - $ref: events/issue.opened.yaml

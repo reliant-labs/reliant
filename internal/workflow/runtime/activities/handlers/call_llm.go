@@ -120,6 +120,9 @@ type streamingToolCall struct {
 	ID         string
 	Name       string
 	BlockIndex int
+	// Settled marks a call this stream has already cancelled, so the
+	// dropped-call and interrupt passes never cancel it twice.
+	Settled bool
 }
 
 // ============================================================================
@@ -616,6 +619,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 		TokenCount:        int(output.GetTokenCount()),
 		Cost:              output.GetCost(),
 		Model:             output.GetModel(),
+		ThinkingLevel:     output.GetThinkingLevel(),
 		ProviderAccountID: output.GetProviderAccountId(),
 		WorkflowID:        workflowID,
 		StepID:            rtx.StepID,
@@ -805,6 +809,71 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 		completed[call.ID] = struct{}{}
 	}
 
+	cancelled := a.cancelStreamingToolCalls(ctx, chatID, thread, state, func(call streamingToolCall) bool {
+		_, done := completed[call.ID]
+		return !done
+	})
+
+	if cancelled > 0 {
+		logging.InfoContext(ctx, "[CallLLM] Cancelled in-flight tool calls of an interrupted stream",
+			"chatID", chatID, "thread", thread, "cancelledToolCalls", cancelled)
+	}
+}
+
+// cancelDroppedStreamingToolCalls settles the tool calls a finished stream
+// opened but the driver will not run (llm.DriverResponse.DroppedToolCalls):
+// the calls of a Responses response that did not complete, or ones the stream
+// never named. Without it their cards stayed "preparing" / "requested" in the
+// live UI, since nothing executes them and so nothing reports an outcome.
+//
+// It is the interrupt path's cancellation, for a different reason: each call
+// gets the durable row and the ephemeral tool_cancelled delta. The driver
+// names each call by the ID its EventToolUseStart carried, which is the ID
+// the card was opened under; only calls this stream actually opened are
+// touched.
+func (a *CallLLMActivity) cancelDroppedStreamingToolCalls(
+	ctx context.Context,
+	chatID string,
+	thread string,
+	resp *llm.DriverResponse,
+	state *streamProcessingState,
+) {
+	if resp == nil || len(resp.DroppedToolCalls) == 0 || state == nil || len(state.streamingToolCalls) == 0 {
+		return
+	}
+	dropped := make(map[string]string, len(resp.DroppedToolCalls))
+	for _, call := range resp.DroppedToolCalls {
+		dropped[call.ID] = call.Name
+	}
+	// The start usually came before the name was known; the driver knows it now.
+	for i := range state.streamingToolCalls {
+		if name := dropped[state.streamingToolCalls[i].ID]; name != "" && state.streamingToolCalls[i].Name == "" {
+			state.streamingToolCalls[i].Name = name
+		}
+	}
+
+	cancelled := a.cancelStreamingToolCalls(ctx, chatID, thread, state, func(call streamingToolCall) bool {
+		_, ok := dropped[call.ID]
+		return ok
+	})
+
+	if cancelled > 0 {
+		logging.InfoContext(ctx, "[CallLLM] Cancelled tool calls the provider did not finish; they will not run",
+			"chatID", chatID, "thread", thread, "cancelledToolCalls", cancelled)
+	}
+}
+
+// cancelStreamingToolCalls cancels, durably and on the live stream, each open
+// streaming tool call pick selects, and returns how many it cancelled. A call
+// is settled once: a later pass skips it. See cancelInFlightStreamingToolCalls
+// for why each call gets both halves, in that order.
+func (a *CallLLMActivity) cancelStreamingToolCalls(
+	ctx context.Context,
+	chatID string,
+	thread string,
+	state *streamProcessingState,
+	pick func(streamingToolCall) bool,
+) int {
 	writeCtx, cancel := detachedForTerminalWrite(ctx)
 	defer cancel()
 
@@ -816,11 +885,9 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 	}
 
 	cancelled := 0
-	for _, call := range state.streamingToolCalls {
-		if call.ID == "" {
-			continue
-		}
-		if _, done := completed[call.ID]; done {
+	for i := range state.streamingToolCalls {
+		call := state.streamingToolCalls[i]
+		if call.ID == "" || call.Settled || !pick(call) {
 			continue
 		}
 
@@ -839,7 +906,7 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}); err != nil {
-			logging.WarnContext(ctx, "[CallLLM] Could not persist cancelled status for an interrupted tool call",
+			logging.WarnContext(ctx, "[CallLLM] Could not persist cancelled status for a streaming tool call",
 				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
 		}
 
@@ -850,13 +917,13 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 			Timestamp:   now.Format(time.RFC3339),
 			CompletedAt: now.Format(time.RFC3339),
 		}); err != nil {
-			logging.WarnContext(ctx, "[CallLLM] Could not emit cancelled update for an interrupted tool call",
+			logging.WarnContext(ctx, "[CallLLM] Could not emit cancelled update for a streaming tool call",
 				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
 		}
 
 		// The ephemeral half. writeStreamingDelta drops non-stream_cancelled
-		// deltas once ctx is dead, and ctx is dead by definition here, so this
-		// publishes on the detached context.
+		// deltas once ctx is dead, and on the interrupt path ctx is dead by
+		// definition, so this publishes on the detached context.
 		a.writeStreamingDelta(writeCtx, chatID, "tool_cancelled", map[string]interface{}{
 			"block_index": call.BlockIndex,
 			"thread":      thread,
@@ -866,13 +933,10 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 			},
 		}, state)
 
+		state.streamingToolCalls[i].Settled = true
 		cancelled++
 	}
-
-	if cancelled > 0 {
-		logging.InfoContext(ctx, "[CallLLM] Cancelled in-flight tool calls of an interrupted stream",
-			"chatID", chatID, "thread", thread, "cancelledToolCalls", cancelled)
-	}
+	return cancelled
 }
 
 // contentFreeTurnExplanation reports whether a finished turn came back with
@@ -1613,6 +1677,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 		caps.CanLoad(tools.ToolWorktree),
 	)
+	if note := subAgentScratchNote(chat, rtx.Thread, rtx.SpawnDepth, projectPath != "" || worktreePath != ""); note != "" {
+		systemPrompts = append(systemPrompts, note)
+	}
 	if chat.NoMachine {
 		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
 	}
@@ -1889,6 +1956,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				// probe) no pending inbox: both agent loops exit on this.
 				CompactionThreshold: effectiveCompactionThreshold,
 				Model:               resolvedModelID,
+				ThinkingLevel:       string(resolved.ThinkingLevel),
 				MessageId:           streamState.messageID,
 				// Yielding without calling the provider IS a finished turn —
 				// the previous turn already had the last word. Saying "done"
@@ -2435,6 +2503,7 @@ streamLoop:
 		PendingInbox:        false,
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
+		ThinkingLevel:       string(resolved.ThinkingLevel),
 		ProviderAccountId:   accountID,
 		MessageId:           streamState.messageID,
 		LastStreamSeq:       streamState.streamSeq,
@@ -3206,6 +3275,7 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 		a.handleToolUseStop(ctx, chatID, thread, state)
 	case llm.EventComplete:
 		a.handleComplete(ctx, event, state)
+		a.cancelDroppedStreamingToolCalls(ctx, chatID, thread, event.Response, state)
 	case llm.EventError:
 		return a.handleError(event)
 	}
@@ -3552,6 +3622,9 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 func classifyLLMError(err error) string {
 	if err == nil {
 		return ""
+	}
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return "network"
 	}
 	errMsg := strings.ToLower(err.Error())
 	switch {

@@ -44,6 +44,8 @@ export const ERROR_REASONS = [
   "daemon_reconnecting",
   /** No machine exists for the request at all (ErrNoDaemon). Nothing to wait for. */
   "no_daemon",
+  /** The machine refused new work in a worktree for a moment while it finalizes that worktree's recovery (ErrRecoveryFinalizing). Retry shortly; the machine is up. */
+  "worktree_recovering",
   // ── reliant: handlers ──
   /** SendMessage on a chat whose root run has not started (handlers/chat). */
   "chat_not_started",
@@ -195,6 +197,15 @@ export const ERROR_REASONS = [
   "policy_invalid",
   /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
   "policy_version_conflict",
+  // ── control-plane: free static hosting (OrganizationService.MoveFreeHostingDesignation) ──
+  /** PermissionDenied: the caller is not a member of the target org. */
+  "not_org_member",
+  /** PermissionDenied: only the accountable founder may move their free allowance. */
+  "free_hosting_founder_only",
+  /** FailedPrecondition: the target org already pays for hosting and needs no free allowance. */
+  "free_hosting_target_billed",
+  /** FailedPrecondition: a real move inside the 30-day cooldown; the message carries the RFC3339 date it ends. */
+  "free_hosting_move_cooldown",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

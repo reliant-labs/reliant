@@ -74,7 +74,7 @@ export interface StepUpGate {
   /** The ticking clock the dialog's countdowns read. */
   now: number;
   run<T>(write: () => Promise<T>): Promise<T>;
-  /** Step up ahead of any write — for a run of changes, or for `forge secret set`. */
+  /** Step up ahead of any write — for a run of changes, or for `forge env secret set`. */
   unlock(): void;
   send(): void;
   submit(code: string): void;

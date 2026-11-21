@@ -22,7 +22,7 @@ DELVE_LISTEN="${DELVE_LISTEN:-:2345}"
 reliant_args="$*"
 
 # Base dlv flags. --accept-multiclient lets a debugger attach/detach
-# repeatedly while the process keeps running (forge debug stop detaches; the
+# repeatedly while the process keeps running (forge dev debug stop detaches; the
 # pod stays up).
 continue_flag=""
 case "${DELVE_CONTINUE:-}" in
