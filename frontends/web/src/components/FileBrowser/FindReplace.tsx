@@ -254,7 +254,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute inset-0 bg-scrim" />
 
       {/* Modal */}
       <div

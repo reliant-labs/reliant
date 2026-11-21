@@ -353,7 +353,7 @@ function ServiceDetail({
                 ["p99", health.p99Ms],
               ].map(([name, value]) => (
                 <div key={name as string}>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{name}</dt>
+                  <dt className="text-xs font-medium text-ink-muted">{name}</dt>
                   <dd className="text-lg font-semibold tabular-nums text-ink">{formatDuration(value as number)}</dd>
                 </div>
               ))}

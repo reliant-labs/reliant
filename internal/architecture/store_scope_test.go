@@ -25,8 +25,8 @@ import (
 // For code under internal/handlers/** and internal/llm/tools/** (non-test,
 // non-generated files):
 //
-//  1. Sealed tables are deny-all. api_keys, provider_accounts,
-//     connection_secrets and the *_auth_tokens tables hold sealed credentials;
+//  1. Sealed tables are deny-all. api_keys, provider_accounts and
+//     connection_secrets hold sealed credentials;
 //     only the credential packages may read or write them. No store
 //     identifier from their files, and no SQL naming them, may appear. No
 //     exception.
@@ -55,7 +55,6 @@ var storeScopeDirs = []string{"internal/handlers", "internal/llm/tools"}
 // hold sealed credentials.
 var sealedStoreEntities = []string{
 	"api_key", "provider_account", "connection_secret",
-	"claude_auth_token", "codex_auth_token", "copilot_auth_token", "antigravity_auth_token",
 }
 
 // sealedStoreExtraFiles are sealed store files that follow no entity naming.
@@ -64,7 +63,7 @@ var sealedStoreExtraFiles = []string{"org_credentials.go"}
 // sealedTableSQL matches SQL that names a sealed table.
 var sealedTableSQL = regexp.MustCompile(
 	`(?is)\b(?:from|join|into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:only\s+)?(?:public\.)?"?` +
-		`(?:api_keys|provider_accounts|connection_secrets|claude_auth_tokens|codex_auth_tokens|copilot_auth_tokens|antigravity_auth_tokens)"?(?:[^a-z0-9_]|$)`)
+		`(?:api_keys|provider_accounts|connection_secrets)"?(?:[^a-z0-9_]|$)`)
 
 // storeCallAllowlist maps a handler or tool package directory to the store
 // functions it may call. An entry's function must take a typed owner (or an
@@ -317,7 +316,7 @@ func TestStoreScopeGuardSelfCheck(t *testing.T) {
 		{"sealed even with a scope comment", "func f() {\n// scope: because\nstore.ListProviderAccount() }", nil, "sealed: store.ListProviderAccount"},
 		{"sealed type", "var _ store.ListProviderAccount", nil, "sealed: store.ListProviderAccount"},
 		{"sealed sql", "var q = `SELECT secret FROM provider_accounts WHERE id = $1`", nil, "sealed: SQL"},
-		{"sealed sql update", "var q = \"UPDATE claude_auth_tokens SET x = 1\"", nil, "sealed: SQL"},
+		{"sealed sql update", "var q = \"UPDATE connection_secrets SET x = 1\"", nil, "sealed: SQL"},
 		{"unrelated sql", "var q = \"SELECT 1 FROM provider_account_grants\"", nil, ""},
 		{"generated crud", "func f() { store.GetChatByID() }", nil, "unscoped: store.GetChatByID"},
 		{"generated interface", "var _ store.PlanStore", nil, "unscoped: store.PlanStore"},

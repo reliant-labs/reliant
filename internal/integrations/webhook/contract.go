@@ -132,6 +132,9 @@ type Delivery struct {
 	Respond *Response
 	// Events are the events the request carries; usually one.
 	Events []Event
+	// ID identifies the provider's whole delivery, including revocation-only
+	// deliveries. Providers with one event can use that event's native ID.
+	ID string
 	// Revocations are access the provider says has ended (a repository
 	// removed from an installation, a member removed from an org). The
 	// receiver applies them before routing Events, so an event in the same

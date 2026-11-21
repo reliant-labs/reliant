@@ -208,7 +208,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	// Which definition this fire resolves, recorded on the event whatever the
 	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
 	// trusted from intake, like the declaration below.
-	def, err := firingDefinition(ctx, f.workflows, trigger, ev, resuming)
+	//
+	// Every resolution of this fire reads through one memo (oneFire): the
+	// snapshot it pins is read once, not once per resolution.
+	reads := oneFire(f.workflows)
+	def, err := tracedFiringDefinition(ctx, reads, trigger, ev, resuming)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +222,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	workflows := PinnedTo(f.workflows, def)
+	workflows := firingWorkflows(reads, def)
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
