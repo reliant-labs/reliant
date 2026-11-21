@@ -5577,8 +5577,10 @@ type ListProjectsWithAppsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The org listed.
 	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// The caller's own projects in the org, then projects shared with them in
-	// it, most recently active first.
+	// The caller's own projects in the org and the projects shared with them in
+	// it, together in one list, most recently active first (ties by id).
+	// Project.viewer_access tells a shared one from the caller's own. Each half
+	// is capped at 500: past that, the most recently active of each.
 	Projects []*ProjectWithApps `protobuf:"bytes,2,rep,name=projects,proto3" json:"projects,omitempty"`
 	// The org's apps that no project in `projects` contains: app-only rows.
 	UnlinkedApps []*HostedApp `protobuf:"bytes,3,rep,name=unlinked_apps,json=unlinkedApps,proto3" json:"unlinked_apps,omitempty"`
@@ -5720,10 +5722,13 @@ func (x *ProjectWithApps) GetCheckouts() []*ProjectCheckout {
 }
 
 type ProjectRepoSummary struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	RelativePath string                 `protobuf:"bytes,3,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The repo's id: an opaque identifier, set for a viewer too, because
+	// ProjectApp.repo_id joins an app to its repo by it. It names nothing about
+	// where the repo lives.
+	Id           string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name         string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	RelativePath string `protobuf:"bytes,3,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
 	// forge's canonical "host/owner/repo"; "" without a shareable remote, and
 	// always "" for a viewer.
 	Remote        string `protobuf:"bytes,4,opt,name=remote,proto3" json:"remote,omitempty"`

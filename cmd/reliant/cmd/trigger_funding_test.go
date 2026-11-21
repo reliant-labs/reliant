@@ -55,7 +55,7 @@ func orgTrigger(funding reliantv1.UnattendedFunding) *reliantv1.Trigger {
 
 // `trigger get` prints which AI accounts a trigger of an org runs on
 // (org-provider-accounts §11.5); a trigger of no org has no stamp and prints
-// no line, and a server that predates the field reads as any.
+// no line, and an unset stamp reads as any.
 func TestTriggerFunding_DetailShowsTheStamp(t *testing.T) {
 	var out strings.Builder
 	printTriggerDetail(&out, orgTrigger(reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY))

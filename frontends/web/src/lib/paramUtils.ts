@@ -339,15 +339,6 @@ export function repairLegacyWorkflowParams(
   return repaired;
 }
 
-/** Preset selections stored under the legacy "default" target belong to the workflow ("" target). */
-export function repairLegacyPresetSelections<T>(
-  selections: Record<string, T>
-): Record<string, T> {
-  if (!(LEGACY_WORKFLOW_PRESET_TARGET in selections)) return selections;
-  const { [LEGACY_WORKFLOW_PRESET_TARGET]: legacy, ...rest } = selections;
-  return "" in rest ? rest : { ...rest, "": legacy };
-}
-
 /**
  * Set the reasoning effort on the params' model selector — the one place a
  * send accepts it. A bare-string model becomes `{id}`; with no model set there

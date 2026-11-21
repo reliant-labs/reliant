@@ -6,9 +6,7 @@
  *   - pushes nothing just for being opened (the baseline is the server's);
  *   - pushes an edit whether or not a run is live, with the version it read;
  *   - adopts a change made elsewhere, or a model the server moved, but keeps an
- *     edit not yet pushed;
- *   - seeds a chat the server has no selection for from what an older build kept
- *     in localStorage, once, and then forgets it.
+ *     edit not yet pushed.
  */
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -122,8 +120,6 @@ setTransport(
   }),
 );
 
-const LEGACY_KEY = "reliant-chat-params";
-
 function storeParams() {
   return useChatParamsStore.getState().getChatParams(CHAT_ID);
 }
@@ -196,12 +192,18 @@ describe("composer adopts what the server says runs", () => {
   });
 });
 
+/** Settings live in ⊕: open it, then its Settings row. */
+async function openSettings() {
+  await userEvent.click(await screen.findByRole("button", { name: "Chat options" }));
+  await userEvent.click(await screen.findByTestId("options-settings-row"));
+}
+
 describe("composer pushes edits to the selection", () => {
   it("pushes a reset-only edit as null, then does not resend it on leaving", async () => {
     server.selection = { workflowName: WORKFLOW, params: { mode: "plan" }, version: 4n };
     const view = renderComposer();
     await waitFor(() => expect(storeParams()).toEqual({ mode: "plan" }));
-    await userEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
     expect(server.updates[0]).toEqual({ params: { mode: null }, expectedVersion: 4n });
@@ -216,9 +218,11 @@ describe("composer pushes edits to the selection", () => {
     const send = vi.fn().mockResolvedValue(undefined);
     renderWithQuery(<ChatInput onSend={send} chatId={CHAT_ID} isStreaming={false} />);
     await waitFor(() => expect(storeParams().mode).toBe("plan"));
-    fireEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "default" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "continue" } });
+    // Close ⊕ (a modal sheet) to reach the composer again.
+    await userEvent.keyboard("{Escape}");
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "continue" } });
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", code: "Enter" });
     expect(server.updates).toHaveLength(0);
     await waitFor(() => expect(send).toHaveBeenCalled());
@@ -227,7 +231,7 @@ describe("composer pushes edits to the selection", () => {
 
   it("pushes a thread settings reset rather than dropping the removed key", async () => {
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId="thread-1" isStreaming={false} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
@@ -239,7 +243,7 @@ describe("composer pushes edits to the selection", () => {
     let resolve!: () => void;
     server.pending = new Promise<void>((done) => { resolve = done; });
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId={threadId} isStreaming={false} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await openSettings();
     await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
     await userEvent.click(screen.getByRole("button", { name: "default" }));
     await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
@@ -276,64 +280,5 @@ describe("composer pushes edits to the selection", () => {
     await waitFor(() => expect(server.refetches).toBeGreaterThan(0), PUSH_DEBOUNCE_WAIT);
     // The edit is still the user's: it stays in the composer for the next push.
     expect(storeParams().model).toEqual({ id: "claude-5.5-opus@claude", thinking_level: "high" });
-  });
-});
-
-describe("a chat the server has no selection for", () => {
-  it("is seeded once from what an older build kept in this browser, then forgets it", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        version: 7,
-        state: {
-          chatParams: { [CHAT_ID]: { model: { id: "gpt-5.6-sol@codex" } }, "other-chat": { mode: "plan" } },
-          chatPresets: {},
-        },
-      }),
-    );
-    server.selection = null;
-
-    renderComposer();
-
-    await waitFor(() => expect(server.updates.length).toBe(1), PUSH_DEBOUNCE_WAIT);
-    expect(server.updates[0].params).toEqual({ model: { id: "gpt-5.6-sol@codex" } });
-    const left = JSON.parse(localStorage.getItem(LEGACY_KEY) ?? "{}");
-    expect(left.state.chatParams).toEqual({ "other-chat": { mode: "plan" } });
-  });
-
-  it("repairs a poisoned key first, so it never seeds a selection the server would refuse", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        version: 7,
-        state: {
-          chatParams: { [CHAT_ID]: { model: { id: "claude-5.5-opus@claude" }, thinking_level: "high", "default.mode": "plan" } },
-          chatPresets: {},
-        },
-      }),
-    );
-
-    renderComposer();
-
-    await waitFor(() => expect(server.updates.length).toBe(1), PUSH_DEBOUNCE_WAIT);
-    expect(server.updates[0].params).toEqual({
-      model: { id: "claude-5.5-opus@claude", thinking_level: "high" },
-      mode: "plan",
-    });
-    expect(server.updates[0].params).not.toHaveProperty("thinking_level");
-  });
-
-  it("is not seeded from local values once the server has a selection", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({ version: 7, state: { chatParams: { [CHAT_ID]: { mode: "plan" } }, chatPresets: {} } }),
-    );
-    server.selection = { workflowName: WORKFLOW, params: { mode: "auto" }, version: 2n };
-
-    renderComposer();
-    await waitFor(() => expect(storeParams()).toEqual({ mode: "auto" }));
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    expect(server.updates).toEqual([]);
   });
 });

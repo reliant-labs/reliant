@@ -50,6 +50,7 @@ import { AutomationDialogHost } from './components/Automations/dialog/Automation
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
+import { ClientMinimumWatch } from './components/ClientMinimumWatch'
 import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -197,6 +198,10 @@ const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
 const ProjectHomePage = lazyRoute(
   () => import('./components/Projects/ProjectHomePage'), 'ProjectHomePage')
+const ProjectSettingsPage = lazyRoute(
+  () => import('./components/Projects/ProjectPage'), 'ProjectSettingsPage')
+const ProjectWorkspacesPage = lazyRoute(
+  () => import('./components/Projects/ProjectPage'), 'ProjectWorkspacesPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -332,6 +337,9 @@ function RootShell() {
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
+      {/* The forced upgrade when this build is below the reliant API's
+          published minimum (lib/clientMinimum.ts). */}
+      <ClientMinimumWatch />
       {/* The desktop app's update dialog: the sidebar button, Settings and
           the app menu's "Check for Updates…" open it from any route. */}
       <GlobalUpdateHandler />
@@ -454,7 +462,7 @@ const oauthConsentRoute = createRoute({
   ),
 })
 
-// CLI login consent (`forge login`, `reliant auth login`). The control plane's
+// CLI login consent (`forge cloud login`, `reliant auth login`). The control plane's
 // /oauth/authorize validates the CLI's PKCE request and sends the browser here,
 // because this app holds the end-user session. Root-level and unguarded for the
 // same reason as /oauth/consent: the page signs the user in itself and must
@@ -772,11 +780,13 @@ const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLay
 //   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
 //                   /workflow/…, /workflows/… (and their retired paths),
 //                   /inbox, /usage, /projects (and the
-//                   retired /apps, /sites), /forge/…
+//                   retired /apps, /sites), /projects/$projectId[/settings|/workspaces],
+//                   /forge/…
 //   form 'org'      /o/$org, /o/$org/project/$projectId,
 //                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/usage,
 //                   /o/$org/projects (and the retired /o/$org/apps, /o/$org/sites),
+//                   /o/$org/projects/$projectId[/settings|/workspaces],
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
 function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
@@ -899,18 +909,32 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   // (sandboxesAliasRoute.tsx).
   const sandboxesAliasRoute = createSandboxesAliasRoute(authParent)
 
-  // Projects: the nav's Projects entry — the person's apps and sites, and
-  // their code (components/Projects/ProjectsPage.tsx; U7 replaces it). Apps
-  // and Sites are its filters (`?show=apps|sites`); their old pages, /apps and
-  // /sites, are redirects to them (retiredPageRoutes).
+  // Projects: the nav's Projects entry. With several projects chosen it is
+  // their Home (the summary); `?browse=1`, or one project, the org's projects
+  // and its apps as one list (design §8.3, U7; components/Projects/ProjectsPage.tsx).
+  // Apps and Sites are its filters (`?show=apps|sites`); their old pages, /apps
+  // and /sites, are redirects to them (retiredPageRoutes).
   const projectsRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects',
     validateSearch: projectsSearchSchema,
     component: ProjectsPage,
   })
+  const projectSettingsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId/settings',
+    component: ProjectSettingsPage,
+  })
+  const projectWorkspacesRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId/workspaces',
+    component: ProjectWorkspacesPage,
+  })
 
-  // A project's Home (U6b): the project shell's first row (lib/paths projectPath).
+  // A project's page (U6b, U7): `/projects/<id>` redirects to the app's
+  // Overview when the project has a deployed app, and is the project's own
+  // page otherwise (ProjectHomePage); its Settings and Workspaces tabs are
+  // the routes above (design §8.4).
   const projectHomeRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId',
@@ -925,7 +949,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, projectSettingsRoute, projectWorkspacesRoute, ...retiredPageRoutes] as const,
   }
 }
 

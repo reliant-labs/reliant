@@ -272,7 +272,7 @@ message ListOrgProviderAccountsResponse {
 
 message AddOrgProviderAPIKeyRequest {
   string org_id = 1;
-  // An API-key driver: "anthropic", "openai", "gemini" or "openrouter".
+  // An API-key driver: "anthropic", "openai", "gemini", "openrouter" or "vertexai" (the JSON of a Google service-account key).
   string provider = 2;
   // Write-only: never returned by any rpc.
   string api_key = 3;

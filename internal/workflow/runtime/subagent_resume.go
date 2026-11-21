@@ -302,6 +302,7 @@ func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, t
 		ToolGrants:            tracker.toolGrantsHandoff(),
 		AmbientMemoryExcluded: tracker.ambientMemoryHandoff(),
 		ThreadInputs:          tracker.threadInputOverridesHandoff(),
+		RunStartedAtMs:        tracker.startedAtMs(),
 		// Unlike a late wake's fresh run, this continues the interrupted
 		// tree: it resumes the stopped agents and the parent's loop against
 		// the catalog they started with, not one pushed while they were
@@ -580,7 +581,7 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 		// on a terminal thread revives it — and with the row, the agent's
 		// spawn card, which reads it. The spawn TOOL CALL is not touched: it
 		// ended, failed, and a call ends once (see notifySpawnTerminal).
-		notifyWorkflowStatus(gCtx, deps.chatID, config.childWorkflowID, prep.targetWorkflow, "started", h.ParentWorkflowID, h.ChildThread, &workflowStatusOpts{
+		_ = notifyWorkflowStatus(gCtx, deps.chatID, config.childWorkflowID, prep.targetWorkflow, "started", h.ParentWorkflowID, h.ChildThread, &workflowStatusOpts{
 			Title:               h.Preset,
 			ThreadTitle:         prep.threadTitle,
 			Origin:              model.ThreadOriginSpawn,

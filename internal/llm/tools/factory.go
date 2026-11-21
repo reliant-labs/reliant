@@ -92,6 +92,11 @@ type ToolsOptions struct {
 	// both report they are unavailable here (self-hosted, or the daemon
 	// runtime).
 	MachineController MachineController
+	// ChangeController reads and acts on Forge Changes (remote config,
+	// rollouts, A/B tests) as the user, for list_changes, get_change and
+	// manage_change. Optional: nil means they report they are unavailable
+	// here (self-hosted, or the daemon runtime).
+	ChangeController ChangeController
 	// ConnectionProposer checks a propose_connection call (the chat's org,
 	// the person's org role, an identical proposal already waiting) and reads
 	// back the connection the person made. Optional: nil means the tool
@@ -533,6 +538,22 @@ func (f *ToolsFactory) ManageMachinePool() Tool {
 	return NewManageMachinePoolTool(f.store(), f.opts.MachineController)
 }
 
+func (f *ToolsFactory) ListChanges() Tool {
+	return NewListChangesTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) GetChange() Tool {
+	return NewGetChangeTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) ChangeResults() Tool {
+	return NewChangeResultsTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) ManageChange() Tool {
+	return NewManageChangeTool(f.store(), f.opts.ChangeController)
+}
+
 func (f *ToolsFactory) ProposeConnection() Tool {
 	return NewProposeConnectionTool(f.store(), f.opts.ConnectionProposer)
 }
@@ -766,6 +787,14 @@ Make each question stand on its own. Include enough context for users, as someti
 - Say what you will do by default if nobody answers.
 - Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
 
+Write every question and option as you, the agent, speaking directly to the user, so that "I" and "you" each mean exactly one party:
+- "I", "me", "my" are you, the agent asking. "You", "your" are the person reading and answering.
+- Never call the reader "the user" or "they", and never call yourself "the agent" or "we": they read the question as if you were talking to them.
+- Name anyone else explicitly: "the sub-agent fixing the build", "the PR author", "the reviewer bot", "the owner", not "it", "they" or "you".
+- In option labels and descriptions, say who acts whenever it is not obvious: "I delete the branch" or "You review the diff first", not a bare "Delete the branch".
+- Good: "I found two migrations that conflict. Should I keep yours and drop mine? If you don't answer, I'll keep yours."
+- Bad: "Should the user's migration be kept? The agent will default to keeping it." (Whose migration? Who is "the user"?)
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
@@ -784,7 +813,7 @@ Usage notes:
 						"properties": map[string]interface{}{
 							"question": map[string]interface{}{
 								"type":        "string",
-								"description": "The question to ask, clear, specific and able to stand on its own: the user may see it alone in their inbox or feed, without this chat. Name what it is about (the issue, PR or system, not a bare id), why you are asking now, and the default you will proceed with. No internal shorthand, and no references to \"above\" or earlier messages.",
+								"description": "The question to ask, clear, specific and able to stand on its own: the user may see it alone in their inbox or feed, without this chat. Name what it is about (the issue, PR or system, not a bare id), why you are asking now, and the default you will proceed with. No internal shorthand, and no references to \"above\" or earlier messages. Speak to the reader directly: 'I' is you, the agent, and 'you' is the reader; never 'the user' or 'the agent'.",
 							},
 							"options": map[string]interface{}{
 								"type":        "array",
@@ -800,7 +829,7 @@ Usage notes:
 										},
 										"description": map[string]interface{}{
 											"type":        "string",
-											"description": "What choosing this option means in practice: its consequence and main trade-off. Do not restate the label.",
+											"description": "What choosing this option means in practice: its consequence and main trade-off. Do not restate the label. Say who acts when it is not obvious: 'I'll…' for you, the agent; 'You…' for the reader.",
 										},
 										"preview": map[string]interface{}{
 											"type":        "string",

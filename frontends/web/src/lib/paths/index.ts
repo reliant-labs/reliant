@@ -298,7 +298,7 @@ export function acceptInvitePath(): string {
   return "/accept-invite";
 }
 
-/** CLI login consent (`forge login`, `reliant auth login`). */
+/** CLI login consent (`forge cloud login`, `reliant auth login`). */
 export function oauthCliPath(): string {
   return "/oauth/cli";
 }
@@ -336,7 +336,7 @@ export function mobileChatPath(chatId: Segment): string {
 }
 
 /** A workflow chat's run, as the mobile surface shows it. */
-export function mobileChatWorkflowPath(chatId: string): string {
+export function mobileChatWorkflowPath(chatId: Segment): string {
   return `/m/chats/${seg(chatId)}/workflow`;
 }
 

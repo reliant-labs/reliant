@@ -256,10 +256,13 @@ type ListSharedChatsRequest struct {
 	// empty one is the same as unset.
 	AppName *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
 	// Narrow the list to several projects' shared chats: the union of
-	// project_id and project_ids, so a client may set either or both; with
-	// both empty every project is listed, as before this field existed. A
-	// project with nothing shared with the org contributes nothing. At most
-	// 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+	// project_id and project_ids, so a client may set either or both. With
+	// project_ids empty, project_id behaves exactly as before this field
+	// existed: unset lists every project, and set to "" lists nothing. With
+	// project_ids set, a project_id of "" adds nothing: the list is just
+	// project_ids. A project with nothing shared with the org contributes
+	// nothing. At most 200 ids, none of them empty (INVALID_ARGUMENT
+	// otherwise).
 	ProjectIds    []string `protobuf:"bytes,6,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

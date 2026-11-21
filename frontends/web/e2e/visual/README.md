@@ -7,12 +7,16 @@ touched nothing else.
 
 | Project | Viewport | Surfaces |
 |---|---|---|
-| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, observability errors, environment, billing, usage |
+| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, app code card, observability errors, environment, the project selector, Projects, a project's page, billing, usage |
 | `desktop-light` | 1440×900, light | the same |
-| `mobile-dark` | 390×844, dark, touch | chat list, chat, app overview, observability errors, environment |
+| `mobile-dark` | 390×844, dark, touch | chat list, chat, app overview, app code card, observability errors, environment, the project selector (the console's app switcher), Projects, a project's page |
 
 The surface list is `SURFACES` in `surfaces.visual.ts`. The chat uses every
-tool renderer the timeline has (`fixtures/chat.ts`).
+tool renderer the timeline has (`fixtures/chat.ts`). The project catalog
+(`fixtures/projects.ts`) is in the shared table; the selector, Projects and a
+project's page add their pins per surface (`selectorSurfaceFixtures`,
+`projectsPageSurfaceFixtures`), because the `sidebar.projects` setting also
+moves every other surface's sidebar.
 
 ## Running it
 
@@ -68,8 +72,13 @@ identical frames. A capture may differ from its baseline by at most
 100 pixels past the default per-pixel threshold (measured noise: under 110
 pixels, each at most 10/255 off, all inside the threshold). The pointer is
 parked off the page so no row shows its hover state. The build's version
-string (settings footer) is masked, so a baseline does not depend on the
-commit that built it.
+string (settings footer) is pinned and masked, so a baseline does not depend
+on the commit that built it: `task test:web:visual` builds with
+`RELEASE_VERSION=0.0.0-visual`, `scripts/visual-docker.sh` refuses a `dist/`
+built with any other version, and the footer never wraps (a long version is
+truncated). The composer's example prompt is a function of the chat id
+(`src/components/Chat/examplePrompt.ts`), not of `Math.random`, so it does
+not move when a change reorders the seeded random draws.
 
 This harness is a port of the November UX review's fake network
 (`dev-docs/design/app-ux-review-2026-11/HARNESS.md`), with its fixtures

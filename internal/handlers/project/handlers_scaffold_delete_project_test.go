@@ -123,7 +123,7 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 			mu.Lock()
 			removes = append(removes, daemonID+":"+p["path"])
 			mu.Unlock()
-			return []byte(`{"success":true}`), nil
+			return json.Marshal(map[string]any{"success": true, "op_id": p["op_id"], "op_state": "done"})
 		}
 		return []byte(`{}`), nil
 	})

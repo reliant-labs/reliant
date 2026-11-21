@@ -39,7 +39,7 @@ export interface ToolCollapseDefaults {
  */
 export const DEFAULT_TOOL_COLLAPSE_SETTINGS: ToolCollapseDefaults = {
   fileView: true,       // collapsed by default (view-only tools)
-  fileWrite: false,     // expanded by default — the diff is the point of the call
+  fileWrite: true,      // collapsed by default: the row says +4 −1, the diff opens on a click
   searchRead: true,     // collapsed by default (can expand to see results)
   execution: true,      // collapsed by default
   planning: true,       // collapsed by default
@@ -118,9 +118,9 @@ export function getToolCategory(toolName: string): keyof ToolCollapseDefaults | 
  *
  * On a phone, an expanded `edit`/`write` renders a full diff into a viewport
  * that fits a few lines — one file edit pushes the rest of the conversation
- * off-screen, and the timeline stops being scannable. The desktop rationale
- * for `fileWrite: false` ("the diff is the point of the call") assumes a pane
- * wide enough to read a diff in, which mobile does not have.
+ * off-screen, and the timeline stops being scannable. A desktop user who
+ * opted into expanded edits (`fileWrite: false`) did so for a pane wide
+ * enough to read a diff in, which mobile does not have.
  *
  * This is a *default*, not a lock: tapping a row still expands it, and that
  * choice is remembered via `userHasToggled` in ToolExecution. The user's

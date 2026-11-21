@@ -37,9 +37,6 @@ const (
 	// capacity accounting), shown to no caller; a launch it leads to is
 	// decided by authz in the launcher.
 	readBackground = "background owner work, shown to no caller"
-	// readUnused: nothing outside internal/db calls it yet. Classify it
-	// again before the first caller.
-	readUnused = "no caller outside internal/db"
 )
 
 // userScopedReads classifies every exported *Repo read in internal/db that
@@ -82,10 +79,13 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
-	"ListDeletedProjects":          readCallersFilter,
-	"FindProjectOrgMoveByRequest":  readCallersFilter,
-	"ListUnlaunchedTriggerEvents":  readCallersFilter,
-	"ListWorktreeRecoveries":       readCallersFilter,
+	"ListDeletedProjects":         readCallersFilter,
+	"FindProjectOrgMoveByRequest": readCallersFilter,
+	"ListUnlaunchedTriggerEvents": readCallersFilter,
+	"ListWorktreeRecoveries":      readCallersFilter,
+	// The inbox passes each incident through authz.Visible (itemReads.incident:
+	// its chat and its project) before showing it.
+	"ListAttentionIncidents":       readCallersFilter,
 	"SearchChats":                  readCallersFilter,
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
@@ -101,14 +101,15 @@ var userScopedReads = map[string]string{
 	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,
 
-	"FiringsSinceLastSuccess":   readParentAuthorized,
-	"GetPresetBySlugAndProject": readParentAuthorized,
-	"GetWorktreeRecovery":       readParentAuthorized,
-	"ListPresetsByTag":          readParentAuthorized,
-	"ListTriggerChanges":        readParentAuthorized,
-	"ListTriggerRegistrations":  readParentAuthorized,
-	"ListUserPresetsByProject":  readParentAuthorized,
-	"ListWorktrees":             readParentAuthorized,
+	"FiringsSinceLastSuccess":          readParentAuthorized,
+	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
+	"GetPresetBySlugAndProject":        readParentAuthorized,
+	"GetWorktreeRecovery":              readParentAuthorized,
+	"ListPresetsByTag":                 readParentAuthorized,
+	"ListTriggerChanges":               readParentAuthorized,
+	"ListTriggerRegistrations":         readParentAuthorized,
+	"ListUserPresetsByProject":         readParentAuthorized,
+	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"ListChatsForWorktree":  readParentAuthorized,
@@ -116,10 +117,11 @@ var userScopedReads = map[string]string{
 	"RecentTriggerOutcomes": readParentAuthorized,
 	"WorkflowSlugExists":    readParentAuthorized,
 
-	"GetAnalyticsEnabled":             readPersonal,
-	"GetAutomationToken":              readPersonal,
-	"GetIntegrationAccessRefresh":     readPersonal,
-	"GetIntegrationAccessSubject":     readPersonal,
+	"GetAnalyticsEnabled":         readPersonal,
+	"GetAutomationToken":          readPersonal,
+	"GetIntegrationAccessSubject": readPersonal,
+	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
+	"HasFreshIntegrationAccess":       readPersonal,
 	"GetLatestUserUpdateSequence":     readPersonal,
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,
@@ -129,7 +131,6 @@ var userScopedReads = map[string]string{
 	"GetProviderAccountWithSecrets":   readPersonal,
 	"GetSetting":                      readPersonal,
 	"GetSettingValue":                 readPersonal,
-	"GetVisibilityOverride":           readPersonal,
 	"ListAccountLimits":               readPersonal,
 	"ListCommandFavorites":            readPersonal,
 	"ListDismissedInboxItemIDs":       readPersonal,
@@ -141,13 +142,10 @@ var userScopedReads = map[string]string{
 	"ListProviderAccountsWithSecrets": readPersonal,
 	"ListSettings":                    readPersonal,
 	"ListSettingsByKey":               readPersonal,
-	"ListUserPresets":                 readUnused,
-	"ListUserPresetsGlobal":           readUnused,
 	"ListVisibilityOverrides":         readPersonal,
 
 	"IsDaemonAttached":                  readOrgless,
 	"ListAttachedDaemonIDsForUser":      readOrgless,
-	"ListBackgroundProcesses":           readUnused,
 	"ListDaemonLocalModels":             readOrgless,
 	"ListDaemonStorageState":            readOrgless,
 	"ListDaemonsByUserID":               readOrgless,

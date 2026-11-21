@@ -175,7 +175,7 @@ nodes:
 
           **Load the source of truth FIRST — do not work from memory:**
           ```bash
-          cd {{inputs.working_directory}} && reliant forge skill load migration
+          cd {{inputs.working_directory}} && reliant forge agent skill load migration
           ```
           Then load the shape-specific sibling skill it points you to
           (`migration-service` or `migration-cli`) plus `architecture` and
@@ -187,7 +187,7 @@ nodes:
           **Check the source language first.** A Go repository goes straight
           on. For an app in another language (Express, Django, Rails, ...),
           adoption is usually the better path: forge deploys it as it is,
-          from its own Dockerfile (`reliant forge skill load adopt`, Tier 1 in
+          from its own Dockerfile (`reliant forge agent skill load adopt`, Tier 1 in
           about an hour). Recommend it once with `ask_user` before planning,
           unless the user's goal already asks for a port to forge's Go stack.
           If they choose the port, or the app has no workable container
@@ -310,7 +310,7 @@ nodes:
           Read `{{inputs.working_directory}}/MIGRATION_PLAN.md`, then load the
           skills before doing anything:
           ```bash
-          cd {{inputs.working_directory}} && reliant forge skill load migration
+          cd {{inputs.working_directory}} && reliant forge agent skill load migration
           ```
           plus the shape-specific skill (`migration-service` / `migration-cli`)
           and `services`, `contracts`. Follow the skill's recommended
@@ -399,7 +399,7 @@ nodes:
 
                 Load the source of truth first:
                 ```bash
-                cd {{inputs.working_directory}} && reliant forge skill load migration
+                cd {{inputs.working_directory}} && reliant forge agent skill load migration
                 ```
                 Follow its per-package porting recipe and gotchas exactly
                 (import rewrites, dependency pins, embeds, generated

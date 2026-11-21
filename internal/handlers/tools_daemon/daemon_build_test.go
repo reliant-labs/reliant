@@ -91,8 +91,8 @@ func TestRegisteredBuildIsStoredServedAndPublished(t *testing.T) {
 	require.Equal(t, want.Commit, fleet[0].Commit)
 }
 
-// A daemon that predates the build fields registers as before: it connects, is
-// served as an unknown build (all empty/zero), and publishes no build.
+// A daemon that reports no build (a development build) connects, is served as
+// an unknown build (all empty/zero), and publishes no build.
 func TestDaemonWithoutBuildFieldsIsAnUnknownBuild(t *testing.T) {
 	repo, _, registry, userID, daemonID := leaseFixture(t)
 	svc := newTestService(repo)

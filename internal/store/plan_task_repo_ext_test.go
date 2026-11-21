@@ -123,7 +123,7 @@ func TestPlanQueries(t *testing.T) {
 	wantIDs(t, "ListPlansByChatID", byChat, "plan-newer", "plan-older")
 
 	// The Repository lists the same plans in the same order.
-	twinThread, err := env.Repo.ListPlansByThread(ctx, "thread-plans")
+	twinThread, err := store.ListPlansByThread(ctx, env.Repo.ORM(), "thread-plans")
 	if err != nil {
 		t.Fatalf("Repo.ListPlansByThread: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestTaskDependencyQueries(t *testing.T) {
 	if err != nil || got.FromTaskID != "a3" || got.DependencyType != related {
 		t.Fatalf("GetTaskDependency(d2) = %+v, %v; want the Repository's a3->a2 related edge", got, err)
 	}
-	twin, err := env.Repo.GetTaskDependency(ctx, "d1")
+	twin, err := store.GetTaskDependency(ctx, env.Repo.ORM(), "d1")
 	if err != nil || twin.ToTaskID != "a2" || !twin.CreatedAt.Equal(base) {
 		t.Fatalf("Repo.GetTaskDependency(d1) = %+v, %v; want the store's edge", twin, err)
 	}
@@ -319,7 +319,7 @@ func TestTaskDependencyQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTaskDependenciesByTask: %v", err)
 	}
-	twinByTask, err := env.Repo.ListTaskDependenciesByTask(ctx, "a2")
+	twinByTask, err := store.ListTaskDependenciesByTask(ctx, env.Repo.ORM(), "a2")
 	if err != nil {
 		t.Fatalf("Repo.ListTaskDependenciesByTask: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestTaskDependencyQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListBlockersForTask: %v", err)
 	}
-	twinBlockers, err := env.Repo.ListBlockersForTask(ctx, "a2")
+	twinBlockers, err := store.ListBlockersForTask(ctx, env.Repo.ORM(), "a2")
 	if err != nil {
 		t.Fatalf("Repo.ListBlockersForTask: %v", err)
 	}
@@ -349,13 +349,13 @@ func TestTaskDependencyQueries(t *testing.T) {
 	if err := store.DeleteTaskDependencyByPair(ctx, env.ORM, "a3", "a2", blocks); err != nil {
 		t.Fatalf("DeleteTaskDependencyByPair(wrong type): %v", err)
 	}
-	if _, err := env.Repo.GetTaskDependency(ctx, "d2"); err != nil {
+	if _, err := store.GetTaskDependency(ctx, env.Repo.ORM(), "d2"); err != nil {
 		t.Fatalf("d2 gone after a by-pair delete of another type: %v", err)
 	}
 	if err := store.DeleteTaskDependencyByPair(ctx, env.ORM, "a3", "a2", related); err != nil {
 		t.Fatalf("DeleteTaskDependencyByPair: %v", err)
 	}
-	if _, err := env.Repo.GetTaskDependency(ctx, "d2"); err == nil {
+	if _, err := store.GetTaskDependency(ctx, env.Repo.ORM(), "d2"); err == nil {
 		t.Fatalf("d2 still there after DeleteTaskDependencyByPair")
 	}
 

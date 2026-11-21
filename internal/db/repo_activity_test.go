@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -137,7 +138,7 @@ func TestGetChatActivity_Idle(t *testing.T) {
 	chatID := "chat-idle"
 	createActivityTestChat(t, repo, chatID)
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -156,7 +157,7 @@ func TestGetChatActivity_Running(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 	insertTestWorkflow(t, repo, "wf-1", chatID, "builtin://agent", Active())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestGetChatActivity_RunningWithThreadWorkflow(t *testing.T) {
 	// from the activity view, causing the chat to appear IDLE.
 	insertTestWorkflow(t, repo, "wf-thread", chatID, "thread:abc123", Active())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestGetChatActivity_AwaitingInput_PendingApproval(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 	insertTestApproval(t, repo, "approval-1", chatID, 1) // status=1 → PENDING
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestGetChatActivity_ApprovalTakesPriorityOverRunning(t *testing.T) {
 	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", Active())
 	insertTestApproval(t, repo, "approval-pri", chatID, 1) // PENDING
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestGetChatActivity_Paused(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 	insertTestWorkflow(t, repo, "wf-paused", chatID, "builtin://agent", Paused())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestGetChatActivity_RunningTakesPriorityOverPaused(t *testing.T) {
 	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", Active())
 	insertTestWorkflow(t, repo, "wf-paused", chatID, "thread:abc123", Paused())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -309,7 +310,7 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 	// Start a workflow → activity should be RUNNING (1).
 	insertTestWorkflow(t, repo, "wf-transition", chatID, "builtin://agent", Active())
 
-	activity, err := repo.GetChatActivity(ctx, chatID)
+	activity, err := store.GetChatActivity(ctx, repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity after start: %v", err)
 	}
@@ -322,7 +323,7 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 		t.Fatalf("UpdateWorkflowStatus: %v", err)
 	}
 
-	activity, err = repo.GetChatActivity(ctx, chatID)
+	activity, err = store.GetChatActivity(ctx, repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity after complete: %v", err)
 	}
@@ -382,7 +383,7 @@ func TestGetChatActivity_Error_WhenNothingSucceededAfterFailure(t *testing.T) {
 	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
 	completeWorkflowNow(t, repo, "wf-fail", Failed())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -417,7 +418,7 @@ func TestGetChatActivity_ErrorClearedAfterRecovery(t *testing.T) {
 	insertTestWorkflow(t, repo, "wf-retry", chatID, "builtin://agent", Active())
 	completeWorkflowNow(t, repo, "wf-retry", Completed())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -444,7 +445,7 @@ func TestGetChatActivity_ErrorNotClearedByEarlierSuccess(t *testing.T) {
 	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
 	completeWorkflowNow(t, repo, "wf-fail", Failed())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
@@ -468,7 +469,7 @@ func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
 	completeWorkflowNow(t, repo, "wf-fail", Failed())
 	insertTestWorkflow(t, repo, "wf-live", chatID, "builtin://agent", Active())
 
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	activity, err := store.GetChatActivity(context.Background(), repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}

@@ -81,12 +81,6 @@ func (r *Repo) FinishIntegrationAccessRefresh(ctx context.Context, userID, integ
 	return nil
 }
 
-// GetIntegrationAccessRefresh returns the refresh bookkeeping, or
-// svcerr.NotFound when the pair was never refreshed.
-func (r *Repo) GetIntegrationAccessRefresh(ctx context.Context, userID, integrationID string) (*core.IntegrationAccessRefresh, error) {
-	return store.GetIntegrationAccessRefresh(ctx, r.ORM(), userID, integrationID)
-}
-
 func truncateString(s string, n int) string {
 	if len(s) <= n {
 		return s

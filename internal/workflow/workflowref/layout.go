@@ -355,7 +355,15 @@ func (l *Layout) slugForFileStem(fileStem string) string {
 // workflow (a directory named for a file rather than a name:, a typo, a
 // workflow that was renamed).
 func (l *Layout) ScenarioProblems() []error {
-	problems := append([]error(nil), l.Misplaced...)
+	return append(append([]error(nil), l.Misplaced...), l.OrphanScenarioDirs()...)
+}
+
+// OrphanScenarioDirs is the part of ScenarioProblems that names scenario
+// directories belonging to no workflow. Unlike a Misplaced file, an orphan
+// directory is never the scenarios of any workflow the layout holds, so a
+// caller working on one named workflow can report it without refusing.
+func (l *Layout) OrphanScenarioDirs() []error {
+	var problems []error
 	reported := map[string]bool{}
 	for _, s := range l.Scenarios {
 		if reported[s.WorkflowSlug] {

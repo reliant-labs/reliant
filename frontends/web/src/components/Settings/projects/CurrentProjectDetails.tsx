@@ -46,7 +46,7 @@ export interface CurrentProjectDetailsProps {
 }
 
 const RECENT_CHAT_LIMIT = 5;
-const SECTION_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const SECTION_LABEL = "text-xs font-semibold text-muted-foreground";
 
 export function CurrentProjectDetails({
   project,

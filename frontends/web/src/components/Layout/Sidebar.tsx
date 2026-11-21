@@ -84,7 +84,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { inboxPath, newChatPath, settingsPath, withSearch } from "../../lib/paths";
+import { inboxPath, newChatPath, projectsPath, withSearch } from "../../lib/paths";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -99,7 +99,7 @@ import {
   SidebarSubRow,
   ChatSectionHeading,
 } from "./sidebar/primitives";
-import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
+import { OrgHeaderRow, ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
 import { useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
@@ -119,6 +119,7 @@ import {
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
+import { ChatAppTag } from "../Projects/ChatAppTag";
 
 interface SidebarProps {
   /** The page on screen (the router's): which row is current, which app is open. */
@@ -386,7 +387,14 @@ const ChatItem = memo(function ChatItem({
         </>
       }
       suffix={where}
-      glyph={isRun(chat) ? <AutomationOriginGlyph chat={chat} /> : undefined}
+      glyph={
+        isRun(chat) || chat.appName ? (
+          <>
+            {chat.appName && <ChatAppTag name={chat.appName} interactive={false} compact className="ml-1" />}
+            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
+          </>
+        ) : undefined
+      }
       editor={editor}
       isTabStop={isTabStop}
       onClick={() => onChatClick(chat)}
@@ -1826,7 +1834,7 @@ function SidebarComponent({
           filterId={projectFilterId}
           projects={projects}
           onAddProject={() => openAddProject()}
-          onManageProjects={() => go(settingsPath("projects"))}
+          onManageProjects={() => go(projectsPath())}
           sortOrder={sortOrder}
           onSortChange={setSortOrder}
           viewMode={viewMode}
@@ -2097,9 +2105,9 @@ function SidebarComponent({
       data-context="left-sidebar"
       tabIndex={-1}
     >
-      {/* Find, at the very top (it opens the command palette); then the org and project switcher. */}
+      {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
+      <OrgHeaderRow />
       <FindBox />
-      {/* [Org ▾] / [Project ▾]: the org, and the project(s) every row below is about. */}
       <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
 
       {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}

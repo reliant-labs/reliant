@@ -136,7 +136,7 @@ function TimelineRow({
     </span>
   );
   const originNote = origin && (
-    <span className="rounded border border-border/60 px-1.5 text-2xs text-ink-muted" data-testid="obs-timeline-origin" data-origin-issue={origin.issueId} title={`Issue ${origin.issueId}`}>
+    <span className="rounded border border-border/60 px-1.5 text-meta text-ink-muted" data-testid="obs-timeline-origin" data-origin-issue={origin.issueId} title={`Issue ${origin.issueId}`}>
       {origin.label}
     </span>
   );
@@ -386,7 +386,7 @@ function CommentComposer({ issueId, disabled }: { issueId: string; disabled: boo
         <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty || disabled || readOnly || add.isPending} title={readOnly ? reason : undefined} loading={add.isPending} data-testid="obs-comment-submit">
           Comment
         </Button>
-        <span className="text-2xs text-ink-muted">⌘/Ctrl+Enter sends</span>
+        <span className="text-meta text-ink-muted">⌘/Ctrl+Enter sends</span>
       </div>
       {add.error ? (
         <p role="alert" className="text-xs text-danger-ink" data-testid="obs-comment-add-error">

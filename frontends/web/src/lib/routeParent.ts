@@ -49,7 +49,7 @@ import {
   isWorkflowsDetailPath,
   workflowsTabForPath,
 } from "./workflowsArea";
-import { encodedSegment, homePath, workflowDetailPath, workflowLibraryPath } from "@/lib/paths";
+import { encodedSegment, homePath, projectsPath, workflowDetailPath, workflowLibraryPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 export type RouteParentNavigateOptions = {
@@ -72,6 +72,8 @@ export function getParentRouteNavigateOptions(
   if (pathname === "/forge" || pathname.startsWith("/forge/")) {
     return { to: homePath(), search: {} };
   }
+  // A project's page (and its Settings and Workspaces tabs) steps back to Projects.
+  if (pathname.startsWith("/projects/")) return { to: projectsPath() };
   if (isWorkflowsDetailPath(pathname)) {
     const tab = WORKFLOWS_TABS.find((candidate) => candidate.key === workflowsTabForPath(pathname));
     if (tab) return { to: tab.href() };

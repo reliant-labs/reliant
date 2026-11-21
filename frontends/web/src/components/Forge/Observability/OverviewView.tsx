@@ -22,7 +22,7 @@ import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useServiceOverview } from "@/hooks/observability-queries";
 import type { ObsScope, ServiceHealth, ServiceSignal } from "@/services/controlPlane/observability/types";
-import type { RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { UPlotChart } from "./charts/UPlotChart";
@@ -76,9 +76,13 @@ export function OverviewView({
   }
 
   return (
-    <div className="space-y-4">
-    <Card padding="none" className="overflow-hidden" data-testid="obs-overview">
-      <ObsAsOf updatedAt={overview.dataUpdatedAt} />
+    <div className="space-y-10">
+    <OverviewHeadline services={services} range={range} />
+    <section className="space-y-3" data-testid="obs-overview">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-section text-ink">Services</h2>
+        <ObsAsOf updatedAt={overview.dataUpdatedAt} />
+      </div>
       <DataTable<ServiceRow>
         flush
         stacked
@@ -90,9 +94,9 @@ export function OverviewView({
         getRowLabel={({ health }) => health.name}
         getRowProps={({ health, group }) => ({ "data-testid": group ? `obs-service-${health.name}-${group}` : `obs-service-${health.name}` })}
       />
-    </Card>
+    </section>
     {/* What the requests took, and who was in the app: each tile its own read (Home/SignalTiles). */}
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2" data-testid="obs-overview-signals">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-2" data-testid="obs-overview-signals">
       <TracesTile
         scope={scope}
         range={range}
@@ -110,10 +114,69 @@ export function OverviewView({
   );
 }
 
+/**
+ * The page's headline: requests over the window as the one big number, and
+ * one chart of the request rate, every service summed. Error rate and the
+ * services reporting are a quiet row beside it. All of it is the overview's
+ * own answer; it has no previous-window read, so it names the window and
+ * makes no comparison.
+ */
+function OverviewHeadline({ services, range }: { services: ServiceHealth[]; range: RangePreset }) {
+  const requests = services.reduce((sum, s) => sum + s.requestCount, 0);
+  const errors = services.reduce((sum, s) => sum + s.errorCount, 0);
+  const rate = requests ? errors / requests : null;
+  const timestamps = [...new Set(services.flatMap((s) => s.timestamps))].sort((a, b) => a - b);
+  const summed = timestamps.map((t) => {
+    let total: number | null = null;
+    for (const s of services) {
+      const value = s.rateSeries[s.timestamps.indexOf(t)];
+      if (value != null) total = (total ?? 0) + value;
+    }
+    return total;
+  });
+  const windowWords = RANGE_LABELS[range];
+  return (
+    <section className="min-w-0 space-y-5" aria-label={`Requests, ${windowWords.toLowerCase()}`} data-testid="obs-overview-headline">
+      <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2 text-ui">
+            <span className="font-medium text-ink">Requests</span>
+            <span className="text-meta text-ink-muted">{windowWords}</span>
+          </div>
+          <div className="mt-1 text-figure tabular-nums text-ink">{formatCount(requests)}</div>
+        </div>
+        <dl className="flex flex-wrap gap-x-10 gap-y-5">
+          <div className="min-w-0">
+            <dt className="text-meta text-ink-muted">Error rate</dt>
+            <dd className={cn("mt-0.5 text-2xl font-semibold tabular-nums", rate !== null && rate >= ERROR_RATE_ALERT ? "text-danger-ink" : "text-ink")}>
+              {rate === null ? "—" : formatPercent(rate)}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-meta text-ink-muted">Services</dt>
+            <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-ink">{new Set(services.map((s) => s.name)).size}</dd>
+          </div>
+        </dl>
+      </div>
+      {timestamps.length > 1 && (
+        <UPlotChart
+          height={180}
+          area="fill"
+          legend={false}
+          timestamps={timestamps}
+          series={[{ label: "Requests per second", values: summed, color: "--chart-1" }]}
+          unit="rate"
+          label={`Request rate, every service, ${windowWords.toLowerCase()}`}
+        />
+      )}
+    </section>
+  );
+}
+
 type ServiceRow = { health: ServiceHealth; group: string };
 
 /** A service that served no requests sent logs or metrics only: its request figures say so once. */
-const NO_REQUESTS = <span className="text-xs text-ink-muted">—</span>;
+const NO_REQUESTS = <span className="text-meta text-ink-muted">—</span>;
 
 function serviceColumns(groupBy: string[]): DataTableColumn<ServiceRow>[] {
   return [
@@ -122,13 +185,13 @@ function serviceColumns(groupBy: string[]): DataTableColumn<ServiceRow>[] {
       header: "Service",
       render: (_, { health }) => (
         <span className="flex items-center gap-2">
-          <span className="font-mono">{health.name}</span>
+          <span className="font-medium text-ink">{health.name}</span>
           <OperatorBadge provenance={health} />
         </span>
       ),
     },
     ...(groupBy.length > 0
-      ? [{ key: "group", header: groupBy.map(attributeLabel).join(" · "), render: (_: unknown, { group }: ServiceRow) => <span className="font-mono text-xs">{group}</span> }]
+      ? [{ key: "group", header: groupBy.map(attributeLabel).join(" · "), render: (_: unknown, { group }: ServiceRow) => <span className="text-meta">{group}</span> }]
       : []),
     {
       key: "requests",
@@ -144,7 +207,7 @@ function serviceColumns(groupBy: string[]): DataTableColumn<ServiceRow>[] {
             unit="rate"
           />
         ) : (
-          <span className="text-xs text-ink-muted">No requests served — this service sent logs or metrics only.</span>
+          <span className="text-meta text-ink-muted">No requests served — this service sent logs or metrics only.</span>
         ),
     },
     {
@@ -174,7 +237,7 @@ function serviceColumns(groupBy: string[]): DataTableColumn<ServiceRow>[] {
         health.requestCount > 0 ? (
           <span className="tabular-nums">
             {formatDuration(health.p95Ms)}
-            <span className="ml-1.5 text-xs text-ink-muted">p95 · {formatDuration(health.p99Ms)} p99</span>
+            <span className="ml-1.5 text-meta text-ink-muted">p95 · {formatDuration(health.p99Ms)} p99</span>
           </span>
         ) : (
           NO_REQUESTS
@@ -275,7 +338,7 @@ function ServiceDetail({
           >
             All services
           </Button>
-          <h3 className="font-mono text-sm font-semibold text-ink">{health.name}</h3>
+          <h3 className="text-section text-ink">{health.name}</h3>
           <OperatorBadge provenance={health} />
           {compared && (
             <span className="text-xs text-ink-muted">
@@ -353,7 +416,7 @@ function ServiceDetail({
                 ["p99", health.p99Ms],
               ].map(([name, value]) => (
                 <div key={name as string}>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{name}</dt>
+                  <dt className="text-xs font-medium text-ink-muted">{name}</dt>
                   <dd className="text-lg font-semibold tabular-nums text-ink">{formatDuration(value as number)}</dd>
                 </div>
               ))}
@@ -407,7 +470,7 @@ function SignalJumps({ service, signals, navigate }: { service: string; signals:
             data-testid={`obs-service-${signal}`}
           >
             {label}
-            {idle && <span className="text-2xs text-ink-muted">{idle.badge}</span>}
+            {idle && <span className="text-meta text-ink-muted">{idle.badge}</span>}
           </Button>
         );
       })}

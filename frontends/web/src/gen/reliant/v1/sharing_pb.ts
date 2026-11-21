@@ -166,10 +166,13 @@ export type ListSharedChatsRequest = Message<"reliant.v1.ListSharedChatsRequest"
 
   /**
    * Narrow the list to several projects' shared chats: the union of
-   * project_id and project_ids, so a client may set either or both; with
-   * both empty every project is listed, as before this field existed. A
-   * project with nothing shared with the org contributes nothing. At most
-   * 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+   * project_id and project_ids, so a client may set either or both. With
+   * project_ids empty, project_id behaves exactly as before this field
+   * existed: unset lists every project, and set to "" lists nothing. With
+   * project_ids set, a project_id of "" adds nothing: the list is just
+   * project_ids. A project with nothing shared with the org contributes
+   * nothing. At most 200 ids, none of them empty (INVALID_ARGUMENT
+   * otherwise).
    *
    * @generated from field: repeated string project_ids = 6;
    */

@@ -18,7 +18,7 @@
  * what the page is (GettingStarted renders it under its agent action).
  */
 
-import { lazy, Suspense, useContext, useState, type ReactNode } from "react";
+import { Suspense, useContext, useState, type ReactNode } from "react";
 import { ArrowRightLeft, Rocket } from "lucide-react";
 
 import Button, { buttonClasses } from "@/components/forge-ui/button";
@@ -30,12 +30,10 @@ import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 
 import { START_APP, START_REPO } from "../Apps/appStart";
+import { MigrateRunDialog } from "./migrateRunDialog";
 import { ForgeConsoleContext } from "../Forge/Console/consoleContextValue";
 import { learnSectionOf } from "../Forge/Console/consoleLearn";
 
-// The Run dialog loads when it opens: every console empty state renders this
-// row, and the dialog brings the run form and the chat actions with it.
-const RunNowDialog = lazy(() => import("@/components/workflow/run/RunNowDialog").then((m) => ({ default: m.RunNowDialog })));
 
 /** The Move to Forge workflow (internal/workflow/builtin/forge-migrate.yaml). */
 export const MIGRATE_WORKFLOW_REF = "builtin://forge-migrate";
@@ -47,11 +45,18 @@ export const MIGRATE_LABEL = "Migrate an existing app to forge";
 /**
  * The Reliant project an action runs in: the one named, the console's, the
  * one open in the shell, else the person's first. Null with no project at all.
+ *
+ * An explicit null is an answer, not a gap: a caller passing `projectId={null}`
+ * (a forge app no Reliant project declares), or a console whose app maps to no
+ * project, gets no project, never an unrelated current or first one. Only a
+ * page outside the console, naming nothing, falls back to the shell's.
  */
 function useActionProjectId(projectId?: string | null): string | null {
-  const consoleProjectId = useContext(ForgeConsoleContext)?.projectId ?? null;
+  const consoleCtx = useContext(ForgeConsoleContext);
   const current = useProjectStore((state) => state.currentProject?.id ?? null);
-  return projectId ?? consoleProjectId ?? current ?? getCachedProjects()[0]?.id ?? null;
+  if (projectId !== undefined) return projectId;
+  if (consoleCtx) return consoleCtx.projectId;
+  return current ?? getCachedProjects()[0]?.id ?? null;
 }
 
 /**
@@ -84,7 +89,7 @@ export function MigrateToForgeButton({ projectId, variant = "secondary" }: { pro
       </Button>
       {open && (
         <Suspense fallback={null}>
-          <RunNowDialog open onClose={() => setOpen(false)} projectId={project} workflowRef={MIGRATE_WORKFLOW_REF} />
+          <MigrateRunDialog open onClose={() => setOpen(false)} projectId={project} workflowRef={MIGRATE_WORKFLOW_REF} />
         </Suspense>
       )}
     </>

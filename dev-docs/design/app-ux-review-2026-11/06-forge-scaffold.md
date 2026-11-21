@@ -265,7 +265,7 @@ Impact: H/M/L. Effort: S (≤ half a day) / M (1–2 days) / L (several days).
 
 ## 5. Broken things and bugs filed
 
-All filed with `reliant forge report-bug` on 2026-11-01.
+All filed with `reliant forge agent report-bug` on 2026-11-01.
 
 | Report id | Severity | Defect |
 |---|---|---|

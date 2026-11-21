@@ -92,8 +92,8 @@ export interface IdentityDelivery {
 }
 
 /**
- * Why an environment has no instance. `unknown`: a server that predates the
- * field, which says only `refused`.
+ * Why an environment has no instance. `unknown`: no reason given (the
+ * environment has an instance, or the server named none).
  */
 export type IdentityNotEnabledReason = "not-declared" | "refused" | "pending" | "no-shape" | "unknown";
 
@@ -131,14 +131,14 @@ export interface IdentityStatus {
   exportEnabled: boolean;
   /**
    * Whether the instance can send mail. `none`: invitations and resets are
-   * refused unless the code is handed back (return_code). `unknown`: a server
-   * that predates the field, so the console claims neither.
+   * refused unless the code is handed back (return_code). `unknown`: the
+   * server could not say, so the console claims neither.
    */
   mailDelivery: IdentityMailDelivery;
   /** Why there is no instance, when `hasInstance` is false, and the server's sentence for it. */
   notEnabledReason: IdentityNotEnabledReason;
   notEnabledMessage: string;
-  /** ownerEnvironmentId / sharerEnvironmentIds with names; null / [] from a server that predates them. */
+  /** ownerEnvironmentId / sharerEnvironmentIds with names; null when there is no owner. */
   ownerEnvironment: IdentityEnvironmentRef | null;
   sharerEnvironments: IdentityEnvironmentRef[];
 }
@@ -305,7 +305,7 @@ async function getIdentityStatus(orgId: string, environmentId: string): Promise<
     callerCanManage: r.callerCanManage,
     exportEnabled: r.exportEnabled,
     mailDelivery: MAIL_DELIVERY[r.mailDelivery] ?? "unknown",
-    notEnabledReason: NOT_ENABLED[r.notEnabledReason] ?? (r.refused ? "refused" : "unknown"),
+    notEnabledReason: NOT_ENABLED[r.notEnabledReason] ?? "unknown",
     notEnabledMessage: r.notEnabledMessage,
     ownerEnvironment: r.ownerEnvironment ? mapEnvironment(r.ownerEnvironment) : null,
     sharerEnvironments: r.sharerEnvironments.map(mapEnvironment),

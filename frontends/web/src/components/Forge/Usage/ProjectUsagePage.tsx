@@ -31,6 +31,7 @@ import { PAGE_SUBTITLES } from "../Console/groupedNav";
 import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { formatPercent } from "../Observability/format";
+import { aggregateAmountText, projectDaily, type AggregateAmount } from "./projectUsageModel";
 
 const CATEGORY_LABEL: Record<string, string> = {
   compute: "Hosted compute",
@@ -72,29 +73,14 @@ export function ProjectUsagePage() {
   const data = cost.data;
   const envName = (id: string) => roster.envs.find((candidate) => candidate.live?.id === id)?.name ?? data?.drivers.find((d) => d.environmentId === id)?.environmentName ?? id;
 
-  const { days, categories, byEnv, byCategory } = useMemo(() => {
-    const daily = data?.daily ?? [];
-    const dayKeys = [...new Set(daily.map((d) => Number(d.day?.seconds ?? 0)))].sort((a, b) => a - b);
-    const cats = [...new Set(daily.map((d) => d.category))];
-    const env = new Map<string, number>();
-    const cat = new Map<string, number>();
-    const cell = new Map<string, number>();
-    for (const d of daily) {
-      const v = dollars(d.list?.usdNanos) ?? 0;
-      env.set(d.environmentId, (env.get(d.environmentId) ?? 0) + v);
-      cat.set(d.category, (cat.get(d.category) ?? 0) + v);
-      const key = `${Number(d.day?.seconds ?? 0)}|${d.category}`;
-      cell.set(key, (cell.get(key) ?? 0) + v);
-    }
+  const { days, categories, byEnv, byCategory, total: listTotal } = useMemo(() => {
+    const view = projectDaily(data?.daily ?? []);
     return {
-      days: dayKeys,
-      categories: cats.map((c, i) => ({ label: categoryLabel(c), values: dayKeys.map((t) => cell.get(`${t}|${c}`) ?? 0), color: CATEGORY_COLOR[i % CATEGORY_COLOR.length] })),
-      byEnv: [...env.entries()].sort((a, b) => b[1] - a[1]),
-      byCategory: [...cat.entries()].sort((a, b) => b[1] - a[1]),
+      ...view,
+      categories: view.categories.map((c, i) => ({ label: categoryLabel(c.category), values: c.values, color: CATEGORY_COLOR[i % CATEGORY_COLOR.length] })),
     };
   }, [data]);
 
-  const listTotal = byEnv.reduce((acc, [, v]) => acc + v, 0);
   const forecast = data?.forecast;
   const low = dollars(forecast?.lowUsdNanos);
   const high = dollars(forecast?.highUsdNanos);
@@ -127,14 +113,22 @@ export function ProjectUsagePage() {
           <Card padding="none" className="min-w-0" data-testid="usage-daily">
             <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3">
               <h2 className="text-section text-ink">By day</h2>
-              <span className="text-meta text-ink-muted">At list price, before allowances · {usd(listTotal)} so far</span>
+              <span className="text-meta text-ink-muted" data-testid="usage-daily-total">
+                At list price, before allowances · {listTotal.nanos === undefined ? "nothing measured yet" : `${aggregateAmountText(listTotal)} so far`}
+              </span>
             </div>
             <div className="px-2 pb-3 pt-2">
-              {days.length < 2 ? (
+              {days.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 px-2 py-8" data-testid="usage-none">
                   <p className="text-center text-meta text-ink-muted">No hosted usage recorded this month yet.</p>
                   <ProjectEmptyCtaRow deploy={<DeployWithAgentButton env={null} />} learn="usage" className="justify-center" testId="usage-empty-cta" />
                 </div>
+              ) : days.length === 1 ? (
+                // One point is not a chart: say the day's figure in words until a second day lands.
+                <p className="px-2 py-8 text-center text-ui text-ink" data-testid="usage-one-day">
+                  {formatDay(days[0])}: <span className="font-semibold tabular-nums">{aggregateAmountText(listTotal)}</span>
+                  <span className="block text-meta text-ink-muted">The daily chart starts once a second day is recorded.</span>
+                </p>
               ) : (
                 <UPlotChart height={200} timestamps={days} series={categories} unit="" label={`Daily cost of ${forgeProject} by category`} bars area="stacked" />
               )}
@@ -142,8 +136,8 @@ export function ProjectUsagePage() {
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Breakdown title="By environment" rows={byEnv.map(([id, v]) => ({ key: id, label: <Tag>{envName(id)}</Tag>, value: v }))} total={listTotal} testId="usage-by-env" />
-            <Breakdown title="By category" rows={byCategory.map(([c, v]) => ({ key: c, label: categoryLabel(c), value: v }))} total={listTotal} testId="usage-by-category" />
+            <Breakdown title="By environment" rows={byEnv.map(([id, v]) => ({ key: id, label: <Tag>{envName(id)}</Tag>, value: v }))} total={listTotal.nanos} testId="usage-by-env" />
+            <Breakdown title="By category" rows={byCategory.map(([c, v]) => ({ key: c, label: categoryLabel(c), value: v }))} total={listTotal.nanos} testId="usage-by-category" />
           </div>
 
           <section className="space-y-3" data-testid="usage-drivers">
@@ -210,7 +204,12 @@ function Figure({ title, figure, detail, big = false }: { title: string; figure:
   );
 }
 
-function Breakdown({ title, rows, total, testId }: { title: string; rows: { key: string; label: ReactNode; value: number }[]; total: number; testId: string }) {
+function formatDay(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function Breakdown({ title, rows, total, testId }: { title: string; rows: { key: string; label: ReactNode; value: AggregateAmount }[]; total: bigint | undefined; testId: string }) {
+  const share = (value: AggregateAmount) => (total && value.nanos !== undefined ? Math.round((Number(value.nanos) / Number(total)) * 100) : 0);
   return (
     <Card padding="none" className="min-w-0" data-testid={testId}>
       <h2 className="px-4 pt-3 text-section text-ink">{title}</h2>
@@ -219,9 +218,9 @@ function Breakdown({ title, rows, total, testId }: { title: string; rows: { key:
           <li key={row.key} className="flex items-center gap-3 py-1.5 text-ui">
             <span className="min-w-0 flex-1 truncate">{row.label}</span>
             <span className="h-1.5 w-24 overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
-              <span className="block h-full rounded-full bg-primary" style={{ width: `${total ? Math.round((row.value / total) * 100) : 0}%` }} />
+              <span className="block h-full rounded-full bg-primary" style={{ width: `${share(row.value)}%` }} />
             </span>
-            <span className="w-20 text-right tabular-nums text-ink">{usd(row.value)}</span>
+            <span className="w-20 text-right tabular-nums text-ink">{aggregateAmountText(row.value)}</span>
           </li>
         ))}
       </ul>

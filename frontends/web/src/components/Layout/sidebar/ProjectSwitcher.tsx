@@ -1,9 +1,14 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The project shell's top row (U6b, prototype): `[Org ▾] / [Project ▾]`.
- * The org half is the org switcher; the project half is the project
- * selector (Projects/ProjectSelector.tsx), in two panels:
+ * The sidebar's header (U6, owner, after Vercel and Cloudflare), top to bottom:
+ *
+ *   [avatar] Org name [Plan] ⇕     the org, the row that anchors the nav (OrgHeaderRow)
+ *   Find…                    F     the command palette (FindBox)
+ *   [mark] Project ⌄               the project(s) every row below is about (ProjectSwitcherRow)
+ *
+ * The project row is the project selector (Projects/ProjectSelector.tsx), in
+ * two panels:
  *
  *   one project   a click switches the whole nav to that project: on an
  *                 app's page, to the same section of its app; else to its
@@ -31,6 +36,26 @@ import { ProjectSelector, type ProjectSelection, type ProjectSelectorLeadItem } 
 import { isForgeShell } from "../../../lib/shell";
 import { ProjectMark } from "../ProjectMark";
 import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel, SidebarOrgRow } from "./primitives";
+
+/**
+ * The org row: the org switcher at full width (avatar, name, plan, ⇕), on the
+ * nav's 48px bar so its edge lines up with the page's. With no org (no control
+ * plane, or a person in none) it is the brand, and opens nothing.
+ */
+export function OrgHeaderRow() {
+  return (
+    <SidebarOrgRow>
+      <OrgSwitcher
+        variant="sidebar-header"
+        fallback={
+          <div className={cn(SIDEBAR_ORG_TRIGGER, "h-9 px-1.5 hover:bg-transparent")} data-testid="org-header-brand">
+            {isForgeShell() ? <ForgeBrand /> : <SidebarOrgLabel name="Reliant" />}
+          </div>
+        }
+      />
+    </SidebarOrgRow>
+  );
+}
 import { ALL_PROJECTS_PICK, sectionInAnotherApp, sectionsAppOf, useShellLastPick, type ShellProject } from "./shellProject";
 
 /** Where picking `selection` goes from `pathname`, and the key it becomes. */
@@ -122,66 +147,51 @@ export function ProjectSwitcherRow({
     shell.mode === "all" ? "All projects" : shell.mode === "many" ? `${shell.ids.length} projects` : (shell.name ?? "Choose a project");
 
   return (
-    <SidebarOrgRow>
-      <div className="flex min-w-0 flex-1 items-center gap-0.5" data-testid="shell-switcher">
-        <div className="flex min-w-0 max-w-[50%] shrink-0">
-          <OrgSwitcher
-            variant="sidebar-switcher"
-            fallback={
-              <div className={cn(SIDEBAR_ORG_TRIGGER, "hover:bg-transparent")}>
-                {isForgeShell() ? <ForgeBrand /> : <SidebarOrgLabel name="Reliant" />}
-              </div>
+    <div className="flex shrink-0 px-2 pb-1 pt-1" data-testid="shell-switcher">
+      <ProjectSelector
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // Closing ends a choice of several; the next open starts on one project.
+          if (!next) setSeveral(false);
+        }}
+        {...(several
+          ? {
+              mode: "chat" as const,
+              multiple: { selected: chosen, onChange: onChangeSeveral },
+              placeholder: "Choose projects…",
             }
-          />
-        </div>
-        <span aria-hidden="true" className="shrink-0 select-none text-ui text-muted-foreground">
-          /
-        </span>
-        <ProjectSelector
-          open={open}
-          onOpenChange={(next) => {
-            setOpen(next);
-            // Closing ends a choice of several; the next open starts on one project.
-            if (!next) setSeveral(false);
-          }}
-          {...(several
-            ? {
-                mode: "chat" as const,
-                multiple: { selected: chosen, onChange: onChangeSeveral },
-                placeholder: "Choose projects…",
-              }
-            : {
-                mode: "navigate" as const,
-                selectedKey: shell.mode === "one" ? shell.key : null,
-                leadItems,
-                placeholder: "Switch project…",
-                onSelect: pickOne,
-              })}
-          align="left"
-          trigger={(props) => (
-            <button
-              {...props}
-              type="button"
-              data-testid="shell-project-switcher"
-              data-mode={shell.mode}
-              aria-label={`Project: ${label}. Switch project`}
-              className={cn(SIDEBAR_ORG_TRIGGER, "gap-1.5 px-1.5")}
-            >
-              {shell.mode !== "one" ? (
-                <Layers className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              ) : appOnly ? (
-                <AppWindow className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              ) : (
-                <ProjectMark name={shell.name ?? "?"} className="size-5 text-meta" />
-              )}
-              <span className="min-w-0 truncate font-semibold" data-testid="shell-project-name">
-                {label}
-              </span>
-              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </button>
-          )}
-        />
-      </div>
-    </SidebarOrgRow>
+          : {
+              mode: "navigate" as const,
+              selectedKey: shell.mode === "one" ? shell.key : null,
+              leadItems,
+              placeholder: "Switch project…",
+              onSelect: pickOne,
+            })}
+        align="left"
+        trigger={(props) => (
+          <button
+            {...props}
+            type="button"
+            data-testid="shell-project-switcher"
+            data-mode={shell.mode}
+            aria-label={`Project: ${label}. Switch project`}
+            className={cn(SIDEBAR_ORG_TRIGGER, "w-full gap-2 px-1.5")}
+          >
+            {shell.mode !== "one" ? (
+              <Layers className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : appOnly ? (
+              <AppWindow className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ProjectMark name={shell.name ?? "?"} className="size-5 text-meta" />
+            )}
+            <span className="min-w-0 truncate font-semibold" data-testid="shell-project-name">
+              {label}
+            </span>
+            <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </button>
+        )}
+      />
+    </div>
   );
 }

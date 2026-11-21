@@ -168,7 +168,11 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// whatever the outcome. A definition that is broken — the newest version
 	// of the file does not parse or validate — refuses the fire: it is never
 	// skipped quietly, and never run from an older version.
-	def, err := firingDefinition(ctx, f.workflows, trigger, existing, resuming)
+	//
+	// Every resolution of this fire reads through one memo (oneFire): the
+	// snapshot it pins is read once, not once per resolution.
+	reads := oneFire(f.workflows)
+	def, err := tracedFiringDefinition(ctx, reads, trigger, existing, resuming)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +188,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// rules (the reconciler re-converges the Temporal schedule itself).
 	// Everything after reads the catalog snapshot the definition was
 	// described in, and the run launches on it: what it recorded is what runs.
-	workflows := PinnedTo(f.workflows, def)
+	workflows := firingWorkflows(reads, def)
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {

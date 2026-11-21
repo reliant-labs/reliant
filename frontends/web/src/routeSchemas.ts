@@ -21,6 +21,8 @@ import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from ".
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
 import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
+import type { VulnSearch } from "./components/Forge/Security/vulnModel";
+import { MIN_SEVERITIES } from "./services/controlPlane/vulnerabilities/types";
 import { RUN_SOURCES, RUN_STATUSES, type RunsSearch as TestRunsSearch } from "./components/Forge/Tests/runsModel";
 import { FLAKY_STATE_FILTERS, type FlakySearch } from "./components/Forge/Tests/flakyModel";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
@@ -419,6 +421,10 @@ export const BILLING_TAB_IDS = [
   "usage",
   "ai",
   "limits",
+  // Independent app hosting: the org's agreement and budget, its usage per
+  // app and environment, and the free static tier. Org-scoped, unlike the
+  // machine and AI tabs, which are the signed-in person's.
+  "hosting",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -428,13 +434,23 @@ export type BillingTab = (typeof BILLING_TAB_IDS)[number];
  * were one tab pretending to be two, and reconciling a number meant checking
  * both.
  */
-export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as const;
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "hosting", "ai"] as const;
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
+/**
+ * The tab strip in the order a shell shows it. The forge console is about
+ * hosting apps, so hosting leads there and is where a bare /settings/billing
+ * opens; Reliant leads with the person's own overview.
+ */
+export function billingTabOrder(forgeShell: boolean): readonly VisibleBillingTab[] {
+  return forgeShell ? ["hosting", "overview", "plans", "usage", "ai"] : VISIBLE_BILLING_TABS;
+}
+
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
-export function resolveBillingTab(tab?: SettingsTab): VisibleBillingTab {
+export function resolveBillingTab(tab?: SettingsTab, forgeShell = false): VisibleBillingTab {
   if (tab === "invoices" || tab === "limits") return "usage";
-  return (VISIBLE_BILLING_TABS as readonly string[]).includes(tab ?? "") ? (tab as VisibleBillingTab) : "overview";
+  if ((VISIBLE_BILLING_TABS as readonly string[]).includes(tab ?? "")) return tab as VisibleBillingTab;
+  return billingTabOrder(forgeShell)[0];
 }
 
 /**
@@ -497,6 +513,11 @@ export const settingsSearchSchema = z.object({
   // The slug of a /settings/<slug> URL that matched no section. Set only by
   // that redirect; the page explains it and offers to dismiss.
   notFound: z.string().optional(),
+  // The org (id) a billing link is for: a queued deploy's "Set up billing",
+  // a new org's next step. Billing acts in the ACTIVE org, so a link for
+  // another one never switches silently: BillingOrgGate asks first, and
+  // nothing that spends renders until the person has chosen.
+  org: z.string().optional(),
 });
 
 // Search params for `/onboarding`. A strict subset of `indexSearchSchema` —
@@ -541,11 +562,16 @@ const idParam = z.preprocess((value) => (typeof value === "number" ? String(valu
  *   project  the project it starts in
  *   machine  the machine it runs on (a daemon id)
  *   ws       the workspace (worktree id); absent: the project's main checkout
+ *   app      the app it is about (Chat.app_name), when started from one
  */
 export const newChatSearchSchema = z.object({
   project: idParam,
   machine: idParam,
   ws: idParam,
+  // The app the new chat is about (Chat.app_name; store/newChatAppStore.ts):
+  // set by a screen that starts a chat from an app, so a refresh keeps the
+  // tag. Anything but a string is dropped rather than failing the route.
+  app: z.string().optional().catch(undefined),
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 
@@ -669,6 +695,33 @@ export const forgeConsoleStorageSearchSchema = z.object({
 /** Every StorageSearch key has a schema entry and vice versa. */
 export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
 export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env" | "only">, keyof StorageSearch>>;
+
+/**
+ * Security › Vulnerabilities (components/Forge/Security): the scope, and the
+ * findings filters — a release instead of the scope's current one, a minimum
+ * severity, fixable or not, KEV-listed only, exempt ones too. Every filtered
+ * view is a link someone can send ("the fixable criticals in prod"). The
+ * environment is the console's one scope (`env`), never a second key.
+ */
+const flagParam = z.union([z.literal("1"), z.literal(1).transform(() => "1" as const)]).optional().catch(undefined);
+export const forgeConsoleVulnerabilitiesSearchSchema = z.object({
+  env: envScopeParam,
+  release: z.union([z.string().min(1).max(256), z.number().transform(String)]).optional().catch(undefined),
+  severity: z.enum(MIN_SEVERITIES).optional().catch(undefined),
+  fixable: z.enum(["yes", "no"]).optional().catch(undefined),
+  kev: flagParam,
+  exempt: flagParam,
+});
+
+/** Every VulnSearch key has a schema entry and vice versa. */
+export type _VulnSchemaCoversSearch = AssertNoDrift<Exclude<keyof VulnSearch, keyof z.output<typeof forgeConsoleVulnerabilitiesSearchSchema>>>;
+export type _VulnSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleVulnerabilitiesSearchSchema>, "env">, keyof VulnSearch>>;
+
+/** Security › SBOMs: the scope, and one release instead of the scope's current ones. */
+export const forgeConsoleSbomsSearchSchema = z.object({
+  env: envScopeParam,
+  release: z.union([z.string().min(1).max(256), z.number().transform(String)]).optional().catch(undefined),
+});
 
 /** A git ref or a lane the router may have parsed as a number ("1234"). */
 const testsRefParam = (max: number) => z.union([z.string().min(1).max(max), z.number().transform(String)]).optional().catch(undefined);
@@ -1001,6 +1054,10 @@ export const forgeConsoleEnvSearchSchema = z.object({
   tab: envPageTab,
   user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
   q: identitySubjectParam,
+  // The org (id) the link was written for: the control plane's queued-deploy
+  // action URL names it. The page asks before acting in it when it is not
+  // the active org (OrgSwitchGate), and never switches silently.
+  org: z.string().optional(),
 });
 
 /**
@@ -1015,12 +1072,24 @@ export const forgeConsoleUsersSearchSchema = z.object({
   q: identitySubjectParam,
 });
 
+/**
+ * Experiments (components/Forge/Experiments): the scope, and on one change
+ * the "Who gets it?" answer it opens on (a new change, from its form).
+ */
+export const forgeConsoleExperimentsSearchSchema = z.object({
+  env: envScopeParam,
+  who: z.enum(["everyone", "some", "compare"]).optional().catch(undefined),
+});
+
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
 export const forgeLegacyEnvSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
   secret: z.string().optional(),
   tab: z.string().optional(),
+  // The org the control plane's action URL names (`?forgeProject=…&org=…`):
+  // carried to the environment page, which asks before switching to it.
+  org: z.string().optional(),
   ...legacyObsShape,
 });
 

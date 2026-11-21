@@ -12,12 +12,13 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // The storage reaper routine: the daemon runs forge's own reaper on a schedule.
 //
 // Why the daemon does it. A cloud machine has no systemd timer or cron, so
-// `forge storage install` cannot register its daily job, and the only other
+// `forge machine storage install` cannot register its daily job, and the only other
 // trigger — the pass `forge env up` starts in the background — is rate-limited
 // to once a day and only fires after an `up`. Under agent load the shared Go
 // build cache grows ~40 GB an hour, so a daily trim cannot hold its budget and
@@ -25,11 +26,11 @@ import (
 // the budget in forge's storage policy (go_cache_gib), enforced by forge's
 // reaper. This file only decides WHEN to run it.
 //
-// What it runs: `<this binary> forge storage auto-gc --policy <path>` — the
+// What it runs: `<this binary> forge machine storage auto-gc --policy <path>` — the
 // bounded, non-disruptive pass (rotated logs, Go caches, dangling images,
 // builder cache, temp sweep, source cache). It never removes worktrees,
 // anonymous volumes or registry images, and never takes a registry offline;
-// those stay with an explicit `forge storage gc --apply`. forge owns every
+// those stay with an explicit `forge machine storage gc --apply`. forge owns every
 // protection and budget; nothing here widens its scope.
 //
 // When:
@@ -70,7 +71,7 @@ const (
 	// re-run in a loop.
 	DefaultReaperPressureInterval = 10 * time.Minute
 	MinReaperPressureInterval     = time.Minute
-	// DefaultGoCacheInterval is the Go-cache pass (`forge storage gocache`):
+	// DefaultGoCacheInterval is the Go-cache pass (`forge machine storage gocache`):
 	// under agent load ~25 GiB of the shared build cache crosses forge's 2h
 	// safety floor every hour, so an hourly trim leaves up to that much
 	// removable cache on the disk. Every 10 minutes it leaves ~4 GiB.
@@ -186,13 +187,10 @@ type reaperState struct {
 	// the schedule or a user's "clear caches" started it.
 	sem chan struct{}
 	run reaperRunner
-	// goCache runs the Go-cache pass (`forge storage gocache --apply`).
+	// goCache runs the Go-cache pass (`forge machine storage gocache --apply`).
 	goCache reaperRunner
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
-	// forgeVersion overrides the embedded forge's version (tests); nil reads
-	// the build info (reaper_floor.go).
-	forgeVersion func() string
 
 	// guarded by Watcher.mu
 	cfg     ReaperConfig
@@ -226,6 +224,14 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 	cfg := w.reaperConfig()
 	if !cfg.Enabled {
 		logging.InfoContext(ctx, "[diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)")
+		if w.worktreeSweepRunsAlone() {
+			// RELIANT_WORKTREE_RECLAIM=on is a person asking for worktrees
+			// to be reclaimed: it runs without the cache reaper
+			// (worktreereap.go).
+			logging.InfoContext(ctx, "[diskwatch] Worktree reclaim scheduled on its own (RELIANT_WORKTREE_RECLAIM=on)", "interval", WorktreeReapInterval,
+				"pressure_interval", WorktreeReapPressureInterval)
+			w.runWorktreeSweepAlone(ctx)
+		}
 		return
 	}
 	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval,
@@ -475,15 +481,6 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 	defer cancel()
 
 	start := w.now()
-	// auto-gc trims the Go caches first, so the floor guard covers it.
-	floor := w.checkFloor(ctx, policyPath, "full", trigger)
-	if !floor.proceed() {
-		w.mu.Lock()
-		w.reaper.lastRun = w.now()
-		w.mu.Unlock()
-		w.auditPass(ctx, policyPath, "full", trigger, start, floor, false, 0, autoGCRecord{}, false)
-		return res
-	}
 	freeBefore := w.reclaimableFree()
 	run, err := w.reaper.run(ctx, policyPath)
 	freeAfter := w.reclaimableFree()
@@ -526,9 +523,9 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 		logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 	}
 	if fresh {
-		logGoCacheTrims(ctx, trigger, start, floor.forge, rec.GoCaches)
+		logGoCacheTrims(ctx, trigger, start, version.Forge(), rec.GoCaches)
 	}
-	w.auditPass(ctx, policyPath, "full", trigger, start, floor, true, run.ExitCode, rec, fresh)
+	w.auditPass(ctx, policyPath, "full", trigger, start, run.ExitCode, rec, fresh)
 	fields := []any{
 		"trigger", trigger, "after", elapsed, "freed", FormatBytes(res.Freed),
 		"free_before", FormatBytes(freeBefore), "free_after", FormatBytes(freeAfter),
@@ -589,7 +586,7 @@ func logGoCacheTrims(ctx context.Context, trigger string, start time.Time, forge
 	}
 }
 
-// goCachePass runs `forge storage gocache --apply` once and logs the outcome.
+// goCachePass runs `forge machine storage gocache --apply` once and logs the outcome.
 // The caller holds the single-flight. Like reaperPass it never panics and never
 // returns an error: a failed trim is a WARN line, and the next one runs at
 // GoCacheInterval.
@@ -603,14 +600,6 @@ func (w *Watcher) goCachePass(ctx context.Context, policyPath, trigger string) {
 	defer cancel()
 
 	start := w.now()
-	floor := w.checkFloor(ctx, policyPath, "gocache", trigger)
-	if !floor.proceed() {
-		w.mu.Lock()
-		w.reaper.lastGoCache = w.now()
-		w.mu.Unlock()
-		w.auditPass(ctx, policyPath, "gocache", trigger, start, floor, false, 0, autoGCRecord{}, false)
-		return
-	}
 	freeBefore := w.reclaimableFree()
 	run, err := w.reaper.goCache(ctx, policyPath)
 	freeAfter := w.reclaimableFree()
@@ -640,9 +629,9 @@ func (w *Watcher) goCachePass(ctx context.Context, policyPath, trigger string) {
 		for _, finding := range rec.OverBudget {
 			logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 		}
-		logGoCacheTrims(ctx, trigger, start, floor.forge, rec.GoCaches)
+		logGoCacheTrims(ctx, trigger, start, version.Forge(), rec.GoCaches)
 	}
-	w.auditPass(ctx, policyPath, "gocache", trigger, start, floor, true, run.ExitCode, rec, fresh)
+	w.auditPass(ctx, policyPath, "gocache", trigger, start, run.ExitCode, rec, fresh)
 	fields := []any{"trigger", trigger, "after", elapsed, "freed", FormatBytes(freed), "free_after", FormatBytes(freeAfter)}
 	switch {
 	case run.ExitCode != 0:

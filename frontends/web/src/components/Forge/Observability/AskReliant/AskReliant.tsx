@@ -112,6 +112,8 @@ export function useAskReliant(options: AskReliantOptions = {}) {
           send: intent === "fix",
           onChatCreated: onChatCreated ?? opts.onChatCreated,
           openProject: (projectId) => void router?.navigate({ to: projectChatsPath(projectId), search: {} }),
+          // The chat is about the app the console shows (Chat.app_name, D4).
+          appName: forgeProject,
         });
         if (started.sendError !== undefined) {
           toast.warning(`Couldn't start the agent: ${errorText(started.sendError)}. Its prompt is waiting in the composer; send it when you're ready.`);

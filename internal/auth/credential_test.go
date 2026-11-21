@@ -97,6 +97,39 @@ func TestRequirePerson(t *testing.T) {
 	}
 }
 
+// RequirePersonOrApprovedCard admits what RequirePerson admits, and a ctx a
+// tool marked with the card a person approved; an empty card id is no card.
+func TestRequirePersonOrApprovedCard(t *testing.T) {
+	daemon := &fat.Principal{Scopes: fat.SetOf(fat.ScopeDaemonConnect), Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d"}}
+	for name, tc := range map[string]struct {
+		ctx context.Context
+		ok  bool
+	}{
+		"app session":                {WithCredential(context.Background(), CredentialSession), true},
+		"shared key":                 {WithCredential(context.Background(), CredentialSharedKey), true},
+		"approved card":              {WithApprovedCard(context.Background(), "call-1"), true},
+		"empty card id":              {WithApprovedCard(context.Background(), ""), false},
+		"unclassified":               {context.Background(), false},
+		"cli login":                  {WithMachineToken(WithCredential(context.Background(), CredentialAccessToken), &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI)}), false},
+		"daemon credential":          {WithMachineToken(WithCredential(context.Background(), CredentialAccessToken), daemon), false},
+		"oauth client":               {WithCredential(context.Background(), CredentialOAuthClient), false},
+		"cli login with no approval": {WithApprovedCard(WithCredential(context.Background(), CredentialAccessToken), ""), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := RequirePersonOrApprovedCard(tc.ctx, "label a machine")
+			if tc.ok {
+				if err != nil {
+					t.Fatalf("RequirePersonOrApprovedCard = %v, want nil", err)
+				}
+				return
+			}
+			if got := svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader); svcerr.Code(err) != connect.CodePermissionDenied || got != ReasonPersonRequired {
+				t.Fatalf("RequirePersonOrApprovedCard = %v (reason %q), want PermissionDenied %s", err, got, ReasonPersonRequired)
+			}
+		})
+	}
+}
+
 func TestMachineBound(t *testing.T) {
 	daemon := &fat.Resource{Kind: fat.ResourceDaemon, ID: "d"}
 	for name, tc := range map[string]struct {

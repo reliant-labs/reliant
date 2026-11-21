@@ -41,7 +41,7 @@ func (l *Launcher) checkOrgAccountsOnly(ctx context.Context, spec Spec, userID s
 	if !spec.OrgAccountsOnly || !spec.Unattended || chat == nil || chat.OrgID == nil || *chat.OrgID == "" {
 		return nil
 	}
-	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScopeAt(userID, chat, workflowName, pin).sourceOptions(), workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.workflowReads(), chatScopeAt(userID, chat, workflowName, pin).sourceOptions(), workflowName)
 	if err != nil {
 		return &InternalError{Reason: "failed to look up workflow", Err: err}
 	}

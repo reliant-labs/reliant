@@ -42,6 +42,7 @@ import {
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { VulnerabilityApiProvider } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { projectsKey } from "@/hooks/project-queries";
 import { ListProjectsResponseSchema } from "@/gen/reliant/v1/project_pb";
@@ -60,8 +61,13 @@ import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
 import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
 import { AuthPage } from "../Users/AuthPage";
+import { ExperimentPage, ExperimentsPage } from "../Experiments/ExperimentsPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
+import { fixtureVulnerabilityApi, type VulnScenario } from "../Security/fixtures";
+import { SbomsPage } from "../Security/SbomsPage";
+import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
+import { VulnerabilityPage } from "../Security/VulnerabilityPage";
 import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
 import { TestsFlakyPage } from "../Tests/TestsFlakyPage";
 import { TestsFlakyTestPage } from "../Tests/TestsFlakyTestPage";
@@ -220,14 +226,15 @@ function liveEnvironments(scenario: Scenario) {
   const queued = queuedHostedDeploy(scenario);
   return [
     {
-      environment: { id: "env-dev", name: "dev", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_LOCAL", createdAt: ts("2026-09-01T10:00:00Z") },
+      environment: { id: "env-dev", name: "dev", project: "control-plane", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_READABLE", createdAt: ts("2026-09-01T10:00:00Z") },
     },
     {
       environment: {
         id: "env-prod",
         name: "prod",
         project: "control-plane",
-        kind: "DEPLOY_ENVIRONMENT_KIND_SELF_MANAGED",
+        lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT",
+        secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY",
         currentPromotionId: "promo-15",
         declaredAt: ts("2026-10-04T21:18:40Z"),
         declaredBy: { repo: "github.com/reliant-labs/control-plane", commit: "47d0d1525ccc", branch: "main", forgeVersion: "v0.1.44" },
@@ -244,7 +251,7 @@ function liveEnvironments(scenario: Scenario) {
     },
     {
       // A pull request's preview: the scope control files it under its menu.
-      environment: { id: "env-pr-1042", name: "pr-1042", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_PREVIEW", createdAt: ts("2026-10-06T09:00:00Z") },
+      environment: { id: "env-pr-1042", name: "pr-1042", project: "control-plane", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: ts("2026-10-06T09:00:00Z") },
       phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
     },
     {
@@ -254,7 +261,7 @@ function liveEnvironments(scenario: Scenario) {
         id: "env-hosted",
         name: "hosted",
         project: "control-plane",
-        kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT",
+        lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true,
         currentPromotionId: queued ? queued.promotion.id : "promo-h2",
         ...(queued ? { holds: queued.holds } : {}),
       },
@@ -455,6 +462,9 @@ function buildRouter(path: string) {
     storage: StoragePage,
     data: DataPage,
     auth: AuthPage,
+    vulnerabilities: VulnerabilitiesPage,
+    vulnerability: VulnerabilityPage,
+    sboms: SbomsPage,
     tests: TestsOverviewPage,
     testsCoverage: TestsCoveragePage,
     testsRuns: TestsRunsPage,
@@ -472,6 +482,8 @@ function buildRouter(path: string) {
     events: EventsMetricsPage,
     analytics: AnalyticsPage,
     speedInsights: SpeedInsightsPage,
+    experiments: ExperimentsPage,
+    experiment: ExperimentPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -527,12 +539,17 @@ function ForgePanePreviewCase() {
   }, []);
   const router = useMemo(() => buildRouter(path), [path]);
   const obsApi = useMemo(() => createFixtureApi(), []);
+  // The Security pages read the fixture VulnerabilityService: `?vulns=<scenario>` (Security/fixtures.ts), default "findings".
+  const vulnScenario = (params.get("vulns") as VulnScenario) || "findings";
+  const vulnApi = useMemo(() => fixtureVulnerabilityApi(vulnScenario), [vulnScenario]);
 
   if (!ready) return null;
   return (
     <QueryClientProvider client={queryClient}>
       <ObservabilityApiProvider api={obsApi}>
-        <RouterProvider router={router} />
+        <VulnerabilityApiProvider api={vulnApi}>
+          <RouterProvider router={router} />
+        </VulnerabilityApiProvider>
       </ObservabilityApiProvider>
     </QueryClientProvider>
   );

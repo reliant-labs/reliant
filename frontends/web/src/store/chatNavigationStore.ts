@@ -28,6 +28,7 @@
  */
 
 import { navigateToChatUrl } from "../lib/chatRoute";
+import { chatListScope } from "../lib/chatProjectFilter";
 import { create } from "zustand";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { isWorkspaceClosed, workspaceOfChat } from "../lib/chatWorkspace";
@@ -98,8 +99,11 @@ async function getOrderedChatList(): Promise<Chat[]> {
   const { useChatListPreferencesStore } = await import("./chatListPreferencesStore");
   // Read the chat list from the React Query cache — the same source the sidebar
   // renders from — so navigation order matches the sidebar exactly.
-  // The sidebar's scope: the project filter, or every project.
-  const scope = useWorkspaceStateStore.getState().projectFilterId;
+  // The sidebar's scope: the chat filter's projects (one, or several: the
+  // list it reads for `?projects=`), or every project.
+  const { chatProjectFilterIds } = await import("../hooks/useChatProjectFilter");
+  const projectFilterId = useWorkspaceStateStore.getState().projectFilterId;
+  const scope = chatListScope(chatProjectFilterIds());
   const chats = getCachedChatList(scope);
   const mainWorktrees = getCachedListMainWorktrees(scope);
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
@@ -140,7 +144,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // Across projects, the sidebar leaves hidden projects' chats out and lists
   // pinned projects first (listProjectGroups).
   let listing: ProjectListing | undefined;
-  if (!scope) {
+  if (!projectFilterId) {
     const [{ cachedSidebarProjectSettings }, { getOrgScope }] = await Promise.all([
       import("../hooks/sidebar-project-queries"),
       import("../lib/orgScope"),
@@ -185,8 +189,8 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // For grouped view, group (by project, then workspace) and flatten in
   // visual order — the same grouping Sidebar.tsx renders (lib/sidebarGroups).
   const groupOptions = { sortOrder, needsAttention };
-  if (scope) {
-    return groupByWorkspace(scope, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
+  if (projectFilterId) {
+    return groupByWorkspace(projectFilterId, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
   }
   const projects = (await import("../hooks/project-queries")).getCachedProjects();
   const groups = groupByProject(activeChats, mainWorktrees, projects, groupOptions);

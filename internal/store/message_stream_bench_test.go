@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
@@ -96,7 +97,7 @@ func BenchmarkP1AppendDelta(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		delta := fmt.Sprintf("token %08d of a streamed assistant reply, quoted 'like this'", i)
-		if err := env.Repo.AppendToContentBlock(ctx, "bap-b0", delta); err != nil {
+		if err := store.AppendToContentBlock(ctx, env.Repo.ORM(), "bap-b0", delta); err != nil {
 			b.Fatal(err)
 		}
 	}

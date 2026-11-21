@@ -29,6 +29,11 @@
  *       /events                             Product analytics › Events & metrics
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
+ *       /experiments, /experiments/$changeId  Forge Changes (remote config, rollouts, A/B tests)
+ *       /security/vulnerabilities           Security: the findings of the scope's releases
+ *       /security/vulnerabilities/$advisory one advisory across the project
+ *       /security/sboms                     each release artifact's SBOM and scan
+ *       /security                           → /security/vulnerabilities
  *       /tests                              Tests › Overview (`branch`)
  *       /tests/coverage                     coverage tree and a file's lines (`path`, `commit`, `lane`, `base`)
  *       /tests/runs[/$run]                  recorded runs (`branch`, `commit`, `release`, `lane`, `source`, `status`), and one run
@@ -64,12 +69,14 @@ import {
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
   forgeConsoleEnvSearchSchema,
+  forgeConsoleExperimentsSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleOverviewSearchSchema,
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
   forgeConsoleEnvironmentsSearchSchema,
+  forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeConsoleTestsCoverageSearchSchema,
   forgeConsoleTestsFlakySearchSchema,
@@ -78,12 +85,21 @@ import {
   forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
+  forgeConsoleVulnerabilitiesSearchSchema,
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
 } from './routeSchemas'
+import { registerSecurityNav } from './components/Forge/Security/registerSecurityNav'
+
+// Security ▾'s rows (Vulnerabilities, SBOMs) join the nav from here, the
+// module that mounts the console's routes, before the nav first renders
+// (consoleNavRegistry.ts). The Security pages' routes are #3085's, mounted in
+// this file on main; this branch predates them, so until it is rebased on
+// main the rows link to /security/… pages that are not mounted yet.
+registerSecurityNav()
 
 export interface ForgeConsoleComponents {
   /** The pathless `_forge` layout. */
@@ -124,6 +140,15 @@ export interface ForgeConsoleComponents {
   analytics: RouteComponent
   /** Speed insights (U6c): web vitals per page. */
   speedInsights: RouteComponent
+  /** Experiments: the project's Forge Changes, and one change. */
+  experiments: RouteComponent
+  experiment: RouteComponent
+  /** Security › Vulnerabilities: the findings of the scope's releases. */
+  vulnerabilities: RouteComponent
+  /** One advisory in the project. */
+  vulnerability: RouteComponent
+  /** Security › SBOMs: each release artifact's SBOM and its scan. */
+  sboms: RouteComponent
   /** Tests › Overview: one branch's coverage, pass rate, flaky tests and last run. */
   tests: RouteComponent
   /** Tests › Coverage. */
@@ -416,6 +441,48 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.speedInsights,
   })
+  // Forge Changes: remote config, gradual rollouts and A/B tests
+  // (components/Forge/Experiments). The nav row is behind the web config's
+  // CHANGES_UI; the routes are always mounted.
+  const experimentsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiments,
+  })
+  const experimentRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments/$changeId',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiment,
+  })
+  // Security (components/Forge/Security). The section has no page of its
+  // own: its first page is where /security lands.
+  const securityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security',
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/security\/?$/, '/security/vulnerabilities')}${location.searchStr}`, replace: true })
+    }),
+  })
+  const vulnerabilitiesRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities',
+    validateSearch: forgeConsoleVulnerabilitiesSearchSchema,
+    component: components.vulnerabilities,
+  })
+  const vulnerabilityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities/$advisory',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.vulnerability,
+  })
+  const sbomsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/sboms',
+    validateSearch: forgeConsoleSbomsSearchSchema,
+    component: components.sboms,
+  })
   // Tests (components/Forge/Tests). The bare segment is its Overview. Each page
   // narrows by its own `?environment=`, never the console's scope, so none draws
   // the env picker (`envScope: false`, useRouteUsesEnvScope).
@@ -511,6 +578,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       analyticsRoute,
       analyticsTabRoute,
       speedInsightsRoute,
+      experimentsRoute,
+      experimentRoute,
+      securityRoute,
+      vulnerabilitiesRoute,
+      vulnerabilityRoute,
+      sbomsRoute,
       testsRoute,
       testsCoverageRoute,
       testsRunsRoute,

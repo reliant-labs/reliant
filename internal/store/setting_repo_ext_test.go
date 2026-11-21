@@ -153,10 +153,6 @@ func TestItemDefaultAndPresetAssignmentQueries(t *testing.T) {
 	if err != nil || !got.IsHidden || got.Reason == nil || *got.Reason != "deprecated" || got.Slug != "zz-hidden" || got.ItemType != int32(workflow) {
 		t.Fatalf("GetItemDefault = %+v, %v", got, err)
 	}
-	twin, err := env.Repo.GetItemDefault(ctx, int32(workflow), "zz-hidden")
-	if err != nil || twin.IsHidden != got.IsHidden || twin.Reason == nil || *twin.Reason != *got.Reason || twin.Slug != got.Slug || twin.ItemType != got.ItemType {
-		t.Fatalf("Repo.GetItemDefault = %+v, %v; want %+v", twin, err, got)
-	}
 	if _, err := store.GetItemDefault(ctx, env.ORM, int32(preset), "zz-hidden"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetItemDefault(other type) err = %v, want sql.ErrNoRows", err)
 	}
@@ -192,7 +188,7 @@ func TestItemDefaultAndPresetAssignmentQueries(t *testing.T) {
 	if err != nil || len(assignments) != 2 || assignments["planner"] != "fast" || assignments["coder"] != "smart" {
 		t.Fatalf("GetDefaultPresetAssignments = %v, %v", assignments, err)
 	}
-	twinAssignments, err := env.Repo.GetDefaultPresetAssignments(ctx, "zz-flow")
+	twinAssignments, err := store.GetDefaultPresetAssignments(ctx, env.Repo.ORM(), "zz-flow")
 	if err != nil || len(twinAssignments) != 2 || twinAssignments["coder"] != "smart" {
 		t.Fatalf("Repo.GetDefaultPresetAssignments = %v, %v", twinAssignments, err)
 	}

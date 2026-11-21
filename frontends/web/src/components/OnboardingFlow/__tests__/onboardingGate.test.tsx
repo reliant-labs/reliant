@@ -440,10 +440,14 @@ describe.each([false, true])("chatRouteAction (forge brand %s)", (forgeBrand) =>
     });
   });
 
-  it("sends a home that asked for a chat to the wizard, search and all, or keeps it", () => {
+  it("sends a home that asked for a chat where New chat goes: the wizard, search and all, or Settings › Machines", () => {
     expect(act("/", persona("not onboarded, no machine"), true)).toEqual({ kind: "go", to: "/onboarding", search: "keep" });
-    expect(act("/", persona("onboarded, no machine"), true)).toEqual(stay);
-    expect(act("/", persona("onboarded, machines loading"), true)).toEqual(stay);
+    // Onboarded with no usable machine: never the new-chat view with nothing to run it on.
+    expect(act("/", persona("onboarded, no machine"), true)).toEqual(machines);
+    expect(act("/o/acme", persona("onboarded, only unusable machines"), true)).toEqual(machines);
+    expect(act("/", persona("onboarded, machines loading"), true)).toEqual(wait);
+    expect(act("/", persona("onboarded, a machine"), true)).toEqual(stay);
+    expect(act("/", persona("onboarded, machines failed"), true)).toEqual(stay);
   });
 
   it("does nothing off the chat routes", () => {

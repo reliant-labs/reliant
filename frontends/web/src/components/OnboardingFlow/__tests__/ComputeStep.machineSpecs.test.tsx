@@ -116,10 +116,10 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
       ],
       daemonPricing: {
         sizes: [
-          { size: "m", multiplier: 1n, hourlyPriceCents: "13", storageGib: 25n },
-          { size: "l", multiplier: 2n, hourlyPriceCents: "26", storageGib: 50n },
-          { size: "xl", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
-          { size: "2xl", multiplier: 8n, hourlyPriceCents: "104", storageGib: 200n },
+          { size: "m", hourlyPriceCents: "13", storageGib: 25n },
+          { size: "l", hourlyPriceCents: "26", storageGib: 50n },
+          { size: "xl", hourlyPriceCents: "52", storageGib: 100n },
+          { size: "2xl", hourlyPriceCents: "104", storageGib: 200n },
         ],
         storageCentsPerGibMonth: "25",
         placeholder: false,

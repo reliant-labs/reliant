@@ -18,10 +18,11 @@
  * and the steps follow as the way to do it by hand.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 
 import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+import { ForgeConsoleContext } from "@/components/Forge/Console/consoleContextValue";
 import type { LearnSection } from "@/lib/learnLinks";
 
 /** The docs this frame links to, so one URL is spelled once. */
@@ -62,22 +63,26 @@ export interface GettingStartedProps {
   /**
    * The project shell's other ways forward beside `agent` (U6d,
    * EmptyState/ProjectEmptyCta.tsx): Migrate an existing app to forge, and the
-   * section's Learn link (default: the console page's). On whenever `agent`
-   * is set; false turns it off.
+   * section's Learn link (default: the console page's). By default on when
+   * `agent` is set inside the project shell (a forge console page) and off
+   * elsewhere; set it to turn it on anywhere, false to turn it off.
    */
   projectCta?: { learn?: LearnSection | false } | false;
   testId: string;
 }
 
-export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, projectCta = {}, testId }: GettingStartedProps) {
+export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, projectCta: projectCtaProp, testId }: GettingStartedProps) {
+  const inConsole = useContext(ForgeConsoleContext) !== null;
+  const projectCta = projectCtaProp ?? (inConsole ? {} : false);
   return (
-    <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
-      <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
+    // A designed empty state, not a dashed box: an icon tile, what goes here, and the one way to start.
+    <div role="status" data-testid={testId} className="flex items-start gap-4 py-6">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-ink-muted [&_svg]:h-5 [&_svg]:w-5" aria-hidden="true">
         {icon}
       </span>
-      <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm font-medium text-ink">{title}</p>
-        <div className="space-y-1.5 text-xs text-ink-muted">
+      <div className="min-w-0 max-w-2xl flex-1 space-y-3">
+        <p className="text-section text-ink">{title}</p>
+        <div className="space-y-2 text-ui text-ink-muted">
           <p data-testid={`${testId}-about`}>{about}</p>
           {children}
         </div>
@@ -89,13 +94,13 @@ export function GettingStarted({ icon, title, about, children, agent, steps = []
               {agent}
             </div>
           ))}
-        {agent && steps.length > 0 && <p className="pt-1 text-xs text-ink-muted">Or do it yourself, from the project&apos;s checkout:</p>}
+        {agent && steps.length > 0 && <p className="pt-1 text-meta text-ink-muted">Or do it yourself, from the project&apos;s checkout:</p>}
         {steps.length > 0 && (
-          <ol className="max-w-2xl space-y-2 pt-1 text-xs text-ink-muted" aria-label={agent ? "Do it yourself" : "Get started"} data-testid={`${testId}-steps`}>
+          <ol className="max-w-2xl space-y-3 pt-1 text-ui text-ink-muted" aria-label={agent ? "Do it yourself" : "Get started"} data-testid={`${testId}-steps`}>
             {steps.map((step, index) => (
               <li key={index} className="flex gap-2">
                 <span
-                  className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-2xs font-medium text-ink"
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border text-meta font-medium tabular-nums text-ink"
                   aria-hidden="true"
                 >
                   {index + 1}
@@ -116,7 +121,7 @@ export function GettingStarted({ icon, title, about, children, agent, steps = []
                 href={docs.href}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1 rounded-sm text-ui font-medium text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid={`${testId}-docs`}
               >
                 {docs.label}

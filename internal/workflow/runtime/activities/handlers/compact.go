@@ -1004,4 +1004,5 @@ const compactionMsg = `You are approaching your context window. You need to prov
 This can optionally detail any context you deem worth including, but should focus on next steps.
 Be particular about your current plan, and whether the remaining steps are indicative of what is actually remaining. Sometimes plans can grow stale.
 If you are unsure of the plan tool's state, you can include that in your handoff, and mention to use your handoff as canonical source of truth, or to return to user if the agent is unsure.
+Copy verbatim every attachment_id the remaining work still needs (an image the user attached that is still to be saved or used, a document still to be read), with what it is: the attachments themselves do not carry past this handoff, and an id is not guessable.
 `

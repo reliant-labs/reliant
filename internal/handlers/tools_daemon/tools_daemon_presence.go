@@ -108,8 +108,7 @@ func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID str
 
 // recordMachineHealth stores a heartbeat's machine health on the attachment
 // lease, where the registry and wait_for_machine read it. A heartbeat with no
-// health (a daemon that predates the report, or one that has not probed yet)
-// is a healthy machine. It writes only when the state, code or reason
+// health (a daemon that has not probed yet) is a healthy machine. It writes only when the state, code or reason
 // changed, stamping Since with this gateway's clock when the state changed
 // and carrying it forward otherwise — across a re-created lease too.
 func (s *Service) recordMachineHealth(ctx context.Context, conn *daemonConnection, h *reliantv1.MachineHealth, now time.Time) {

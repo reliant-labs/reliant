@@ -333,7 +333,7 @@ func (x *ListOrgProviderAccountsResponse) GetAddingEnabled() bool {
 type AddOrgProviderAPIKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// An API-key driver: "anthropic", "openai", "gemini" or "openrouter".
+	// An API-key driver: "anthropic", "openai", "gemini", "openrouter" or "vertexai" (the JSON of a Google service-account key).
 	Provider string `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
 	// Write-only: never returned by any rpc.
 	ApiKey string `protobuf:"bytes,3,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`

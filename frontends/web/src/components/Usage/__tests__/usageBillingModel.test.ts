@@ -40,6 +40,17 @@ describe("usageBillingModel", () => {
     expect(total).toEqual({ nanos: 2_500_000_000n, unpricedDimensions: ["egress_kib"] });
   });
 
+  it("keeps unpriced dimensions from points with no amount: a lower bound, not a complete total", () => {
+    const total = listEstimateTotal(
+      usage([
+        { category: "hosted_apps", listEquivalentUsdNanos: 2_000_000_000n },
+        { category: "databases", unpricedDimensions: ["storage_gib"] },
+        { category: "managed_llm", actualChargesUsdNanos: 9_000_000_000n, unpricedDimensions: ["llm_cache"] },
+      ]),
+    );
+    expect(total).toEqual({ nanos: 2_000_000_000n, unpricedDimensions: ["storage_gib"] });
+  });
+
   it("has no total when nothing was priced: unknown, not zero", () => {
     expect(listEstimateTotal(usage([{ category: "machines" }]))).toBeUndefined();
   });

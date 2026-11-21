@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -23,6 +24,14 @@ type fakeMachines struct {
 	// labels are each machine's labels, by id; pools the user's pools.
 	labels map[string]map[string]string
 	pools  []MachinePoolSummary
+	// cards is the approved card (auth.WithApprovedCard) each label or pool
+	// write carried, "" for none: the registry refuses a write without one.
+	cards []string
+}
+
+func (f *fakeMachines) recordCard(ctx context.Context) {
+	card, _ := auth.ApprovedCardFromContext(ctx)
+	f.cards = append(f.cards, card)
 }
 
 func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, error) {
@@ -37,7 +46,8 @@ func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, 
 func (f *fakeMachines) ListMachinePools(context.Context, string) ([]MachinePoolSummary, error) {
 	return f.pools, nil
 }
-func (f *fakeMachines) SetMachineLabels(_ context.Context, user, id string, labels map[string]string) error {
+func (f *fakeMachines) SetMachineLabels(ctx context.Context, user, id string, labels map[string]string) error {
+	f.recordCard(ctx)
 	f.calls = append(f.calls, machineCall{op: "label " + formatLabels(labels), user: user, id: id})
 	if f.labels == nil {
 		f.labels = map[string]map[string]string{}
@@ -45,11 +55,13 @@ func (f *fakeMachines) SetMachineLabels(_ context.Context, user, id string, labe
 	f.labels[id] = labels
 	return nil
 }
-func (f *fakeMachines) PutMachinePool(_ context.Context, user string, spec MachinePoolSpec) (MachinePoolSummary, error) {
+func (f *fakeMachines) PutMachinePool(ctx context.Context, user string, spec MachinePoolSpec) (MachinePoolSummary, error) {
+	f.recordCard(ctx)
 	f.calls = append(f.calls, machineCall{op: "put " + spec.Name + ": " + describeSpec(spec), user: user})
 	return MachinePoolSummary{ID: "pool-" + spec.Name, Spec: spec}, nil
 }
-func (f *fakeMachines) DeleteMachinePool(_ context.Context, user, name string) error {
+func (f *fakeMachines) DeleteMachinePool(ctx context.Context, user, name string) error {
+	f.recordCard(ctx)
 	f.calls = append(f.calls, machineCall{op: "delete " + name, user: user})
 	return nil
 }

@@ -165,8 +165,8 @@ function IdentityUsersBody({
   // User verbs open the instance with its owner key, which only a ready (or
   // degraded, still serving) instance has.
   const serving = status.state === "ready" || status.state === "degraded";
-  // "unknown" (a server that predates the field) keeps offering email: it is
-  // what that server does.
+  // "unknown" (the server could not say) keeps offering email rather than
+  // claiming the instance cannot send it.
   const canEmail = status.mailDelivery !== "none";
   // The demo console (and any read-only host) shows the verbs, disabled, with why.
   const { readOnly, reason } = useObsReadOnly();
@@ -531,14 +531,14 @@ function RoleTags({ roles, declared, max }: { roles: string[]; declared: Set<str
         <span
           key={role}
           title={declared.has(role) ? DECLARED_ROLE_NOTE : undefined}
-          className="inline-flex max-w-full items-center gap-1 truncate rounded border border-border/60 px-1.5 py-px font-mono text-2xs text-ink-muted"
+          className="inline-flex max-w-full items-center gap-1 truncate rounded border border-border/60 px-1.5 py-px font-mono text-meta text-ink-muted"
         >
           {declared.has(role) && <Lock className="h-2.5 w-2.5 shrink-0" aria-label="declared" />}
           {role}
         </span>
       ))}
       {rest > 0 && (
-        <span className="text-2xs text-ink-muted" title={roles.slice(shown.length).join(", ")}>
+        <span className="text-meta text-ink-muted" title={roles.slice(shown.length).join(", ")}>
           +{rest}
         </span>
       )}

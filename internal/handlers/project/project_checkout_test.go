@@ -24,7 +24,14 @@ type pinnedRecorder struct {
 
 func newPinnedRecorder() *pinnedRecorder {
 	r := &pinnedRecorder{}
-	r.fakeDaemon = func(string, []byte) ([]byte, error) { return []byte(`{"success":true}`), nil }
+	// A teardown is acknowledged done under the op id it carries.
+	r.fakeDaemon = func(_ string, payload []byte) ([]byte, error) {
+		var p struct {
+			OpID string `json:"op_id"`
+		}
+		_ = json.Unmarshal(payload, &p)
+		return json.Marshal(map[string]any{"success": true, "op_id": p.OpID, "op_state": "done"})
+	}
 	return r
 }
 

@@ -18,8 +18,9 @@ import {
   RouterProvider,
   type AnyRouter,
 } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { create } from "zustand";
 
 import type { Chat } from "@/api/client";
 import { useChatViewOverride } from "@/components/Chat/thread-views/useChatThreadMode";
@@ -34,6 +35,8 @@ import { useChatRoute, type ChatRouteView } from "../useChatRoute";
 
 const opened = vi.hoisted(() => [] as string[]);
 const applied = vi.hoisted(() => [] as unknown[]);
+// A project whose apply is held until the test releases it (its project still resolving).
+const hold = vi.hoisted(() => ({ project: null as string | null, release: () => {}, latest: 0 }));
 
 vi.mock("@/lib/openChatInWorkspace", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/openChatInWorkspace")>()),
@@ -47,9 +50,18 @@ vi.mock("@/store/openChat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/store/openChat")>();
   return {
     ...actual,
-    applyNewChat: vi.fn(async (target: { projectId?: string; daemonId?: string; worktreeId?: string }) => {
+    applyNewChat: vi.fn(async (target: { projectId?: string; daemonId?: string; worktreeId?: string; appName?: string }) => {
       applied.push(target);
-      markNewChatApplied({ project: target.projectId, machine: target.daemonId, ws: target.worktreeId });
+      markNewChatApplied({ project: target.projectId, machine: target.daemonId, ws: target.worktreeId, app: target.appName });
+      const generation = ++hold.latest;
+      if (target.projectId && target.projectId === hold.project) {
+        await new Promise<void>((resolve) => {
+          hold.release = resolve;
+        });
+      }
+      // Superseded by a later apply: it shows nothing (store/openChat.ts isCurrent).
+      if (generation !== hold.latest) return;
+      if (target.projectId) shellContext.setState({ projectId: target.projectId });
       useChatStore.setState({ activeChatId: null });
     }),
   };
@@ -58,11 +70,18 @@ vi.mock("@/store/openChat", async (importOriginal) => {
 const PROJECT = "p-1";
 let view: ChatRouteView;
 let setPanel: (open: boolean) => void;
+let mounts = 0;
+// The project the view shows (ModernApp's current project).
+const shellContext = create(() => ({ projectId: PROJECT }));
 
 function Shell() {
   const [panelOpen, setPanelOpen] = useState(false);
   setPanel = setPanelOpen;
-  view = useChatRoute({ ready: true, panelOpen, setPanelOpen, projectId: PROJECT, worktreeId: null });
+  const projectId = shellContext((s) => s.projectId);
+  view = useChatRoute({ ready: true, panelOpen, setPanelOpen, projectId, worktreeId: null });
+  useEffect(() => {
+    mounts += 1;
+  }, []);
   const active = useChatStore((s) => s.activeChatId);
   return <div data-testid="shell">{JSON.stringify({ active, thread: view.thread?.threadId ?? null, panelOpen, data: view.data?.kind ?? null })}</div>;
 }
@@ -97,6 +116,9 @@ beforeEach(() => {
   setRuntimeConfig({});
   opened.length = 0;
   applied.length = 0;
+  mounts = 0;
+  hold.project = null;
+  shellContext.setState({ projectId: PROJECT });
   useChatStore.setState({ activeChatId: null });
   // What the last test's new-chat view showed is not on screen in this one.
   markNewChatApplied({ project: "(none)" });
@@ -140,6 +162,31 @@ describe("the open chat follows the URL", () => {
     expect(shown().thread).toBe("t-1");
     // The chat stays open across its threads: it is not reopened.
     expect(opened).toEqual(["a-1"]);
+  });
+
+  it("keeps a chat's view and panel as a thread opens and closes", async () => {
+    await open("/c/a-1?view=simplified&panel=changes");
+    await waitFor(() => expect(shown().panelOpen).toBe(true));
+    act(() => view.onSelectThread("t-1"));
+    await waitFor(() => expect(path()).toBe("/c/a-1/t/t-1"));
+    expect(search()).toEqual({ view: "simplified", panel: "changes" });
+    expect(useChatViewOverride.getState().view).toBe("simplified");
+    act(() => view.onSelectThread(null));
+    await waitFor(() => expect(path()).toBe("/c/a-1"));
+    expect(search()).toEqual({ view: "simplified", panel: "changes" });
+    expect(useChatViewOverride.getState().view).toBe("simplified");
+  });
+
+  it("reopens a chat on Back from the new-chat view, in the same shell", async () => {
+    await open("/c/a-1");
+    await waitFor(() => expect(shown().active).toBe("a-1"));
+    await act(() => router.navigate({ href: "/new" }));
+    await waitFor(() => expect(shown().active).toBeNull());
+    act(() => router.history.back());
+    await waitFor(() => expect(path()).toBe("/c/a-1"));
+    await waitFor(() => expect(shown().active).toBe("a-1"));
+    expect(opened).toEqual(["a-1", "a-1"]);
+    expect(mounts).toBe(1);
   });
 
   it("shows an unknown chat as not found and opens nothing", async () => {
@@ -192,13 +239,85 @@ describe("the URL follows what the app opens and closes by itself", () => {
 describe("the new-chat view", () => {
   it("applies its draft context once", async () => {
     await open("/new?project=p-1&machine=d-1");
-    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: "d-1", worktreeId: undefined }]));
+    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: "d-1", worktreeId: undefined, appName: undefined }]));
     // The same context again (a replace that only reorders the search) applies nothing.
     await act(() => router.navigate({ to: "/new", search: { machine: "d-1", project: "p-1" }, replace: true } as never));
     expect(applied).toHaveLength(1);
     // Another one (Back to an older draft, a link) does.
     await act(() => router.navigate({ to: "/new", search: { project: "p-1", machine: "d-2" } } as never));
     await waitFor(() => expect(applied).toHaveLength(2));
+  });
+
+  it("applies a draft context again on Back from a chat, in the same shell", async () => {
+    await open("/new?project=p-1");
+    await waitFor(() => expect(applied).toHaveLength(1));
+    await act(() => router.navigate({ href: "/c/a-1" }));
+    await waitFor(() => expect(shown().active).toBe("a-1"));
+    act(() => router.history.back());
+    await waitFor(() => expect(path()).toBe("/new"));
+    await waitFor(() => expect(shown().active).toBeNull());
+    expect(applied).toHaveLength(2);
+    expect(mounts).toBe(1);
+  });
+
+  it("keeps a link's project in the URL while the view still shows the last one", async () => {
+    hold.project = "p-2";
+    await open("/new?project=p-1");
+    await waitFor(() => expect(applied).toHaveLength(1));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-2" } } as never));
+    await waitFor(() => expect(applied).toHaveLength(2));
+    // p-2 is still resolving and p-1 still on screen: nothing writes p-1 over the link.
+    await act(async () => {});
+    expect(shellContext.getState().projectId).toBe("p-1");
+    expect(search()).toEqual({ project: "p-2" });
+    expect(applied).toHaveLength(2);
+    // Shown: the URL follows the view again (the project chip).
+    act(() => hold.release());
+    await waitFor(() => expect(shellContext.getState().projectId).toBe("p-2"));
+    act(() => shellContext.setState({ projectId: "p-3" }));
+    await waitFor(() => expect(search().project).toBe("p-3"));
+  });
+
+  it("waits for the apply of the move that navigated here before following the view", async () => {
+    await open("/new?project=p-1");
+    await waitFor(() => expect(applied).toHaveLength(1));
+    // openNewChat (the project chip): it applies p-2 itself and navigates; p-2 is still resolving.
+    let show: (shown: boolean) => void = () => {};
+    markNewChatApplied({ project: "p-2" }, new Promise<boolean>((resolve) => (show = resolve)));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-2" }, replace: true } as never));
+    await act(async () => {});
+    expect(applied).toHaveLength(1);
+    expect(search()).toEqual({ project: "p-2" });
+    await act(async () => {
+      shellContext.setState({ projectId: "p-2" });
+      show(true);
+    });
+    act(() => shellContext.setState({ projectId: "p-3" }));
+    await waitFor(() => expect(search().project).toBe("p-3"));
+  });
+
+  it("lets a superseded draft apply settle nothing", async () => {
+    hold.project = "p-2";
+    await open("/new?project=p-1");
+    await waitFor(() => expect(applied).toHaveLength(1));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-2" } } as never));
+    await waitFor(() => expect(applied).toHaveLength(2));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-3" } } as never));
+    await waitFor(() => expect(shellContext.getState().projectId).toBe("p-3"));
+    // p-2's apply finishes late, superseded: the view stays p-3's, and the mirror follows it.
+    await act(async () => hold.release());
+    act(() => shellContext.setState({ projectId: "p-4" }));
+    await waitFor(() => expect(search().project).toBe("p-4"));
+  });
+});
+
+describe("a new chat about an app", () => {
+  it("applies the app the URL names with the draft, and a change of app applies again", async () => {
+    await open("/new?project=p-1&app=shopfront");
+    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: undefined, worktreeId: undefined, appName: "shopfront" }]));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-1" } } as never));
+    await waitFor(() => expect(applied).toHaveLength(2));
+    expect(applied[1]).toMatchObject({ projectId: "p-1", appName: undefined });
   });
 });
 

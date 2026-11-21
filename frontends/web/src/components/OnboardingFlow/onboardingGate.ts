@@ -204,8 +204,10 @@ export type ChatRouteAction =
  *     remembering where they were going; a home with a chat intent carries
  *     its search (`?plan=`, `?start=`) along instead, as it always did.
  *   - An onboarded person with no machine who opens the new-chat view
- *     (`/new`) goes where New chat takes them in that state (chatSetupPath:
- *     Settings › Machines), and it waits while that is still being checked.
+ *     (`/new`), or a home that asked for a chat (`?plan=`, `?start=`,
+ *     `?reset-onboarding`), goes where New chat takes them in that state
+ *     (chatSetupPath: Settings › Machines), and it waits while that is still
+ *     being checked.
  *   - An onboarded person with no machine who opens a project's chats, or a
  *     chat by its URL (`/c/…`), stays: the chat has its own Connect a machine
  *     (Chat/NoMachine.tsx).
@@ -233,10 +235,14 @@ export function chatRouteAction(state: {
     const target = onboardingGateTarget(state.href);
     return { kind: "go", to: target.to, search: target.search };
   }
-  if (atNewChat && state.setup === "connect-machine") return { kind: "go", to: chatSetupPath(state.setup), search: {} };
+  // The new-chat view, and a home that asked for a chat (it shows the
+  // new-chat view with the plan or starter), are New chat: with no machine
+  // they go where New chat goes in that state.
+  const newChat = atNewChat || (atHome && state.chatIntent);
+  if (newChat && state.setup === "connect-machine") return { kind: "go", to: chatSetupPath(state.setup), search: {} };
   // The home and the new-chat view are about to learn whether there is a
   // machine: hold them rather than show the new-chat view for a frame and
   // then leave.
-  if ((atHome || atNewChat) && state.setup === "checking" && !state.chatIntent) return { kind: "wait" };
+  if ((atHome || atNewChat) && state.setup === "checking") return { kind: "wait" };
   return { kind: "stay" };
 }

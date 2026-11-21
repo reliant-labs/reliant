@@ -354,7 +354,7 @@ describe("the forge journey", () => {
       setTourShell("forge");
       const agent = render(<>{presentStep(step("fg-agent")).description}</>);
       expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
-      expect(screen.getByText("claude mcp add forge -- forge mcp")).toBeInTheDocument();
+      expect(screen.getByText("claude mcp add forge -- forge agent mcp")).toBeInTheDocument();
       agent.unmount();
       resetShellForTests("demo");
       render(<>{presentStep(step("fg-done")).description}</>);

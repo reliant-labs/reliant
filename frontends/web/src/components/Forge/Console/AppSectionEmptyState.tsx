@@ -59,6 +59,11 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
+    case "vulnerabilities":
+    case "vulnerability":
+      return { title: "Vulnerabilities", shows: "The known vulnerabilities in what your app's releases ship" };
+    case "sboms":
+      return { title: "SBOMs", shows: "What each release artifact is made of, and its scan" };
     case "tests":
     case "tests-coverage":
     case "tests-runs":

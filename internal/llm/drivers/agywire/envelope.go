@@ -12,7 +12,8 @@
 // and the call appears to succeed while producing nothing. That is why these
 // structs exist at all, and why neither caller uses the SDK for transport.
 //
-// This is a LEAF package — it imports nothing from this repo — because two
+// This is a LEAF package — it imports nothing from this repo (only the genai
+// SDK, for the schema type) — because two
 // packages on opposite sides of an import edge both need these types. The chat
 // driver (internal/llm/drivers/antigravity) imports internal/llm/tools, which
 // imports internal/llm/drivers/imagegen, so imagegen can never import the chat
@@ -21,6 +22,8 @@
 //
 //forge:exclude-contract: Antigravity wire types (request/response envelopes); pure data
 package agywire
+
+import "google.golang.org/genai"
 
 // Wire constants captured from antigravity/cli/1.2.5. These look like
 // client-identity gating, so they are sent verbatim rather than guessed.
@@ -126,14 +129,12 @@ type FunctionDeclaration struct {
 	Parameters  *Schema `json:"parameters,omitempty"`
 }
 
-type Schema struct {
-	Type        string             `json:"type,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Enum        []string           `json:"enum,omitempty"`
-	Items       *Schema            `json:"items,omitempty"`
-	Properties  map[string]*Schema `json:"properties,omitempty"`
-	Required    []string           `json:"required,omitempty"`
-}
+// Schema is the function-declaration schema: Gemini's OpenAPI subset, whose
+// JSON the genai SDK's Schema type already spells field for field. It is that
+// type rather than a copy of it so one converter (geminiwire.ToolParameters)
+// serves every Gemini transport; a hand-kept copy was how anyOf, nullable
+// and format went missing here.
+type Schema = genai.Schema
 
 type ToolConfig struct {
 	FunctionCallingConfig *FunctionCallingConfig `json:"functionCallingConfig,omitempty"`
@@ -204,6 +205,9 @@ type GenerateResp struct {
 type Candidate struct {
 	Content      *Content `json:"content,omitempty"`
 	FinishReason string   `json:"finishReason,omitempty"`
+	// FinishMessage explains an error finishReason; for
+	// MALFORMED_FUNCTION_CALL it is the call the model tried to make.
+	FinishMessage string `json:"finishMessage,omitempty"`
 }
 
 type PromptFeedback struct {
@@ -217,6 +221,7 @@ type UsageMetadata struct {
 	TotalTokenCount         int64 `json:"totalTokenCount,omitempty"`
 	ThoughtsTokenCount      int64 `json:"thoughtsTokenCount,omitempty"`
 	CachedContentTokenCount int64 `json:"cachedContentTokenCount,omitempty"`
+	ToolUsePromptTokenCount int64 `json:"toolUsePromptTokenCount,omitempty"`
 }
 
 // APIErrorEnvelope is Google's error body, which both surfaces return on a

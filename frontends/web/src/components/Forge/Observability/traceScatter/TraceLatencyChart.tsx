@@ -137,7 +137,7 @@ export function TraceLatencyChart(props: TraceLatencyChartProps) {
         <Plot {...props} window={props.window!} scale={scale} />
       )}
       {/* Always laid out, shown only over a plot, so the card keeps one height through loading, empty and data. */}
-      <p className={cn("border-t border-border px-4 py-1.5 text-2xs text-ink-muted", !ready && "invisible")} aria-hidden="true">
+      <p className={cn("border-t border-border px-4 py-1.5 text-meta text-ink-muted", !ready && "invisible")} aria-hidden="true">
         Drag across the plot to narrow the list to a time and latency range. Click a dot to open its trace.
       </p>
     </Card>
@@ -403,7 +403,7 @@ function LatencyGrid({ y, scale, domain, width }: { y: Scale; scale: LatencyScal
       {ticks.map((t) => (
         <g key={t} transform={`translate(0,${y.toPx(t)})`}>
           <line x2={width} className="stroke-border" strokeOpacity={0.7} />
-          <text x={-6} dy="0.32em" textAnchor="end" className="fill-ink-muted text-2xs tabular-nums">
+          <text x={-6} dy="0.32em" textAnchor="end" className="fill-ink-muted text-meta tabular-nums">
             {formatDuration(t)}
           </text>
         </g>
@@ -422,7 +422,7 @@ function TimeAxis({ x, width }: { x: Scale; width: number }) {
         // A label at either end is anchored inward, so it is not clipped by the plot's edge.
         const anchor = at < 24 ? "start" : at > width - 24 ? "end" : "middle";
         return (
-          <text key={t} x={at} y={16} textAnchor={anchor} className="fill-ink-muted text-2xs tabular-nums">
+          <text key={t} x={at} y={16} textAnchor={anchor} className="fill-ink-muted text-meta tabular-nums">
             {formatTimeTick(t, stepMs)}
           </text>
         );
@@ -465,7 +465,7 @@ function LatencyHistogram({ buckets, y, pct }: { buckets: ReturnType<typeof hist
   const width = measured || 176;
   const barSpace = Math.max(20, width - HIST_RIGHT - 4);
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.error));
-  // 13px apart: a text-2xs label is 10px tall, and at 11 p95 and p99 touched when close.
+  // 13px apart: a text-meta label is 10px tall, and at 11 p95 and p99 touched when close.
   const labelY = pct ? spreadLabels(PCT_KEYS.map((k) => y.toPx(pct[k])), 13) : [];
   return (
     <div ref={ref} className="min-w-0 border-l border-border" data-testid="obs-trace-latency-histogram">
@@ -490,7 +490,7 @@ function LatencyHistogram({ buckets, y, pct }: { buckets: ReturnType<typeof hist
               return (
                 <g key={k} data-testid={`obs-trace-latency-${k}`}>
                   <line x2={barSpace} y1={at} y2={at} className="stroke-ink-muted" strokeDasharray="4 3" />
-                  <text x={barSpace + 4} y={labelY[i]} dy="0.32em" className="fill-ink text-2xs tabular-nums">
+                  <text x={barSpace + 4} y={labelY[i]} dy="0.32em" className="fill-ink text-meta tabular-nums">
                     <tspan className="fill-ink-muted">{k} </tspan>
                     {formatDuration(pct[k])}
                   </text>
@@ -498,7 +498,7 @@ function LatencyHistogram({ buckets, y, pct }: { buckets: ReturnType<typeof hist
               );
             })}
           <line y1={PLOT_HEIGHT} y2={PLOT_HEIGHT} x2={barSpace} className="stroke-border" />
-          <text x={0} y={PLOT_HEIGHT + 16} className="fill-ink-muted text-2xs">
+          <text x={0} y={PLOT_HEIGHT + 16} className="fill-ink-muted text-meta">
             Traces per bucket
           </text>
         </g>

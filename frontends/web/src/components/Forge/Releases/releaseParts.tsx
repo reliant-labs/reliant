@@ -29,15 +29,15 @@ const BUTTON =
 export const BUTTON_PRIMARY = `${BUTTON} border border-accent bg-accent text-on-accent hover:bg-accent-hover`;
 export const BUTTON_SECONDARY = `${BUTTON} border border-border-strong bg-surface text-ink hover:bg-ink/5`;
 /**
- * A link in running text: ink with a quiet underline, never the accent (
- * the accent marks the primary action, focus and selection only). `no-color`
- * opts out of index.css's global `a:not(.no-color)` accent rule, which sits
- * in the utilities layer and would otherwise beat `text-ink`.
+ * A link in running text: ink with a faint underline that firms up on hover,
+ * never the accent (the accent marks the primary action, focus and selection
+ * only). `no-color` opts out of index.css's global `a:not(.no-color)` accent
+ * rule, which sits in the utilities layer and would otherwise beat `text-ink`.
  */
 export const INK_LINK =
-  "no-color text-ink underline decoration-ink-muted/50 underline-offset-2 transition-colors hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "no-color text-ink underline decoration-ink-muted/25 underline-offset-4 transition-colors hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 /** An inline text button styled as INK_LINK. */
-export const INK_BUTTON = "text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink";
+export const INK_BUTTON = "text-ink underline decoration-ink-muted/25 underline-offset-4 hover:decoration-ink";
 export const ICON_BUTTON =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 

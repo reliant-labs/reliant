@@ -158,6 +158,41 @@ func parseProcTCP(r io.Reader, seen map[int]bool) {
 	}
 }
 
+// Listener is one TCP LISTEN socket of a proc table, on any address.
+type Listener struct {
+	IP    net.IP
+	Port  int
+	Inode uint64
+}
+
+// ParseListeners reads one /proc/<pid>/net/tcp{,6} table and returns every
+// LISTEN socket in it with its socket inode, whatever address it is bound to.
+// The inode is what /proc/<pid>/fd/<n> names as "socket:[inode]", so a caller
+// can attribute each listener to the processes holding it. Malformed lines are
+// skipped, as in parseProcTCP.
+func ParseListeners(r io.Reader) []Listener {
+	var out []Listener
+	scanner := bufio.NewScanner(r)
+	scanner.Scan() // header line
+	for scanner.Scan() {
+		// fields: sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode ...
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 10 || fields[3] != tcpListenState {
+			continue
+		}
+		ip, port, err := parseProcAddr(fields[1])
+		if err != nil || port == 0 {
+			continue
+		}
+		inode, err := strconv.ParseUint(fields[9], 10, 64)
+		if err != nil || inode == 0 {
+			continue
+		}
+		out = append(out, Listener{IP: ip, Port: port, Inode: inode})
+	}
+	return out
+}
+
 // parseProcAddr decodes a /proc/net/tcp local_address column ("HEXIP:HEXPORT").
 // The IP is hex-encoded in host byte order per 32-bit word (little-endian on
 // every platform we ship to), so each 4-byte group is reversed. The port is
