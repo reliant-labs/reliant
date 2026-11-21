@@ -76,7 +76,7 @@ phase nests inside that slot, within a CPU budget (below). It prints one row per
 |---|---|---|---|
 | heavy slot (queue) | - | 86 | - |
 | plan | PASS | 28 | 1 |
-| npm-tools-protoc-gen-es | PASS | 10 | 32 |
+| pnpm-tools-protoc-gen-es | PASS | 10 | 32 |
 | generate | PASS | 352 | 49 |
 | docs | PASS | 136 | 58 |
 | build | PASS | 132 | 58 |

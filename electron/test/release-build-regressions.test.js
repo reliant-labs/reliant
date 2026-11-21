@@ -65,21 +65,21 @@ test('electron-builder is new enough to unlock its signing keychain', () => {
 });
 
 test('the resolved app-builder-lib carries the keychain-password fix', () => {
-  const lock = JSON.parse(fs.readFileSync(path.join(ELECTRON_DIR, 'package-lock.json'), 'utf8'));
+  const lock = fs.readFileSync(path.join(ELECTRON_DIR, 'pnpm-lock.yaml'), 'utf8');
 
-  // The lockfile is what CI installs (`npm ci`), so assert on it rather than on
-  // the range in package.json. app-builder-lib is nested under electron-builder
-  // and dmg-builder, so check every copy — signing uses whichever one resolves.
-  const resolved = Object.entries(lock.packages ?? {})
-    .filter(([p]) => p.endsWith('node_modules/app-builder-lib'))
-    .map(([p, meta]) => [p, meta.version]);
+  // The lockfile is what CI installs (`pnpm install --frozen-lockfile`), so
+  // assert on it rather than on the range in package.json. app-builder-lib is
+  // a dependency of electron-builder and dmg-builder, and the lockfile lists
+  // every version it resolves once each (`  app-builder-lib@<version>:` under
+  // packages:) — signing uses whichever one resolves, so check them all.
+  const resolved = [...lock.matchAll(/^ {2}'?app-builder-lib@([^(:'\s]+)/gm)].map((m) => m[1]);
 
-  assert.ok(resolved.length > 0, 'expected app-builder-lib in electron/package-lock.json');
+  assert.ok(resolved.length > 0, 'expected app-builder-lib in electron/pnpm-lock.yaml');
 
-  for (const [pkgPath, version] of resolved) {
+  for (const version of resolved) {
     assert.ok(
       gte(parseExactVersion(version), MIN_ELECTRON_BUILDER),
-      `${pkgPath} resolves to app-builder-lib ${version}; needs >= ${MIN_ELECTRON_BUILDER.join('.')} ` +
+      `electron/pnpm-lock.yaml resolves app-builder-lib ${version}; needs >= ${MIN_ELECTRON_BUILDER.join('.')} ` +
         'for the `security set-key-partition-list -k <keychainPassword>` fix.'
     );
   }

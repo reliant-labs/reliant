@@ -349,14 +349,23 @@ jobs:
           fi
           "$dir/temporal" --version
           echo "$dir" >> "$GITHUB_PATH"
-      # Every part's npm phase installs electron, whose postinstall downloads
+      # Every part's install phase installs electron, whose postinstall downloads
       # Electron's zip from github.com releases (static and go 2/3 failed on
       # it as well as web, 1f81a402e). Restored in every part from the entry
       # the Electron package smoke job keeps (see that job); saved here by the
       # web part on main if missing.
       - name: Read the Electron version
         id: electron-version
-        run: echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
+        # The version electron/pnpm-lock.yaml resolves for the app's direct
+        # dependency (importers ".", peer suffix "(...)" dropped).
+        run: |
+          locked() {
+            v=$(awk -v p="$1" '$0 == "      " p ":" { f = 1; next } f && /^        version: / { v = $2; sub(/\(.*/, "", v); print v; exit }' electron/pnpm-lock.yaml)
+            [ -n "$v" ] || { echo "electron/pnpm-lock.yaml resolves no $1" >&2; return 1; }
+            echo "$v"
+          }
+          electron=$(locked electron)
+          echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-${electron}" >> "$GITHUB_OUTPUT"
       - name: Restore the Electron zip
         id: electron-zip
         uses: actions/cache/restore@v4
@@ -741,10 +750,18 @@ jobs:
       # action's header rule). The zip's entry is shared with the release gate.
       - name: Read the Electron versions
         id: electron-versions
+        # The versions electron/pnpm-lock.yaml resolves for the app's direct
+        # dependencies (importers ".", peer suffix "(...)" dropped).
         run: |
-          lock=electron/package-lock.json
-          echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' "$lock")" >> "$GITHUB_OUTPUT"
-          echo "builder=electron-builder-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron-builder"].version' "$lock")" >> "$GITHUB_OUTPUT"
+          locked() {
+            v=$(awk -v p="$1" '$0 == "      " p ":" { f = 1; next } f && /^        version: / { v = $2; sub(/\(.*/, "", v); print v; exit }' electron/pnpm-lock.yaml)
+            [ -n "$v" ] || { echo "electron/pnpm-lock.yaml resolves no $1" >&2; return 1; }
+            echo "$v"
+          }
+          electron=$(locked electron)
+          builder=$(locked electron-builder)
+          echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-${electron}" >> "$GITHUB_OUTPUT"
+          echo "builder=electron-builder-${RUNNER_OS}-${RUNNER_ARCH}-${builder}" >> "$GITHUB_OUTPUT"
       - name: Restore the Electron zip
         id: electron-zip
         uses: actions/cache/restore@v4
