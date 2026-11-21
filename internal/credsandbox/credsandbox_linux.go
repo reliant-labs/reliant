@@ -763,11 +763,18 @@ func mountOverlay(dir, work string) error {
 	// command's init sits in D state until it finishes. On a busy build
 	// machine that took longer than the command's timeout, so a command that
 	// had finished came back exit 124 (TL-21). A kernel without volatile
-	// (before 5.10) refuses the option; it then gets the plain mount, on a
-	// work directory of its own, since a refused volatile mount may have left
-	// the marker a plain mount refuses (work/incompat/volatile).
-	if err := unix.Mount("overlay", dir, "overlay", 0, opts+",volatile"); err == nil {
+	// (before 5.10) refuses the unknown option with EINVAL, and only that
+	// falls back to the plain mount, on a work directory of its own, since a
+	// refused volatile mount may have left the marker a plain mount refuses
+	// (work/incompat/volatile). Any other failure is returned as it is: a
+	// plain mount in its place would bring the syncfs teardown back on the
+	// very hosts this is for, and hide why the volatile mount failed.
+	verr := unix.Mount("overlay", dir, "overlay", 0, opts+",volatile")
+	if verr == nil {
 		return nil
+	}
+	if !errors.Is(verr, unix.EINVAL) {
+		return fmt.Errorf("volatile overlay on %s: %w", dir, verr)
 	}
 	plainWD := filepath.Join(work, "wp")
 	if err := os.MkdirAll(plainWD, 0o700); err != nil {
@@ -775,7 +782,7 @@ func mountOverlay(dir, work string) error {
 	}
 	opts = "lowerdir=" + dir + ",upperdir=" + upper + ",workdir=" + plainWD + ",userxattr"
 	if err := unix.Mount("overlay", dir, "overlay", 0, opts); err != nil {
-		return fmt.Errorf("overlay on %s: %w", dir, err)
+		return fmt.Errorf("overlay on %s (plain, after volatile was refused: %v): %w", dir, verr, err)
 	}
 	return nil
 }
