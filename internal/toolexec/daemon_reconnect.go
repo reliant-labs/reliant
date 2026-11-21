@@ -127,7 +127,7 @@ func classifyDispatchErr(err error) dispatchOutcome {
 	switch {
 	case err == nil:
 		return dispatchFinal
-	case errors.Is(err, errDaemonNotConnected):
+	case errors.Is(err, errDaemonNotConnected), errors.Is(err, ErrDaemonUpdating):
 		return dispatchUndelivered
 	case errors.Is(err, ErrDaemonConnectionInterrupted):
 		return dispatchInterrupted
@@ -188,10 +188,13 @@ func (r *NATSDaemonRouter) rideOutDisconnect(
 		}
 		if deadline.IsZero() {
 			seen := time.Now()
-			if outcome == dispatchUndelivered {
+			if outcome == dispatchUndelivered && !IsDaemonUpdating(err) {
 				seen = r.daemonLastSeen(ctx, userID, daemonID)
 			}
-			deadline = seen.Add(DaemonReconnectGrace)
+			// A daemon draining for a restart is away for longer than a
+			// reconnect, by design: wait out its drain and restart
+			// (daemon_upgrade.go).
+			deadline = reconnectDeadline(seen, r.daemonUpdatingUntil(ctx, userID, daemonID))
 			if !time.Now().Before(deadline) {
 				// Away longer than a reconnect takes: fail as fast as ever.
 				return 0, err
@@ -288,7 +291,13 @@ func (r *NATSDaemonRouter) daemonAnswers(ctx context.Context, userID, daemonID s
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	msg, err := r.nc.RequestWithContext(probeCtx, daemonSubject(toolOnlineSubject, userID, daemonID), nil)
-	return err == nil && string(msg.Data) == "true"
+	if err != nil {
+		return false
+	}
+	// A daemon draining for a restart answers, but not "true": it is not
+	// back until it has restarted (daemon_upgrade.go).
+	online, _ := parseOnlineReply(msg.Data)
+	return online
 }
 
 // daemonLastSeen is when a gateway last heard from daemonID, per the

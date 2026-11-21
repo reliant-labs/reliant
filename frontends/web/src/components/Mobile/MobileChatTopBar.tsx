@@ -57,6 +57,7 @@ interface MobileChatTopBarProps {
    */
   listPaneVisible?: boolean;
   noMachine?: boolean;
+  machineName?: string;
   contextUsage?: ContextUsage | null;
   /** Present when the chat has a workspace to open. */
   onOpenWorkspace?: () => void;
@@ -70,14 +71,15 @@ export function MobileChatTopBar({
   onBackToThread,
   listPaneVisible = false,
   noMachine,
+  machineName,
   contextUsage,
   onOpenWorkspace,
 }: MobileChatTopBarProps) {
-  // One line of status, and only status: a quiet chat gets a single-line bar.
+  // Keep placement and any live status on one line under the title.
   const status = [
     runningWorkflow ? `Running · ${runningWorkflow}` : null,
     subThread ? `Thread: ${subThread.name}` : null,
-    noMachine ? "No machine" : null,
+    noMachine ? "No machine" : machineName ? `Machine: ${machineName}` : null,
   ].filter(Boolean).join(" · ");
   const ratio = contextUsageRatio(contextUsage);
   const hasBack = (subThread && onBackToThread) || !listPaneVisible;

@@ -1,7 +1,7 @@
 ---
 title: "Forge: Go + React framework for AI-written code"
 sidebarTitle: "Forge overview"
-description: "Forge is an open-source Go and React framework and deploy platform for AI coding agents: tests, dev/staging/prod environments, hosting and monitoring from the first commit"
+description: "Forge is an open-source Go and React framework and deploy platform for AI coding agents, with tests, environments, hosting and monitoring from the first commit."
 ---
 
 Forge is Reliant's framework for building, running and deploying software. Where Reliant is the harness, the agents, workflows and machines that do the work, Forge is the foundation they build on: the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
@@ -30,11 +30,11 @@ Every place the app runs is an environment, declared as code under `deploy/kcl/`
 
 ### Hosting on Reliant
 
-Publishing is one command, with no cluster, registry or DNS to arrange first. Reliant hosting runs your services, workers and jobs, gives the app a managed Postgres, publishes frontends as static sites behind a CDN, gives everything a hostname, and supports [custom domains](/forge/custom-domains) and managed [secrets](/forge/secrets). A project that is only a static site, such as a landing page, can be published on the free static tier without a compute plan. Anything that runs a process needs a Reliant Compute plan; see [Hosting on Reliant](/forge/hosting) for what is hosted, what is not, and how a deploy waits on billing, and the [pricing page](https://reliantlabs.io/pricing) for current plans and prices.
+Publishing is one command, with no cluster, registry or DNS to arrange first. Reliant hosting runs your services, workers and jobs, gives the app a managed Postgres, publishes frontends as static sites behind a CDN, gives everything a hostname, and supports [custom domains](/hosting/custom-domains) and managed [secrets](/hosting/secrets). A project that is only a static site, such as a landing page, can be published on the free static tier without a compute plan. Anything that runs a process needs a Reliant Compute plan; see [Hosting on Reliant](/hosting/overview) for what is hosted, what is not, and how a deploy waits on billing, and the [pricing page](https://reliantlabs.io/pricing) for current plans and prices.
 
 ### Observability without configuration
 
-An app deployed to Reliant hosting reports on itself from its first deploy: generated dashboards for every service and frontend, default alerts, browser error tracking with source maps, and logs, traces and metrics linked to each other. Locally, `forge env up` runs the same stack, so what you see in development is what you see in production. After a deploy, `forge obs check <env>` judges the release against the one before it and exits non-zero when it made things worse, which is the signal an agent or a CI job needs to know whether to roll on or stop. See [Observability](/forge/observability).
+An app deployed to Reliant hosting reports on itself from its first deploy: generated dashboards for every service and frontend, default alerts, browser error tracking with source maps, and logs, traces and metrics linked to each other. Locally, `forge env up` runs the same stack, so what you see in development is what you see in production. After a deploy, `forge obs check <env>` judges the release against the one before it and exits non-zero when it made things worse, which is the signal an agent or a CI job needs to know whether to roll on or stop. See [Observability](/hosting/observability).
 
 ### Static sites, with or without a backend
 
@@ -42,7 +42,7 @@ A landing page, docs site, SPA or PWA with no backend is a complete forge projec
 
 ### An app you already have, in any language
 
-A server written in another language keeps its code and its Dockerfile. Your agent adopts it by following `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
+A server written in another language keeps its code and its Dockerfile. `forge project new --in-place --kind app` reads them and writes `forge.yaml` and the environments declaring the app, without changing a file of yours ([Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language)). From there your agent follows `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
 
 ## How Forge and Reliant fit together
 
@@ -53,13 +53,13 @@ The two products meet in a few places. The **Build an App** workflow scopes an a
 ## Learn how it works
 
 <CardGroup cols={2}>
-  <Card title="Concepts" icon="diagram-project" href="/forge/concepts/two-sources-of-truth">
+  <Card title="Concepts" icon="workflow" href="/forge/concepts/two-sources-of-truth">
     SQL and proto as the two inputs, contracts and injection, the request path, configuration, and which files are yours.
   </Card>
   <Card title="Deploy" icon="rocket" href="/forge/deploy/environments">
     Environments, what gets deployed, releases and promotion, self-hosted delivery, and escape hatches for code forge did not write.
   </Card>
-  <Card title="Observability" icon="chart-line" href="/forge/observability/signals">
+  <Card title="Observability" icon="chart-line" href="/hosting/observability/signals">
     The signals every service emits, where they go, `forge obs`, alerts, and why they help an agent.
   </Card>
   <Card title="Linting" icon="shield-check" href="/forge/linting/overview">
@@ -76,10 +76,10 @@ The two products meet in a few places. The **Build an App** workflow scopes an a
   <Card title="Project anatomy" icon="folder-tree" href="/forge/project-anatomy">
     Where code goes, and which files forge owns.
   </Card>
-  <Card title="Hosting on Reliant" icon="cloud" href="/forge/hosting">
+  <Card title="Hosting on Reliant" icon="cloud" href="/hosting/overview">
     What hosting runs, what it refuses, and queued deploys.
   </Card>
-  <Card title="Observability" icon="activity" href="/forge/observability">
+  <Card title="Observability" icon="activity" href="/hosting/observability">
     What you get without configuring anything.
   </Card>
 </CardGroup>

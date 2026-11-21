@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { cn } from "../../lib/utils";
-import { BarChart3, Bot, Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, ShieldCheck, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare, Plug, ChevronRight } from "lucide-react";
+import { BarChart3, Building2, CircleUser, Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, ShieldCheck, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare, Plug, ChevronRight } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import { appBuild } from "../../lib/appBuild";
 import { formatVersion } from "../../lib/releaseIdentity";
-import type { SettingsSection } from "../../routeSchemas";
+import { resolveAISettingsTab, type AISettingsTab, type SettingsSection, type SettingsTab } from "../../routeSchemas";
 
 export type { SettingsSection };
 
 interface SettingsNavigationProps {
   activeSection: SettingsSection;
-  onSectionChange: (section: SettingsSection) => void;
+  /** The URL's `?tab=`: picks which of the AI section's two entries is current. */
+  activeTab?: SettingsTab;
+  /** `tab` is set only by an entry that stands for some of a section's tabs (Models & tools). */
+  onSectionChange: (section: SettingsSection, tab?: AISettingsTab) => void;
   isCollapsed?: boolean;
 }
 
@@ -20,6 +23,39 @@ interface SectionItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /**
+   * The tabs of section `id` this entry stands for, when the section has more
+   * than one entry. Settings → AI is one page with two entries: Personal
+   * accounts (its providers tab) and Models & tools (its models and local
+   * tabs). The first tab is where the entry goes; the default tab is left off
+   * the URL, so /settings/ai and /settings/ai?tab=models stay the links they
+   * were.
+   */
+  tabs?: readonly AISettingsTab[];
+}
+
+/** One sidebar entry: where it goes, in display order. */
+export interface SettingsNavEntry {
+  section: SettingsSection;
+  tab?: AISettingsTab;
+}
+
+const DEFAULT_AI_TAB: AISettingsTab = "providers";
+
+/** Unique per entry: a section, or a section and the tab it goes to. */
+function navKey(entry: SettingsNavEntry): string {
+  return entry.tab ? `${entry.section}:${entry.tab}` : entry.section;
+}
+
+function entryOf(item: SectionItem): SettingsNavEntry {
+  const tab = item.tabs?.[0];
+  return tab && tab !== DEFAULT_AI_TAB ? { section: item.id, tab } : { section: item.id };
+}
+
+/** Whether `item` is the current page: its section, and (for a tabbed entry) one of its tabs. */
+function isItemActive(item: SectionItem, activeSection: SettingsSection, activeTab?: SettingsTab): boolean {
+  if (item.id !== activeSection) return false;
+  return !item.tabs || item.tabs.includes(resolveAISettingsTab(activeTab));
 }
 
 interface SectionGroup {
@@ -34,10 +70,12 @@ const ABOUT: SectionItem = { id: "about", label: "About", icon: Info };
 /**
  * Six groups, each a real category. The everyday ones are open; Advanced is
  * folded away until someone goes looking (or lands on one of its pages).
- * Only grouping, order and two labels differ from the old nav: every section
+ * Only grouping, order and labels differ from the old nav: every section
  * keeps its id and URL.
  *   Account              who you are and what you pay for;
- *   AI                   what your agents run on;
+ *   AI                   what your agents run on: the accounts you connect,
+ *                        the ones your organization pays for, and which
+ *                        models they use;
  *   Connections          GitHub, integrations and tools agents reach out through;
  *   Machines & projects  where agents work;
  *   Preferences          how this app looks and behaves;
@@ -56,7 +94,6 @@ const sectionGroups: SectionGroup[] = [
             { id: "billing" as const, label: "Billing & usage", icon: CreditCard },
             { id: "member-permissions" as const, label: "Members", icon: Shield },
             { id: "policies" as const, label: "Policies", icon: ShieldCheck },
-            { id: "org-ai-accounts" as const, label: "AI accounts", icon: Bot },
             { id: "org-ai-usage" as const, label: "AI usage", icon: BarChart3 },
           ]
         : []),
@@ -65,7 +102,16 @@ const sectionGroups: SectionGroup[] = [
   },
   {
     label: "AI",
-    items: [{ id: "ai", label: "AI providers", icon: Sparkles }],
+    items: [
+      // Two entries for one page: Settings → AI's providers tab, and its
+      // models and local tabs. Whose account pays is unchanged by the grouping:
+      // each entry opens the same page and permission checks as before.
+      { id: "ai", label: "Personal accounts", icon: CircleUser, tabs: ["providers"] },
+      // Cloud-only: an organization exists only with a control plane. Members
+      // read it; the page itself decides who may manage it.
+      ...(hasControlPlane ? [{ id: "org-ai-accounts" as const, label: "Organization accounts", icon: Building2 }] : []),
+      { id: "ai", label: "Models & tools", icon: Sparkles, tabs: ["models", "local"] },
+    ],
   },
   {
     label: "Connections",
@@ -131,9 +177,28 @@ function isItemVisible(item: SectionItem): boolean {
   return true;
 }
 
-/** Section IDs in sidebar display order (About last, as the footer); used for keyboard nav. */
+/** Sidebar entries in display order (About last, as the footer); used for keyboard nav. */
+export function getVisibleSettingsNavEntries(): SettingsNavEntry[] {
+  return [...sectionGroups.flatMap((group) => group.items.filter(isItemVisible).map(entryOf)), { section: ABOUT.id }];
+}
+
+/** The index of the current page's entry in {@link getVisibleSettingsNavEntries}, or -1. */
+export function activeSettingsNavEntryIndex(entries: SettingsNavEntry[], section: SettingsSection, tab?: SettingsTab): number {
+  const matches = entries.flatMap((entry, index) => (entry.section === section ? [index] : []));
+  if (matches.length <= 1) return matches[0] ?? -1;
+  const item = sectionGroups.flatMap((group) => group.items.filter(isItemVisible)).find((i) => isItemActive(i, section, tab));
+  const wanted = item ? entryOf(item) : undefined;
+  return matches.find((index) => entries[index].tab === wanted?.tab) ?? matches[0];
+}
+
+/** The button that stands for `entry`, as {@link SettingsNavigation} marks it. */
+export function settingsNavEntrySelector(entry: SettingsNavEntry): string {
+  return `button[data-nav-key="${navKey(entry)}"]`;
+}
+
+/** Section IDs in sidebar display order, each once (About last, as the footer). */
 export function getVisibleSettingsSectionIds(): SettingsSection[] {
-  return [...sectionGroups.flatMap((group) => group.items.filter(isItemVisible).map((section) => section.id)), ABOUT.id];
+  return [...new Set(getVisibleSettingsNavEntries().map((entry) => entry.section))];
 }
 
 /** Whether `section` sits in a folded-away group (Advanced). */
@@ -143,6 +208,7 @@ export function isInCollapsibleGroup(section: SettingsSection): boolean {
 
 export function SettingsNavigation({
   activeSection,
+  activeTab,
   onSectionChange,
   isCollapsed = false,
 }: SettingsNavigationProps) {
@@ -154,14 +220,17 @@ export function SettingsNavigation({
   const advancedOpen = activeInAdvanced || (toggled?.section === activeSection && toggled.open);
 
   const renderItem = (section: SectionItem) => {
-    const isActive = section.id === activeSection;
+    const isActive = isItemActive(section, activeSection, activeTab);
+    const entry = entryOf(section);
+    const key = navKey(entry);
     const item = (
       <button
-        key={section.id}
-        onClick={() => onSectionChange(section.id)}
+        key={key}
+        onClick={() => (entry.tab ? onSectionChange(entry.section, entry.tab) : onSectionChange(entry.section))}
         aria-label={section.label}
         aria-current={isActive ? "page" : undefined}
         data-section-id={section.id}
+        data-nav-key={key}
         className={cn(
           "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
           isCollapsed ? "flex items-center justify-center px-2" : "text-left",
@@ -177,7 +246,7 @@ export function SettingsNavigation({
       </button>
     );
     return isCollapsed ? (
-      <Tooltip key={section.id} content={section.label} side="right" triggerClassName="block w-full">
+      <Tooltip key={key} content={section.label} side="right" triggerClassName="block w-full">
         {item}
       </Tooltip>
     ) : (
@@ -238,6 +307,7 @@ export function SettingsNavigation({
             aria-label={ABOUT.label}
             aria-current={activeSection === ABOUT.id ? "page" : undefined}
             data-section-id={ABOUT.id}
+            data-nav-key={ABOUT.id}
             className={cn(
               "flex w-full cursor-pointer items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-left text-xs transition-all",
               activeSection === ABOUT.id
