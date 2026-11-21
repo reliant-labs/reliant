@@ -23,9 +23,8 @@
 
 import { Fragment, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { FileCode2, Folder, GitCommitHorizontal, Package, Sparkles } from "lucide-react";
+import { FileCode2, Folder, GitCommitHorizontal, Package } from "lucide-react";
 
-import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
@@ -55,6 +54,7 @@ import {
   type CoverageSearch,
 } from "./coverageModel";
 import { useCoverageSource } from "./coverageSourceQuery";
+import { RaiseCoverageButton } from "./TestsAgentActions";
 import { laneColor, orderLanes, shortSha } from "./testsModel";
 import { TestsFrame, useTestsScope, type TestsScope } from "./testsScope";
 import { TestsError, TestsNoRunsYet } from "./TestsStates";
@@ -116,7 +116,7 @@ export function TestsCoverageView({ scope, search, projectId, hrefFor, onSelect 
     }
     return <TestsNoRunsYet projectId={projectId} />;
   }
-  return <CoverageBody scope={scope} search={search} path={path} target={target} summary={summary.data ?? null} hrefFor={hrefFor} onSelect={onSelect} />;
+  return <CoverageBody scope={scope} search={search} path={path} target={target} summary={summary.data ?? null} projectId={projectId} hrefFor={hrefFor} onSelect={onSelect} />;
 }
 
 interface BodyProps {
@@ -125,11 +125,12 @@ interface BodyProps {
   path: string;
   target: CoverageTarget;
   summary: TestSummary | null;
+  projectId?: string | null;
   hrefFor: (search: CoverageSearch) => string;
   onSelect: (patch: Partial<CoverageSearch>) => void;
 }
 
-function CoverageBody({ scope, search, path, target, summary, hrefFor, onSelect }: BodyProps) {
+function CoverageBody({ scope, search, path, target, summary, projectId, hrefFor, onSelect }: BodyProps) {
   const lens = { lane: search.lane, baseSha: search.base };
   // A path is a file when its parent's listing says so. The parent is usually cached: it is where the reader came from.
   const parent = useCoverage(scope.project, path ? { target, path: parentPath(path), ...lens } : null);
@@ -163,7 +164,17 @@ function CoverageBody({ scope, search, path, target, summary, hrefFor, onSelect 
   return (
     <div className="space-y-4" data-testid="tests-coverage">
       <Selectors search={search} target={target} commit={commit} lanes={lanes} summary={summary} onSelect={onSelect} />
-      <PathBar path={path} isFile={isFile} hrefFor={(next) => hrefFor({ ...search, path: next || undefined })} />
+      <PathBar
+        path={path}
+        isFile={isFile}
+        hrefFor={(next) => hrefFor({ ...search, path: next || undefined })}
+        raise={(pkg) => {
+          // The package's own figure, before anything else is read: a file's package is its parent listing.
+          const combined = (isFile ? parent.data : dir.data)?.coverage?.combined;
+          const current = combined && combined.statements > 0 && !search.lane ? combined.percent : null;
+          return <RaiseCoverageButton project={scope.project} projectId={projectId} pkg={pkg} target={target} currentPercent={current} defaultBranch={summary?.branch || undefined} />;
+        }}
+      />
       {body}
     </div>
   );
@@ -239,7 +250,7 @@ function Selectors({ search, target, commit, lanes, summary, onSelect }: { searc
 
 // ── Where we are ────────────────────────────────────────────────────────────
 
-function PathBar({ path, isFile, hrefFor }: { path: string; isFile: boolean; hrefFor: (path: string) => string }) {
+function PathBar({ path, isFile, hrefFor, raise }: { path: string; isFile: boolean; hrefFor: (path: string) => string; raise: (pkg: string) => ReactNode }) {
   const crumbs = pathCrumbs(path);
   // The package a coverage-raising agent would work in: the path itself, or a file's own package.
   const pkg = isFile ? parentPath(path) : path;
@@ -266,21 +277,11 @@ function PathBar({ path, isFile, hrefFor }: { path: string; isFile: boolean; hre
           })}
         </ol>
       </nav>
-      {pkg && <RaiseCoverage pkg={pkg} />}
-    </div>
-  );
-}
-
-/** R1's slot: an agent that writes tests for a package. Not built yet, and says so. */
-function RaiseCoverage({ pkg }: { pkg: string }) {
-  return (
-    <div className="flex items-center gap-2" data-testid="tests-coverage-raise">
-      <Button variant="outline" size="sm" leftIcon={<Sparkles className="h-3.5 w-3.5" />} disabled aria-describedby="tests-coverage-raise-soon">
-        Raise coverage of <span className="font-mono">{pkg}</span>
-      </Button>
-      <span id="tests-coverage-raise-soon" className="text-meta text-ink-muted">
-        Coming soon
-      </span>
+      {pkg && (
+        <div className="flex items-center gap-2" data-testid="tests-coverage-raise">
+          {raise(pkg)}
+        </div>
+      )}
     </div>
   );
 }

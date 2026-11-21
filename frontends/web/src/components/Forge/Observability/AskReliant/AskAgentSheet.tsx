@@ -52,6 +52,10 @@ export function openInReliantHref(subject: AskSubject, forgeProject: string | un
       return at({ kind: "obs-view", view: "sessions" }, { session: subject.sessionId });
     case "release":
       return at({ kind: "release", version: subject.version });
+    case "flaky-test":
+      return at({ kind: "tests-flaky-test", test: subject.testId });
+    case "coverage":
+      return at({ kind: "tests-coverage" }, { path: subject.package });
     default:
       return at({ kind: "overview" });
   }

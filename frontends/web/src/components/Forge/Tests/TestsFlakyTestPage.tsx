@@ -8,7 +8,7 @@
  *
  * Top to bottom: the test and its flake record (state, the flake rate with
  * its n, its confirmed events, its quarantine and issue, and what to do: the
- * quarantine command and the agent's slot); a strip of its outcomes over its
+ * quarantine command and the agent that fixes it); a strip of its outcomes over its
  * last runs, oldest to newest, each a link to the run; its flake events, each
  * with the signal that caught it and its verdict (host and correlated events
  * are shown, and said never to count); and its failures grouped by
@@ -38,32 +38,34 @@ import { ObsLoadingRows } from "../Observability/ObsStates";
 import { FLAKE_RATE_MEANS, FLAKE_STATE, flakeRateWords, issueLabel, outcomeStrip, quarantineCommand, SIGNAL_LABEL, STRIP_LABEL, suggestsQuarantine, type StripKind } from "./flakyModel";
 import { failureVerdictWords } from "./runsModel";
 import { shortSha } from "./testsModel";
-import { FixWithAgentSlot } from "./TestsFlakyPage";
+import { FixFlakyTestButton } from "./TestsAgentActions";
 import { FailureOutput, OutLink, Section, shortPackage } from "./TestsParts";
 import { TestsFrame } from "./testsScope";
 import { TestsError } from "./TestsStates";
 
 export function TestsFlakyTestPage() {
-  const { forgeProject, href } = useForgeConsole();
+  const { forgeProject, href, projectId } = useForgeConsole();
   const { test } = useParams({ strict: false }) as { test?: string };
   // The segment is the id as base64url (or, in a link from before, the id itself).
   const testId = test ? decodeTestIdSegment(test) : "";
   return (
     <TestsFrame title="Test" subtitle={testId ? <code className="break-all font-mono">{testId}</code> : undefined} testId="console-tests-flaky-test">
-      <TestsFlakyTestView project={forgeProject} testId={testId} runHref={(runId) => href({ kind: "tests-run", run: runId })} />
+      <TestsFlakyTestView project={forgeProject} projectId={projectId} testId={testId} runHref={(runId) => href({ kind: "tests-run", run: runId })} />
     </TestsFrame>
   );
 }
 
 export interface TestsFlakyTestViewProps {
   project: string;
+  /** The Reliant project holding this app's repository: where "Fix this flaky test" starts its agent. */
+  projectId?: string | null;
   testId: string;
   runHref: (runId: string) => string;
   now?: number;
 }
 
 /** The page below its header, free of the console: what tests and the preview render. */
-export function TestsFlakyTestView({ project, testId, runHref, now }: TestsFlakyTestViewProps) {
+export function TestsFlakyTestView({ project, projectId, testId, runHref, now }: TestsFlakyTestViewProps) {
   const read = useTest(project, testId);
   if (read.isLoading) {
     return (
@@ -86,7 +88,7 @@ export function TestsFlakyTestView({ project, testId, runHref, now }: TestsFlaky
   const at = now ?? Date.now();
   return (
     <div className="space-y-4" data-testid="tests-test">
-      <Record flake={read.data.flake} now={at} />
+      <Record flake={read.data.flake} project={project} projectId={projectId} now={at} />
       <OutcomeStrip detail={read.data} runHref={runHref} now={at} />
       <Events events={read.data.events} runHref={runHref} now={at} />
       <Signatures signatures={read.data.signatures} now={at} />
@@ -105,7 +107,7 @@ function Fact({ label, children, testId }: { label: string; children: ReactNode;
 
 const ago = (ms: number | null, now: number) => (ms === null ? <span className="text-ink-muted">—</span> : <span title={formatWhen(ms, now)}>{formatAgo(ms, now)}</span>);
 
-function Record({ flake, now }: { flake: TestFlake; now: number }) {
+function Record({ flake, project, projectId, now }: { flake: TestFlake; project: string; projectId?: string | null; now: number }) {
   const state = FLAKE_STATE[flake.state];
   const test = flake.test;
   const place = test.file ? (test.line > 0 ? `${test.file}:${test.line}` : test.file) : "";
@@ -163,7 +165,7 @@ function Record({ flake, now }: { flake: TestFlake; now: number }) {
             <CommandLine command={quarantineCommand(flake)} />
           </div>
         )}
-        {actionable && <FixWithAgentSlot />}
+        {actionable && <FixFlakyTestButton project={project} projectId={projectId} flake={flake} />}
       </div>
     </Card>
   );

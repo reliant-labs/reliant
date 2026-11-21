@@ -69,8 +69,8 @@ export interface AskReliantOptions {
 type Choosing = Extract<AskProjectResolution, { kind: "choose" }> & { subject: AskSubject; onChatCreated?: (chatId: string) => void; intent?: AskIntent };
 
 /** The handoff mode's one label, on every surface. */
-const ASK_AGENT_LABEL = "Ask an agent";
-const ASK_AGENT_HINT = "Hand this to your own agent: a prompt with the ids and the forge commands to fetch the rest.";
+export const ASK_AGENT_LABEL = "Ask an agent";
+export const ASK_AGENT_HINT = "Hand this to your own agent: a prompt with the ids and the forge commands to fetch the rest.";
 
 const nonce = () => Math.random().toString(36).slice(2, 6);
 

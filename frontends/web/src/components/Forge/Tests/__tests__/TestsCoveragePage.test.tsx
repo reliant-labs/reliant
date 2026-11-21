@@ -9,7 +9,7 @@
 
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { createRouterTransport } from "@connectrpc/connect";
@@ -18,6 +18,8 @@ import { CoverageSourceService, CoverageSourceUnavailable } from "@/gen/reliant/
 import { setTransport } from "@/lib/connect";
 import { forgeConsoleTestsCoverageSearchSchema } from "@/routeSchemas";
 import { CoverageSourceProvider } from "@/services/coverageSource/CoverageSourceContext";
+import type { AskCoverageSubject } from "../../Observability/AskReliant/askReliantPrompt";
+import { AGENT_REASON } from "../testsAgent";
 import { fetchCoverageSource, type FetchCoverageSource } from "@/services/coverageSource/coverageSource";
 import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
 
@@ -43,6 +45,12 @@ vi.mock("@/components/forge-ui/link", () => ({
   ),
 }));
 
+// The agent start is Ask Reliant's (its own tests); here, what it is handed.
+const ask = vi.fn(async () => true);
+vi.mock("../../Observability/AskReliant/AskReliant", () => ({
+  useAskReliant: () => ({ ask, busy: false, starting: null, dialog: null, mode: "chat" }),
+}));
+
 /** The page's href for a search, as the console builds it: the keys that are set, in a fixed order. */
 function hrefFor(search: CoverageSearch): string {
   const params = new URLSearchParams();
@@ -51,14 +59,17 @@ function hrefFor(search: CoverageSearch): string {
   return `/forge/p/shopfront/tests/coverage${query ? `?${query}` : ""}`;
 }
 
-function renderCoverage(search: CoverageSearch, { api = fixtureTestApi(), source = fixtureCoverageSource(), environmentId }: { api?: TestApi; source?: FetchCoverageSource; environmentId?: string } = {}) {
+function renderCoverage(
+  search: CoverageSearch,
+  { api = fixtureTestApi(), source = fixtureCoverageSource(), environmentId, projectId }: { api?: TestApi; source?: FetchCoverageSource; environmentId?: string; projectId?: string } = {}
+) {
   const onSelect = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <TestApiProvider api={api}>
         <CoverageSourceProvider fetch={source}>
-          <TestsCoverageView scope={{ project: FIXTURE_PROJECT, environmentId }} search={search} hrefFor={hrefFor} onSelect={onSelect} />
+          <TestsCoverageView scope={{ project: FIXTURE_PROJECT, environmentId }} search={search} projectId={projectId} hrefFor={hrefFor} onSelect={onSelect} />
         </CoverageSourceProvider>
       </TestApiProvider>
     </QueryClientProvider>
@@ -107,7 +118,7 @@ describe("Coverage: the tree", () => {
     expect(screen.getByTestId("tests-coverage-totals")).toHaveTextContent("diff 2/3 lines");
   });
 
-  it("the breadcrumb walks back up, and the Raise coverage slot names the package and is disabled", async () => {
+  it("the breadcrumb walks back up, and Raise coverage names the package, disabled with its reason without a linked repository", async () => {
     renderCoverage({ path: "internal/billing" });
     const crumbs = await screen.findByTestId("tests-coverage-crumbs");
     expect(within(crumbs).getByRole("link", { name: "All code" })).toHaveAttribute("href", "/forge/p/shopfront/tests/coverage");
@@ -116,7 +127,26 @@ describe("Coverage: the tree", () => {
     const raise = screen.getByTestId("tests-coverage-raise");
     expect(within(raise).getByRole("button")).toHaveTextContent("Raise coverage of internal/billing");
     expect(within(raise).getByRole("button")).toBeDisabled();
-    expect(raise).toHaveTextContent("Coming soon");
+    expect(within(raise).getByRole("button")).toHaveAccessibleDescription(AGENT_REASON.noProject);
+  });
+
+  it("Raise coverage hands Ask Reliant the package's figures and uncovered line numbers, never its source", async () => {
+    ask.mockClear();
+    const source = fixtureCoverageSource("github");
+    renderCoverage({ path: FIXTURE_REFUND_PATH }, { projectId: "proj-shopfront", source });
+    await screen.findByTestId("tests-coverage-source");
+    const button = within(screen.getByTestId("tests-coverage-raise")).getByRole("button");
+    expect(button).toHaveTextContent("Raise coverage of internal/billing");
+    expect(button).toHaveAttribute("title", expect.stringContaining("reaches 60% combined"));
+    fireEvent.click(button);
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    const [subject, , intent] = ask.mock.calls[0] as unknown as [AskCoverageSubject, unknown, string];
+    expect(intent).toBe("fix");
+    expect(subject).toMatchObject({ kind: "coverage", package: "internal/billing", combined: 58, target: 60, defaultBranch: "main" });
+    expect(subject.uncovered.map((file) => file.path)).toEqual(["internal/billing/tax.go", "internal/billing/invoice.go", FIXTURE_REFUND_PATH]);
+    // The page showed refund.go's source; none of it is handed on.
+    const serialized = JSON.stringify(subject);
+    for (const code of FIXTURE_REFUND_SOURCE.split("\n").filter((text) => text.trim().length > 3)) expect(serialized).not.toContain(code.trim());
   });
 
   it("one lane's lens shows that lane alone", async () => {

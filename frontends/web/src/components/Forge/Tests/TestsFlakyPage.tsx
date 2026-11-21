@@ -10,8 +10,8 @@
  * its confirmed events in 30 days and the signals that caught them, its last
  * event, its quarantine (the entry's path, and "overdue" past its expiry) and
  * its issue. Under each test that still needs acting on: the command that
- * quarantines it, to copy, and the slot for the agent that fixes it (not
- * wired yet). A row opens the test.
+ * quarantines it, to copy, and the agent that fixes it (an Ask Reliant
+ * chat, sent at once on a branch of its own). A row opens the test.
  *
  * What the page will not do:
  *
@@ -29,9 +29,9 @@
  * does not narrow this page.
  */
 
-import { useCallback, useId, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Bot, Server } from "lucide-react";
+import { Server } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -60,6 +60,7 @@ import {
   type FlakySearch,
   type FlakyStateFilter,
 } from "./flakyModel";
+import { FixFlakyTestButton } from "./TestsAgentActions";
 import { OutLink, Section, TestName } from "./TestsParts";
 import { TestsFrame } from "./testsScope";
 import { TestsError, TestsNoRunsYet } from "./TestsStates";
@@ -148,6 +149,9 @@ export function TestsFlakyView({ project, projectId, search, onSearch, testHref,
         )
       ) : (
         <FlakyTable
+          project={project}
+          projectId={projectId}
+          defaultBranch={record?.branch || undefined}
           rows={rows}
           testHref={testHref}
           now={at}
@@ -195,6 +199,9 @@ type Row = { flake: TestFlake };
 const ACTIONABLE = new Set<TestFlake["state"]>(["suspected", "flaky", "quarantined"]);
 
 function FlakyTable({
+  project,
+  projectId,
+  defaultBranch,
   rows,
   testHref,
   now,
@@ -202,6 +209,9 @@ function FlakyTable({
   loadingMore,
   onLoadMore,
 }: {
+  project: string;
+  projectId?: string | null;
+  defaultBranch?: string;
   rows: TestFlake[];
   testHref: (testId: string) => string;
   now: number;
@@ -296,7 +306,7 @@ function FlakyTable({
         getRowHref={({ flake }) => testHref(flake.test.id)}
         getRowLabel={({ flake }) => `${flake.test.name}: ${FLAKE_STATE[flake.state].label.toLowerCase()}, flake rate ${flakeRateWords(flake)}`}
         getRowProps={({ flake }) => ({ className: "align-top", "data-testid": `tests-flake-row-${flake.test.name}`, "data-state": flake.state })}
-        getRowDetail={({ flake }) => (ACTIONABLE.has(flake.state) ? <FlakeActions flake={flake} /> : undefined)}
+        getRowDetail={({ flake }) => (ACTIONABLE.has(flake.state) ? <FlakeActions flake={flake} project={project} projectId={projectId} defaultBranch={defaultBranch} /> : undefined)}
       />
       {hasMore && (
         <div className="border-t border-border-subtle px-4 py-2">
@@ -311,10 +321,22 @@ function FlakyTable({
 
 /**
  * What to do about a test: the command that quarantines it (when it has no
- * entry yet), and the agent that fixes it. The agent is R1's (not wired
- * yet): its button is here, disabled, so the slot and its reason are seen.
+ * entry yet), and the agent that fixes it (FixFlakyTestButton: disabled, with
+ * its reason, when no agent can start here).
  */
-export function FlakeActions({ flake, testId }: { flake: TestFlake; testId?: string }) {
+export function FlakeActions({
+  flake,
+  project,
+  projectId,
+  defaultBranch,
+  testId,
+}: {
+  flake: TestFlake;
+  project: string;
+  projectId?: string | null;
+  defaultBranch?: string;
+  testId?: string;
+}) {
   const id = testId ?? `tests-flake-actions-${flake.test.name}`;
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid={id}>
@@ -323,31 +345,8 @@ export function FlakeActions({ flake, testId }: { flake: TestFlake; testId?: str
           <CommandLine command={quarantineCommand(flake)} />
         </div>
       )}
-      <FixWithAgentSlot />
+      <FixFlakyTestButton project={project} projectId={projectId} flake={flake} defaultBranch={defaultBranch} />
     </div>
-  );
-}
-
-/** The agent action's slot: shown, disabled, with its reason, until it is wired. */
-export function FixWithAgentSlot() {
-  const reason = useId();
-  return (
-    <span className="inline-flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        disabled
-        leftIcon={<Bot className="h-3.5 w-3.5" />}
-        title="An agent that reproduces, fixes or deletes this test, and opens the PR: coming soon"
-        aria-describedby={reason}
-        data-testid="tests-fix-with-agent"
-      >
-        Fix this flaky test
-      </Button>
-      <span id={reason} className="text-meta text-ink-muted">
-        Coming soon
-      </span>
-    </span>
   );
 }
 
