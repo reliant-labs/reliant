@@ -27,7 +27,9 @@ import { surfaceForPath } from "./surface";
 /**
  * Route prefixes that never render an editor and are commonly someone's first
  * (or only) page load. Matched as full segments so `/upgraded` does not match
- * `/upgrade`.
+ * `/upgrade`. None is org-scoped, so an org page (`/o/<org>/…`, control-plane
+ * docs/design/unified-shell-and-projects.md §3) never matches one and
+ * preloads like the app page it is: nothing to strip.
  */
 const EDITOR_FREE_PREFIXES = [
   "/auth",

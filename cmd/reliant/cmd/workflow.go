@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,12 +22,14 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/repo"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/lint"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
@@ -83,6 +86,7 @@ func newWorkflowValidateCmd() *cobra.Command {
 		triggerSender   string
 		activationParam string
 		ownerGitHubID   string
+		onlyTrigger     string
 		base            string
 	)
 
@@ -96,10 +100,14 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
-With --trigger-payload, each declared trigger is also run against that sample
-event: its filter, its inputs mapping and its prompt are evaluated the way a
-real firing would, and anything that fails (or that the integration's declared
-payload rules out) is reported as an error. For an integration trigger the
+With --trigger-payload, each declared trigger the sample can belong to is also
+run against that sample event: its filter, its inputs mapping and its prompt
+are evaluated the way a real firing would, and anything that fails (or that the
+integration's declared payload rules out) is reported as an error. Each
+trigger's outcome is printed (matched, with the inputs it maps; filtered out;
+failed; or not run). An integration trigger that does not listen for the
+sample's "event" (or "integration") is not run against it; --trigger <name>
+runs the sample against that one trigger only. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
 --activation-params supplies trigger.activation.params, as an activation of the workflow
@@ -118,10 +126,14 @@ broke in its owner's Inbox.
 Each project workflow is also linted (reliant workflow lint --rules lists the
 rules): a lint error fails validation, a lint warning is reported.
 
+Each workflow's "No machine" line says whether it can run with No machine, by
+the rule the server applies when you start it in a chat with no machine or
+enable a trigger with none (--json: no_machine).
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender, activationParam, ownerGitHubID)
+			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender, activationParam, ownerGitHubID, onlyTrigger)
 			if err != nil {
 				return err
 			}
@@ -132,6 +144,7 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
 	cmd.Flags().StringVar(&activationParam, "activation-params", "", "Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload")
 	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "Sample trigger.activation.owner.github_id (a string), used with --trigger-payload")
+	cmd.Flags().StringVar(&onlyTrigger, "trigger", "", "Run --trigger-payload against this declared trigger only")
 	cmd.Flags().StringVar(&base, "base", "", "Git revision the workflows are changing from: also report trigger changes that would break existing activations")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
@@ -387,17 +400,24 @@ format, exit codes, and --hook).`,
 				return fmt.Errorf("a project is required — pass --project-id or --project-path")
 			}
 
+			workflowRef := normalizeRunWorkflowRef(workflowName)
+
 			// Build input map: --input flags then --input-file overlay.
+			// Each value is read as the type the workflow declares for it,
+			// as `workflow validate --input` reads it: asap=true is a boolean
+			// for a boolean input (the server never parses text into one),
+			// and test_command=false stays text for a string input.
+			var declared map[string]*reliantv1.Input
+			if len(inputs) > 0 {
+				declared = runInputDeclarations(cmd.Context(), reliantv1connect.NewWorkflowServiceClient(conn.httpClient(), conn.ServerURL), resolvedProjectID, workflowRef)
+			}
 			inputMap := make(map[string]interface{})
 			for _, kv := range inputs {
 				parts := strings.SplitN(kv, "=", 2)
 				if len(parts) != 2 {
 					return fmt.Errorf("invalid input format %q — expected key=value", kv)
 				}
-				// Read as `workflow validate --input` reads it: asap=true is
-				// a boolean and every=10 a number, which a boolean or number
-				// input requires (the server never parses text into one).
-				inputMap[parts[0]] = parseCLIInputValue(parts[1])
+				inputMap[parts[0]] = parseTypedCLIInputValue(parts[1], declared[parts[0]])
 			}
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
@@ -418,7 +438,6 @@ format, exit codes, and --hook).`,
 				return err
 			}
 
-			workflowRef := normalizeRunWorkflowRef(workflowName)
 			runMessage, messageGiven := resolveRunMessage(workflowName, message, inputMap)
 			createReq := &reliantv1.StartChatRequest{
 				ProjectId: resolvedProjectID,
@@ -492,7 +511,7 @@ format, exit codes, and --hook).`,
 		},
 	}
 
-	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable)")
+	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable; read as the type the workflow declares for it)")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default)")
 	cmd.Flags().StringVar(&title, "title", "", "Title for the run (default: \"<workflow> · <first line of the message>\")")
@@ -578,6 +597,11 @@ type validateResult struct {
 	// existing activations cannot follow (activationBreaks). Warnings, kept
 	// apart so they are always printed.
 	ActivationBreaks []string `json:"activation_breaks,omitempty"`
+	// NoMachine says whether the workflow can run with No machine.
+	NoMachine *noMachineReport `json:"no_machine,omitempty"`
+	// TriggerRuns is what each declared trigger did with --trigger-payload's
+	// sample event (matched, filtered out, failed, or skipped and why).
+	TriggerRuns []triggerDryRun `json:"trigger_runs,omitempty"`
 	// Lint is what `reliant workflow lint` finds in a project workflow; an
 	// error-severity finding makes the result invalid.
 	Lint  []lint.Finding `json:"lint,omitempty"`
@@ -944,8 +968,46 @@ func validateWorkflowYAML(data []byte, file string, addressProblem error, layout
 		}
 	}
 
+	result.NoMachine = noMachineOf(wf, projectWorkflowLoader(layout.Workflows))
+
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+// noMachineReport is whether a workflow can run with No machine, by the rules
+// the server applies: a chat with no machine refuses a workflow with a node
+// that needs one (Hard), and a trigger with no machine also refuses one whose
+// agents' tool lists reach a machine tool (Tools), since an unattended run
+// that quietly lost tools has nobody watching. A trigger's params can change
+// a tools-typed input; this reads the inputs' defaults.
+type noMachineReport struct {
+	// Chat is true when a chat with No machine can start it.
+	Chat bool `json:"chat"`
+	// Trigger is true when a trigger with No machine can run it.
+	Trigger bool `json:"trigger"`
+	// Needs are the reasons a machine is needed, hard ones first.
+	Needs []string `json:"needs,omitempty"`
+}
+
+func noMachineOf(wf *reliantv1.Workflow, loader runtime.WorkflowLoader) *noMachineReport {
+	req := runtime.MachineRequirements(wf, nil, runtime.WorkflowRefLoader(loader), tools.PreflightConfig())
+	return &noMachineReport{
+		Chat:    len(req.Hard) == 0,
+		Trigger: req.None(),
+		Needs:   append(append([]string(nil), req.Hard...), req.Tools...),
+	}
+}
+
+// String is the report as one line.
+func (r *noMachineReport) String() string {
+	switch {
+	case r.Trigger:
+		return "runs with no machine, in a chat or from a trigger"
+	case r.Chat:
+		return "a chat with no machine runs it without the agent tools that need one; a trigger needs a machine: " + strings.Join(r.Needs, "; ")
+	default:
+		return "needs a machine: " + strings.Join(r.Needs, "; ")
+	}
 }
 
 func printCompactValidateResult(r validateResult) {
@@ -955,8 +1017,8 @@ func printCompactValidateResult(r validateResult) {
 	}
 
 	warningIndicator := ""
-	if len(r.Warnings) > 0 {
-		warningIndicator = fmt.Sprintf(" (%d warnings)", len(r.Warnings))
+	if n := len(r.Warnings) + lintWarnings(r.Lint); n > 0 {
+		warningIndicator = fmt.Sprintf(" (%d warnings)", n)
 	}
 
 	if r.Name == "" {
@@ -970,10 +1032,29 @@ func printCompactValidateResult(r validateResult) {
 			fmt.Printf("      Error: %s\n", e)
 		}
 	}
+	for _, w := range r.Warnings {
+		fmt.Printf("      Warning: %s\n", w)
+	}
 	for _, b := range r.ActivationBreaks {
 		fmt.Printf("      Breaks activations: %s\n", b)
 	}
+	if r.NoMachine != nil {
+		fmt.Printf("      No machine: %s\n", r.NoMachine)
+	}
+	printTriggerRuns("      ", r.TriggerRuns)
 	printLintFindings("      ", r.Lint)
+}
+
+// lintWarnings counts the findings that warn rather than fail, which the
+// warning counts include beside the validator's own warnings.
+func lintWarnings(findings []lint.Finding) int {
+	n := 0
+	for _, f := range findings {
+		if f.Severity != lint.SeverityError {
+			n++
+		}
+	}
+	return n
 }
 
 func printVerboseValidateResult(r validateResult) {
@@ -1005,6 +1086,13 @@ func printVerboseValidateResult(r validateResult) {
 		for _, b := range r.ActivationBreaks {
 			fmt.Printf("  - %s\n", b)
 		}
+	}
+	if r.NoMachine != nil {
+		fmt.Printf("No machine: %s\n", r.NoMachine)
+	}
+	if len(r.TriggerRuns) > 0 {
+		fmt.Println("Triggers against the sample:")
+		printTriggerRuns("  ", r.TriggerRuns)
 	}
 	if len(r.Lint) > 0 {
 		fmt.Println("Lint:")
@@ -1074,7 +1162,7 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 
 	// Optional input binding validation.
 	if len(inputs) > 0 || inputFile != "" {
-		inputMap, ierr := buildCLIInputMap(inputs, inputFile)
+		inputMap, ierr := buildCLIInputMap(inputs, inputFile, wf.GetInputs())
 		if ierr != nil {
 			return ierr
 		}
@@ -1154,9 +1242,10 @@ func buildCLIPresetLoader(presetDir string) validation.PresetLoader {
 	}
 }
 
-// buildCLIInputMap merges --input key=value pairs and --input-file JSON into a
+// buildCLIInputMap merges --input key=value pairs (each read as the type
+// declared names for it) and --input-file JSON into a
 // single map, parsing values that look like JSON literals.
-func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}, error) {
+func buildCLIInputMap(inputs []string, inputFile string, declared map[string]*reliantv1.Input) (map[string]interface{}, error) {
 	inputMap := make(map[string]interface{})
 
 	if inputFile != "" {
@@ -1174,10 +1263,68 @@ func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid input format %q \u2014 expected key=value", kv)
 		}
-		inputMap[parts[0]] = parseCLIInputValue(parts[1])
+		inputMap[parts[0]] = parseTypedCLIInputValue(parts[1], declared[parts[0]])
 	}
 
 	return inputMap, nil
+}
+
+// runInputDeclarations is the inputs the workflow `workflow run` starts
+// declares, so its --input values are read as those types. Best effort: when
+// the server cannot say (an older server, a workflow it cannot read), a
+// builtin is read from this binary, and anything else gets nil, which reads
+// each value on its own (parseCLIInputValue) as before.
+func runInputDeclarations(ctx context.Context, client reliantv1connect.WorkflowServiceClient, projectID, ref string) map[string]*reliantv1.Input {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	resp, err := client.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{ProjectId: projectID, Name: ref}))
+	if err == nil && resp.Msg.GetWorkflow() != nil {
+		return resp.Msg.GetWorkflow().GetInputs()
+	}
+	if name, ok := strings.CutPrefix(ref, "builtin://"); ok {
+		if data, rerr := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); rerr == nil {
+			if wf, perr := wfyaml.ParseWorkflow(data); perr == nil {
+				return wf.GetInputs()
+			}
+		}
+	}
+	return nil
+}
+
+// parseTypedCLIInputValue reads a --input value as the type the workflow
+// declares for that input. Text inputs keep the text as typed (false, 10 and
+// null are text there, and a quoted "0123" is still unquoted); a boolean,
+// integer or number input reads the value as one. Any other type, an input the
+// workflow does not declare, or a value that does not spell its type falls
+// back to parseCLIInputValue, so the server's type check names the mismatch.
+func parseTypedCLIInputValue(raw string, input *reliantv1.Input) interface{} {
+	if input == nil || model.IsIntegrationInput(input) {
+		return parseCLIInputValue(raw)
+	}
+	trimmed := strings.TrimSpace(raw)
+	switch model.GetInputType(input) {
+	case "string", "message", "enum":
+		if input.GetEnumInput().GetMulti() {
+			break
+		}
+		if s, ok := parseCLIInputValue(raw).(string); ok {
+			return s
+		}
+		return raw
+	case "boolean":
+		if b, err := strconv.ParseBool(trimmed); err == nil && (strings.EqualFold(trimmed, "true") || strings.EqualFold(trimmed, "false")) {
+			return b
+		}
+	case "integer":
+		if i, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+			return i
+		}
+	case "number":
+		if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			return f
+		}
+	}
+	return parseCLIInputValue(raw)
 }
 
 // parseCLIInputValue reads a --input value: a JSON literal (true, 10, 0.5,
@@ -1223,7 +1370,7 @@ func printValidateSummary(results []validateResult) {
 		} else {
 			invalid++
 		}
-		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks)
+		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks) + lintWarnings(r.Lint)
 		breaks += len(r.ActivationBreaks)
 	}
 
@@ -1280,15 +1427,17 @@ func newWorkflowScenarioRunCmd() *cobra.Command {
 		Long: `Runs scenario tests against workflow definitions on the real workflow runtime
 (DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
 ` + scenarioLayoutHelp + `
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed <workflow>/<scenario> label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.`,
@@ -1303,7 +1452,7 @@ Exit code 0 if all scenarios pass, 1 if any fail.`,
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop on first scenario failure")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (for CI)")
 	cmd.Flags().BoolVar(&includeBuiltins, "include-builtins", false, "Also run builtin workflow scenarios")
-	cmd.Flags().StringVar(&filterScenario, "filter", "", "Only run scenarios whose name contains this string")
+	cmd.Flags().StringVar(&filterScenario, "filter", "", "Only run scenarios whose name, or <workflow>/<scenario> label, contains this string")
 
 	return cmd
 }
@@ -1373,6 +1522,10 @@ type scenarioResultSummary struct {
 	DurationMs int64    `json:"duration_ms"`
 	Mismatches []string `json:"mismatches,omitempty"`
 	Error      string   `json:"error,omitempty"`
+	// Warnings are the ways the run could have passed without testing what
+	// its author meant (a mock key no output has, a ref node nothing mocked,
+	// `outcome: completed` matching a failed run). They never change Status.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type scenarioListEntry struct {
@@ -1470,6 +1623,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				Name:       scenario.Name,
 				Status:     string(result.Status),
 				DurationMs: duration,
+				Warnings:   result.Warnings,
 			}
 
 			if result.Status != wfscenario.StatusPassed {
@@ -1510,9 +1664,11 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 	return nil
 }
 
-// filterScenarios keeps the scenarios whose name contains filter, and the
-// workflows left with any. It runs before anything is counted or run, so the
-// "Running N scenario(s)" line and the run agree.
+// filterScenarios keeps the scenarios whose name, or whose
+// `<workflow>/<scenario>` label (the one the run prints), contains filter, and
+// the workflows left with any — so a workflow's name selects all of its
+// scenarios. It runs before anything is counted or run, so the "Running N
+// scenario(s)" line and the run agree.
 func filterScenarios(workflows []workflowWithScenarios, filter string) []workflowWithScenarios {
 	if filter == "" {
 		return workflows
@@ -1521,7 +1677,7 @@ func filterScenarios(workflows []workflowWithScenarios, filter string) []workflo
 	for _, wf := range workflows {
 		var matching []*wfscenario.Scenario
 		for _, s := range wf.Scenarios {
-			if strings.Contains(s.Name, filter) {
+			if strings.Contains(wf.WorkflowName+"/"+s.Name, filter) {
 				matching = append(matching, s)
 			}
 		}
@@ -1583,6 +1739,9 @@ func runWorkflowScenarioList(_ *cobra.Command, args []string, dir string, jsonOu
 // adds the builtin workflows' scenarios, laid out the same way and embedded in
 // the binary (workflowref.BuiltinLayout).
 func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins bool) ([]workflowWithScenarios, error) {
+	if len(args) == 1 && strings.HasPrefix(strings.TrimSpace(args[0]), workflowref.BuiltinScheme) {
+		return builtinWorkflowScenarios(args[0])
+	}
 	workflowsDir, onlyFile := dir, ""
 	if len(args) == 1 {
 		path := args[0]
@@ -1625,6 +1784,41 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 	}
 
 	return results, nil
+}
+
+// builtinWorkflowScenarios is the scenarios of the one builtin a
+// builtin://<name> ref names, as `scenario run builtin://autopilot-oncall`
+// asks: the builtin's own scenarios and no project's.
+func builtinWorkflowScenarios(raw string) ([]workflowWithScenarios, error) {
+	ref, err := workflowref.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	layout, err := workflowref.BuiltinLayout()
+	if err != nil {
+		return nil, fmt.Errorf("reading builtin workflows: %w", err)
+	}
+	known := false
+	for _, e := range layout.Workflows.Entries() {
+		if e.Stem() == ref.Name || e.Name == ref.Name {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, fmt.Errorf("%s: no builtin workflow has that name (reliant workflow list --builtins-only lists them)", ref.Raw)
+	}
+	all, err := layoutScenarios(layout, "builtin", "", "")
+	if err != nil {
+		return nil, err
+	}
+	var kept []workflowWithScenarios
+	for _, wf := range all {
+		if strings.TrimSuffix(path.Base(wf.WorkflowFile), path.Ext(wf.WorkflowFile)) == ref.Name || wf.WorkflowName == ref.Name {
+			kept = append(kept, wf)
+		}
+	}
+	return kept, nil
 }
 
 // layoutScenarios pairs each workflow of a layout with its scenarios — a
@@ -1744,12 +1938,18 @@ func printScenarioResult(s scenarioResultSummary, workflowName string, verbose b
 			}
 		}
 	}
+	// Warnings print whatever the status: each is a way the run could have
+	// passed for a reason its author did not mean.
+	for _, w := range s.Warnings {
+		fmt.Printf("      Warning: %s\n", w)
+	}
 }
 
 func printScenarioSummary(results []scenarioRunResult) {
-	passed, failed, errored := 0, 0, 0
+	passed, failed, errored, warned := 0, 0, 0, 0
 	for _, wf := range results {
 		for _, s := range wf.Scenarios {
+			warned += len(s.Warnings)
 			switch wfscenario.ScenarioStatus(s.Status) {
 			case wfscenario.StatusPassed:
 				passed++
@@ -1770,6 +1970,9 @@ func printScenarioSummary(results []scenarioRunResult) {
 	fmt.Printf("  Passed:  %d\n", passed)
 	fmt.Printf("  Failed:  %d\n", failed)
 	fmt.Printf("  Errors:  %d\n", errored)
+	if warned > 0 {
+		fmt.Printf("  Warnings: %d (printed under their scenarios)\n", warned)
+	}
 	fmt.Println("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550")
 
 	if failed+errored > 0 {

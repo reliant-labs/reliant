@@ -43,6 +43,17 @@ describe("getParentRouteNavigateOptions", () => {
     expect(getParentRouteNavigateOptions("/workflow/new")).toEqual({ to: "/workflows/library" });
   });
 
+  // The name moves into the detail page's builder as the URL carried it
+  // (encodedSegment): never decoded and re-encoded, never encoded twice.
+  it.each([
+    ["/workflow/a%2Fb", "/workflows/library/a%2Fb"],
+    ["/workflow/a%252Fb", "/workflows/library/a%252Fb"],
+    ["/workflow/builtin%3A%2F%2Fget-it-right", "/workflows/library/builtin%3A%2F%2Fget-it-right"],
+    ["/workflow/builtin%3A%2F%2Fget-it-right/edit", "/workflows/library/builtin%3A%2F%2Fget-it-right"],
+  ])("steps from %s to %s, its bytes kept", (from, to) => {
+    expect(getParentRouteNavigateOptions(from)).toEqual({ to });
+  });
+
   it("handles URL-encoded workflow names (e.g. builtin://...)", () => {
     expect(
       getParentRouteNavigateOptions("/workflow/builtin%3A%2F%2Fchat"),
