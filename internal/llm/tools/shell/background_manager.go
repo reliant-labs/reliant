@@ -514,14 +514,12 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 
 	// Start the command. The child holds its own copies of the sandbox's
 	// descriptors once Start returns.
-	err := cmd.Start()
+	err := process.tree.Start(cmdCtx, cmd)
 	credsandbox.Release(cmd)
 	if err != nil {
-		process.tree.Started(0)
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
-	process.tree.Started(cmd.Process.Pid)
 
 	// Steer the kernel OOM killer toward the workload (and its descendants,
 	// which inherit the score) rather than the daemon. No-op outside Linux;

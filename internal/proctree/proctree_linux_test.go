@@ -4,7 +4,10 @@
 package proctree
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -262,6 +265,126 @@ func TestCommandsPreparedTogetherBothStart(t *testing.T) {
 		c.tree.Started(c.cmd.Process.Pid)
 		_ = c.cmd.Wait()
 		c.tree.Release()
+	}
+}
+
+// A command whose cgroup was removed after Prepare made it starts anyway, in
+// a new cgroup, instead of failing "fork/exec …: no such file or directory"
+// (reliant #2826). A missing program still fails, with its own error, whether
+// or not the cgroup is there. Runs only where the daemon's cgroup is
+// delegated to this user.
+func TestStartRecreatesACgroupRemovedBeforeItsCommandStarted(t *testing.T) {
+	testkit.Slow(t, "starts real processes in a cgroup")
+	l := cgroupLimiter(t, 64, 1000)
+
+	cmd := exec.Command("cat", "/proc/self/cgroup")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	tree := l.Prepare(cmd, Owner{})
+	gone := tree.Cgroup()
+	if gone == "" {
+		t.Fatal("a prepared command has no cgroup")
+	}
+	// What a sweep that took a held cgroup did.
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.Start(context.Background(), cmd); err != nil {
+		t.Fatalf("starting a command whose cgroup %s was removed: %v", gone, err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	tree.Release()
+	if now := tree.Cgroup(); now == "" || now == gone || !strings.Contains(out.String(), strings.TrimPrefix(now, cgroupFS)+"\n") {
+		t.Fatalf("the command ran in cgroup %q (/proc/self/cgroup %q), want a new one in place of %s", now, out.String(), gone)
+	}
+
+	for _, remove := range []bool{false, true} {
+		missing := exec.Command(filepath.Join(t.TempDir(), "no-such-program"))
+		tree := l.Prepare(missing, Owner{})
+		if remove {
+			if err := os.Remove(tree.Cgroup()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err := tree.Start(context.Background(), missing)
+		if !errors.Is(err, syscall.ENOENT) || !strings.Contains(err.Error(), "no-such-program") {
+			t.Fatalf("starting a missing program (cgroup removed: %v): %v, want its ENOENT", remove, err)
+		}
+		if _, err := os.Stat(tree.Cgroup()); tree.Cgroup() != "" && !os.IsNotExist(err) {
+			t.Fatalf("a command that did not start left its cgroup %s (%v)", tree.Cgroup(), err)
+		}
+	}
+}
+
+// Only a start refused because the tree's cgroup is gone is retried: a
+// missing program or working directory is ENOENT too, with the cgroup still
+// in place.
+func TestCgroupVanishedOnlyWhenTheCgroupIsGone(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, cmdPrefix+"1-1")
+	if err := os.Mkdir(present, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(dir, cmdPrefix+"1-2")
+	startErr := func(errno syscall.Errno) error {
+		return &os.PathError{Op: "fork/exec", Path: "/usr/bin/bash", Err: errno}
+	}
+	for _, c := range []struct {
+		name string
+		tree *Tree
+		err  error
+		want bool
+	}{
+		{"removed cgroup", &Tree{dir: gone}, startErr(syscall.ENOENT), true},
+		{"dying cgroup", &Tree{dir: gone}, startErr(syscall.ENODEV), true},
+		{"missing program or working directory", &Tree{dir: present}, startErr(syscall.ENOENT), false},
+		{"another error", &Tree{dir: gone}, startErr(syscall.EACCES), false},
+		{"no cgroup", &Tree{}, startErr(syscall.ENOENT), false},
+		{"no tree", nil, startErr(syscall.ENOENT), false},
+	} {
+		if got := c.tree.cgroupVanished(c.err); got != c.want {
+			t.Errorf("%s: cgroupVanished = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// renew makes a Cmd whose Start failed startable again, with every field the
+// caller set and its context: cancelling the context kills what the renewed
+// Cmd started, through the caller's pointer.
+func TestRenewMakesAFailedCmdStartable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", `echo "$PROCTREE_RENEW" "$(pwd)"; exec sleep 300`)
+	cmd.Env = []string{"PROCTREE_RENEW=kept"}
+	cmd.Dir = filepath.Join(t.TempDir(), "missing")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	cmd.Stdout = w
+	if err := cmd.Start(); err == nil {
+		t.Fatal("a command in a missing directory started")
+	}
+	if err := cmd.Start(); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("os/exec took a second Start of one Cmd (%v): renew is not needed", err)
+	}
+	cmd.Dir = t.TempDir()
+	renew(ctx, cmd)
+	err = cmd.Start()
+	_ = w.Close()
+	if err != nil {
+		t.Fatalf("starting the renewed command: %v", err)
+	}
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if want := "kept " + cmd.Dir + "\n"; line != want {
+		t.Fatalf("the renewed command printed %q (%v), want %q", line, err, want)
+	}
+	cancel()
+	if err := cmd.Wait(); err == nil {
+		t.Fatal("cancelling the context did not kill the renewed command")
 	}
 }
 

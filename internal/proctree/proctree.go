@@ -67,6 +67,7 @@
 package proctree
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -359,8 +360,8 @@ type Tree struct {
 
 // Prepare readies cmd, which must not have been started, to run as a bounded
 // tree: its own process group always, and its own cgroup when the limiter has
-// one. Call Started once cmd.Start returns, and Release once the command is
-// done with. A failure to set up the cgroup leaves the command unbounded
+// one. Start it with the tree's Start (or call Started once cmd.Start
+// returns), and Release once the command is done with. A failure to set up the cgroup leaves the command unbounded
 // rather than failing it.
 func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	t := &Tree{l: l, owner: owner, fd: -1}
@@ -374,6 +375,43 @@ func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	}
 	t.prepareCgroup(cmd, cgroupSeq.Add(1))
 	return t
+}
+
+// Start starts cmd, which Prepare readied as this tree, and records it
+// (Started). ctx is the context cmd was made with (exec.CommandContext);
+// context.Background() for one made with exec.Command. A start the kernel refused because the tree's cgroup was
+// removed after Prepare made it — "fork/exec <path>: no such file or
+// directory", the clone into a removed cgroup (reliant #2826) — is retried
+// once, in a new cgroup. A missing program or working directory still fails:
+// the retry is made only when the cgroup itself is gone, and only once.
+func (t *Tree) Start(ctx context.Context, cmd *exec.Cmd) error {
+	err := cmd.Start()
+	if err != nil && t.cgroupVanished(err) {
+		t.recreateCgroup(cmd, err)
+		renew(ctx, cmd)
+		err = cmd.Start()
+	}
+	pid := 0
+	if err == nil {
+		pid = cmd.Process.Pid
+	}
+	t.Started(pid)
+	return err
+}
+
+// renew makes cmd, whose Start failed before it made a process, startable
+// again: os/exec refuses a second Start of one Cmd. The new Cmd is made with
+// ctx as cmd was and takes every field a caller sets, cmd's Cancel (nil for
+// exec.Command) included; it is written over cmd, so the caller's pointer and
+// anything holding it (CommandContext's default Cancel) see the started
+// command.
+func renew(ctx context.Context, cmd *exec.Cmd) {
+	fresh := exec.CommandContext(ctx, cmd.Path)
+	fresh.Args, fresh.Env, fresh.Dir = cmd.Args, cmd.Env, cmd.Dir
+	fresh.Stdin, fresh.Stdout, fresh.Stderr = cmd.Stdin, cmd.Stdout, cmd.Stderr
+	fresh.ExtraFiles, fresh.SysProcAttr = cmd.ExtraFiles, cmd.SysProcAttr
+	fresh.Cancel, fresh.WaitDelay = cmd.Cancel, cmd.WaitDelay
+	*cmd = *fresh
 }
 
 // Started records the started command (cmd.Process.Pid) and applies what can
