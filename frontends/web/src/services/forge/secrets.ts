@@ -39,7 +39,7 @@ import type { Certainty } from "./topology";
 
 // ── Forge's report document ─────────────────────────────────────────────────
 //
-// Typed against `forge secret list --json`. Like every forge report contract it
+// Typed against `forge env secret list --json`. Like every forge report contract it
 // is ADDITIVE, so everything forge marks omitempty is optional here and nothing
 // is assumed non-null: a report from a newer or older forge must render rather
 // than throw.
@@ -280,7 +280,7 @@ export function presenceExplanation(presence: SecretPresence): string {
     case "present":
       return "The store holds a value under this key. Reliant never reads it — only that it is there.";
     case "missing":
-      return "This secret is declared by a workload and the store has no value for it. forge secret ensure exits non-zero on this, so the environment cannot start.";
+      return "This secret is declared by a workload and the store has no value for it. forge env secret ensure exits non-zero on this, so the environment cannot start.";
     case "not-held":
       return "An external secret manager owns this value. Forge does not hold it and did not check, so whether it is set is unknown — not missing.";
     default:
@@ -334,7 +334,7 @@ export function presenceTally(
 }
 
 /**
- * blocksEnvUp answers the question the screen exists for: would `forge secret
+ * blocksEnvUp answers the question the screen exists for: would `forge env secret
  * ensure` fail, and therefore would `forge env up` refuse to start this env?
  *
  * Only ever true under a `file` provider. `report.ok` is deliberately not used:

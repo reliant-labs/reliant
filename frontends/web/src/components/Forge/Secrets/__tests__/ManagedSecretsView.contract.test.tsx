@@ -111,7 +111,7 @@ describe("provider awareness", () => {
   });
 
   it("offers no create affordance for the local file provider", () => {
-    // The write path there is `forge secret set` against a file on the user's
+    // The write path there is `forge env secret set` against a file on the user's
     // own machine, which the browser cannot reach. A form would be a button
     // that lies.
     render(
@@ -120,7 +120,7 @@ describe("provider awareness", () => {
       />
     );
     expect(screen.queryByTestId("add-secret")).not.toBeInTheDocument();
-    expect(screen.getByTestId("secrets-empty").textContent).toMatch(/forge secret set/i);
+    expect(screen.getByTestId("secrets-empty").textContent).toMatch(/forge env secret set/i);
   });
 
   it("offers create on the managed store", () => {
@@ -248,7 +248,7 @@ describe("a store this console cannot read", () => {
     expect(within(row).queryByText("Not set")).toBeNull();
     expect(screen.getByTestId("managed-secrets").textContent).not.toMatch(/not set/);
     // The command is rendered as code, not as a sentence fragment.
-    expect(screen.getByTestId("managed-secrets").querySelector("code")?.textContent).toBe("forge secret set");
+    expect(screen.getByTestId("managed-secrets").querySelector("code")?.textContent).toBe("forge env secret set");
   });
 
   it("links to the tenant-facing secrets documentation", () => {

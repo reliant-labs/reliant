@@ -3,7 +3,7 @@ title: "Self-hosted delivery"
 description: "Deploy to a cluster you run, with no control plane: direct apply from your machine with applier = forge, or a Flux that forge installs in your cluster with applier = flux"
 ---
 
-An environment that declares no `forge.ControlPlane` is **self-hosted**: nothing of Reliant's sits between you and the cluster. This page covers the two ways forge delivers to such a cluster, how to pick between them, and what each costs you. If you are deploying to [Reliant hosting](/hosting/overview), or to a cluster you registered with `forge cluster connect`, delivery is handled for you and you can skip this page.
+An environment that declares no `forge.ControlPlane` is **self-hosted**: nothing of Reliant's sits between you and the cluster. This page covers the two ways forge delivers to such a cluster, how to pick between them, and what each costs you. If you are deploying to [Reliant hosting](/hosting/overview), or to a cluster you registered with `forge cloud cluster connect`, delivery is handled for you and you can skip this page.
 
 ## Direct apply
 
@@ -127,4 +127,4 @@ Stay on direct apply (`applier = "forge"`) when the cluster is yours alone, depl
 
 ## Related topics
 
-[Releases and promotion](/forge/deploy/releases-and-promotion) covers plans, approvals and the ledger that both modes share. [What gets deployed](/forge/deploy/what-gets-deployed) shows the objects that land on the cluster. Agents can run `forge skill load deploy/flux/self-hosted` and `deploy/flux` for the full reference, including the Flux hardening table.
+[Releases and promotion](/forge/deploy/releases-and-promotion) covers plans, approvals and the ledger that both modes share. [What gets deployed](/forge/deploy/what-gets-deployed) shows the objects that land on the cluster. Agents can run `forge agent skill load deploy/flux/self-hosted` and `deploy/flux` for the full reference, including the Flux hardening table.

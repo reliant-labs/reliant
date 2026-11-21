@@ -32,29 +32,10 @@ func ProviderAccountAAD(accountID, column string) []byte {
 	return []byte(providerAccountsAADTable + "\x00" + accountID + "\x00" + column)
 }
 
-// LegacyAPIKeyAAD and LegacyOAuthTokenAAD are the AADs the legacy api_keys and *_auth_tokens
-// tables sealed under. They bind the table name, so the one-time copy must open and re-seal.
-func LegacyAPIKeyAAD(userID, provider string) []byte { return apiKeyAAD(userID, provider) }
-
-func LegacyOAuthTokenAAD(table, userID, column string) []byte {
-	return oauthTokenAAD(table, userID, column)
-}
-
-// Legacy sources: the tables the one-time copy reads, recorded in provider_accounts.legacy_source
-// on the accounts it creates so a re-run can tell an account it already made from a native one.
-const (
-	LegacySourceClaude      = "claude_auth_tokens"
-	LegacySourceCodex       = "codex_auth_tokens"
-	LegacySourceCopilot     = "copilot_auth_tokens"
-	LegacySourceAntigravity = "antigravity_auth_tokens"
-	LegacySourceAPIKeys     = "api_keys"
-)
-
 var errAccountVaultDisabled = errors.New("provider accounts require the credential vault; none is configured")
 
 // accountStore is the Postgres implementation of the Repo's provider-account methods. Its statements are
-// internal/store's (provider_account*_repo_ext.go, thread_provider_account_repo_ext.go,
-// legacy_credential_copy_repo_ext.go); what stays here is everything that is not SQL: sealing
+// internal/store's (provider_account*_repo_ext.go, thread_provider_account_repo_ext.go); what stays here is everything that is not SQL: sealing
 // and opening the secret columns, the advisory-lock-then-read-then-write transactions, the
 // identity merge, and the compare-and-swap loop.
 type accountStore struct {
@@ -215,14 +196,6 @@ func (s *accountStore) GetOwnedProviderAccountWithSecrets(ctx context.Context, o
 	return &core.AccountWithSecrets{ProviderAccount: r.ProviderAccount, Secrets: sec}, nil
 }
 
-// importMeta marks a write as the one-time copy of a legacy row: it stamps the legacy timestamps
-// and source.
-type importMeta struct {
-	source    string
-	createdAt time.Time
-	updatedAt time.Time
-}
-
 func (s *accountStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
 	if err := validateUpsert(u); err != nil {
 		return core.ProviderAccount{}, false, err
@@ -309,59 +282,15 @@ func (s *accountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct
 		return core.ProviderAccount{}, false, err
 	}
 	if existing == nil {
-		acct, err := s.insertTx(ctx, u, nil)
+		acct, err := s.insertTx(ctx, u)
 		return acct, true, err
 	}
-	acct, err = s.updateTx(ctx, *existing, u, u.IdentityKey, nil)
+	acct, err = s.updateTx(ctx, *existing, u, u.IdentityKey)
 	return acct, false, err
 }
 
-// importTx copies one legacy row. It never merges and never deletes: an account that already
-// holds the row's identity is left alone, and a row whose provider already has an account this
-// copy made from the same table (an earlier run, or an earlier release's mirror, whose identity
-// a refresh has since rewritten) is that account, not a new one. Only such a mirror is ever
-// overwritten, and only by a strictly newer legacy write: an account the user connected through
-// the new code has no legacy_source and is untouchable. A row that cannot be matched becomes a
-// new account, because a duplicate is harmless (the next refresh merges it into the real
-// identity) and a missing one is a user signed out.
-func (s *accountStore) importTx(ctx context.Context, u core.AccountUpsert, imp importMeta) (created, applied bool, err error) {
-	if err := store.LockUserProviderAccounts(ctx, s.db, u.UserID, u.Provider); err != nil {
-		return false, false, err
-	}
-	existing, err := store.LockProviderAccountByIdentity(ctx, s.db, u.UserID, u.Provider, u.IdentityKey)
-	if err != nil {
-		return false, false, err
-	}
-	if existing == nil {
-		if existing, err = store.LockLegacyMirror(ctx, s.db, u.UserID, u.Provider, imp.source); err != nil {
-			return false, false, err
-		}
-	}
-	if existing == nil {
-		if _, err := s.insertTx(ctx, u, &imp); err != nil {
-			return false, false, err
-		}
-		return true, true, nil
-	}
-	src, err := store.ProviderAccountLegacySource(ctx, s.db, existing.ID)
-	if err != nil {
-		return false, false, err
-	}
-	if src == nil || !existing.UpdatedAt.Before(imp.updatedAt) {
-		return false, false, nil
-	}
-	identity := u.IdentityKey
-	if core.IsPlaceholderIdentityKey(identity) {
-		identity = existing.IdentityKey // a refresh already learned the real identity; the legacy row has not
-	}
-	if _, err := s.updateTx(ctx, *existing, u, identity, &imp); err != nil {
-		return false, false, err
-	}
-	return false, true, nil
-}
-
 // credential is u's write of identity, with its secrets sealed for account accountID.
-func (s *accountStore) credential(ctx context.Context, owner core.AccountOwner, accountID string, u core.AccountUpsert, identity string, imp *importMeta) (store.ProviderAccountCredential, error) {
+func (s *accountStore) credential(ctx context.Context, owner core.AccountOwner, accountID string, u core.AccountUpsert, identity string) (store.ProviderAccountCredential, error) {
 	secret, refresh, idToken, err := s.sealAll(ctx, owner, accountID, u.Secrets)
 	if err != nil {
 		return store.ProviderAccountCredential{}, err
@@ -372,16 +301,13 @@ func (s *accountStore) credential(ctx context.Context, owner core.AccountOwner, 
 		OrganizationName: u.OrganizationName, Plan: u.Plan, PlanRaw: u.PlanRaw, KeyHint: u.KeyHint, Scope: u.Scope,
 		Secret: secret, Refresh: refresh, IDToken: idToken, ExpiresAt: u.ExpiresAt, UpdatedAt: s.now(),
 	}
-	if imp != nil {
-		c.UpdatedAt, c.LegacySource = imp.updatedAt, imp.source
-	}
 	return c, nil
 }
 
-func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *importMeta) (core.ProviderAccount, error) {
+func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, error) {
 	id := uuid.New().String()
 	owner := u.AccountOwner()
-	c, err := s.credential(ctx, owner, id, u, u.IdentityKey, imp)
+	c, err := s.credential(ctx, owner, id, u, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
@@ -389,23 +315,19 @@ func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
-	createdAt := c.UpdatedAt
-	if imp != nil {
-		createdAt = imp.createdAt
-	}
 	own := store.ProviderAccountOwnership{
 		Owner: owner, OrgAccess: u.OrgAccess, CreatedByUserID: u.CreatedByUserID,
 		AttributedOrgID: u.AttributedOrgID, AttributionSource: u.AttributionSource,
 	}
-	return store.InsertProviderAccount(ctx, s.db, id, own, u.Provider, priority, c, createdAt)
+	return store.InsertProviderAccount(ctx, s.db, id, own, u.Provider, priority, c, c.UpdatedAt)
 }
 
 // updateTx rewrites an existing account in place with a fresh credential. Identity metadata that
 // the new write does not carry is kept; the refresh and id tokens likewise (a re-consent that
 // omits a refresh token must not erase the one we hold). Label, priority and pause are the
 // user's and are never touched here.
-func (s *accountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string, imp *importMeta) (core.ProviderAccount, error) {
-	c, err := s.credential(ctx, cur.Owner(), cur.ID, u, identity, imp)
+func (s *accountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string) (core.ProviderAccount, error) {
+	c, err := s.credential(ctx, cur.Owner(), cur.ID, u, identity)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
@@ -428,10 +350,10 @@ func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u
 		return core.ProviderAccount{}, err
 	}
 	if target == nil {
-		return s.updateTx(ctx, old, u, u.IdentityKey, nil)
+		return s.updateTx(ctx, old, u, u.IdentityKey)
 	}
 	if target.ID == old.ID {
-		return s.updateTx(ctx, old, u, u.IdentityKey, nil)
+		return s.updateTx(ctx, old, u, u.IdentityKey)
 	}
 	if core.IsPlaceholderIdentityKey(target.IdentityKey) {
 		return core.ProviderAccount{}, fmt.Errorf("refusing to merge into placeholder identity %q", target.IdentityKey)
@@ -457,7 +379,7 @@ func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u
 		return core.ProviderAccount{}, err
 	}
 	target.Priority, target.Label, target.PausedAt = priority, label, paused
-	acct, err := s.updateTx(ctx, *target, u, u.IdentityKey, nil)
+	acct, err := s.updateTx(ctx, *target, u, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
@@ -758,98 +680,4 @@ func (s *accountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []
 // opening (decrypting) any of them.
 func (s *accountStore) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return store.ListUserIDsWithProviderAccount(ctx, s.db, provider)
-}
-
-// LegacyImport is one credential read from a legacy table, ready to copy.
-type LegacyImport struct {
-	Upsert    core.AccountUpsert
-	Source    string // a LegacySource* constant
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// ImportResult counts what the one-time legacy copy did.
-type ImportResult struct{ Created, Updated, Unchanged, Failed int }
-
-// LegacyCopyDone reports whether the one-time copy has completed. A cheap read, so a boot that
-// has nothing to do opens no secret.
-func (s *accountStore) LegacyCopyDone(ctx context.Context) (bool, error) {
-	return store.LegacyCredentialCopyDone(ctx, s.db)
-}
-
-// ImportLegacy copies the legacy credentials into provider_accounts ONCE and records that it did.
-// It runs in one transaction under a global advisory lock, and re-checks the completion marker
-// under that lock, so boots racing each other (API server, worker, replicas) import exactly once:
-// the losers find the marker and return ran=false. The marker commits with the accounts, so a
-// crash leaves neither. A row that fails to write is rolled back to a savepoint, counted and
-// logged: one bad credential never blocks the rest or the boot, and the count is kept in the
-// marker so whoever drops the legacy tables can see whether anything was left behind.
-func (s *accountStore) ImportLegacy(ctx context.Context, imports []LegacyImport, skipped int) (res ImportResult, ran bool, err error) {
-	err = s.inTx(ctx, func(ctx context.Context) error {
-		if err := store.LockLegacyCredentialCopy(ctx, s.db); err != nil {
-			return err
-		}
-		done, err := store.LegacyCredentialCopyDone(ctx, s.db)
-		if err != nil {
-			return err
-		}
-		if done {
-			return nil
-		}
-		res = ImportResult{Failed: skipped}
-		for _, in := range imports {
-			if err := validateUpsert(in.Upsert); err != nil {
-				slog.WarnContext(ctx, "legacy credential skipped: invalid", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
-				res.Failed++
-				continue
-			}
-			var created, applied bool
-			rowErr, err := store.InLegacyImportSavepoint(ctx, s.db, func() error {
-				var err error
-				created, applied, err = s.importTx(ctx, in.Upsert, importMeta{source: in.Source, createdAt: in.CreatedAt, updatedAt: in.UpdatedAt})
-				return err
-			})
-			if err != nil {
-				return err
-			}
-			if rowErr != nil {
-				slog.WarnContext(ctx, "legacy credential skipped: write failed", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", rowErr)
-				res.Failed++
-				continue
-			}
-			switch {
-			case created:
-				res.Created++
-			case applied:
-				res.Updated++
-			default:
-				res.Unchanged++
-			}
-		}
-		if err := store.RecordLegacyCredentialCopy(ctx, s.db, s.now(), res.Created+res.Updated, res.Unchanged, res.Failed); err != nil {
-			return err
-		}
-		ran = true
-		return nil
-	})
-	if err != nil {
-		return ImportResult{}, false, err
-	}
-	return res, ran, nil
-}
-
-// OpenLegacy opens a value sealed by a legacy table under its old AAD.
-func (s *accountStore) OpenLegacy(ctx context.Context, userID string, aad, sealed []byte) (string, error) {
-	if s.sealer == nil {
-		return "", errAccountVaultDisabled
-	}
-	if len(sealed) == 0 {
-		return "", errors.New("legacy value has no sealed ciphertext")
-	}
-	pt, err := s.sealer.Open(ctx, vault.UserTenant(userID), sealed, aad)
-	if err != nil {
-		return "", err
-	}
-	defer clear(pt)
-	return string(pt), nil
 }

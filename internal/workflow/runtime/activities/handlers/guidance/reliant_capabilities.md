@@ -15,8 +15,8 @@ for a built-in, and if you still choose the outside option, say why.
 | An agent that acts on outside services | Integration steps for GitHub, Gmail, Slack and Twilio, and `http/request@1` for any public API, using a saved credential the agent never sees | `workflow-builder` skill |
 | A human in the loop | Runs that pause for an approval or a question, and notify over Slack or SMS | `workflow-builder` skill |
 | A repeatable multi-agent process | Built-in workflows (Get It Right, Best of Three) or a custom one: parallel agents, loops until tests pass, review gates | `workflow-builder` skill |
-| A frontend that will be deployed, with or without a backend: a landing page, marketing or docs site, SPA or PWA | forge, below | `reliant forge skill load deploy/static-site` |
-| Code that keeps running or gets deployed: an API or backend service, workers, jobs, cron jobs, Kubernetes operators, a CLI, a web or mobile app | forge, below | `reliant forge skill load forge` |
+| A frontend that will be deployed, with or without a backend: a landing page, marketing or docs site, SPA or PWA | forge, below | `reliant forge agent skill load deploy/static-site` |
+| Code that keeps running or gets deployed: an API or backend service, workers, jobs, cron jobs, Kubernetes operators, a CLI, a web or mobile app | forge, below | `reliant forge agent skill load forge` |
 
 A scheduled *agent* is a workflow; scheduled *code* is a forge worker or cron job.
 They combine: a workflow's agent can call a forge app's API, so the agent decides
@@ -36,7 +36,7 @@ existing codebase with its own stack.
   cluster; releases built once and promoted by digest; Reliant static hosting with
   a CDN (one static site per org is free; each environment's site counts) and
   custom domains; a 70+ component
-  library (`reliant forge component search`) and the `frontend/design` skill;
+  library (`reliant forge ui component search`) and the `frontend/design` skill;
   browser console logs mirrored into `.forge/logs/<env>/`; and room to add an API
   when it needs a waitlist or a checkout (its own forge project beside the site,
   reached by URL). Next.js (static export) and Vite build as static sites; an
@@ -73,7 +73,7 @@ existing codebase with its own stack.
 `reliant forge obs status <env>` answers "what is wrong now". For rows, use
 `reliant forge db query <env> … --confirm-env <env> --reason "<why>"`; it needs
 the organization's `db:query` grant.
-The flags, output documents and exit codes are in `reliant forge skill load observability/query`;
+The flags, output documents and exit codes are in `reliant forge agent skill load observability/query`;
 load it instead of guessing.
 
 Don't push forge onto an existing codebase with its own stack, or onto data

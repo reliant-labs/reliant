@@ -305,13 +305,15 @@ func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, e
 }
 
 // runStartedForPriorSend reports whether an earlier attempt of this send saved
-// its message to the transcript and the chat's run is open now. The workflow
-// row lags a run that has just started — it keeps its old status until the
-// run's own first activity writes "started" — so the row alone cannot tell a
-// repeat from a first send, and Temporal is asked instead. A repeat that finds
-// the run open has nothing left to do: starting another would terminate it.
+// its message — to the transcript, or queued behind the thread's mailbox — and
+// the chat's run is open now. The workflow row lags a run that has just
+// started — it keeps its old status until the run's own first activity writes
+// "started" — so the row alone cannot tell a repeat from a first send, and
+// Temporal is asked instead. A repeat that finds the run open has nothing left
+// to do: starting another would terminate it, and the open run reads the
+// message (a queued one at its next call_llm).
 func (s *Service) runStartedForPriorSend(ctx context.Context, prior *priorSend, workflowID string) bool {
-	if prior == nil || prior.history == nil {
+	if prior == nil {
 		return false
 	}
 	state, err := s.runs.State(ctx, workflowID)

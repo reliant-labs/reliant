@@ -83,7 +83,8 @@ describe('Reliant dark is the site palette', () => {
   const theme = themeAt('reliant', 'dark')
   it.each([
     ['background', '#0a0a0f'], // canvas
-    ['card', '#111118'], // panel
+    // One surface (restyle v1): a panel is the canvas, edged by --border.
+    ['card', '#0a0a0f'], // canvas
     ['popover', '#18181f'], // panel.raised
     ['foreground', '#f4f4f5'], // fg
     ['muted-foreground', '#9d9da6'], // fg.muted
@@ -122,12 +123,18 @@ describe('elevation in every scheme', () => {
   it.each(cases)('%s %s: background recesses, muted is hover-only', (scheme, mode) => {
     const theme = themeAt(scheme, mode)
     const [page, card, popover, muted] = ['background', 'card', 'popover', 'muted'].map((t) => lum(theme.rgb(t)!))
+    // The default scheme is one surface (restyle v1): its panels are the
+    // page's own fill, told apart by a line. Every other scheme keeps the
+    // recess. Nothing may sit ABOVE the page in light or BELOW it in dark.
+    const oneSurface = scheme === 'reliant'
+    const below = (a: number, b: number, what: string) =>
+      oneSurface ? expect(a, what).toBeLessThanOrEqual(b) : expect(a, what).toBeLessThan(b)
     if (mode === 'dark') {
-      expect(page, 'page below card').toBeLessThan(card!)
+      below(page!, card!, 'page below card')
       expect(card, 'card below popover').toBeLessThan(popover!)
       expect(card, 'muted above card (the inversion rule)').toBeLessThan(muted!)
     } else {
-      expect(page, 'page below card').toBeLessThan(card!)
+      below(page!, card!, 'page below card')
       expect(muted, 'muted below card').toBeLessThan(card!)
     }
   })

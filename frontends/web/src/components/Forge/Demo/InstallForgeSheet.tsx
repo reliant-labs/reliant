@@ -15,12 +15,12 @@ const QUICK_START_URL = "https://docs.reliantlabs.io/forge/quick-start";
 export const INSTALL_COMMANDS = [
   { method: "curl", command: "curl -fsSL https://raw.githubusercontent.com/reliant-labs/forge/main/install.sh | sh" },
   { method: "brew", command: "brew install reliant-labs/reliant/forge" },
-  { method: "start", command: "forge start" },
+  { method: "start", command: "forge project start" },
 ] as const;
 
 export function InstallForgeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} size="md" title="Install Forge" description="Installs one binary. Then forge start takes an empty directory to a running app with this console.">
+    <Modal open={open} onClose={onClose} size="md" title="Install Forge" description="Installs one binary. Then forge project start takes an empty directory to a running app with this console.">
       <div className="space-y-3" data-testid="demo-install-sheet">
         <p className="text-sm text-ink-muted">With the install script, or Homebrew:</p>
         <div className="space-y-1.5">

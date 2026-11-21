@@ -71,8 +71,8 @@ forge env status demo                     # forge-demo: its *.sites.reliantlabs.
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://<that sites URL>
 
 # 3. Move the domain (an org resource; this replaces prod/reliant-web's binding)
-forge domain bind demo.reliantlabs.io --env demo --target forge-demo
-forge domain show demo.reliantlabs.io --env demo   # serving: forge-demo in <demo env id>; all three records "ok"
+forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo
+forge cloud domain show demo.reliantlabs.io --env demo   # serving: forge-demo in <demo env id>; all three records "ok"
 ```
 
 `--target forge-demo` matters: without it the build also builds the `web` frontend found on disk, in the same directory (the `web` frontend of the same package; see deploy/kcl/demo/main.k).
@@ -121,8 +121,8 @@ certificate belong to the domain, so no DNS changes.
 ```bash
 # 1. The domain back to prod's reliant-web (from a control-plane checkout)
 cd ../control-plane
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # serving: reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain bind demo.reliantlabs.io --env prod --target reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain show demo.reliantlabs.io --env prod   # serving: reliant-web
 
 # 2. Only if the demo env itself must go back: its previous release (an ordinary deploy, BEHIND)
 cd ../reliant
@@ -192,7 +192,7 @@ control-plane `internal/domainregistry/service.go` (`bindSQL`, `Bind`).
   not a name, so record the id before a move and compare it after. `config.js`'s
   platform-written `ENVIRONMENT` names the env that serves.
 
-`TestForgeDemoCutoverDomainCommandsParse` (`cmd/reliant/cmd`) parses every `forge domain` and
+`TestForgeDemoCutoverDomainCommandsParse` (`cmd/reliant/cmd`) parses every `forge cloud domain` and
 `forge env status` command on this page against the forge command tree reliant embeds.
 It checks the subcommand, its flags, and bind's one-of `--target`/`--redirect-to`, so a
 renamed command or flag fails before it is pasted into prod.
@@ -206,17 +206,17 @@ control-plane `docs/runbook.md`, "demo.reliantlabs.io (forge-demo)". In short:
 ```bash
 # 0. Read-only, in a RELIANT checkout with deploy/kcl/demo: the rollback path resolves.
 reliant forge env status demo                                 # forge-demo and its live release
-reliant forge domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; record hsts:
+reliant forge cloud domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; record hsts:
 
 # 1-4. In a CONTROL-PLANE checkout at the promoted release.
-reliant forge domain show demo.reliantlabs.io --env prod      # the same <ID_DEMO> and hsts: (domains are the org's)
+reliant forge cloud domain show demo.reliantlabs.io --env prod      # the same <ID_DEMO> and hsts: (domains are the org's)
 reliant forge obs check prod --wait --json                    # exit 0, or stop
 reliant forge env status prod                                 # forge-demo: its *.sites.reliantlabs.dev URL
 node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://<that sites URL>
-reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo
+reliant forge cloud domain bind demo.reliantlabs.io --env prod --target forge-demo
 # ...or, only if hsts: read includeSubDomains:
-reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo --hsts-include-subdomains
-reliant forge domain show demo.reliantlabs.io --env prod      # serving: forge-demo in <ID> != <ID_DEMO>; same hsts:; records "ok"
+reliant forge cloud domain bind demo.reliantlabs.io --env prod --target forge-demo --hsts-include-subdomains
+reliant forge cloud domain show demo.reliantlabs.io --env prod      # serving: forge-demo in <ID> != <ID_DEMO>; same hsts:; records "ok"
 ```
 
 ### Proof that the demo is served from the prod release
@@ -244,11 +244,11 @@ is retired). It does not work from control-plane, whose project has no `demo` en
 
 ```bash
 reliant forge env status demo                                 # read-only: forge-demo is still deployed
-reliant forge domain show demo.reliantlabs.io --env demo      # read-only: resolves; record hsts:
-reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
+reliant forge cloud domain show demo.reliantlabs.io --env demo      # read-only: resolves; record hsts:
+reliant forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo
 # ...or, only if hsts: read includeSubDomains:
-reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo --hsts-include-subdomains
-reliant forge domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; same hsts:
+reliant forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo --hsts-include-subdomains
+reliant forge cloud domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; same hsts:
 curl -s https://demo.reliantlabs.io/config.js | grep -o '"ENVIRONMENT":"[^"]*"'   # "ENVIRONMENT":"demo"
 ```
 

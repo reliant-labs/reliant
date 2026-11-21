@@ -204,7 +204,7 @@ fi
 # render needs kcl. Report presence up front so a green phase gate can be
 # trusted to be green for the reason it appears to be.
 #
-# This is NOT a health check and must not grow into one — `forge doctor` /
+# This is NOT a health check and must not grow into one — `forge project doctor` /
 # `forge env status` own "is the environment running", per the note below.
 # This answers only "can the gates actually execute", which is prep's job.
 echo
@@ -229,9 +229,9 @@ select_dogfood_daemon_data_dir
 
 # ── Stack readiness ──────────────────────────────────────────────────────────
 #
-# `forge doctor` answers this and it is the ONLY thing that should. Do not add
+# `forge project doctor` answers this and it is the ONLY thing that should. Do not add
 # port probes here: a bespoke prober in this script would be a fourth health
-# mechanism beside `forge doctor`, KCL's `schema HealthCheck`, and serverkit's
+# mechanism beside `forge project doctor`, KCL's `schema HealthCheck`, and serverkit's
 # `FlowChecks` — and the first three would stay half-wired forever. Whatever is
 # missing gets fixed IN forge, where every project gets it.
 #

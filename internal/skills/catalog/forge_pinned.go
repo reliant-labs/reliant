@@ -23,9 +23,11 @@ import (
 // forgepin says why this matters everywhere).
 //
 // So inside a project that pins another forge, the shipped skills come from
-// THAT forge: `forge skill list --json --with-bodies` (one call for the whole
-// catalog), or — from a pin that predates the flag — `skill list --json` and
-// `skill load <path>` per body. forgepin caches them per pinned forge.
+// THAT forge: `forge agent skill list --json --with-bodies` (one call for the whole
+// catalog), or — from a pin that predates the flag — `agent skill list --json`
+// and `agent skill load <path>` per body. A pin older than the `agent` noun
+// (forge v1.4.0) has only the old spelling, `skill …`, which is tried last.
+// forgepin caches them per pinned forge.
 //
 // What stays on the embedded forge: user (~/.forge/skills) and project
 // (.forge/skills) skills, which are the user's files rather than any forge's
@@ -75,6 +77,8 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 		return e.list, nil
 	}
 	raw, err := pinnedForge.Output(pf, baseDir, "skills-list.json",
+		[]string{"agent", "skill", "list", "--json", "--with-bodies"},
+		[]string{"agent", "skill", "list", "--json"},
 		[]string{"skill", "list", "--json", "--with-bodies"},
 		[]string{"skill", "list", "--json"})
 	if err != nil {
@@ -90,7 +94,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 		Body        *string `json:"body"`
 	}
 	if err := json.Unmarshal(raw, &listed); err != nil {
-		return nil, fmt.Errorf("%s: `skill list --json`: %w", pf.Want, err)
+		return nil, fmt.Errorf("%s: `agent skill list --json`: %w", pf.Want, err)
 	}
 	skills := make([]forgecli.Skill, 0, len(listed))
 	for _, s := range listed {
@@ -106,7 +110,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 	return skills, nil
 }
 
-// pinnedSkillBody is `skill load <path>` as the pinned forge prints it.
+// pinnedSkillBody is `agent skill load <path>` as the pinned forge prints it.
 func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, error) {
 	e := pinnedEntry(pf.Key)
 	e.mu.Lock()
@@ -118,6 +122,7 @@ func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, err
 		return body, nil
 	}
 	raw, err := pinnedForge.Output(pf, baseDir, "skill-"+forgepin.Fingerprint([]byte(path))+".md",
+		[]string{"agent", "skill", "load", path},
 		[]string{"skill", "load", path})
 	if err != nil {
 		return "", err

@@ -5,7 +5,7 @@ description: "Scaffold a Go cron job worker that fires each tick on one replica,
 keywords: ["Go cron job worker", "background worker", "forge scaffold worker", "cronkit", "scheduled job Postgres"]
 ---
 
-You will add `digest`, a scheduled job that counts the active products in `shop` once a minute, and watch it run locally and on Reliant hosting. The worker runs inside your existing `server` process, so a schedule needs no new process, queue or Kubernetes object, and it claims each tick in your app's Postgres, so each tick fires on one replica. `reliant forge skill load workers` is the full reference.
+You will add `digest`, a scheduled job that counts the active products in `shop` once a minute, and watch it run locally and on Reliant hosting. The worker runs inside your existing `server` process, so a schedule needs no new process, queue or Kubernetes object, and it claims each tick in your app's Postgres, so each tick fires on one replica. `reliant forge agent skill load workers` is the full reference.
 
 ## Before you begin
 

@@ -16,7 +16,7 @@ func TestNormalizeGatewayURL(t *testing.T) {
 		{name: "http passes through", raw: "http://localhost:29190", want: "http://localhost:29190"},
 		{name: "https passes through", raw: "https://gateway.example.com", want: "https://gateway.example.com"},
 		{
-			// `forge cluster urls` prints this form; it must dial, not die.
+			// `forge dev cluster urls` prints this form; it must dial, not die.
 			name: "grpc becomes plaintext h2c",
 			raw:  "grpc://localhost:29190",
 			want: "http://localhost:29190",
