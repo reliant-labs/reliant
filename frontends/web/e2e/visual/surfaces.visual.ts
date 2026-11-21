@@ -360,6 +360,18 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('uploads', { exact: true }).first(),
   },
   {
+    name: 'shell-analytics',
+    path: '/forge/p/shopfront/analytics',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('heading', { name: 'Analytics' }).first(),
+  },
+  {
+    name: 'shell-analytics-events',
+    path: '/forge/p/shopfront/analytics/events',
+    on: ['desktop'],
+    ready: (page) => page.getByText('product.checkout_completed', { exact: true }).first(),
+  },
+  {
     // The forge host's shell (lib/shell.ts reads this key before the router is built).
     name: 'shell-forge-host-app-overview',
     path: '/forge/p/shopfront',
