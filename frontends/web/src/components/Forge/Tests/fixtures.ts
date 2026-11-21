@@ -173,6 +173,10 @@ export function fixtureSummaryResponse(): WireSummaryResponse {
  *   pending         one run recorded, its ingest not finished: no figures yet
  *   unit-only       one lane merged so far, and no trend before it
  *   no-flakes       the report's runs, and no test has ever flaked (nor any host failure)
+ *   acts-on-suspected  the report, from a project whose flake policy acts at
+ *                   `suspected` (forge.yaml tests.flakes.issues / quarantine: pr,
+ *                   as forge, control-plane and reliant do): the nav badge and
+ *                   Needs attention count suspected tests too
  *   not-configured  a control plane without TestsService (Unimplemented)
  *   denied          no tests:read
  *
@@ -180,8 +184,11 @@ export function fixtureSummaryResponse(): WireSummaryResponse {
  * the report has nine runs over two pages, a failed branch run and ten flaky
  * tests; pending and unit-only have their one run; no-runs has none.
  */
-export type TestsScenario = "report" | "no-runs" | "pending" | "unit-only" | "no-flakes" | "not-configured" | "denied";
-export const TESTS_SCENARIOS: readonly TestsScenario[] = ["report", "no-runs", "pending", "unit-only", "no-flakes", "not-configured", "denied"];
+export type TestsScenario = "report" | "no-runs" | "pending" | "unit-only" | "no-flakes" | "acts-on-suspected" | "not-configured" | "denied";
+export const TESTS_SCENARIOS: readonly TestsScenario[] = ["report", "no-runs", "pending", "unit-only", "no-flakes", "acts-on-suspected", "not-configured", "denied"];
+
+/** The scenario every read but the summary answers from: a policy is the summary's alone. */
+const dataScenario = (scenario: TestsScenario): TestsScenario => (scenario === "acts-on-suspected" ? "report" : scenario);
 
 export function fixtureSummaryWire(scenario: TestsScenario): WireSummaryResponse {
   const empty: WireSummaryResponse = {
@@ -233,6 +240,8 @@ export function fixtureSummaryWire(scenario: TestsScenario): WireSummaryResponse
     }
     case "no-flakes":
       return { ...fixtureSummaryResponse(), suspectedCount: 0, flakyCount: 0, quarantinedCount: 0, hostFailures30d: 0 };
+    case "acts-on-suspected":
+      return { ...fixtureSummaryResponse(), actsOnSuspected: true };
     default:
       return fixtureSummaryResponse();
   }
@@ -248,6 +257,7 @@ export type FixtureTestApi = TestApi & { calls: FixtureCall[] };
 
 export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestApi {
   const calls: FixtureCall[] = [];
+  const data = dataScenario(scenario);
   const refuse = (): Promise<never> => {
     if (scenario === "denied") return Promise.reject(new ConnectError("missing tests:read", Code.PermissionDenied));
     return Promise.reject(new ConnectError("TestsService is not available", Code.Unimplemented));
@@ -269,20 +279,20 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
       if (scenario === "not-configured" || scenario === "denied") return refuse();
       return Promise.resolve(summaryOf(fixtureSummaryWire(scenario)));
     },
-    listTestRuns: (req) => answer("listTestRuns", req, () => runPageOf(fixtureRunsWire(scenario, req))),
-    getTestRun: (req) => answer("getTestRun", req, () => runDetailOf(fixtureRunWire(scenario, req))),
+    listTestRuns: (req) => answer("listTestRuns", req, () => runPageOf(fixtureRunsWire(data, req))),
+    getTestRun: (req) => answer("getTestRun", req, () => runDetailOf(fixtureRunWire(data, req))),
     getCoverage: (req) =>
       answer("getCoverage", req, () => {
-        if (scenario === "no-runs" || scenario === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
+        if (data === "no-runs" || data === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
         return req;
       }).then(fixtureCoverage),
     getFileCoverage: (req) =>
       answer("getFileCoverage", req, () => {
-        if (scenario === "no-runs" || scenario === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
+        if (data === "no-runs" || data === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
         return req;
       }).then(fixtureFileCoverage),
-    getReleaseTests: (req) => answer("getReleaseTests", req, () => releaseTestsOf(fixtureReleaseTestsWire(scenario, req))),
-    listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(scenario, req))),
-    getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(scenario, req))),
+    getReleaseTests: (req) => answer("getReleaseTests", req, () => releaseTestsOf(fixtureReleaseTestsWire(data, req))),
+    listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(data, req))),
+    getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(data, req))),
   };
 }

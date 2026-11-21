@@ -4,7 +4,8 @@
  * The project Overview's Tests surfaces and the nav badge against the
  * fixture TestsService: the Tests card (the report, an empty record, a
  * failed read, and no card at all without the service or the grant), the
- * Tests rows of "Needs attention" (suspected, newly flaky, an overdue
+ * Tests rows of "Needs attention" (suspected when the project acts at
+ * suspected, newly flaky, an overdue
  * quarantine, coverage that fell), and the count the nav draws.
  */
 
@@ -19,6 +20,7 @@ import { flakeOf, summaryOf } from "@/services/controlPlane/tests/wire";
 import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureSummaryWire, fixtureTestApi, type TestsScenario } from "../fixtures";
 import { fixtureFlakes } from "../runFlakeFixtures";
 import { OverviewTestsCard, TestsAttentionRows, testsAttentionHrefs } from "../surfaces/OverviewTests";
+import { useTestsNavCount } from "../surfaces/useTestsNavCount";
 import { COVERAGE_DROP_ATTENTION_POINTS, testsAttentionCount, testsAttentionItems } from "../surfaces/surfacesModel";
 import { renderWithApi } from "./testsTestUtils";
 
@@ -80,8 +82,19 @@ describe("the Overview's Tests card", () => {
 });
 
 describe("Needs attention's Tests rows", () => {
-  it("lists suspected tests, newly flaky ones, an overdue quarantine and a package whose coverage fell", async () => {
+  it("lists newly flaky tests, an overdue quarantine and a package whose coverage fell; not suspected ones by default", async () => {
     rows("report");
+    const block = await screen.findByTestId("overview-attention-tests");
+    // The flaky list is its own read: wait for its rows before saying what is absent.
+    expect(await within(block).findByTestId("attention-tests/flaky-recent")).toHaveTextContent("4 flaky tests flaked this week");
+    // The customer default acts at flaky: a suspected test is not its work yet.
+    expect(within(block).queryByTestId("attention-tests/suspected")).not.toBeInTheDocument();
+    expect(within(block).getByText("TestInventoryReserve").closest("li")).toHaveTextContent("quarantine overdue");
+    expect(within(block).getByTestId("attention-tests/coverage/internal/billing")).toBeInTheDocument();
+  });
+
+  it("lists suspected tests too when the project acts at suspected", async () => {
+    rows("acts-on-suspected");
     const block = await screen.findByTestId("overview-attention-tests");
     expect(block).toHaveTextContent("main, every environment");
     const suspected = await within(block).findByTestId("attention-tests/suspected");
@@ -128,7 +141,7 @@ describe("testsAttentionItems", () => {
     const latest = summary.latest!;
     const at = (delta: number) =>
       testsAttentionItems({ summary: { ...summary, lowCoverage: [], latest: { ...latest, coverage: { ...latest.coverage!, deltaPercent: delta } } }, flakes: [], now: FIXTURE_NOW, hrefs });
-    expect(at(-(COVERAGE_DROP_ATTENTION_POINTS - 0.1))).toEqual([expect.objectContaining({ key: "tests/suspected" })]);
+    expect(at(-(COVERAGE_DROP_ATTENTION_POINTS - 0.1))).toEqual([]);
     const fell = at(-COVERAGE_DROP_ATTENTION_POINTS - 0.4).find((item) => item.key === "tests/coverage");
     expect(fell).toMatchObject({ subject: "Coverage on main", what: "fell 2.4 points", detail: "74.2% at 9f3c2a1" });
   });
@@ -140,9 +153,29 @@ describe("testsAttentionItems", () => {
 });
 
 describe("the nav badge's count", () => {
-  it("is suspected plus flaky, never quarantined", () => {
-    expect(testsAttentionCount({ suspected: 3, flaky: 4 })).toBe(7);
-    expect(testsAttentionCount({ suspected: 0, flaky: 0 })).toBe(0);
-    expect(testsAttentionCount(undefined)).toBe(0);
+  it("is flaky only by default, and suspected plus flaky when the project acts at suspected; never quarantined", () => {
+    expect(testsAttentionCount({ suspected: 3, flaky: 4 }, "flaky")).toBe(4);
+    expect(testsAttentionCount({ suspected: 3, flaky: 4 }, "suspected")).toBe(7);
+    expect(testsAttentionCount({ suspected: 0, flaky: 0 }, "suspected")).toBe(0);
+    expect(testsAttentionCount(undefined, "suspected")).toBe(0);
+  });
+
+  it.each([
+    ["report", "4"],
+    ["acts-on-suspected", "7"],
+    ["not-configured", "0"],
+  ] as const)("is what useTestsNavCount hands the nav in %s", async (scenario, expected) => {
+    function Probe() {
+      const summary = useTestSummary(FIXTURE_PROJECT);
+      const count = useTestsNavCount(FIXTURE_PROJECT);
+      return summary.isSuccess || summary.isError ? <i data-testid="count" data-count={count} /> : null;
+    }
+    renderWithApi(fixtureTestApi(scenario), <Probe />);
+    expect(await screen.findByTestId("count")).toHaveAttribute("data-count", expected);
+  });
+
+  it("reads the policy from the summary, flaky when the server does not say", () => {
+    expect(summaryOf(fixtureSummaryWire("report")).flakePolicy).toBe("flaky");
+    expect(summaryOf(fixtureSummaryWire("acts-on-suspected")).flakePolicy).toBe("suspected");
   });
 });

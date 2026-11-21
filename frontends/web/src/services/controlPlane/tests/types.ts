@@ -221,6 +221,15 @@ export interface TestFlakeEvent {
   infraGroup: string;
 }
 
+/**
+ * The flake state a project acts at (forge.yaml): "suspected" when it deletes
+ * or quarantines on the first confirmed flake (tests.flakes.issues on, or
+ * quarantine: pr; forge, control-plane and reliant), "flaky" otherwise (the
+ * customer default, design §3.1). It decides what the nav badge and "Needs
+ * attention" count.
+ */
+export type TestsFlakePolicy = "suspected" | "flaky";
+
 /** GetTestSummary: one branch's test health — what the Tests Overview draws. */
 export interface TestSummary {
   /** The branch summarised (the default branch when none was asked for). */
@@ -243,6 +252,8 @@ export interface TestSummary {
   lowCoverage: PackageCoverage[];
   /** Failures classified "host" in 30 days: host health, never scored against a test. */
   hostFailures30d: number;
+  /** The state the project acts at. "flaky" while the server does not say (control-plane#3331 item 5). */
+  flakePolicy: TestsFlakePolicy;
 }
 
 export interface TestRunPage {

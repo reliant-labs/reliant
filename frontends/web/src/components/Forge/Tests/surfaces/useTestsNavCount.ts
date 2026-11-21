@@ -5,14 +5,17 @@ import { useTestSummary } from "@/hooks/test-queries";
 import { testsAttentionCount } from "./surfacesModel";
 
 /**
- * The Tests nav group's badge count for `project` (suspected plus flaky on
- * the default branch): the console nav model reads it once per app, and the
- * nav's Tests group (navConfig/tests.tsx) draws it. The default branch's
- * summary is the Tests Overview's own read, so it costs no extra request
- * there. 0 while it loads, and on any failure: a control plane without
- * TestsService answers Unimplemented, which is never retried.
+ * The Tests nav group's badge count for `project`: the console nav model's
+ * `navCounts.tests` (useConsoleNavCounts), drawn by navConfig/tests.tsx.
+ * The default branch's flaky tests, plus its suspected ones when the
+ * project acts at `suspected` (surfacesModel.ts testsAttentionCount; the
+ * policy is the summary's, flaky-only while the server does not say).
+ *
+ * The default branch's summary is the Tests Overview's own read, so it costs
+ * no request of its own. 0 while it loads, and on any failure: a control
+ * plane without TestsService answers Unimplemented, which is never retried.
  */
 export function useTestsNavCount(project: string): number {
   const summary = useTestSummary(project);
-  return testsAttentionCount(summary.data);
+  return testsAttentionCount(summary.data, summary.data?.flakePolicy ?? "flaky");
 }

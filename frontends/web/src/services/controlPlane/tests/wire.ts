@@ -239,6 +239,12 @@ export interface WireSummaryResponse {
   lastRun?: WireRunSummary;
   lowCoveragePackages: WirePackageCoverage[];
   hostFailures30d: number;
+  /**
+   * NOT IN THE PROTO YET (control-plane#3331 item 5; the name may change when
+   * it lands): true when the project acts at `suspected` (forge.yaml
+   * tests.flakes.issues on, or quarantine: pr). Absent reads as false.
+   */
+  actsOnSuspected?: boolean;
 }
 
 export interface WireListRunsResponse {
@@ -506,6 +512,8 @@ export function summaryOf(res: WireSummaryResponse): TestSummary {
       (p): PackageCoverage => ({ path: p.path, lang: p.lang, combined: statementsOf(p.combined), lanes: lanesOf(p.lanes), deltaPercent: p.deltaPercent ?? null })
     ),
     hostFailures30d: res.hostFailures30d,
+    // Absent until the server says: the customer default, flaky only.
+    flakePolicy: res.actsOnSuspected ? "suspected" : "flaky",
   };
 }
 

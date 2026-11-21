@@ -13,7 +13,7 @@
  * commit, and the Overview's `prod` would hide nearly all of them.
  */
 
-import type { ReleaseTests, TestFlake, TestSummary } from "@/services/controlPlane/tests/types";
+import type { ReleaseTests, TestFlake, TestsFlakePolicy, TestSummary } from "@/services/controlPlane/tests/types";
 
 import { formatAgo } from "../../Observability/format";
 import { formatDelta, formatPercent, shortSha } from "../testsModel";
@@ -33,14 +33,17 @@ export const RECENT_FLAKE_MS = 7 * 24 * 3600 * 1000;
 // ── The nav badge ───────────────────────────────────────────────────────────
 
 /**
- * The Tests nav group's count: suspected plus flaky tests on the default
- * branch. Suspected is the state people act on (one confirmed flake, delete
- * or rewrite it), so it counts beside flaky; quarantined does not (it is
- * handled), nor does a host failure (never a test's). 0 draws no badge.
+ * The Tests nav group's count on the default branch, by the project's flake
+ * policy (owner): flaky tests, the customer default (design §3.1); plus
+ * suspected ones when the project acts at `suspected` (forge.yaml
+ * tests.flakes.issues on, or quarantine: pr — forge, control-plane and
+ * reliant delete or quarantine on the first confirmed flake). Quarantined
+ * never counts (it is handled), nor does a host failure (never a test's).
+ * 0 draws no badge.
  */
-export function testsAttentionCount(summary: Pick<TestSummary, "suspected" | "flaky"> | null | undefined): number {
+export function testsAttentionCount(summary: Pick<TestSummary, "suspected" | "flaky"> | null | undefined, policy: TestsFlakePolicy): number {
   if (!summary) return 0;
-  return Math.max(0, summary.suspected) + Math.max(0, summary.flaky);
+  return Math.max(0, summary.flaky) + (policy === "suspected" ? Math.max(0, summary.suspected) : 0);
 }
 
 // ── Needs attention ─────────────────────────────────────────────────────────
@@ -73,7 +76,8 @@ const points = (delta: number) => (Math.round(Math.abs(delta) * 10) / 10).toFixe
 /**
  * The Tests rows of the Overview's "Needs attention", worst first:
  *
- *   suspected      every suspected test (one confirmed flake: act now). The
+ *   suspected      every suspected test, only when the project acts at
+ *                  `suspected` (summary.flakePolicy; testsAttentionCount). The
  *                  count is the summary's; the newest one is named.
  *   new flaky      flaky tests whose newest confirmed flake is within
  *                  RECENT_FLAKE_MS.
@@ -102,7 +106,9 @@ export function testsAttentionItems({
   const atLeast = flakesMore ? "at least " : "";
 
   const suspected = flakes.filter((flake) => flake.state === "suspected").sort((a, b) => (b.lastEventMs ?? 0) - (a.lastEventMs ?? 0));
-  const suspectedCount = summary ? summary.suspected : suspected.length;
+  // The customer default acts at flaky: a suspected test is not yet theirs to act on.
+  const actsOnSuspected = summary?.flakePolicy === "suspected";
+  const suspectedCount = !actsOnSuspected ? 0 : summary ? summary.suspected : suspected.length;
   if (suspectedCount > 0) {
     const newest = suspected[0];
     items.push({
