@@ -165,6 +165,28 @@ func (t tokenValidator) ValidateToken(token string) (*JWTClaims, error) {
 	return v.Claims, nil
 }
 
+// VerifyIdentityToken checks token as a token of the managed identity, and
+// only of it: alg, iss, aud, exp and signature, by the identity's validator
+// (TokenChain). A Supabase token, the shared key, a session id or an
+// unconfigured identity is refused (ErrInvalidToken). The session resolver
+// verifies what a server-side session holds before handing it out.
+func (a *Authenticator) VerifyIdentityToken(token string) (*JWTClaims, error) {
+	if a.chain.IdentityIssuer() == "" || unverifiedIssuer(token) != a.chain.IdentityIssuer() {
+		return nil, fmt.Errorf("%w: not a token of the managed identity", ErrInvalidToken)
+	}
+	claims, err := a.chain.ValidateToken(token)
+	if err != nil {
+		return nil, err
+	}
+	v, ok := verdictOf(claims)
+	if !ok || v.source != SourceIdentity {
+		return nil, fmt.Errorf("%w: not a token of the managed identity", ErrInvalidToken)
+	}
+	jc := identityClaims(claims)
+	jc.Credential = CredentialIdentityToken
+	return jc, nil
+}
+
 // VerifiedAccessToken is the Verified of an `rlat_` access token the token
 // authority resolved to claims and p.
 func VerifiedAccessToken(claims *JWTClaims, p *fat.Principal, channel authn.Channel) *Verified {

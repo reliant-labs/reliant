@@ -374,6 +374,12 @@ type APIListenerDeps struct {
 	//
 	// forge:optional-dep
 	Accounts *ControlPlaneAccounts
+	// Auth verifies the tokens the session resolver hands out (the managed
+	// identity's validator).
+	Auth *grpcserver.UserAuth
+	// ControlPlane names the internal-service secret the session resolver
+	// accepts control-plane's calls with.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -406,6 +412,13 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 				}
 				RegisterLoginBroker(mux, d.API, d.Logger, opts...)
 				d.Logger.Info("native sign-in enabled", "routes", "/auth/* (internal/app/login_broker.go)")
+				// The service-only session resolver, for control-plane to
+				// honour this sign-in's cookie on its own routes. Only with
+				// a control plane to share the internal-service secret with.
+				if secret := ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret; secret != "" {
+					mux.Handle(grpcserver.SessionResolvePath,
+						grpcserver.NewSessionResolveHandler(d.SignIn.Manager, d.Auth.Authenticator(), secret))
+				}
 			}
 			return services
 		}),

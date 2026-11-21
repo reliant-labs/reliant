@@ -736,8 +736,10 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		Policies:       g.OrgPolicyResolver(),
 		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 		// Native sign-in (/auth/*), only with a configured identity.
-		SignIn:   g.SignInSessions(),
-		Accounts: g.ControlPlaneAccounts(),
+		SignIn:       g.SignInSessions(),
+		Accounts:     g.ControlPlaneAccounts(),
+		Auth:         g.UserAuth(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
