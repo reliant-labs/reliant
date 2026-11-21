@@ -13,6 +13,69 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.25.0" description="November 21, 2026">
+### 11 new features, 29 fixes and 7 other changes
+
+Every pull request merged since v1.24.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **llm: repair message history before every provider request** [#3076](https://github.com/reliant-labs/reliant/pull/3076)
+- **cli: send Reliant-Client and refuse with the upgrade command** [#3061](https://github.com/reliant-labs/reliant/pull/3061)
+- **triggers: webhook URL and token at activate, trigger rotate, HMAC secrets on enable, no proxy request ids in dedupe** [#3124](https://github.com/reliant-labs/reliant/pull/3124)
+- **cli: reliant auth token create --expires-in** [#3113](https://github.com/reliant-labs/reliant/pull/3113)
+- **cli: reliant chat list, show and set-machine** [#3107](https://github.com/reliant-labs/reliant/pull/3107)
+- **integrations: GitHub branch.rules, release.create/update, compare, commit.statuses and Slack conversations.replies actions** [#3121](https://github.com/reliant-labs/reliant/pull/3121)
+- **workflows: forge one-shot exposes the reviewer's inspection evidence** [#3134](https://github.com/reliant-labs/reliant/pull/3134)
+- **workflows: builtin://agent takes max_turns and tool_params** [#3114](https://github.com/reliant-labs/reliant/pull/3114)
+- **record the effective thinking level on messages** [#3160](https://github.com/reliant-labs/reliant/pull/3160)
+- **mcp: offer dir-scoped MCP servers' tools, apply mcp.json edits at the next turn, and reliant mcp list|tools|restart** [#3132](https://github.com/reliant-labs/reliant/pull/3132)
+- **runs: SignalRunResponse.not_delivered_reason, beside the X-Reliant-Not-Delivered-Reason header (#2465)** [#3161](https://github.com/reliant-labs/reliant/pull/3161)
+
+#### Changed
+
+- **handlers: tenant-isolation tests for plan, task and attachment** [#3064](https://github.com/reliant-labs/reliant/pull/3064)
+- **web: vite 8 and vitest 5, matching forge's scaffold** [#3018](https://github.com/reliant-labs/reliant/pull/3018)
+- **settings: document MCP dir, dirScoped, requiresFiles and $\{projectPath\}** [#3104](https://github.com/reliant-labs/reliant/pull/3104)
+- **web: preserve boot mock history and remove flaky root probe** [#3127](https://github.com/reliant-labs/reliant/pull/3127)
+- **package-commands: ListProcesses probes each machine's liveness concurrently, not one after another** [#3149](https://github.com/reliant-labs/reliant/pull/3149)
+- **daemon: check framed background credential environment** [#3159](https://github.com/reliant-labs/reliant/pull/3159)
+- **proctree: LimitNote's own-limit check accepts the either-limit wording on kernels before 6.13** [#3169](https://github.com/reliant-labs/reliant/pull/3169)
+
+#### Fixed
+
+- **codex: keep image generation available outside the chat catalog** [#3063](https://github.com/reliant-labs/reliant/pull/3063)
+- **test: telemetry tests stub the SDK forge-web-runtime 0.13.20 starts; drop a flaky shell_kill probe** [#3075](https://github.com/reliant-labs/reliant/pull/3075)
+- **cli: a scoped token refused for a missing scope is told which scope, not to re-authenticate** [#3115](https://github.com/reliant-labs/reliant/pull/3115)
+- **docs: generated reference pages parse in Mintlify; keyword descriptions; true credential-sandbox text** [#3106](https://github.com/reliant-labs/reliant/pull/3106)
+- **workflows: a call_llm node's messages render their templates** [#3116](https://github.com/reliant-labs/reliant/pull/3116)
+- **cli: trigger deactivate says it reaches every project and takes --project; activate and deactivate name the built-in a bare --workflow meant** [#3118](https://github.com/reliant-labs/reliant/pull/3118)
+- **cli: auth status says when the login cannot manage machines** [#3120](https://github.com/reliant-labs/reliant/pull/3120)
+- **cli: workflow validate runs a sample only through its triggers, counts lint warnings, checks credentials and no-machine** [#3119](https://github.com/reliant-labs/reliant/pull/3119)
+- **triggers: a trigger with no workflow runs the default one; an unresolvable workflow is recorded** [#3110](https://github.com/reliant-labs/reliant/pull/3110)
+- **workflow: approval outputs declare denial_reason; data is deprecated and documented as never set** [#3122](https://github.com/reliant-labs/reliant/pull/3122)
+- **launch: refuse an org_only automation on any unserved model input, not only one named model** [#3123](https://github.com/reliant-labs/reliant/pull/3123)
+- **tools: update_task changes only the caller's plan chain, and a sub-agent only the task it holds** [#3097](https://github.com/reliant-labs/reliant/pull/3097)
+- **web: links in question cards are clickable** [#3128](https://github.com/reliant-labs/reliant/pull/3128)
+- **trigger: activation approval preview validates each workflow once, and is bounded** [#3129](https://github.com/reliant-labs/reliant/pull/3129)
+- **chat: a message sent to a paused run is delivered after the queued mailbox** [#3130](https://github.com/reliant-labs/reliant/pull/3130)
+- **workflows: forge one-shot's gate holds an unattended run to its decisions section** [#3131](https://github.com/reliant-labs/reliant/pull/3131)
+- **daemonerr: a worktree-recovery refusal is a retryable Unavailable, not Internal, and the web does not report it** [#3137](https://github.com/reliant-labs/reliant/pull/3137)
+- **workflow: a native function's list result (regex.extractAll) converts to structpb** [#3139](https://github.com/reliant-labs/reliant/pull/3139)
+- **web: telemetry tests stub the SDK the runtime starts again; smoke test waits for React to mount** [#3141](https://github.com/reliant-labs/reliant/pull/3141)
+- **workflows: nodes.?X type-checks like nodes.X for a node whose outputs are known only at run time** [#3142](https://github.com/reliant-labs/reliant/pull/3142)
+- **triggers: EnableWorkflow re-reads an owner's integration access once per request, not per trigger per phase** [#3143](https://github.com/reliant-labs/reliant/pull/3143)
+- **triggers: enabling a workflow's triggers together gets a budget for several, not 10s** [#3147](https://github.com/reliant-labs/reliant/pull/3147)
+- **spawn: a stopped sub-agent no longer holds a concurrency slot while it unwinds** [#3150](https://github.com/reliant-labs/reliant/pull/3150)
+- **prompt: each sub-agent gets its own scratch subdirectory under the chat's** [#3151](https://github.com/reliant-labs/reliant/pull/3151)
+- **triggers: a webhook delivery pins its catalog once and gives each trigger its own deadline** [#3154](https://github.com/reliant-labs/reliant/pull/3154)
+- **shell: GetProcessStatus reads lifecycle state without a port scan** [#3153](https://github.com/reliant-labs/reliant/pull/3153)
+- **llm: an OpenAI cyber_policy refusal is the user's prompt, not a server error** [#3155](https://github.com/reliant-labs/reliant/pull/3155)
+- **cli: reliant auth token revoke takes the --name token create took** [#3152](https://github.com/reliant-labs/reliant/pull/3152)
+- **cli: worktree help says reclaim only reports by default; models reference names the app's AI settings** [#3158](https://github.com/reliant-labs/reliant/pull/3158)
+
+</Update>
+
 <Update label="v1.24.0" description="November 19, 2026">
 ### 2 new features
 
