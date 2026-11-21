@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -359,6 +362,59 @@ func TestCallLLM_TruncationContinuationsStopAtTheCap(t *testing.T) {
 	require.Equal(t, 1, driver.calls(), "the third continuation itself still runs")
 	assert.Equal(t, stopreason.Truncated, output.StopReason, "past the cap the turn ends honestly as truncated, not done")
 	assert.Empty(t, output.Continuation, "three nudged continuations in a row is the cap")
+}
+
+// nudgeSaveFailingRepo fails every save of a hidden continuation nudge (its
+// activity id carries "|continuation-") and passes every other write through.
+type nudgeSaveFailingRepo struct {
+	*db.Repo
+	failed int
+	mu     sync.Mutex
+}
+
+func (r *nudgeSaveFailingRepo) SaveMessageAtomic(ctx context.Context, w db.AtomicMessageWrite) (*db.AtomicMessageResult, error) {
+	if w.ActivityID != nil && strings.Contains(*w.ActivityID, "|continuation-") {
+		r.mu.Lock()
+		r.failed++
+		r.mu.Unlock()
+		return nil, errors.New("storage unavailable")
+	}
+	return r.Repo.SaveMessageAtomic(ctx, w)
+}
+
+// The saved nudges are the only record planContinuation counts toward the
+// cap, so a nudge that cannot be saved must fail the attempt before the
+// provider is called. Sending it unsaved would leave the count at zero, and
+// a storage failure that persisted would continue a truncating turn forever.
+func TestCallLLM_UnsavedNudgeFailsTheAttemptInsteadOfContinuing(t *testing.T) {
+	t.Parallel()
+
+	driver := &turnScriptDriver{turns: []llm.DriverResponse{
+		{Content: "...still going", FinishReason: message.FinishReasonMaxTokens},
+	}}
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "part 1")
+
+	repo := &nudgeSaveFailingRepo{Repo: h.Repo()}
+	activityInstance := NewCallLLMActivity(repo, nil, nil, &staticConfigProvider{}, turnScriptResolver(driver), nil)
+
+	for range maxTruncationContinuations + 1 {
+		var output CallLLMOutput
+		err := h.ExecuteActivity(activityInstance.Execute,
+			withPosition(withContinuation(callLLMInput(chat.ID, chat.ID, "mock-model"), continuationTruncated)), &output)
+		require.Error(t, err, "an unsaved nudge must fail the attempt")
+	}
+
+	assert.Equal(t, 0, driver.calls(), "no provider call may carry a nudge the cap cannot count")
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	assert.Equal(t, maxTruncationContinuations+1, repo.failed, "every attempt tried to save its nudge")
 }
 
 // A Codex turn that ends on commentary with no tool call gets exactly one
