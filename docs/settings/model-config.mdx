@@ -1,6 +1,7 @@
 ---
-title: "Model Configuration"
-description: "Configure model selection preferences and add custom models"
+title: "Model configuration: tags, custom models, local providers"
+sidebarTitle: "Model Configuration"
+description: "Configure Reliant model selection in ~/.reliant/config.yaml: tag-based tiers, thinking effort, custom models, Ollama and local providers, and provider priority."
 ---
 
 Reliant uses a tag-based system for model selection that lets workflows declare what kind of model they need rather than which specific model to use. When a workflow requests a flagship model, Reliant automatically selects the best available option from your configured providers—Claude Opus if you have Anthropic configured, GPT Codex if you have OpenAI or Codex configured, or whichever flagship model is available.

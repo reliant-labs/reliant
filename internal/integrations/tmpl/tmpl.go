@@ -3,7 +3,8 @@
 // params, connection (the resolved connection's non-secret params, as
 // connection.params.<name>), response (parsed JSON body), raw (body text),
 // status, headers and parent (a fan-out request's item). Beyond standard CEL they have optional types,
-// base64.decode / base64.encode, <bytes>.text(), cel.bind and
+// base64.decode / base64.encode, <bytes>.text(), cel.bind, the string
+// extension (split, substring, trim, ...) and
 // <string>.lineWindow(start, count, budget).
 package tmpl
 
@@ -77,6 +78,9 @@ func celEnv() (*cel.Env, error) {
 			// parent is the item a fan-out request is running for; null
 			// everywhere else.
 			cel.Variable("parent", cel.DynType),
+			// split, substring, trim...: an output often keeps one piece of
+			// a longer string (a commit message's first line).
+			ext.Strings(),
 		}
 		env, envErr = cel.NewEnv(append(opts, envOptions()...)...)
 	})

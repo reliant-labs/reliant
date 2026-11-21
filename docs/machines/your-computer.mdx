@@ -1,6 +1,6 @@
 ---
 title: "Your own computer"
-description: "Run a Reliant daemon on a computer you own with the reliant CLI"
+description: "Run a Reliant daemon on your own computer or server with reliant daemon start: device pairing, CI and unattended setups, flags and one daemon per workspace."
 ---
 
 If you use the desktop app, you usually do nothing here: the app starts a daemon on your computer, signs it in with your account, and it appears under **Settings → Machines** as connected. This page is for everything else: a workstation you only reach over SSH, a home server, a Raspberry Pi, or a second laptop. For those you run the daemon yourself with the `reliant` CLI ([installing it](/getting-started/installation)).
@@ -48,7 +48,7 @@ Use `--non-interactive` when something else owns sign-in (this is how the deskto
 | `--label` | | A durable machine label `key=value` (repeatable, or comma-separated; or `RELIANT_DAEMON_LABELS`). Merged into the machine's labels on every connect, so `--label pool=<name>` joins that machine pool ([Run a machine](/cli/run-a-machine#join-a-machine-pool-when-it-starts)) |
 | `--token` | off | Read an access token from stdin instead of pairing |
 | `--non-interactive` | off | Never open a browser or run login; wait for credentials on disk |
-| `--account` | | Which account this daemon runs as, when several accounts share one computer |
+| `--account` | | Which account this daemon runs as, by user id, when several accounts share one computer. `reliant auth status` prints yours on its `Account:` line (a login made by an older release says `not recorded`; log in again to record it). See [Run several daemons on one computer](/guides/machines/run-several-daemons-one-computer) |
 | `--workspace` | git worktree root of the current directory | The workspace this daemon serves |
 | `--data-dir` | this instance's folder under `~/.reliant/instances` | Where its state and logs live |
 | `--port` | `9190` | Port of a local daemon gateway, dialled only when no gateway URL is known |
@@ -87,4 +87,4 @@ reliant daemon ls       # every daemon instance on this computer
 
 - [Machines overview](/machines/overview)
 - [Choosing a machine in workflows](/machines/choosing)
-- [Deploying with Forge: signing in](/features/forge-sign-in), for how Forge commands run on a daemon use your Reliant sign-in
+- [Deploying with Forge: signing in](/forge/sign-in), for how Forge commands run on a daemon use your Reliant sign-in

@@ -37,6 +37,9 @@ inputs:
   golangci:
     description: Put the pinned forge's golangci-lint on PATH, the release the release gate's forge lint runs (needs go)
     default: "false"
+  github-read-token:
+    description: Optional GitHub read token for public tool downloads; leave empty in the merge-group candidate workflow
+    default: ${{ github.token }}
 
 outputs:
   go-version:
@@ -125,7 +128,7 @@ runs:
       if: runner.os == 'Linux' && runner.arch == 'X64'
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-read-token }}
       run: |
         set -euo pipefail
         d="$HOME/.cache/ci-tools/task-3.54.0"
@@ -150,7 +153,7 @@ runs:
       uses: arduino/setup-task@v2
       with:
         version: 3.54.0
-        repo-token: ${{ github.token }}
+        repo-token: ${{ inputs.github-read-token }}
 
     # setup-go's own cache always saves in its post step, which cannot be
     # limited to main, so it is off and the caches are restored explicitly.
@@ -226,7 +229,7 @@ runs:
       if: inputs.buf == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-read-token }}
         BUF_VERSION: ${{ steps.buf.outputs.version }}
       run: |
         set -euo pipefail
@@ -275,7 +278,7 @@ runs:
       if: inputs.golangci == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-read-token }}
         V: ${{ steps.golangci.outputs.version }}
       run: |
         set -euo pipefail
@@ -328,7 +331,7 @@ runs:
       if: inputs.ripgrep == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-read-token }}
       run: |
         set -euo pipefail
         v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"; d="$HOME/.cache/ci-tools/rg-${v}"

@@ -27,8 +27,8 @@ interface Props {
 }
 
 /**
- * Which site keeps the one free static slot. Shown on /claim, before anything is
- * claimed, only when the person already holds their free site.
+ * Where free hosting stays. Shown on /claim before anything is claimed, only
+ * when the server requires a choice for a signed-in account.
  *
  * A radio group rather than three buttons: the choice is a decision with
  * consequences, so it is picked, read and then confirmed, not fired by a stray

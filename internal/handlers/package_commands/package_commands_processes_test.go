@@ -505,3 +505,45 @@ func TestProcessLogs_FromAnOlderDaemon(t *testing.T) {
 	assert.Empty(t, logs.Stderr)
 	assert.Len(t, logs.Combined, 2)
 }
+
+// probeBarrierRouter's liveness probe answers only once every expected probe
+// is in flight at the same time, as a slow ping to each machine would. Probing
+// the machines one after another never fills the barrier, so each probe times
+// out offline and the list comes back empty.
+type probeBarrierRouter struct {
+	*machineRouter
+	arrived chan struct{}
+	release chan struct{}
+	want    int
+	once    sync.Once
+}
+
+func (r *probeBarrierRouter) IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error) {
+	r.arrived <- struct{}{}
+	if len(r.arrived) == r.want {
+		r.once.Do(func() { close(r.release) })
+	}
+	select {
+	case <-r.release:
+		return r.machineRouter.IsDaemonOnline(ctx, userID, selector)
+	case <-time.After(2 * time.Second):
+		return false, nil
+	}
+}
+
+func TestListProcesses_EverywhereProbesMachinesConcurrently(t *testing.T) {
+	now := time.Now()
+	inner := &machineRouter{listed: map[string][]*daemon.ProcessInfo{}}
+	repo := newProcessesRepo()
+	machines := []string{"daemon-a", "daemon-b", "daemon-c"}
+	for _, m := range machines {
+		repo.machine(m, "test-user")
+		inner.listed[m] = []*daemon.ProcessInfo{{ID: "on-" + m, Status: "running", StartTime: now, WorktreeID: "wt-" + m}}
+	}
+	router := &probeBarrierRouter{machineRouter: inner, arrived: make(chan struct{}, len(machines)), release: make(chan struct{}), want: len(machines)}
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo}))
+
+	resp, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, resp.Msg.Processes, len(machines), "every machine was probed at once, so every probe answered")
+}

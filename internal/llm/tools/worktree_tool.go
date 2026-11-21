@@ -37,6 +37,9 @@ type WorktreeParams struct {
 	// Base branch to branch from (optional, defaults to main/master)
 	BaseBranch string `json:"base_branch,omitempty" jsonschema:"description=Base branch to branch from (defaults to repository default branch)"`
 
+	// Scopes base_branch to one repository of a multi-repo project.
+	BaseBranchRepo string `json:"base_branch_repo,omitempty" jsonschema:"description=Multi-repo projects: the one repository (its name or relative path) that starts from base_branch; every other repository starts from its own default branch. Use it for a branch that exists in one repository only, such as a pull request's branch."`
+
 	// Exact paths to copy from the source repo — never searched for.
 	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Exact paths relative to the project root to copy into the new worktree (e.g. .env or web/node_modules). Each path is copied as-is; nothing is searched for."`
 
@@ -174,8 +177,9 @@ Prefer this to running "git worktree add" yourself: a checkout made by hand is i
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 
 ACTIONS:
-1. create - Required: name. Optional: branch, base_branch, copy_files, force
+1. create - Required: name. Optional: branch, base_branch, base_branch_repo, copy_files, force
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   In a multi-repo project base_branch must exist in every repository; to start from a branch that exists in one repository only (e.g. a pull request's branch), also pass base_branch_repo (the name of that repository) and the others start from their default branch.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
 2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
@@ -284,6 +288,20 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 		return fail("%v", err)
 	}
 
+	// base_branch_repo scopes the base to one repository; the rest start
+	// from their own default branch (the daemon's detection).
+	globalBase, baseBranches := p.BaseBranch, map[string]string(nil)
+	if p.BaseBranchRepo != "" {
+		if p.BaseBranch == "" {
+			return fail("base_branch_repo needs base_branch: name the branch that repository starts from")
+		}
+		target := baseBranchRepo(repos, p.BaseBranchRepo)
+		if target == nil {
+			return fail("base_branch_repo %q is not a repository of this project (its repositories: %s)", p.BaseBranchRepo, repoNames(repos))
+		}
+		globalBase, baseBranches = "", map[string]string{target.ID: p.BaseBranch}
+	}
+
 	var chatID *string
 	if rc.ChatID != "" {
 		id := rc.ChatID
@@ -302,7 +320,8 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 		Repos:         repos,
 		Name:          p.Name,
 		Branch:        p.Branch,
-		BaseBranch:    p.BaseBranch,
+		BaseBranch:    globalBase,
+		BaseBranches:  baseBranches,
 		Force:         p.Force,
 		CopyPaths:     copyPaths,
 		CopySource:    copySource,
@@ -338,6 +357,10 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	// Settled either way (ACTIVE or FAILED): tell connected clients.
 	w.emitChanged(ctx, machine.userID, project.ID, wt.ID)
 	if finishErr != nil {
+		var noBase *workspacecreate.BaseNotFoundError
+		if errors.As(finishErr, &noBase) && len(repos) > 1 && p.BaseBranchRepo == "" {
+			return fail("%v. If the branch exists in one repository only, pass base_branch_repo=<that repository> as well: the other repositories then start from their default branch. (The attempt is recorded as a failed worktree named '%s'; creating again with that name replaces it.)", finishErr, p.Name)
+		}
 		return fail("%v (the attempt is recorded as a failed worktree named '%s'; creating again with that name replaces it)", finishErr, p.Name)
 	}
 
@@ -846,6 +869,26 @@ func (w *worktreeTool) info(row *db.Worktree, repos []*core.Repo) *WorktreeInfo 
 		}
 	}
 	return info
+}
+
+// baseBranchRepo is the repository base_branch_repo names: by name, or by
+// its path relative to the project root.
+func baseBranchRepo(repos []*core.Repo, want string) *core.Repo {
+	slash := func(p string) string { return strings.Trim(strings.ReplaceAll(p, `\`, "/"), "/") }
+	for _, repo := range repos {
+		if repo.Name == want || (repo.RelativePath != "" && slash(repo.RelativePath) == slash(want)) {
+			return repo
+		}
+	}
+	return nil
+}
+
+func repoNames(repos []*core.Repo) string {
+	names := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		names = append(names, repo.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // checkoutPath is where a repository's checkout sits in a workspace. The

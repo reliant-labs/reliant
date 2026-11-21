@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/workflow"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -29,8 +30,8 @@ import (
 //     run's main view): the root, when an agent reads it (an agent chat); else
 //     the run's one agent, when exactly one is running; else, with several
 //     running in parallel, a refusal that lists them so the sender names one —
-//     never a guess; else, with none running, "not delivered: no agent is
-//     running in this run", and nothing is queued.
+//     never a guess; else, with none running, refuse without queueing, except
+//     for a paused builtin agent whose root will read after resume.
 //   - A thread id of the run: that thread, when an agent reads it or it is a
 //     sub-agent spawned in this run that is still running (whose mailbox,
 //     stop and resume work as before); otherwise refused, listing the
@@ -66,8 +67,8 @@ type runRecipient struct {
 
 // resolveRunRecipient decides where input to the run rooted at workflowID
 // goes; requested is the sender's target ("" for none). rootThread is the
-// root workflow's thread.
-func (s *Service) resolveRunRecipient(ctx context.Context, chat *db.Chat, workflowID, rootThread, requested string) (runRecipient, error) {
+// root workflow's thread and rootRun is its workflow row, if known.
+func (s *Service) resolveRunRecipient(ctx context.Context, chat *db.Chat, workflowID, rootThread, requested string, rootRun *db.Workflow) (runRecipient, error) {
 	requested = strings.TrimSpace(requested)
 	listeners, err := s.agentLoopThreads(ctx, workflowID)
 	if err != nil {
@@ -93,7 +94,14 @@ func (s *Service) resolveRunRecipient(ctx context.Context, chat *db.Chat, workfl
 		case len(listeners) == 1:
 			rec.thread = listeners[0].Thread
 		case len(listeners) == 0:
-			return rec, errNoListeningAgent()
+			// The builtin agent can pause at the graph boundary before it
+			// registers its root loop. The send itself resumes that loop,
+			// so an empty registry must not stop the send from reaching resume.
+			if rootRun == nil || rootRun.ID != workflowID || rootRun.Thread != rootThread ||
+				rootRun.Status != db.Paused() || rootRun.WorkflowName != workflow.DefaultWorkflow {
+				return rec, errNoListeningAgent()
+			}
+			rec.thread = rootThread
 		default:
 			return rec, s.errRecipientAmbiguous(ctx, listeners)
 		}
