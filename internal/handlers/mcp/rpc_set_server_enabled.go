@@ -78,11 +78,10 @@ func (s *Service) SetServerEnabled(
 			defer cancel()
 
 			if err := s.preflightMCPServer(ctx, checkout, name, intCfg); err != nil {
-				logging.ErrorContext(ctx, "MCP server enable/disable failed",
+				logServerFailure(ctx, "MCP server enable/disable failed", err,
 					"operation", "set_enabled",
 					"server", name,
 					"phase", "preflight",
-					"error", err,
 				)
 				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
 					Success: false,
@@ -93,11 +92,10 @@ func (s *Service) SetServerEnabled(
 			}
 
 			if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
-				logging.ErrorContext(ctx, "MCP server enable/disable failed",
+				logServerFailure(ctx, "MCP server enable/disable failed", err,
 					"operation", "set_enabled",
 					"server", name,
 					"phase", "startup",
-					"error", err,
 				)
 				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
 					Success: false,

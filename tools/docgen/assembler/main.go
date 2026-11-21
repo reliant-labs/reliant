@@ -738,7 +738,7 @@ func generateGotchas() string {
 
 ### Response tools
 - Force structured LLM output for routing/classification
-- ` + "`builtin://agent`" + ` returns when no tool calls remain (use ` + "`ask: true`" + ` to prompt for user feedback first)
+- ` + "`builtin://agent`" + ` returns when no tool calls remain (use ` + "`ask: true`" + ` to prompt for user feedback first). ` + "`args.max_turns`" + ` bounds it (0, the default, is no limit; set it in any unattended or ` + "`max_running`" + ` workflow) and ` + "`args.tool_params`" + ` binds tool parameters the model cannot see, e.g. ` + "`{shell: {credentials: none}}`" + ` (with ` + "`spawn_presets: []`" + `, since a spawned sub-agent's tools are not bound)
 - ` + "`builtin://structured-agent`" + ` returns when the response tool is called (use ` + "`ask: true`" + ` to prompt for user feedback first)
 - Access structured output via ` + "`nodes.<execute_tools_id>.response_data.<tool_name>`" + `
 
