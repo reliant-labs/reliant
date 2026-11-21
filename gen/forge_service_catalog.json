@@ -47190,6 +47190,11 @@
             {
               "name": "exclude_skill_catalog",
               "kind": "bool"
+            },
+            {
+              "name": "continuation",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [

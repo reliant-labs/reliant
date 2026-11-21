@@ -985,6 +985,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		Usage:              usage,
 		FinishReason:       finishReason,
 		Phase:              responseswire.AssistantPhase(resp),
+		PrematureStop:      responseswire.PrematureStop(resp, nil, len(toolCalls), content),
 		UpstreamRequestID:  upstreamRequestID,
 		UpstreamProxymanID: upstreamProxymanID,
 	}, nil
@@ -1073,6 +1074,9 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		currentContent := ""
 		toolCallsByID := make(map[string]*message.ToolCall)
 		var finalResp *responses.Response
+		// Assistant messages as output_item.done delivered them, for
+		// responseswire.PrematureStop when the terminal output is empty.
+		var streamedMessages []responses.ResponseOutputMessage
 
 		for ; hasNext; hasNext = stream.Next() {
 			ev := stream.Current()
@@ -1092,6 +1096,9 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				// Detect when reasoning item completes
 				if reasoning := v.Item.AsReasoning(); reasoning.Type == "reasoning" {
 					eventChan <- llm.DriverEvent{Type: llm.EventThinkingStop}
+				}
+				if msg := v.Item.AsMessage(); msg.Type == "message" {
+					streamedMessages = append(streamedMessages, msg)
 				}
 			case responses.ResponseReasoningSummaryPartAddedEvent:
 				// Streaming reasoning summary delta
@@ -1248,6 +1255,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				Usage:              usage,
 				FinishReason:       finishReason,
 				Phase:              responseswire.AssistantPhase(finalResp),
+				PrematureStop:      responseswire.PrematureStop(finalResp, streamedMessages, len(finalToolCalls), currentContent),
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},

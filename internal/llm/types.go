@@ -149,6 +149,14 @@ type DriverResponse struct {
 	// "commentary".
 	Phase string
 
+	// PrematureStop is set when an OpenAI Responses turn (codex, openai)
+	// completed in a shape that usually means the model stopped before doing
+	// the work: interim commentary with no final answer, or reasoning with no
+	// visible output. Empty on every other driver and on ordinary turns. It is
+	// a hint, not a verdict: call_llm decides what to do with it (one nudged
+	// retry per turn), and FinishReason stays what the provider said.
+	PrematureStop PrematureStop
+
 	// Upstream correlation identifiers copied from provider response headers when available.
 	// Used for log correlation between Reliant app logs and HTTP capture tooling (e.g. Proxyman).
 	UpstreamRequestID  string // e.g. x-oai-request-id
