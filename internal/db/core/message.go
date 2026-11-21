@@ -38,6 +38,9 @@ type Message struct {
 	// ProviderAccountID is the provider account that served an assistant
 	// message; nil before accounts were recorded and for other roles.
 	ProviderAccountID *string
+	// ThinkingLevel is the effective thinking (reasoning-effort) level an
+	// assistant message ran at; nil when none was recorded.
+	ThinkingLevel *string
 	// SenderThreadID and SenderKind attribute a message another agent wrote
 	// (a spawn_send, say) to its sender. Both nil means the human, or the
 	// model's own output. SenderThreadID is not a foreign key: a message

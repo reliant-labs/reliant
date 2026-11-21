@@ -5,8 +5,6 @@ description: "Create a Go Connect RPC service, a Postgres table and a React fron
 keywords: ["Go React framework", "Connect RPC", "Go Postgres app", "full-stack Go", "forge project new"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L/LD steps run in scratch: yes (guides-scratch/build-go-react-app-connect-rpc/shop: project new, entity, scaffold --dry-run, scaffold, generate, go build, lint --quiet, env up dev, curl healthz + ListProducts + /products, db query dev, env down dev) · H steps: none */}
-
 You will create `shop`: a Go API that serves a `catalog` service over [Connect RPC](https://connectrpc.com), a `products` table in Postgres, and a Next.js frontend that calls it through generated, typed React hooks. At the end the whole stack runs on your machine with seeded data, and nothing needs an account.
 
 Forge derives the API from your proto file and the data access from your SQL migrations, so you write one message and get the table, the RPCs, the hooks and the pages. [Two sources of truth](/forge/concepts/two-sources-of-truth) explains that split. The [Forge quick start](/forge/quick-start) covers the same ground in prose and goes on to deploy; this guide stays local and shows the output of each step.

@@ -738,6 +738,11 @@ message Message {
   // a message keeps role USER (every provider accepts it) but must not be
   // presented as the user's own words. Unset means the human (or the model).
   MessageSender sender = 20;
+  // thinking_level is the effective thinking (reasoning-effort) level the
+  // assistant turn ran at, after the model's capabilities reconciled the
+  // requested one. Unset for a message no model wrote, a model that takes no
+  // level, and a message saved before this was recorded.
+  optional string thinking_level = 21;
 }
 
 // MessageSender attributes a message to the agent thread that sent it.
