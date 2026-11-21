@@ -106,6 +106,12 @@ async function openFixtureChat(page: Page) {
   await scrollToEnd(page)
 }
 
+/** Open the nav drawer on a phone: the menu button of the phone's shell, or the shell's own on an app page. */
+async function openNavDrawer(page: Page) {
+  await page.getByRole('button', { name: /^(Open menu|Show sidebar)/ }).first().click()
+  await expect(page.getByRole('dialog', { name: 'Navigation' }).or(page.getByTestId('shell-nav')).first()).toBeVisible()
+}
+
 const SURFACES: Surface[] = [
   {
     name: 'home-sidebar',
@@ -338,6 +344,26 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
     act: async (page) => {
       await page.getByRole('button', { name: 'Show sidebar' }).click()
+    },
+  },
+  {
+    // The phone's drawer (Mobile/MobileNavDrawer, or the shell's narrow drawer on an app page)
+    // draws the one hybrid nav: open at the top level, then drilled into Observability.
+    name: 'shell-m-drawer-top',
+    path: '/forge/p/shopfront',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('nav-observability'),
+    act: openNavDrawer,
+  },
+  {
+    name: 'shell-m-drawer-observability',
+    path: '/forge/p/shopfront',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('nav-drill-in'),
+    act: async (page) => {
+      await openNavDrawer(page)
+      await page.getByTestId('nav-observability').click()
+      await expect(page.getByTestId('nav-drill-in')).toBeVisible()
     },
   },
   {
