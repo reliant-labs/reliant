@@ -14,9 +14,10 @@
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *                                             one dashboard: a release one (`release/<id>`)
  *                                             or a workspace one (`workspace/<slug>`)
- *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only
+ *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only (buckets only, U6e)
  *                                             (`bucket`, `prefix`, `object`, `token`: Storage/storageUrl-model.ts)
- *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
+ *   /forge/p/:project/data                    Data: the database's home (U6e): each managed Postgres in scope,
+ *                                             then the scoped environment's tables, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
  *   /forge/p/:project/users                   Users: who can sign in to the scoped environment
@@ -29,7 +30,8 @@
  *   /forge/p/:project/activity                Activity (the audit log)
  *   /forge/p/:project/services                Services: every workload, the site and the database, live
  *                                             (`view=charts`: each workload's charts, U6e)
- *   /forge/p/:project/services/:name          one of them, across the environments in scope
+ *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
+ *                                             database's name redirects to Data (U6e)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -245,10 +247,12 @@ export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app,
 /** Observability's Overview (U6e): where drilling into Observability lands. */
 export const obsOverviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "obs-overview" }, ctx);
 export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "services" }, ctx);
-/** Storage: the app's buckets. */
+/** Storage: buckets (object storage) only (U6e). */
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+/** Data: the database's home (U6e): its status, backups and metrics as reported, then its tables. */
+export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
 /** Services' charts view (U6e): every workload's charts. */
 export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);

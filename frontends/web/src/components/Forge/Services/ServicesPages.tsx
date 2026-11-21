@@ -117,7 +117,8 @@ function ProjectServicesPage() {
           loading={loading}
           redLoading={red.isLoading}
           showEnv={all}
-          hrefOf={(row) => href({ kind: "service", name: row.name }, all ? {} : { env: row.envName })}
+          // A database's page is Data (U6e): its tables, status and backups.
+          hrefOf={(row) => (row.type === "database" ? href({ kind: "data" }, { env: row.envName }) : href({ kind: "service", name: row.name }, all ? {} : { env: row.envName }))}
           releaseHref={(version) => href({ kind: "release", version })}
         />
       )}
@@ -332,7 +333,7 @@ function ProjectServiceRows({ project }: { project: SeveralApp }) {
       redLoading={live.red.isLoading}
       showEnv
       project={project.name}
-      hrefOf={(row) => withSearch(consolePath(project.app, { kind: "service", name: row.name }), { env: row.envName })}
+      hrefOf={(row) => withSearch(consolePath(project.app, row.type === "database" ? { kind: "data" } : { kind: "service", name: row.name }), { env: row.envName })}
       releaseHref={(version) => consolePath(project.app, { kind: "release", version })}
     />
   );

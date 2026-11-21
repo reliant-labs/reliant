@@ -3,6 +3,7 @@ import { baseFixtures } from './base'
 import { billingFixtures } from './billing'
 import { chatFixtures } from './chat'
 import { consoleFixtures } from './console'
+import { dataFixtures } from './data'
 import { projectCatalogFixtures } from './projects'
 import { servicesFixtures } from './services'
 import { u6cFixtures } from './u6c'
@@ -28,5 +29,6 @@ export const allFixtures: Fixtures = {
   ...servicesFixtures,
   ...u6cFixtures,
   ...overviewFixtures,
+  ...dataFixtures,
   [QUERY_PANEL]: queryPanel,
 }
