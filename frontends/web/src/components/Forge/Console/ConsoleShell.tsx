@@ -275,6 +275,12 @@ export function consoleCrumbs(
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
     case "auth":
       return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 

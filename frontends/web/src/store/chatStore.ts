@@ -934,6 +934,8 @@ interface ChatStoreState {
     // Where it runs: a machine (daemonId), no machine by design (noMachine),
     // or neither for default resolution. See lib/chatMachine.ts.
     machine?: { daemonId?: string; noMachine?: boolean },
+    // The app the chat is about (Chat.app_name), when it starts from one.
+    about?: { appName?: string },
   ) => Promise<Chat>;
   // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
   startExistingChat: (
@@ -1355,6 +1357,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
     machine?: { daemonId?: string; noMachine?: boolean },
+    about?: { appName?: string },
   ) => {
     const projectId = useProjectStore.getState().currentProject?.id;
     if (!projectId) {
@@ -1374,13 +1377,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // whose response was lost may well have made the chat; sending it again
     // under a new id makes a second one. The composer puts the text back when
     // a start fails, so the user's next send is the same message and must find
-    // the same id: that is what the server recognizes it by.
+    // the same id: that is what the server recognizes it by. The app the chat
+    // is about is part of the request: a retry after the app tag changed is a
+    // different start, under a new id, so it never gets the old chat back.
     const attemptKey = JSON.stringify([
       "start",
       projectId,
       worktreeId ?? "",
       firstMessage,
       attachmentIds ?? [],
+      about?.appName || "",
     ]);
     const chat = await chatActions.startChat({
       project_id: projectId,
@@ -1398,6 +1404,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : undefined,
       selectedPresets: selectedPresets,
       client_message_id: attemptIdFor(attemptKey),
+      app_name: about?.appName || undefined,
     });
     endAttempt(attemptKey);
 
