@@ -65,13 +65,41 @@ export function FailureOutput({ output, open, label = "Output", testId }: { outp
   );
 }
 
-/** A link out of the console (CI, an issue): a new tab, marked as leaving. */
+/**
+ * A recorded URL that is safe to open: an absolute https URL, or null. CI run
+ * and issue URLs arrive in uploaded run metadata, which anyone holding the
+ * project's upload token writes, so a `javascript:`, `data:` or plain-http
+ * value is never made a link. Any https host is allowed: CI and issue
+ * trackers are self-hosted as often as not.
+ */
+export function safeOutUrl(href: string): URL | null {
+  try {
+    const url = new URL(href);
+    return url.protocol === "https:" && !url.username && !url.password ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A link out of the console (CI, an issue): a new tab, marked as leaving, its
+ * destination host in its title. A URL safeOutUrl refuses is shown as text.
+ */
 export function OutLink({ href, children, testId, className }: { href: string; children: ReactNode; testId?: string; className?: string }) {
+  const url = safeOutUrl(href);
+  if (!url) {
+    return (
+      <span className={cn("whitespace-nowrap text-ink-muted", className)} title={`Not a link: ${href}`} data-testid={testId} data-unsafe-url="">
+        {children}
+      </span>
+    );
+  }
   return (
     <a
-      href={href}
+      href={url.href}
+      title={`Opens ${url.host}`}
       target="_blank"
-      rel="noreferrer"
+      rel="noopener noreferrer"
       className={cn("inline-flex items-center gap-1 whitespace-nowrap text-primary-ink underline-offset-2 hover:underline", className)}
       data-testid={testId}
     >
