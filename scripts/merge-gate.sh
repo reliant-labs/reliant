@@ -532,13 +532,26 @@ if [ "$fail" = 0 ]; then
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
-  if [ "$webdemo" = true ]; then
-    phase demo demo_build & pids+=($!)
-  fi
-  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
-  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
-  if [ "$webbuild" = true ]; then
-    phase webbuild scripts/web-release-build.sh & pids+=($!)
+  # The two vite builds are the gate's largest phases: on reliant#2935's merge
+  # with main the demo bundle peaked at 9.1 GB RSS and the renderer's release
+  # bundle at 11.8 GB, each on its own. Beside test, tsc -b and lint on the
+  # queue's 16 GiB runner the demo build alone took the gate to 14.6 GiB
+  # (cgroup memory.peak); with both, the runner ran out (#2935 twice, #3009
+  # twice: "The runner has received a shutdown signal", or a job with no log
+  # at its 30-minute timeout). So on a small host (gen_alone, the memory
+  # budget above) they run after every other phase, one at a time
+  # (run_bundles, below); on a bigger host, beside the rest.
+  if [ "$gen_alone" = 1 ]; then
+    bundles_after=1
+  else
+    if [ "$webdemo" = true ]; then
+      phase demo demo_build & pids+=($!)
+    fi
+    # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+    # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+    if [ "$webbuild" = true ]; then
+      phase webbuild scripts/web-release-build.sh & pids+=($!)
+    fi
   fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
@@ -607,6 +620,18 @@ fi
 # Every launched phase is waited for, the generators too when the gate failed
 # before build: cleanup must not remove a checkout a generator still writes.
 for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done
+# run_bundles: a small host's vite builds, deferred above, one at a time now
+# that nothing else runs. They run even when another phase failed, so the
+# summary names every failure, and before an --amend failure resets the tree.
+run_bundles() {
+  local rc=0
+  [ "$webdemo" = true ] || [ "$webbuild" = true ] || return 0
+  notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; the vite builds (demo, release) ran one at a time after the other phases")
+  if [ "$webdemo" = true ]; then phase demo demo_build || rc=1; fi
+  if [ "$webbuild" = true ]; then phase webbuild scripts/web-release-build.sh || rc=1; fi
+  return "$rc"
+}
+if [ "${bundles_after:-0}" = 1 ]; then run_bundles || fail=1; fi
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq
@@ -638,7 +663,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
