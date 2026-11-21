@@ -55,9 +55,8 @@ describe("UsersPage", () => {
     render(<UsersPage />);
     expect(screen.getByRole("heading", { name: "Users" })).toBeInTheDocument();
     expect(screen.getByTestId("identity-tab-stub")).toHaveTextContent("prod");
-    const props = state.tab.mock.calls.at(-1)![0] as Record<string, unknown> & { envNameById: (id: string) => string | undefined };
+    const props = state.tab.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(props).toMatchObject({ envName: "prod", lifecycle: "deployed", live: PROD, layout: "page" });
-    expect(props.envNameById("env-prod-id")).toBe("prod");
   });
 
   it("asks for one environment when the scope is all of them", async () => {

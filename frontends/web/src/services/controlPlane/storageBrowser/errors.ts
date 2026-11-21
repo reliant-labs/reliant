@@ -50,7 +50,7 @@ export type StorageErrorKind =
   | "too-slow"
   | "unavailable";
 
-/** An older control plane without the rpc, or one that has it but runs without the reader behind it. */
+/** A control plane that does not serve the rpc, or serves it without the reader behind it. */
 function notOnThisServer(error: ConnectError): boolean {
   if (error.code === Code.Unimplemented) return true;
   return error.code === Code.Unavailable && /not configured/i.test(error.rawMessage || error.message);
