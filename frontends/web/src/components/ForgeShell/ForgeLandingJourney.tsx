@@ -15,6 +15,7 @@ import { getJourney, isJourneyAvailable } from "@/components/Onboarding/journeys
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
 import { trackEvent } from "@/lib/analytics";
 import { dropLandingJourney, readLandingJourney } from "@/lib/landingAttribution";
+import { orgFreeRouteId } from "@/lib/paths/org";
 import { useAuthStore } from "@/store/authStore";
 
 import { forgeAuthDecision } from "./ForgeAuthGuard";
@@ -24,7 +25,7 @@ export function ForgeLandingJourney() {
   const nav = useTourNavigation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tourOpen = useRouterState({ select: (s) => (s.location.search as Record<string, unknown>).tour !== undefined });
-  const guarded = useRouterState({ select: (s) => s.matches.some((m) => m.routeId === GUARDED_ROUTE_ID) });
+  const guarded = useRouterState({ select: (s) => s.matches.some((m) => orgFreeRouteId(m.routeId) === GUARDED_ROUTE_ID) });
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
   const initialized = useAuthStore((state) => state.initialized);

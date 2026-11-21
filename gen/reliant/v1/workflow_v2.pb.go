@@ -3306,8 +3306,12 @@ type SaveMessageNodeArgs struct {
 	// completion, forwarded from CallLLMOutput.provider_account_id and persisted
 	// onto messages.provider_account_id.
 	ResolvedProviderAccountId string `protobuf:"bytes,33,opt,name=resolved_provider_account_id,json=resolvedProviderAccountId,proto3" json:"resolved_provider_account_id,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// ResolvedThinkingLevel is the effective thinking level the completion ran
+	// at, forwarded from CallLLMOutput.thinking_level and persisted onto
+	// messages.thinking_level.
+	ResolvedThinkingLevel string `protobuf:"bytes,34,opt,name=resolved_thinking_level,json=resolvedThinkingLevel,proto3" json:"resolved_thinking_level,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *SaveMessageNodeArgs) Reset() {
@@ -3476,6 +3480,13 @@ func (x *SaveMessageNodeArgs) GetResolvedPhase() string {
 func (x *SaveMessageNodeArgs) GetResolvedProviderAccountId() string {
 	if x != nil {
 		return x.ResolvedProviderAccountId
+	}
+	return ""
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedThinkingLevel() string {
+	if x != nil {
+		return x.ResolvedThinkingLevel
 	}
 	return ""
 }
@@ -6253,7 +6264,13 @@ type CallLLMOutput struct {
 	// this turn's tool calls, on whichever worker it lands, opens each call's
 	// span under the turn that asked for it (internal/telemetry/ai_spans.go).
 	// Empty when the turn was not traced.
-	TraceParent   string `protobuf:"bytes,21,opt,name=trace_parent,json=traceParent,proto3" json:"trace_parent,omitempty"`
+	TraceParent string `protobuf:"bytes,21,opt,name=trace_parent,json=traceParent,proto3" json:"trace_parent,omitempty"`
+	// ThinkingLevel is the effective thinking (reasoning-effort) level this
+	// completion was requested at, after the model's capabilities reconciled
+	// the requested one: what the step actually ran at. Empty when the model
+	// takes no level (it cannot reason, or runs at its driver's default). The
+	// inline save_message persists it onto messages.thinking_level.
+	ThinkingLevel string `protobuf:"bytes,22,opt,name=thinking_level,json=thinkingLevel,proto3" json:"thinking_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6417,6 +6434,13 @@ func (x *CallLLMOutput) GetProviderAccountId() string {
 func (x *CallLLMOutput) GetTraceParent() string {
 	if x != nil {
 		return x.TraceParent
+	}
+	return ""
+}
+
+func (x *CallLLMOutput) GetThinkingLevel() string {
+	if x != nil {
+		return x.ThinkingLevel
 	}
 	return ""
 }
@@ -9379,7 +9403,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0fAskQuestionArgs\x12\xfb\x02\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xc7\x02\x82\xb5\x18\xc2\x02\n" +
 	"\xbf\x01The questions to ask, as JSON: {\"type\": \"ask_user\", \"questions\": [...]}, each question with its text and options. Without \"type\": \"ask_user\" the app shows no options and nothing can answer it\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xd4\r\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x94\x0e\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12\xa6\x01\n" +
@@ -9408,7 +9432,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eresolved_model\x18\x1e \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedModel\x12-\n" +
 	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent\x12-\n" +
 	"\x0eresolved_phase\x18  \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedPhase\x12G\n" +
-	"\x1cresolved_provider_account_id\x18! \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x19resolvedProviderAccountId:c\x8a\xb5\x18_\n" +
+	"\x1cresolved_provider_account_id\x18! \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x19resolvedProviderAccountId\x12>\n" +
+	"\x17resolved_thinking_level\x18\" \x01(\tB\x06\x82\xb5\x18\x02 \x01R\x15resolvedThinkingLevel:c\x8a\xb5\x18_\n" +
 	"\fsave_message\x12\fSave Message\x1a)Save a message to the conversation thread*\aagentic2\rMessageSquare\"\\\n" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
@@ -9731,7 +9756,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xe6\a\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\x9d\b\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -9766,7 +9791,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x13provider_account_id\x18\x14 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\x11providerAccountId\x121\n" +
 	"\ftrace_parent\x18\x15 \x01(\tB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\vtraceParent\"\x82\x06\n" +
+	"Z\badvancedR\vtraceParent\x125\n" +
+	"\x0ethinking_level\x18\x16 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\rthinkingLevel\"\x82\x06\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +

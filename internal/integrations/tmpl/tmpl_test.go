@@ -89,6 +89,17 @@ func TestEvalExpr(t *testing.T) {
 	}
 }
 
+// An output keeps one piece of a longer string: a commit message's first line.
+func TestEvalExprHasTheStringExtension(t *testing.T) {
+	got, err := EvalExpr(`response.message.split('\n')[0].trim()`, map[string]any{"response": map[string]any{"message": "Fix the save crash \n\nLong body."}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Fix the save crash" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 // GitHub's contents API sends a file base64-encoded, wrapped at 60 columns.
 // base64.decode undoes it, newlines and all, and .text() yields the string
 // only when the bytes are text: an image is an absent value, never an error

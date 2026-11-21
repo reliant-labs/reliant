@@ -2,10 +2,12 @@
 import { describe, expect, it } from "vitest";
 import { Code, ConnectError, createRouterTransport, type Interceptor } from "@connectrpc/connect";
 import { ChatService } from "#gen/reliant/v1/chat_pb.js";
+import { StreamingService } from "#gen/reliant/v1/streaming_pb.js";
 import type { AuthTokenProvider } from "./auth.js";
 import { createReliantClient } from "./client.js";
 import { FAILED_SEND_PREFIX } from "./send-ids.js";
-import { resolveTransport, type ReliantTransportOptions } from "./transport.js";
+import { resolveTransport, sdkInterceptors, serviceClient, type ReliantTransportOptions } from "./transport.js";
+import { SDK_VERSION } from "./version.js";
 
 // The SDK's interceptor chain on its normal path: `baseUrl` + `createTransport`,
 // so resolveTransport composes normalise -> auth -> trace before the host's own
@@ -112,5 +114,118 @@ describe("the SDK transport chain", () => {
     const transport = createRouterTransport(() => {});
     expect(resolveTransport({ transport, baseUrl: "https://ignored.test" })).toBe(transport);
     expect(() => resolveTransport({ baseUrl: "https://x.test" })).toThrow(/createTransport/);
+  });
+});
+
+// Every call on a transport the SDK builds names this SDK in Reliant-Client:
+// the server refuses a reliant.v1 call that names no client once it enforces
+// its minimum, so a missed path is a broken client. These pin each way a call
+// leaves the SDK, and that a host's own transport keeps its own identity.
+describe("Reliant-Client", () => {
+  const ID = `sdk-ts/${SDK_VERSION}`;
+
+  function wire(interceptors: Interceptor[] = []) {
+    const seen: Array<{ procedure: string; client: string | null }> = [];
+    const transport = createRouterTransport(
+      (router) => {
+        router.rpc(ChatService.method.sendMessage, async (_req, ctx) => {
+          seen.push({ procedure: "sendMessage", client: ctx.requestHeader.get("reliant-client") });
+          return { messageId: "m-1" };
+        });
+        router.rpc(StreamingService.method.streamChatUpdates, async function* (_req, ctx) {
+          seen.push({ procedure: "streamChatUpdates", client: ctx.requestHeader.get("reliant-client") });
+        });
+      },
+      { transport: { interceptors } },
+    );
+    return { seen, transport };
+  }
+
+  async function callBoth(sdk: ReturnType<typeof createReliantClient>) {
+    await sdk.service(ChatService).sendMessage({ chatId: CHAT });
+    for await (const _ of sdk.service(StreamingService).streamChatUpdates({ chatId: CHAT })) {
+      // drain
+    }
+  }
+
+  it("is sent on unary and streaming calls of a transport the SDK builds", async () => {
+    let w = wire();
+    const sdk = createReliantClient({
+      baseUrl: "https://api.example.test",
+      createTransport: ({ interceptors }) => {
+        w = wire(interceptors);
+        return w.transport;
+      },
+    });
+    await callBoth(sdk);
+    expect(w.seen).toEqual([
+      { procedure: "sendMessage", client: ID },
+      { procedure: "streamChatUpdates", client: ID },
+    ]);
+  });
+
+  it("is sent on unary and streaming calls when createTransport drops the chain", async () => {
+    const w = wire();
+    const sdk = createReliantClient({ baseUrl: "https://api.example.test", createTransport: () => w.transport });
+    await callBoth(sdk);
+    expect(w.seen.map((s) => s.client)).toEqual([ID, ID]);
+  });
+
+  it("is sent through the client's exposed transport, and by a host chain built on sdkInterceptors()", async () => {
+    let w = wire();
+    const sdk = createReliantClient({
+      baseUrl: "https://api.example.test",
+      createTransport: ({ interceptors }) => {
+        w = wire(interceptors);
+        return w.transport;
+      },
+    });
+    await serviceClient(sdk.transport, ChatService).sendMessage({ chatId: CHAT });
+    const host = wire(sdkInterceptors());
+    await serviceClient(host.transport, ChatService).sendMessage({ chatId: CHAT });
+    expect([...w.seen, ...host.seen].map((s) => s.client)).toEqual([ID, ID]);
+  });
+
+  it("leaves a host's supplied transport, and its identity, to the host", async () => {
+    const bare = wire();
+    await callBoth(createReliantClient({ transport: bare.transport }));
+    expect(bare.seen.map((s) => s.client)).toEqual([null, null]);
+
+    const web: Interceptor = (next) => async (req) => {
+      req.header.set("Reliant-Client", "web/1.9.2");
+      return next(req);
+    };
+    const host = wire([web]);
+    await callBoth(createReliantClient({ transport: host.transport }));
+    expect(host.seen.map((s) => s.client)).toEqual(["web/1.9.2", "web/1.9.2"]);
+  });
+
+  it("yields to a host interceptor or a caller's own header on a transport the SDK builds", async () => {
+    const cli: Interceptor = (next) => async (req) => {
+      req.header.set("Reliant-Client", "cli/1.9.2");
+      return next(req);
+    };
+    let w = wire();
+    const sdk = createReliantClient({
+      baseUrl: "https://api.example.test",
+      interceptors: [cli],
+      createTransport: ({ interceptors }) => {
+        w = wire(interceptors);
+        return w.transport;
+      },
+    });
+    await callBoth(sdk);
+    expect(w.seen.map((s) => s.client)).toEqual(["cli/1.9.2", "cli/1.9.2"]);
+
+    let own = wire();
+    const plain = createReliantClient({
+      baseUrl: "https://api.example.test",
+      createTransport: ({ interceptors }) => {
+        own = wire(interceptors);
+        return own.transport;
+      },
+    });
+    await plain.service(ChatService).sendMessage({ chatId: CHAT }, { headers: { "Reliant-Client": "daemon/1.9.2" } });
+    expect(own.seen.map((s) => s.client)).toEqual(["daemon/1.9.2"]);
   });
 });
