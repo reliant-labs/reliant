@@ -1088,6 +1088,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--attach <dir> links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .
+
 ```
 reliant daemon start [flags]
 ```
@@ -1097,6 +1105,7 @@ reliant daemon start [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool |
