@@ -137,7 +137,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       await expect(block).toBeVisible(LOADED);
       await expect(page.getByTestId('claim-signed-in-as')).toContainText('me@example.com');
       await expect(block).toContainText(/you'll own it/i);
-      await expect(block).toContainText(/one static site/i);
+      await expect(block).toContainText(/where you want free hosting to stay/i);
       await expect(page.getByTestId('claim-into-account-button')).toBeEnabled();
       await expect(page.getByTestId('claim-submit')).toHaveCount(0);
       await expect(page.getByTestId('claim-site')).toBeVisible();
@@ -326,7 +326,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       const mock = await arriveWithConflict(page);
       await openChoice(page);
 
-      const dialog = page.getByRole('dialog', { name: /already have a free site/i });
+      const dialog = page.getByRole('dialog', { name: /choose where free hosting stays/i });
       await expect(dialog).toBeVisible();
       await expect(page.getByTestId('free-site-existing')).toContainText('quiet-heron.sites.reliantlabs.dev');
       await expect(page.getByTestId('free-site-claimed')).toContainText('amber-quokka.reliantpreview.dev');
@@ -351,8 +351,8 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
       expect(mock.choices).toEqual(['FREE_SITE_CHOICE_CLAIMED']);
       await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
-      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept this site live/i);
-      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/subscribe/i);
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you chose free hosting for the site you claimed/i);
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/review billing/i);
       await shot(page, 'apps-after-keep-new');
     });
 
@@ -364,7 +364,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
 
       await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
       expect(mock.choices).toEqual(['FREE_SITE_CHOICE_EXISTING']);
-      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept your existing site live/i);
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept free hosting where it was/i);
       await shot(page, 'apps-after-keep-existing');
     });
 

@@ -1,6 +1,7 @@
 ---
-title: "Skills"
-description: "Reusable agent instructions that customize how Reliant works"
+title: "Agent skills: reusable SKILL.md instructions"
+sidebarTitle: "Skills"
+description: "Reliant skills are reusable SKILL.md instruction files in .reliant/skills that give agents task-specific expertise; how to create, load and manage them."
 ---
 
 Skills are reusable sets of instructions that customize how Reliant's agents behave for specific tasks. Think of them as saved expertise — a skill for "frontend design" or "incident response" gives agents the right context, examples, and rules without you repeating yourself every time. Skills use the shared **Agent Skills** format (`SKILL.md`), so they're portable across tools that support the standard.
@@ -54,7 +55,7 @@ In a project with several repositories, each repository's own skill folders are 
 
 A `SKILL.md` in a subdirectory of a skill is a **sub-skill**: `.reliant/skills/go/error-handling/SKILL.md` becomes `go/error-handling`, listed under `go`.
 
-Reliant ships a few built-in skills of its own: `code-search`, `reliant-config` and `workflow-builder`. General-purpose methodology skills, such as code review, debugging and refactoring, come from Forge and are offered in every project; a [Forge](/features/deploy-and-host) project also gets Forge's own framework skills.
+Reliant ships a few built-in skills of its own: `code-search`, `reliant-config` and `workflow-builder`. General-purpose methodology skills, such as code review, debugging and refactoring, come from Forge and are offered in every project; a [Forge](/forge/overview) project also gets Forge's own framework skills.
 
 ## SKILL.md format
 

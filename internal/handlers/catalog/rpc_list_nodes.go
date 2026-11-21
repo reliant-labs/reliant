@@ -75,6 +75,8 @@ func (s *Service) nodeToolOptions() []*reliantv1.NodeFieldOption {
 }
 
 // ListNodes returns all workflow nodes available for the builder
+//
+// forge:auth-unscoped-ok: the workflow node registry is built into the binary and the same for every caller
 func (s *Service) ListNodes(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListNodesRequest],

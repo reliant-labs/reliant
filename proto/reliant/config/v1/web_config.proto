@@ -223,4 +223,9 @@ message ReliantWebConfig {
     env_var: "CLI_DEFAULTS_BAKED"
     description: "\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download."
   }];
+
+  string identity_data_links = 30 [(forge.v1.config) = {
+    env_var: "IDENTITY_DATA_LINKS"
+    description: "\"disabled\": the forge console's Identity and Data pages render no crosslinks between an identity and the app rows that name it (and make no lookup for them); Identity administration and Data browsing are unaffected. Unset: the links render. Replaces the build-time VITE_IDENTITY_DATA_LINKS, which a bundle still honours when this key is unset."
+  }];
 }

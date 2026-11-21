@@ -380,6 +380,15 @@ func (c *lazyClient) reapNow() {
 	c.idleShutdown()
 }
 
+// cachedManifest is the tool manifest a probe or a live delegate already
+// produced, if any. It never spawns: a status report must not pay a cold
+// start (Manager.ProjectToolCount).
+func (c *lazyClient) cachedManifest() ([]Tool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.manifest, c.manifestCached
+}
+
 func (c *lazyClient) cacheManifest(tools []Tool) {
 	c.mu.Lock()
 	c.manifest = tools

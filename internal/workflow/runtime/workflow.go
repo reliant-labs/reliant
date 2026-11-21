@@ -1663,6 +1663,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// provider is exactly what the switched (or unbound) chat replaces.
 	childTracker.switchProvider = func(wakeCtx workflow.Context) {
 		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		if usageLimitWaiter.manualModel != "" {
+			// A banner click still being processed must not re-create the stay
+			// after the picker has changed the binding.
+			usageLimitWaiter.useModel, usageLimitWaiter.manualModel = "", ""
+			usageLimitWaiter.manualEpoch = 0
+		}
 		childTracker.resumeWholeChat(wakeCtx)
 	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
@@ -2769,7 +2775,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 
 		// Wait for at least one step (activity or inline workflow) to complete
-		if len(runningSteps) > 0 || len(runningInlineWorkflows) > 0 {
+		// Unless this pass produced events of its own (a skipped node), which are
+		// routed first (routePendingFirst).
+		if (len(runningSteps) > 0 || len(runningInlineWorkflows) > 0) && !routePendingFirst(ctx, len(events)) {
 			completedSteps, completedInline := waitForAnyCompletion(ctx, runningSteps, runningInlineWorkflows)
 
 			// Check for pause signal after completion before processing results

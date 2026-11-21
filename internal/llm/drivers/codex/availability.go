@@ -88,8 +88,9 @@ func (c *CodexClient) availabilityKey() string {
 //   - reasoning levels are the INTERSECTION of the advertised levels and the
 //     ones the API accepts (`ultra` is advertised and 400s).
 //
-// A model the catalog does not list is NOT servable (the account does not
-// serve it). A slug with no catalog entry is not auto-added; it is logged once.
+// An unlisted chat model is not servable. Image generation uses a separate
+// endpoint, so absence from this chat catalog is not a verdict on image
+// models mapped to that endpoint. An unknown slug is only logged.
 // A failed fetch is an error: a credential refusal is a
 // registry.CredentialRejectedError (the provider is unavailable), anything
 // else an outage callers fail open on.
@@ -167,11 +168,15 @@ func parseCodexModels(body []byte) (registry.ProviderAvailability, error) {
 	}
 
 	catalog := map[string]bool{}
+	imageModels := map[string]bool{}
 	if reg, err := models.GetRegistry(); err == nil {
 		for _, def := range reg.ListModelsByProvider(string(Family)) {
 			for _, p := range def.Providers {
 				if p.Driver == string(Family) {
 					catalog[p.APIModel] = true
+					if def.Capabilities.CanOutput(models.ModalityImage) && !def.Capabilities.CanOutput(models.ModalityText) {
+						imageModels[p.APIModel] = true
+					}
 				}
 			}
 		}
@@ -181,6 +186,11 @@ func parseCodexModels(body []byte) (registry.ProviderAvailability, error) {
 		Models:         make(map[string]models.ModelAvailability, len(parsed.Models)),
 		Authoritative:  true,
 		UnlistedReason: codexNotServedReason,
+	}
+	// Keep the verified static mappings for the separate image endpoint.
+	// A listed entry below can still explicitly disable a model.
+	for slug := range imageModels {
+		report.Models[slug] = models.ModelAvailability{}
 	}
 	for _, m := range parsed.Models {
 		slug := strings.TrimSpace(m.Slug)
