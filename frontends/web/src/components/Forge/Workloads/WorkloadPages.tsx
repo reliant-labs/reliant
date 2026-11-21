@@ -241,6 +241,8 @@ function ProjectOverviewPage() {
                 service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}),
                 // The database's home is Data (U6e: "data and storage got mixed up").
                 data: (envName) => href({ kind: "data" }, envName ? { env: envName } : {}),
+                analytics: href({ kind: "analytics" }),
+                events: href({ kind: "analytics", tab: "events" }),
               }
             : undefined
         }

@@ -17,6 +17,7 @@ import {
   BarChart3,
   Boxes,
   Inbox,
+  ShieldCheck,
   Database,
   Gauge,
   Globe,
@@ -38,7 +39,8 @@ import type { ComponentType, ReactNode } from "react";
 import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
-import { consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
 import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
@@ -143,6 +145,25 @@ export const configureGroup: NavGroup = {
   available: hasApp,
   // Activity (the audit log) stays its last row (owner): no page loses its nav entry.
   children: [secrets, domains, activity],
+};
+
+// ── Security (U6d) ──────────────────────────────────────────────────────────
+
+const securityRows = (ctx: NavCtx): NavRow[] => registeredRows(ctx, "security");
+
+/**
+ * Security ▾: its rows are the pages that register into it
+ * (consoleNavRegistry.ts, `group: "security"`: Vulnerabilities and SBOMs,
+ * from the Security pages' own module). Until one has, the group is not
+ * drawn, so the nav never links to a page that is not mounted.
+ */
+export const securityGroup: NavGroup = {
+  kind: "group",
+  id: "security",
+  label: "Security",
+  icon: icon(ShieldCheck),
+  available: (ctx) => hasApp(ctx) && securityRows(ctx).length > 0,
+  children: securityRows,
 };
 
 // ── Dashboards (one place only: bug 4) ──────────────────────────────────────
@@ -279,30 +300,63 @@ export const observabilityArea: NavArea = {
 
 // ── Analytics ───────────────────────────────────────────────────────────────
 
-/** The routes that are Analytics: the built-in Product analytics hub's dashboards. */
-export const isAnalyticsRoute = (ctx: NavCtx): boolean => ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key);
+const analyticsTabOf = (ctx: NavCtx): AnalyticsTab | null =>
+  ctx.page?.kind === "analytics" ? (ctx.page.tab ?? "overview") : ctx.page?.kind === "events" ? "events" : null;
 
-const hasHub = (ctx: NavCtx) => hasApp(ctx) && !!ctx.console?.productAnalytics;
+/** One Analytics tab as a row (Product overview, Users, Product, Acquisition, Events & metrics). */
+function analyticsTabRow(tab: AnalyticsTab): NavRow {
+  return {
+    kind: "row",
+    id: `analytics-${tab}`,
+    label: ANALYTICS_TAB_LABELS[tab],
+    href: consoleHref({ kind: "analytics", tab }),
+    match: (ctx) => analyticsTabOf(ctx) === tab,
+    available: hasApp,
+  };
+}
 
-/** Insights: the built-in Product analytics hub (Users · Product · Acquisition), when the app has it. */
-const insights: NavRow = {
-  kind: "row",
-  id: "analytics-insights",
-  label: "Insights",
-  href: (ctx) => (ctx.console?.productAnalytics ? consoleHref(ctx.console.productAnalytics.open)(ctx) : undefined),
-  match: isAnalyticsRoute,
-  available: hasHub,
-};
+/** Which nav group a registered entry joins: Security's, or Analytics (every other entry). */
+const groupOf = (entry: ConsoleNavEntry): ConsoleNavGroup => (entry.group === "security" ? "security" : "product-analytics");
 
-/** Analytics ▾: the app's Product analytics hub. */
+function registeredEntryOf(ctx: NavCtx, group: ConsoleNavGroup): ConsoleNavEntry | undefined {
+  return consoleNavEntries().find((entry) => groupOf(entry) === group && consoleNavEntryLights(entry, ctx.page));
+}
+
+/**
+ * The rows other modules register (consoleNavRegistry.ts; Experiments, first)
+ * into `group`, each while the app has it: the end of Analytics, or Security.
+ */
+function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
+  const model = ctx.console;
+  if (!model) return [];
+  return consoleNavEntries()
+    .filter((entry) => groupOf(entry) === group && (entry.available?.(model) ?? true))
+    .map((entry) => ({
+      kind: "row" as const,
+      id: `registered-${entry.id}`,
+      label: entry.label,
+      href: consoleHref(consoleNavEntryTarget(entry)),
+      match: (c: NavCtx) => consoleNavEntryLights(entry, c.page),
+    }));
+}
+
+const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [...ANALYTICS_TABS.map(analyticsTabRow), ...registeredRows(ctx, "product-analytics")];
+
+/** The routes that are Analytics: its page, Events & metrics, the built-in hub's dashboards, the registered pages. */
+export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
+  analyticsTabOf(ctx) !== null ||
+  (ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key)) ||
+  !!registeredEntryOf(ctx, "product-analytics");
+
+/** Analytics ▾: the built-in dashboards' tabs, Events & metrics, then registered rows (Experiments). */
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",
   label: "Analytics",
   icon: icon(BarChart3),
-  available: hasHub,
+  available: hasApp,
   match: isAnalyticsRoute,
-  children: [insights],
+  children: analyticsChildren,
 };
 
 // ── Agents ──────────────────────────────────────────────────────────────────

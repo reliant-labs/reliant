@@ -8,7 +8,7 @@
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Users ·
- *   Configure ▾ (Secrets, Domains, Activity)
+ *   Security ▾ · Configure ▾ (Secrets, Domains, Activity)
  *   footer: Settings
  *
  * Only Agents and Observability drill in (their rows replace the nav, under a
@@ -29,6 +29,7 @@ import {
   inbox,
   observabilityArea,
   overview,
+  securityGroup,
   settingsSections,
   storage,
   users,
@@ -47,7 +48,8 @@ export const hybridNav: NavConfig = {
     data,
     storage,
     users,
-      configureGroup,
+    securityGroup,
+    configureGroup,
   ],
   footer,
   sectionPages: [settingsSections],

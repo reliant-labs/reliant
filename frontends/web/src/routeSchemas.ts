@@ -811,6 +811,15 @@ export const forgeConsoleServicesSearchSchema = z.object({
  * explorers' vocabulary, as on the Observability pages). The environment is
  * in the path; `env` is still carried so the way back keeps the scope.
  */
+/**
+ * Analytics (U6c): the scope, plus what the open tab carries — a built-in
+ * dashboard's window (`range`), or Events & metrics' own (none).
+ */
+export const forgeConsoleAnalyticsSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+});
+
 export const forgeConsoleWorkloadSearchSchema = z.object({
   env: envScopeParam,
   tab: z.enum(WORKLOAD_TABS).optional().catch(undefined),

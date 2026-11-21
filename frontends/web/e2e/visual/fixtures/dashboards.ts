@@ -5,6 +5,9 @@
  * Reliant), and QueryPanel answers for the cards' previews (`gallery-*`
  * panels: 24 hourly points each, a deterministic wave).
  *
+ * GetDashboard answers the four generated Product analytics dashboards (the Analytics tabs, U6): line
+ * panels whose `gallery-*` ids the QueryPanel answers below.
+ *
  * Registered by wrapping the merged table (withDashboardFixtures), so its
  * QueryPanel answers its own panels and hands every other one to whatever
  * answered before it.
@@ -54,6 +57,20 @@ const SHOPFRONT = [
   dashboard('WORKSPACE', 'launch-notes', 'Launch notes', 'Notes for the holiday launch; text only', { panels: 2, noPreview: true }),
 ]
 
+const GENERATED_PRODUCT = ['product-overview', 'users', 'product', 'acquisition']
+
+/** A generated dashboard's spec: a heading line, then line panels the gallery's QueryPanel answers. */
+const productSpec = (key: string, title: string) => ({
+  id: key, title, filters: [], panels: [
+    ...['Visitors', 'Sign-ups', 'Conversion'].map((name, i) => ({
+      id: `gallery-${key}-${i}`, title: name, kind: 'line', signal: 'traces', series: [{ label: 'A', agg: 'count' }], width: 8, height: 6,
+    })),
+    ...['Sessions', 'Active users'].map((name, i) => ({
+      id: `gallery-${key}-b${i}`, title: name, kind: 'line', signal: 'traces', series: [{ label: 'A', agg: 'count' }], width: 12, height: 8,
+    })),
+  ],
+})
+
 const at = (ago: number) => new Date(FIXED_NOW - ago).toISOString()
 
 /** A preview's answer: one line of 24 hourly points, shaped per dashboard. */
@@ -83,10 +100,17 @@ export function dashboardsQueryPanel(req: Record<string, unknown>): Record<strin
 export function withDashboardFixtures(base: Fixtures): Fixtures {
   const previous = base['controlplane.v1.ObservabilityService/QueryPanel'] as Fixture | undefined
   const listPrevious = base['controlplane.v1.DashboardService/ListDashboards'] as Fixture | undefined
+  const getPrevious = base['controlplane.v1.DashboardService/GetDashboard'] as Fixture | undefined
   const call = (fixture: Fixture | undefined, req: Record<string, unknown>) => (typeof fixture === 'function' ? fixture(req) : fixture ?? {})
   return {
     ...base,
     'controlplane.v1.ObservabilityService/QueryPanel': (req) => dashboardsQueryPanel(req) ?? call(previous, req),
+    'controlplane.v1.DashboardService/GetDashboard': (req) => {
+      const key = String(((req.ref ?? {}) as { key?: string }).key ?? '')
+      const summary = SHOPFRONT.find((d) => d.ref.key === key)
+      if (!summary || !GENERATED_PRODUCT.includes(key)) return call(getPrevious, req)
+      return { summary, spec: productSpec(key, summary.title), version: 1, canWrite: false }
+    },
     'controlplane.v1.DashboardService/ListDashboards': (req) => (req.projectId === 'shopfront' ? { dashboards: SHOPFRONT, canWrite: true } : call(listPrevious, req)),
   }
 }

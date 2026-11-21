@@ -24,6 +24,8 @@
  *       /secrets, /domains, /activity
  *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
  *                                           (a database's name → /data, client-side: ServiceDetail)
+ *       /events                             Product analytics › Events & metrics
+ *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
@@ -48,9 +50,10 @@ import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
-import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
+  forgeConsoleAnalyticsSearchSchema,
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
@@ -103,6 +106,10 @@ export interface ForgeConsoleComponents {
   services: RouteComponent
   /** One of them. */
   service: RouteComponent
+  /** Product analytics › Events & metrics. */
+  events: RouteComponent
+  /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
+  analytics: RouteComponent
   /** Speed insights (U6c): web vitals per page. */
   speedInsights: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
@@ -330,6 +337,29 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.service,
   })
+  const eventsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'events',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.events,
+  })
+  const analyticsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    component: components.analytics,
+  })
+  // A tab that is not one (a hand-edited URL) lands on the first.
+  const analyticsTabRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics/$tab',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isAnalyticsTab(params.tab)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.analytics,
+  })
   const speedInsightsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'speed-insights',
@@ -379,6 +409,9 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       activityRoute,
       servicesRoute,
       serviceRoute,
+      eventsRoute,
+      analyticsRoute,
+      analyticsTabRoute,
       speedInsightsRoute,
     ]),
   ])
