@@ -173,7 +173,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     },
     row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
     row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
-    row("Users", { kind: "users" }, icon(Users), page.kind === "users"),
+    row("Auth", { kind: "auth" }, icon(Users), page.kind === "auth" || page.kind === "users"),
     {
       // No page of its own: the row opens and closes the group, which opens by itself on one of its pages.
       label: "More tools",

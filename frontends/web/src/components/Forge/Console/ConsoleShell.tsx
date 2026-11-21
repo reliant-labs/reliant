@@ -166,7 +166,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Data", { kind: "data" }, icon(Database)),
       row("Storage", { kind: "storage" }, icon(HardDrive)),
-      row("Users", { kind: "users" }, icon(Users)),
+      // Auth (U6d): Users and Sign-in tabs; the old Users page redirects to it.
+      row("Auth", { kind: "auth" }, icon(Users), { active: is("auth") || is("users") }),
       ...configureNavRows({ page, envs }, href),
     ],
     footer: [row("Activity", { kind: "activity" }, icon(Activity))],
