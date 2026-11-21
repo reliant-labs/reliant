@@ -3,9 +3,9 @@ package drivers
 
 import (
 	"context"
-	"errors"
+	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,12 +25,8 @@ type barrierReporter struct {
 
 func (b *barrierReporter) ReportAvailability(context.Context) (registry.ProviderAvailability, error) {
 	b.arrived <- struct{}{}
-	select {
-	case <-b.release:
-		return b.report, nil
-	case <-time.After(5 * time.Second):
-		return registry.ProviderAvailability{}, errors.New("asked one after another: the other reports were never asked")
-	}
+	<-b.release
+	return b.report, nil
 }
 
 // Each account's report is a provider catalog round trip when cold. They are
@@ -38,15 +34,14 @@ func (b *barrierReporter) ReportAvailability(context.Context) (registry.Provider
 // sum, and every answer still lands on its own account.
 func TestWithAccountAvailability_AsksEveryAccountsReportAtOnce(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, testAccountReportsConcurrent)
+}
+
+func testAccountReportsConcurrent(t *testing.T) {
 	const n = 3 // two Codex accounts and a Copilot one
 	arrived := make(chan struct{}, n)
 	release := make(chan struct{})
-	go func() {
-		for range n {
-			<-arrived
-		}
-		close(release)
-	}()
+	unblock := sync.OnceFunc(func() { close(release) })
 	codexA := &barrierReporter{arrived: arrived, release: release, report: codexServes(codexAPIModel(t, "gpt-5.5"))}
 	codexB := &barrierReporter{arrived: arrived, release: release, report: codexServes(codexAPIModel(t, "gpt-5.6-sol"))}
 	copilot := &barrierReporter{arrived: arrived, release: release}
@@ -67,14 +62,23 @@ func TestWithAccountAvailability_AsksEveryAccountsReportAtOnce(t *testing.T) {
 		return r, nil
 	}
 
-	done := make(chan models.AvailableDrivers, 1)
-	go func() { done <- withAccountAvailability(context.Background(), accounts, build) }()
+	done := make(chan struct{})
 	var available models.AvailableDrivers
-	select {
-	case available = <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("withAccountAvailability did not return")
-	}
+	go func() {
+		available = withAccountAvailability(context.Background(), accounts, build)
+		close(done)
+	}()
+	defer func() {
+		unblock()
+		<-done
+	}()
+
+	// Wait for durable blocking, not elapsed time: a serial implementation
+	// parks in its first reporter and cannot produce all n arrivals.
+	synctest.Wait()
+	require.Len(t, arrived, n, "every account must be asked before any report returns")
+	unblock()
+	<-done
 
 	require.Len(t, available.Accounts["codex"], 2)
 	require.Len(t, available.Accounts["copilot"], 1)
