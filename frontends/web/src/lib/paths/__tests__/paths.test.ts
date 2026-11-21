@@ -272,6 +272,13 @@ describe("lib/paths", () => {
     expect(Object.keys(ORG_URLS).filter((name) => !(name in ROWS))).toEqual([]);
   });
 
+  it("narrows Projects to its apps or its sites, the way the router writes the search", () => {
+    expect(paths.projectsHref()).toBe("/projects");
+    expect(paths.projectsHref("apps")).toBe(hrefOf({ to: "/projects", search: { show: "apps" } } as never));
+    expect(paths.projectsHref("sites")).toBe("/projects?show=sites");
+  });
+
+
   it("joins a search the way the router writes one", () => {
     expect(paths.withSearch(paths.runsPath(), { project: "p-1", allProjects: true, empty: "" })).toBe(
       hrefOf({ to: "/workflows/runs", search: { project: "p-1", allProjects: true } } as never),

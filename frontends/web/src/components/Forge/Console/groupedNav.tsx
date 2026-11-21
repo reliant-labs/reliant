@@ -5,13 +5,15 @@
  * technical name with a plain line under its title (PAGE_SUBTITLES):
  *
  *   Overview
+ *   Storage                 the app's object storage buckets (databases are Data)
+ *   Dashboards        ▸     the app's own and starred dashboards — the ONE place (U6c bug 4)
  *   Issues            ▾     Errors · Alerts
  *   Performance       ▾     Traces · RPC explorer
  *   Sessions
  *   Product analytics       the Users · Product · Acquisition hub, when the project has it
  *   Releases
  *   Data · Users
- *   More tools        ▸     Dashboards (and up to three stars) · Logs · Metrics · Profiles · Service graph · Storage
+ *   More tools        ▸     Logs · Metrics · Profiles · Service graph
  *   ── Configure            Environments › · Secrets · Domains
  *   footer                  Activity
  *
@@ -21,7 +23,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -45,6 +47,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   profiles: "Where your code spends its CPU time",
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
+  storage: "Your app's object storage buckets: files, uploads and assets",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
@@ -71,23 +74,27 @@ export interface GroupedNavInput extends ConsoleNavInput {
   navCounts?: Readonly<Partial<Record<string, number>>>;
 }
 
-/** The group each view sits in, for the nav and the breadcrumb ("Issues › Errors"). */
+/** A nav group that shows its rows on every page, not only while one is open (the app's own dashboards). */
+export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
+
+/** The group each view sits in, for the breadcrumb ("Performance & issues › Errors"). */
+// The groups of the shell's nav (Layout/sidebar/navConfig/hybrid.ts, U6d), not this nav's own Issues / Performance / More tools.
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
-  errors: "Issues",
-  alerts: "Issues",
-  traces: "Performance",
-  rpc: "Performance",
-  logs: "More tools",
-  metrics: "More tools",
-  profiles: "More tools",
-  graph: "More tools",
-  dashboards: "More tools",
+  errors: "Performance & issues",
+  alerts: "Performance & issues",
+  traces: "Performance & issues",
+  rpc: "Observability",
+  logs: "Observability",
+  metrics: "Observability",
+  profiles: "Observability",
+  graph: "Observability",
+  sessions: "Performance & issues",
 };
 
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
 
 export function buildGroupedConsoleNav(input: GroupedNavInput): { items: SidebarNavItem[]; footer: SidebarNavItem[] } {
-  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false } = input;
+  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false, customDashboards = [] } = input;
   const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   // On a host page, every console row is a way out, none the current one.
   const lit = (active: boolean) => !hostPageActive && active;
@@ -107,15 +114,21 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   });
 
   const nested = starred.slice(0, NAV_STARRED_MAX);
-  const openStar = (candidate: ConsoleNavDashboard) => page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
   const onHub = isHubPage(page, productAnalytics);
-  const dashboards: SidebarNavItem = {
-    ...obs("dashboards"),
-    // A dashboard that is neither a hub tab nor a nested star lights Dashboards itself.
-    active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !nested.some(openStar))),
-    children: nested.length
+  const isOpen = (candidate: ConsoleNavDashboard) => page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
+  // The app's own dashboards, then its starred ones not already listed.
+  const listed = [...customDashboards, ...nested.filter((star) => !customDashboards.some((own) => own.dashKind === star.dashKind && own.key === star.key))];
+  // Dashboards: ONE top-level row (U6c, owner bug 4), the app's own dashboards under it.
+  const dashboards: OpenNavItem = {
+    label: "Dashboards",
+    href: href({ kind: "obs-view", view: "dashboards" }),
+    icon: icon(LayoutGrid),
+    // A dashboard that is not a hub tab and not listed lights Dashboards itself.
+    active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !listed.some(isOpen))),
+    alwaysOpen: customDashboards.length > 0,
+    children: listed.length
       ? [
-          ...nested.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(openStar(candidate)) })),
+          ...listed.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(isOpen(candidate)) })),
           { label: "All dashboards", href: href({ kind: "obs-view", view: "dashboards" }), active: false },
         ]
       : undefined,
@@ -125,6 +138,8 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
 
   const items: SidebarNavItem[] = [
     row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview" || page.kind === "workload"),
+    row("Storage", { kind: "storage" }, icon(HardDrive), page.kind === "storage"),
+    dashboards,
     {
       label: "Issues",
       icon: icon(CircleAlert),
@@ -144,14 +159,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
       // No page of its own: the row opens and closes the group, which opens by itself on one of its pages.
       label: "More tools",
       icon: icon(Wrench),
-      children: [
-        dashboards,
-        obs("logs"),
-        obs("metrics"),
-        ...(profiles ? [obs("profiles")] : []),
-        obs("graph"),
-        { label: "Storage", href: href({ kind: "storage" }), active: lit(page.kind === "storage") },
-      ],
+      children: [obs("logs"), obs("metrics"), ...(profiles ? [obs("profiles")] : []), obs("graph")],
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
   ];
@@ -170,7 +178,19 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     const group = GROUP_OF[page.view];
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
-  if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, ...own.slice(-1)];
-  if (page.kind === "dashboard") return [{ label: "More tools" }, ...own.filter((crumb) => crumb.label !== "Observability")];
+  if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
+  // Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
+  if (
+    page.kind === "releases" ||
+    page.kind === "release" ||
+    page.kind === "environments" ||
+    page.kind === "environment"
+  ) {
+    return own[0]?.label === "Deployments" ? own : [{ label: "Deployments" }, ...own];
+  }
+  if (page.kind === "dashboard") {
+    const rest = own.filter((crumb) => crumb.label !== "Observability");
+    return rest[0]?.label === "Dashboards" ? rest : [{ label: "Dashboards" }, ...rest];
+  }
   return null;
 }

@@ -13,6 +13,7 @@ import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { forgeConsolePages } from './forgeConsolePages'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import { createOrgLayoutRoute } from './orgRoutes'
@@ -53,6 +54,7 @@ import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { AppShellFrame } from './components/Layout/shell/AppShell'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
@@ -192,6 +194,10 @@ const SitesPage = lazyRoute(
   () => import('./components/ForgeShell/ForgeSitesPage'), 'SitesPage')
 const UsagePage = lazyRoute(
   () => import('./components/ForgeShell/ForgeUsagePage'), 'ForgeUsagePage')
+const ProjectsPage = lazyRoute(
+  () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
+const ProjectHomePage = lazyRoute(
+  () => import('./components/Projects/ProjectHomePage'), 'ProjectHomePage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -232,52 +238,6 @@ const MobileWorkflowDetailRoute = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
 const MobileChatWorkflowRoute = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
-const ForgeLayout = lazyRoute(
-  () => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
-const ConsoleLayout = lazyRoute(
-  () => import('./components/Forge/Console/ConsoleLayout'), 'ConsoleLayout')
-const ForgeConsoleOverviewPage = lazyRoute(
-  () => import('./components/Forge/Workloads/WorkloadPages'), 'OverviewPage')
-const ForgeConsoleWorkloadPage = lazyRoute(
-  () => import('./components/Forge/Workloads/WorkloadPages'), 'WorkloadPage')
-const ForgeConsoleReleasesPage = lazyRoute(
-  () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage')
-const ForgeConsoleReleasePage = lazyRoute(
-  () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage')
-const ForgeConsoleObservabilityViewPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
-const ForgeConsoleDashboardsPage = lazyRoute(
-  () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage')
-const ForgeConsoleDashboardPage = lazyRoute(
-  () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
-const ForgeConsoleStoragePage = lazyRoute(
-  () => import('./components/Forge/Storage/StoragePage'), 'StoragePage')
-const ForgeConsoleDataPage = lazyRoute(
-  () => import('./components/Forge/Data/DataPage'), 'DataPage')
-const ForgeConsoleUsersPage = lazyRoute(
-  () => import('./components/Forge/Users/UsersPage'), 'UsersPage')
-const ForgeConsoleSecretsPage = lazyRoute(
-  () => import('./components/Forge/Console/SecretsPage'), 'SecretsPage')
-const ForgeConsoleActivityPage = lazyRoute(
-  () => import('./components/Forge/Console/ActivityPage'), 'ActivityPage')
-const ForgeEnvironmentsPage = lazyRoute(
-  () => import('./components/Forge/Overview/EnvironmentsPage'), 'EnvironmentsPage')
-const ForgeEnvPage = lazyRoute(
-  () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
-const ForgeDomainsPage = lazyRoute(
-  () => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage')
-const ForgeLandingRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
-const ForgeLegacyEnvRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
-const ForgeOrgObservabilityRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute')
-const ForgeOrgLayout = lazyRoute(
-  () => import('./components/Forge/Org'), 'OrgConsoleLayout')
-const ForgeLegacyDomainsRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
-const ForgeLegacyCommandRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyCommandRoute')
 const App = lazyRoute(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -358,7 +318,11 @@ function RootShell() {
       <ActiveOrgBinding onSwitch={followActiveOrg} />
       <PageVisitTracker firstVisitProps={forgeEntry} />
       <ShortcutHost>
-        <Outlet />
+        {/* The one shell: one nav around every app page, above the outlet so
+            moving between pages never remounts it (Layout/shell/AppShell.tsx). */}
+        <AppShellFrame>
+          <Outlet />
+        </AppShellFrame>
       </ShortcutHost>
       <ModalLayer />
       {/* Add project opens over any route (the sidebar, Settings, the
@@ -835,31 +799,11 @@ function gated(Component: RouteComponent): RouteComponent {
 
 
 
-const forgeConsolePageComponents = {
-  layout: ForgeLayout,
-  console: gated(ConsoleLayout),
-  overview: gated(ForgeConsoleOverviewPage),
-  workload: gated(ForgeConsoleWorkloadPage),
-  releases: gated(ForgeConsoleReleasesPage),
-  release: gated(ForgeConsoleReleasePage),
-  observabilityView: gated(ForgeConsoleObservabilityViewPage),
-  dashboards: gated(ForgeConsoleDashboardsPage),
-  dashboard: gated(ForgeConsoleDashboardPage),
-  storage: gated(ForgeConsoleStoragePage),
-  data: gated(ForgeConsoleDataPage),
-  users: gated(ForgeConsoleUsersPage),
-  environments: gated(ForgeEnvironmentsPage),
-  environment: gated(ForgeEnvPage),
-  secrets: gated(ForgeConsoleSecretsPage),
-  domains: gated(ForgeDomainsPage),
-  activity: gated(ForgeConsoleActivityPage),
-  orgLayout: gated(ForgeOrgLayout),
-  orgObservability: gated(ForgeOrgObservabilityRoute),
-  landing: gated(ForgeLandingRoute),
-  legacyEnv: gated(ForgeLegacyEnvRoute),
-  legacyDomains: gated(ForgeLegacyDomainsRoute),
-  legacyCommand: gated(ForgeLegacyCommandRoute),
-}
+// The console's pages (forgeConsolePages.ts, the demo's map too), each behind
+// ForgeGate; the pathless layout renders nothing of its own and stays ungated.
+const forgeConsolePageComponents = Object.fromEntries(
+  Object.entries(forgeConsolePages).map(([key, component]) => [key, key === 'layout' ? component : gated(component)]),
+) as typeof forgeConsolePages
 
 // ── The org-scoped pages, mounted twice ─────────────────────────────────────
 //
@@ -874,11 +818,11 @@ const forgeConsolePageComponents = {
 //
 //   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
 //                   /workflow/…, /workflows/… (and their retired paths),
-//                   /inbox, /apps, /forge/…
+//                   /inbox, /apps, /sites, /usage, /projects, /forge/…
 //   form 'org'      /o/$org, /o/$org/project/$projectId,
 //                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/apps,
-//                   /o/$org/sites, /o/$org/usage,
+//                   /o/$org/sites, /o/$org/usage, /o/$org/projects,
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
 function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
@@ -1008,11 +952,26 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: UsagePage,
   })
 
+  // Projects: the nav's Projects entry — the person's apps and sites, and
+  // their code (components/Projects/ProjectsPage.tsx; U7 replaces it).
+  const projectsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects',
+    component: ProjectsPage,
+  })
+
+  // A project's Home (U6b): the project shell's first row (lib/paths projectPath).
+  const projectHomeRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId',
+    component: ProjectHomePage,
+  })
+
   const forgeConsoleRoutes = createForgeConsoleRoutes(authParent, forgeConsolePageComponents, { form })
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute, projectsRoute, projectHomeRoute] as const,
   }
 }
 
