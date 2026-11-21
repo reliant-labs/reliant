@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { useRouteOrgScope } from "@/lib/routeOrg";
 import { ChangesApiProvider } from "@/services/controlPlane/changes/ChangesApiContext";
 import { createChangesApi } from "@/services/controlPlane/changes/changesApi";
 
@@ -156,6 +157,38 @@ describe("ExperimentsPage", () => {
     expect(service.of("ListChanges")[0]!.body).not.toHaveProperty("environmentId");
   });
 
+  it("reads every page of a project's changes", async () => {
+    const service = fakeService({
+      ListChanges: (body) =>
+        body.pageToken === "p2"
+          ? { changes: [wireChange({ id: "chg-2", key: "dark-mode" })] }
+          : { changes: [wireChange()], nextPageToken: "p2" },
+    });
+    renderPage(service);
+    expect(await screen.findByTestId("change-row-dark-mode")).toBeInTheDocument();
+    expect(screen.getByTestId("change-row-new-checkout")).toBeInTheDocument();
+    expect(service.of("ListChanges").map((c) => c.body.pageToken ?? "")).toEqual(["", "p2"]);
+    expect(screen.queryByTestId("changes-truncated")).not.toBeInTheDocument();
+  });
+
+  it("lists the route's org's changes, and another org's after a switch, for the same project name", async () => {
+    const before = useRouteOrgScope.getState();
+    try {
+      useRouteOrgScope.setState({ scope: { kind: "member", org: { id: "org-a", slug: "a" } } });
+      const service = fakeService({
+        ListChanges: (body) => ({ changes: [wireChange(body.orgId === "org-a" ? { key: "only-in-a" } : { id: "chg-b", key: "only-in-b" })] }),
+      });
+      renderPage(service);
+      expect(await screen.findByTestId("change-row-only-in-a")).toBeInTheDocument();
+      useRouteOrgScope.setState({ scope: { kind: "member", org: { id: "org-b", slug: "b" } } });
+      expect(await screen.findByTestId("change-row-only-in-b")).toBeInTheDocument();
+      expect(screen.queryByTestId("change-row-only-in-a")).not.toBeInTheDocument();
+      expect(service.of("ListChanges").map((c) => c.body.orgId)).toEqual(["org-a", "org-b"]);
+    } finally {
+      useRouteOrgScope.setState(before);
+    }
+  });
+
   it("narrows the list to the top bar's environment", async () => {
     state.console = { ...state.console, env: "staging" };
     const service = fakeService({ ListChanges: () => ({ changes: [] }) });
@@ -247,6 +280,25 @@ describe("ChangeDetail", () => {
     expect(notice).toHaveTextContent("Share: 10% → 30%");
     expect(await screen.findByText("Revision 9")).toBeInTheDocument();
     expect(service.of("LaunchChange")).toHaveLength(1);
+  });
+
+  it("rolls out another version of a running rollout instead of ramping the old one", async () => {
+    const rollout = wireChange({ mode: "CHANGE_MODE_ROLLOUT", rolloutVariant: "treatment", percentBp: 2000, currentRun: { id: "r_roll", kind: "rollout" } });
+    const service = fakeService({
+      GetChange: () => ({ change: rollout }),
+      ListChangeEvents: () => ({ events: [] }),
+      RampChange: () => ({ change: { ...rollout, revision: "8" } }),
+      RollOutChange: () => ({ change: { ...rollout, rolloutVariant: "control", revision: "8" } }),
+    });
+    renderDetail(service);
+    const actions = await screen.findByTestId("who-actions");
+    expect(within(actions).getByRole("button", { name: /^Change to 20%/ })).toBeInTheDocument();
+    await userEvent.selectOptions(within(actions).getByTestId("who-variant"), "control");
+    await userEvent.click(within(actions).getByRole("button", { name: /^Roll out to 20%/ }));
+
+    await waitFor(() => expect(service.of("RollOutChange")).toHaveLength(1));
+    expect(service.of("RollOutChange")[0]!.body).toMatchObject({ changeId: "chg-1", variant: "control", percentBp: 2000 });
+    expect(service.of("RampChange")).toHaveLength(0);
   });
 
   it("stops with one click and a confirm, sending no revision", async () => {

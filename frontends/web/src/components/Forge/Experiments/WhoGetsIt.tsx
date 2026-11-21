@@ -139,6 +139,9 @@ export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps)
   const splitInvalid = who === "compare" && splitTotal(draft.split) !== 10000;
   const metricMissing = who === "compare" && !draft.metricEvent.trim();
   const isBusy = busy !== null;
+  // A running rollout's percentage moves by a ramp, which names no version;
+  // another version is a new roll-out of it (and is approved as one).
+  const rampsRollout = change.mode === "rollout" && running && variant === change.rolloutVariant;
 
   /** Save the draft if it changed; the revision the next write must name. Null when the save failed. */
   const saveDraft = async (): Promise<number | null> => {
@@ -333,7 +336,7 @@ export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps)
           <>
             {variantSelect}
             {percentInput}
-            {change.mode === "rollout" && running ? (
+            {rampsRollout ? (
               <Button variant="primary" onClick={() => void ramp()} disabled={isBusy || !!actionReason} loading={busy?.startsWith("Change to")}>
                 Change to {formatBp(percentBp ?? 0)}%
               </Button>

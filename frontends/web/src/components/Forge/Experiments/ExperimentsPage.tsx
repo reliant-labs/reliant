@@ -134,7 +134,16 @@ export function ExperimentsPage() {
     );
   }
 
-  return frame(<ChangeTable changes={changes} showEnv={!scoped} envNameById={envNameById} href={(c) => href({ kind: "experiment", changeId: c.id })} />);
+  return frame(
+    <>
+      <ChangeTable changes={changes} showEnv={!scoped} envNameById={envNameById} href={(c) => href({ kind: "experiment", changeId: c.id })} />
+      {list.data?.truncated && (
+        <p className="mt-3 text-meta text-ink-muted" data-testid="changes-truncated">
+          {`Showing the first ${changes.length} changes. Pick an environment in the top bar to narrow the list.`}
+        </p>
+      )}
+    </>
+  );
 }
 
 function ChangeTable({ changes, showEnv, envNameById, href }: { changes: Change[]; showEnv: boolean; envNameById: Map<string, string>; href: (c: Change) => string }) {
