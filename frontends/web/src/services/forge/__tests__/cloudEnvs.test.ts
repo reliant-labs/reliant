@@ -26,12 +26,14 @@ vi.mock("@/services/controlPlane/client", () => ({
 
 import {
   DeployEnvironmentKind,
+  DeployEnvironmentLifetime,
   DeployEnvironmentSchema,
   DeploymentSchema,
   DeployObservedState,
   DeployObservedStateDetailSchema,
   DeployPromotionKind,
   DeployPromotionSchema,
+  DeploySecretPosture,
   DeployTier,
   DeployVerdict,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
@@ -88,6 +90,42 @@ describe("listProjectEnvironments", () => {
     });
     const envs = await listProjectEnvironments("control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
+  });
+
+  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", async () => {
+    listEnvironments.mockResolvedValue({
+      environments: [
+        create(DeployEnvironmentSchema, {
+          id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED,
+          lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true,
+        }),
+      ],
+    });
+    const envs = await listProjectEnvironments("control-plane", null);
+    expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
+  });
+
+  // DeployEnvironment.kind leaves the wire with control-plane#3095; every
+  // server since #1349 also sends lifetime, secret_posture and hosted_slot.
+  it("derives each kind from the placement fields when kind is absent", async () => {
+    listEnvironments.mockResolvedValue({
+      environments: [
+        create(DeployEnvironmentSchema, { id: "a", name: "a", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE }),
+        create(DeployEnvironmentSchema, { id: "b", name: "b", project: "p", lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
+        create(DeployEnvironmentSchema, { id: "c", name: "c", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
+        create(DeployEnvironmentSchema, { id: "d", name: "d", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY }),
+        // Neither kind nor the placement fields: a server older than both.
+        create(DeployEnvironmentSchema, { id: "e", name: "e", project: "p" }),
+      ],
+    });
+    const envs = await listProjectEnvironments("p", null);
+    expect(Object.fromEntries(envs.map((e) => [e.id, e.kind]))).toEqual({
+      a: "local",
+      b: "preview",
+      c: "persistent",
+      d: "self_managed",
+      e: "unknown",
+    });
   });
 });
 

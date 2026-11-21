@@ -392,6 +392,14 @@ func unmarshalDaemonSelector(node *yaml.Node, ds *reliantv1.DaemonSelectorProto)
 					ds.Labels[val.Content[j].Value] = val.Content[j+1].Value
 				}
 			}
+		case "pool":
+			// The proto string cannot tell `pool: ""` from no pool, so a
+			// blank one is refused here, where the key is still visible:
+			// otherwise it would silently become an empty selector.
+			if val.Kind != yaml.ScalarNode || strings.TrimSpace(val.Value) == "" {
+				return fmt.Errorf("daemon pool must name one of your machine pools, e.g. daemon: {pool: gate}")
+			}
+			ds.Pool = val.Value
 		default:
 			return fmt.Errorf("unknown daemon selector field: %q", key)
 		}
@@ -418,13 +426,14 @@ func marshalCelDaemonSelector(cds *reliantv1.CelDaemonSelector) (*yaml.Node, err
 
 func marshalDaemonSelector(ds *reliantv1.DaemonSelectorProto) (*yaml.Node, error) {
 	// If only type is set, use the compact string form
-	if ds.Id == "" && ds.Name == "" && len(ds.Labels) == 0 && ds.Type != "" {
+	if ds.Id == "" && ds.Name == "" && len(ds.Labels) == 0 && ds.Pool == "" && ds.Type != "" {
 		return scalarNode(ds.Type, ""), nil
 	}
 	// If only name is set, use compact string form
-	if ds.Id == "" && ds.Type == "" && len(ds.Labels) == 0 && ds.Name != "" {
+	if ds.Id == "" && ds.Type == "" && len(ds.Labels) == 0 && ds.Pool == "" && ds.Name != "" {
 		return scalarNode(ds.Name, ""), nil
 	}
+	// A pool never takes the compact form: a bare string is a machine name.
 	// Full object form
 	m := &yaml.Node{Kind: yaml.MappingNode}
 	if ds.Id != "" {
@@ -442,6 +451,9 @@ func marshalDaemonSelector(ds *reliantv1.DaemonSelectorProto) (*yaml.Node, error
 			labelsNode.Content = append(labelsNode.Content, scalarNode(k, ""), scalarNode(ds.Labels[k], ""))
 		}
 		m.Content = append(m.Content, scalarNode("labels", ""), labelsNode)
+	}
+	if ds.Pool != "" {
+		m.Content = append(m.Content, scalarNode("pool", ""), scalarNode(ds.Pool, ""))
 	}
 	return m, nil
 }

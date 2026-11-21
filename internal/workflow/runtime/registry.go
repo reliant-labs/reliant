@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
@@ -129,8 +130,9 @@ func classifyError(err error) error {
 	// status and a transport's text verbatim, so the text rules below could
 	// match ("not found", "permission denied") and replace the type with
 	// TerminalError — and a machine-unavailable run would pause, holding its
-	// automation's slot, instead of ending.
-	if errors.As(err, &app) && app.NonRetryable() && strings.HasPrefix(app.Type(), "RunStep") {
+	// automation's slot, instead of ending. A retryable one (RunStepReleased)
+	// keeps its retry the same way.
+	if errors.As(err, &app) && strings.HasPrefix(app.Type(), "RunStep") {
 		return err
 	}
 	// Check if already classified as TerminalError
@@ -1388,7 +1390,8 @@ func resolveMaxAttempts(info activity.Info) int32 {
 		"WorkflowStatus",
 		"EmitStreamFinalized",
 		"DrainAgentMessages",
-		"Cleanup":
+		"Cleanup",
+		machinepool.PlaceRunActivityName:
 		return infrastructureActivityMaxAttempts
 	}
 

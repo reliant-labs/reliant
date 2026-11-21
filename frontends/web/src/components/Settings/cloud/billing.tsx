@@ -89,11 +89,16 @@ import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 import {
-  VISIBLE_BILLING_TABS,
+  billingTabOrder,
   resolveBillingTab,
   type BillingTab,
   type VisibleBillingTab,
 } from "@/routeSchemas";
+import { isForgeShell } from "@/lib/shell";
+import { LimitsStrip, type LimitRow } from "./LimitsStrip";
+import { BillingOrgGate } from "./BillingOrgGate";
+import { HostingUsagePanel } from "./usage/HostingUsagePanel";
+import { FreeTierCard } from "./usage/FreeTierCard";
 // The two bands. Each owns ONE product's presentation and none of its business
 // rules — they take resolved props and call no mutation, so every purchase
 // still passes through useCloudBillingQueries' identity chokepoint.
@@ -140,12 +145,21 @@ const TAB_META: Record<
   overview: { label: "Overview", icon: CreditCard },
   plans: { label: "Change plan", icon: Cpu },
   usage: { label: "Usage & invoices", icon: BarChart3 },
+  // Independent app hosting, the organization's: its agreement and budget,
+  // usage per app and environment, and the free static tier.
+  hosting: { label: "App hosting", icon: Server },
   // Reliant's managed AI keys and spend. They used to be a tab of Settings →
   // AI, a third place Reliant appeared there; AI now shows Reliant once, as a
   // provider card that links here.
   ai: { label: "Reliant AI", icon: Sparkles },
 };
-const TABS = VISIBLE_BILLING_TABS.map((id) => ({ id, ...TAB_META[id] }));
+const tabsFor = (forgeShell: boolean) => billingTabOrder(forgeShell).map((id) => ({ id, ...TAB_META[id] }));
+
+/** Scroll to a section once the tab that holds it has rendered. */
+function scrollToSection(hash: string | undefined) {
+  if (!hash) return;
+  requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 // Reliant AI's keys and spend tables load only when their tab is opened.
 const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default: m.ReliantAISection })));
@@ -184,7 +198,9 @@ export function BillingSection() {
   };
   // An inbound `?tab=invoices` is a real link somebody has; it resolves to the
   // merged surface rather than being stripped and silently landing on Overview.
-  const tab: VisibleBillingTab = resolveBillingTab(search.tab);
+  const forgeShell = isForgeShell();
+  const tabs = tabsFor(forgeShell);
+  const tab: VisibleBillingTab = resolveBillingTab(search.tab, forgeShell);
 
   const setTab = (next: VisibleBillingTab) => {
     void navigate({
@@ -192,6 +208,22 @@ export function BillingSection() {
       search: (prev: Record<string, unknown>) => ({ ...prev, tab: next }),
       replace: true,
     });
+  };
+
+  // App hosting moved out of Usage into its own tab. Links already sent
+  // (`?tab=usage#app-hosting`, the hosting checkout's old return URL) still
+  // mean the hosting card, so they land on it.
+  const hash = typeof window === "undefined" ? "" : window.location.hash;
+  useEffect(() => {
+    if (hash === "#app-hosting" && tab !== "hosting") setTab("hosting");
+    else if (hash) scrollToSection(hash.slice(1));
+    // Once per arrival: a later tab click must not be overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash]);
+
+  const openLimit = (target: LimitRow["target"]) => {
+    setTab(target.tab);
+    scrollToSection(target.hash);
   };
 
   const clearCheckout = () => {
@@ -210,7 +242,7 @@ export function BillingSection() {
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
         title="Billing & usage"
-        description="Manage wallet credits, machine subscriptions, independent app hosting billing, usage and invoices."
+        description="App hosting for your organization, plus your machine plan, AI credit, usage and invoices. Each has its own limit."
         className="mb-0"
       />
 
@@ -238,45 +270,50 @@ export function BillingSection() {
         />
       )}
 
-      <div className="overflow-x-auto border-b border-border">
-        <div role="tablist" aria-label="Billing" className="flex w-max min-w-full gap-1">
-          {TABS.map(({ id, label, icon: Icon }) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(id)}
-                className={[
-                  "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4",
-                  active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <BillingOrgGate>
+        <LimitsStrip onOpen={openLimit} />
 
-      {tab === "overview" && (
-        <OverviewTab
-          onGoToPlans={() => setTab("plans")}
-          onGoToUsage={() => setTab("usage")}
-        />
-      )}
-      {tab === "plans" && <PlansTab />}
-      {tab === "usage" && <UsageAndInvoicesTab />}
-      {tab === "ai" && (
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-          <ReliantAISection />
-        </Suspense>
-      )}
+        <div className="overflow-x-auto border-b border-border">
+          <div role="tablist" aria-label="Billing" className="flex w-max min-w-full gap-1">
+            {tabs.map(({ id, label, icon: Icon }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(id)}
+                  className={[
+                    "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {tab === "overview" && (
+          <OverviewTab
+            onGoToPlans={() => setTab("plans")}
+            onGoToUsage={() => setTab("usage")}
+          />
+        )}
+        {tab === "plans" && <PlansTab />}
+        {tab === "usage" && <UsageAndInvoicesTab />}
+        {tab === "hosting" && <HostingTab />}
+        {tab === "ai" && (
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+            <ReliantAISection />
+          </Suspense>
+        )}
+      </BillingOrgGate>
     </div>
   );
 }
@@ -1374,23 +1411,14 @@ function PlansTab() {
 // below it: a receipt is looked up by intent, usage is browsed.
 
 function UsageAndInvoicesTab() {
-  // Deployment usage sits beside compute usage because they answer the same
-  // question about two products — "what have I run, and what will it cost" —
-  // and a customer reconciling one bill should not have to find two tabs.
-  //
-  // Gated on `available`, which is false until the public proto subtree
-  // carries the infra-overage pair and DeployService (see ./usage/
-  // useDeployUsage.ts for the exact unblock). A tab that rendered this
-  // half-wired would show a paying customer an empty dashboard about money.
-  const deployUsage = useDeployUsage();
   const obsOrg = useObservabilityOrg();
 
   return (
     // The period's machine usage leads, as the tab's one headline number;
-    // the hosting agreement and the receipts follow, then the other products.
+    // the receipts follow, then the observability usage. (The hosting
+    // agreement is the App hosting tab's.)
     <div className="flex flex-col gap-12">
       <UsagePanel />
-      <UsageBillingPanel />
       <InvoicesPanel />
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
       <div id="observability" className="border-t border-border pt-10" data-testid="billing-observability-usage">
@@ -1398,6 +1426,39 @@ function UsageAndInvoicesTab() {
           <UsageView orgId={obsOrg.orgId} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── App hosting tab ─────────────────────────────────────────────────────
+//
+// The organization's, not the signed-in person's: one agreement, one budget
+// and one free allowance cover every app and environment in the org. So it
+// is its own tab rather than a section of Usage, which is mostly the
+// person's machines. In the forge console it is the first tab.
+//
+// Agreement first (the anchor every "Set up billing" link targets), then what
+// it is costing and where the month is heading, then the free tier, then the
+// per-resource detail.
+
+function HostingTab() {
+  const org = useActiveOrg();
+  const orgId = org.activeOrgId;
+  const deployUsage = useDeployUsage();
+
+  return (
+    <div className="flex flex-col gap-8" data-testid="billing-hosting-tab">
+      <UsageBillingPanel />
+      {orgId && (
+        <div className="border-t border-border pt-6">
+          <HostingUsagePanel orgId={orgId} />
+        </div>
+      )}
+      {orgId && (
+        <div className="border-t border-border pt-6">
+          <FreeTierCard orgId={orgId} orgName={org.active?.name ?? ""} />
+        </div>
+      )}
       {deployUsage.available && (
         <div className="border-t border-border pt-10">
           <DeployUsageSection

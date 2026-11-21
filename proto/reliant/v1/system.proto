@@ -117,6 +117,8 @@ message InfoResponse {
   int64 timestamp = 6;
   // Worktree name (for multi-worktree development)
   string worktree_name = 7;
+  // The oldest build of each client this server serves (see ClientMinimums).
+  ClientMinimums client_minimums = 8;
 }
 
 // VersionRequest is the request for the Version RPC
@@ -132,6 +134,40 @@ message VersionResponse {
   string date = 3;
   // Git branch name
   string branch = 4;
+  // The oldest build of each client this server serves (see ClientMinimums).
+  ClientMinimums client_minimums = 5;
+}
+
+// ClientMinimum is the oldest build of one kind of client this server serves.
+// A client names itself in the `Reliant-Client: <kind>/<version>` request
+// header; it is below the minimum iff its version is valid semver (no leading
+// v) and orders before min_version by semver precedence, prerelease and dev
+// builds included, build metadata ignored. An unknown or unparseable version
+// is never below it.
+message ClientMinimum {
+  // Semver without a leading v ("1.9.0"); empty means no floor.
+  string min_version = 1;
+  // Where a below-minimum client sends its user to upgrade; may be empty.
+  string upgrade_url = 2;
+  // What a below-minimum client tells its user to run (e.g. "brew upgrade
+  // --cask reliant"); may be empty.
+  string upgrade_command = 3;
+}
+
+// ClientMinimums is the oldest build of each client kind this server serves,
+// public (no sign-in), so a stale client can always learn it, and show its
+// forced-upgrade screen before a call is refused.
+message ClientMinimums {
+  ClientMinimum web = 1;
+  ClientMinimum desktop = 2;
+  ClientMinimum daemon = 3;
+  ClientMinimum cli = 4;
+  ClientMinimum sdk_go = 5;
+  ClientMinimum sdk_ts = 6;
+  // True when the server refuses a below-minimum client's calls
+  // (FailedPrecondition, x-forge-error-reason: upgrade_required); false, the
+  // minimums are advertised only.
+  bool enforced = 7;
 }
 
 // ============================================

@@ -99,7 +99,8 @@ describe("ToolExecution sub-agent card", () => {
       entityId: "block-1",
       status: ApprovalStatus.DENIED,
       denialReason: "Not now",
-      createdAt: new Date().toISOString(),
+      // A fixed instant: nothing here reads the age (RC-04).
+      createdAt: "2026-11-20T12:00:00.000Z",
     });
 
     render(<ToolExecution toolCall={spawnCall("toolu_spawn_denied")} approval={denied} chatId="chat-1" onCancel={vi.fn()} />);
