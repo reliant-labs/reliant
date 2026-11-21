@@ -92,6 +92,26 @@ func TestStreamAndAccumulate_FallsBackToStopEventToolCalls(t *testing.T) {
 	assert.Equal(t, `{"title":"From Stop Event"}`, resp.ToolCalls[0].Input)
 }
 
+// A Responses driver announces a finished function_call item with a stop event
+// mid-stream, then withholds the call because the response did not complete,
+// saying so in DroppedToolCalls. The stop-event fallback must not bring it
+// back: that would run a call of a failed response.
+func TestStreamAndAccumulate_DoesNotRestoreDroppedToolCalls(t *testing.T) {
+	d := &scriptedDriver{events: []llm.DriverEvent{
+		{Type: llm.EventToolUseStop, ToolCall: &message.ToolCall{
+			ID: "call_1", Name: "bash", Input: `{"command":"ls"}`, Finished: true,
+		}},
+		{Type: llm.EventComplete, Response: &llm.DriverResponse{
+			FinishReason:     message.FinishReasonError,
+			DroppedToolCalls: []message.ToolCall{{ID: "fc_1", Name: "bash"}},
+		}},
+	}}
+
+	resp, err := StreamAndAccumulate(context.Background(), d, nil, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, resp.ToolCalls, "a call the driver dropped must not be restored from its stop event")
+}
+
 // Text content still accumulates from deltas — compaction reads it.
 func TestStreamAndAccumulate_AccumulatesContent(t *testing.T) {
 	d := &scriptedDriver{events: []llm.DriverEvent{
