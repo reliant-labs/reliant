@@ -299,8 +299,8 @@ cmd_run() {
   # Any forge will do (scripts/forge.sh --machine): slots are machine-wide.
   local slotforge
   read -r -a slotforge <<<"$("$forge_sh" --machine --which 2>/dev/null || true)"
-  if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "${slotforge[@]}" slot status --class heavy >/dev/null 2>&1; then
-    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "${slotforge[@]}" slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) ${part:+--part "$part"} ${shard:+--shard "$shard"} ${hbase:+--hotfix-base "$hbase"} "$sha"
+  if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
+    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) ${part:+--part "$part"} ${shard:+--shard "$shard"} ${hbase:+--hotfix-base "$hbase"} "$sha"
   fi
   t0=$(date +%s); slot_wait=$(( t0 - ${RG_SLOT_T0:-$t0} ))
   snap=${RELEASE_GATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-release-gate/$(echo "$common" | md5sum | cut -c1-8)}/snap

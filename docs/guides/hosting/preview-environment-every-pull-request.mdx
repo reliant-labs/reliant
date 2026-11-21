@@ -209,7 +209,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
 ## What this does not do
 
 - **No data is copied.** A preview gets a new database with your migrations applied and no rows from staging or prod.
-- **Secrets are not copied.** Set them per preview with `reliant forge secret set --env preview-pr-<n>` ([Secrets](/hosting/secrets)).
+- **Secrets are not copied.** Set them per preview with `reliant forge env secret set --env preview-pr-<n>` ([Secrets](/hosting/secrets)).
 - **CI uses a stored token.** There is no OIDC or other short-lived credential path from GitHub Actions to Reliant today. Give the token an expiry, and revoke it with `forge cloud token revoke`.
 - **It is not a dev-server link.** [Preview a running app](/cli/previews) shares a server running on a machine, a separate feature.
 
@@ -220,7 +220,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
     The preview's own copy is untracked, so forge treats the tree as dirty and labels the release `DIRTY TREE`. Add `deploy/kcl/preview-*/` to `.gitignore` and commit it, as in step 1.
   </Accordion>
   <Accordion title="env deploy exits 7">
-    The deploy is queued on billing, usually because the organization's one free static site is already in use by `prod`. It goes live once billing is set up ([Queued deploys](/hosting/overview#queued-deploys)).
+    The deploy is queued on billing, usually because the one free static site (one per person, counted across environments) is already in use by `prod`. It goes live once billing is set up ([Queued deploys](/hosting/overview#queued-deploys)).
   </Accordion>
   <Accordion title="env deploy exits 5 in CI">
     With no terminal, a deploy without `--yes` stops after cutting the release and writes no promotion. Pass `--yes`, or use the two-stage `--plan-only` / `--approve` form ([The plan, and approving it](/forge/deploy/releases-and-promotion#the-plan-and-approving-it)).

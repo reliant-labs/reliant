@@ -160,6 +160,13 @@ func EvaluateNodeConfig(
 		return nil, err
 	}
 
+	// A call_llm node's messages are plain strings too, and validation checks
+	// their templates as templates: render them, so the model reads the value
+	// rather than a literal "{{ nodes.x.response_text }}".
+	if err := resolveCallLLMMessages(resolvedNode, builder); err != nil {
+		return nil, err
+	}
+
 	// Resolve ResponseTool schema CEL expressions. The schema field is a
 	// google.protobuf.Struct which ResolveCELFields skips. The YAML parser stores
 	// CEL expressions as a sentinel Struct with key "__cel_expr__"; evaluate it now.
@@ -489,5 +496,49 @@ func resolveRunWritableCheckouts(node *reliantv1.Node, builder *CELContextBuilde
 		}
 	}
 	run.WritableCheckouts = out
+	return nil
+}
+
+// resolveCallLLMMessages renders the templates in a call_llm node's
+// messages[].content and messages[].role, plain strings that ResolveCELFields
+// leaves alone. Validation has always checked them as templates
+// (validation/cel_sites.go), so a workflow that saves already has templates
+// that compile there; a message without "{{" is sent exactly as written.
+// Messages a router builds in Go never come through here.
+func resolveCallLLMMessages(node *reliantv1.Node, builder *CELContextBuilder) error {
+	args := node.GetCallLlm()
+	if args == nil {
+		return nil
+	}
+	render := func(i int, field, raw string) (string, error) {
+		if !strings.Contains(raw, "{{") {
+			return raw, nil
+		}
+		value, err := builder.EvalString(raw)
+		if err != nil {
+			return "", fmt.Errorf("call_llm node %q: messages[%d].%s %q: %w", node.GetId(), i, field, raw, err)
+		}
+		// As a system_prompt renders: text as is, anything else as JSON.
+		native := convertCELToNative(value)
+		if s, ok := native.(string); ok {
+			return s, nil
+		}
+		data, err := json.Marshal(native)
+		if err != nil {
+			return "", fmt.Errorf("call_llm node %q: messages[%d].%s %q: cannot render %T as text: %w", node.GetId(), i, field, raw, native, err)
+		}
+		return string(data), nil
+	}
+	for i, msg := range args.GetMessages() {
+		content, err := render(i, "content", msg.GetContent())
+		if err != nil {
+			return err
+		}
+		role, err := render(i, "role", msg.GetRole())
+		if err != nil {
+			return err
+		}
+		msg.Content, msg.Role = content, role
+	}
 	return nil
 }

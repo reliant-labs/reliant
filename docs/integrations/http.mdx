@@ -109,7 +109,7 @@ Text that reaches a step as data, such as a workflow input or the output of an e
 
 ### Access
 
-A secret's *access list* decides which workflows may use it. An org owner or admin allows a workflow with `forge secret allow TRADER_KEY --env staging --workflow trader-bot`. A workflow that is not on the list fails the step with a message that names that command. The activation and trigger approval list each secret a workflow uses (name and environment), so adding one is a change the owner approves.
+A secret's *access list* decides which workflows may use it. An org owner or admin allows a workflow with `forge env secret allow TRADER_KEY --env staging --workflow trader-bot`. A workflow that is not on the list fails the step with a message that names that command. The activation and trigger approval list each secret a workflow uses (name and environment), so adding one is a change the owner approves.
 
 ### Loops and sub-workflows
 

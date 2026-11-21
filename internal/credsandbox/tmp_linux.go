@@ -58,14 +58,18 @@ var privateTmpDirs = []struct{ path, entry string }{
 }
 
 // makePrivateTmpDirs makes the run directory's stand-ins, sticky and writable
-// by everyone, as the directories they replace are.
+// by everyone, as the directories they replace are. The sticky bit is
+// os.ModeSticky: os.Chmod takes an os.FileMode, whose 0o1000 bit is not the
+// sticky bit, so os.Chmod(p, 0o1777) made them a bare 0777, and a tool that
+// refuses a world-writable directory without it (forge's tool cache:
+// "/tmp is world-writable without the sticky bit") refused to run.
 func makePrivateTmpDirs(runDir string) error {
 	for _, d := range privateTmpDirs {
 		p := filepath.Join(runDir, d.entry)
 		if err := os.Mkdir(p, 0o700); err != nil {
 			return err
 		}
-		if err := os.Chmod(p, 0o1777); err != nil {
+		if err := os.Chmod(p, 0o777|os.ModeSticky); err != nil {
 			return err
 		}
 	}

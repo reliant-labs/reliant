@@ -902,10 +902,12 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 		return nil, tools.RefuseActivation(msg, svcerr.WithMessage(svcerr.ErrNotFound, msg))
 	}
 	// The activation's message overrides the declaration's prompt template;
-	// with neither, a run would start with nothing to do.
-	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" {
+	// with neither, an agent would start with nothing to do. A workflow that
+	// runs no agent needs no prompt: its runs start from
+	// triggers.DefaultSeedPrompt.
+	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" && triggers.WorkflowRunsAgent(wf) {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf(
-			"message is required: the declared trigger %q has no prompt, so the activation must write one", name))
+			"message is required: the declared trigger %q has no prompt and the workflow runs an agent, so the activation must write one", name))
 	}
 	// Activation has no previous kind to hold the declaration to.
 	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: def.Workflow, WorkflowTrigger: &name})

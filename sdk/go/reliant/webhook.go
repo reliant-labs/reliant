@@ -256,7 +256,8 @@ func (w *Webhook) send(ctx context.Context, body []byte, defaultCT string, opts 
 		return nil, fmt.Errorf("reliant: webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", cfg.contentType)
-	req.Header.Set("User-Agent", "reliant-go-sdk/"+Version)
+	req.Header.Set("User-Agent", "reliant-go-sdk/"+clientVersion())
+	req.Header.Set(headerClient, clientHeader())
 	for k, vs := range cfg.header {
 		for _, v := range vs {
 			req.Header.Add(k, v)

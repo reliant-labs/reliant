@@ -104,7 +104,7 @@ This is `autopilot-pr-review`, one of the [Autopilot](/guides/autopilot) built-i
 - **It never approves or merges.** The review event is computed in one node that can only produce `COMMENT` or `REQUEST_CHANGES`, and the reviewer has no tool that posts a review. If you want something to merge, you compose that yourself: a workflow you write can call `github/pr.merge@1` in an action node, pinned to the reviewed head commit ([Merging is a workflow step](/integrations/github#merging-is-a-workflow-step-never-an-agent-tool)).
 - **It does not run your code.** The reviewer reads through GitHub with read-only tools. It runs no tests, builds or linters, so keep your CI.
 - **It has no budget of its own.** Each review is capped at 40 agent turns, and every non-draft pull request is reviewed, including the ones agents open. Start with one repository. See [What it costs](/guides/autopilot#what-it-costs).
-- **In an organization, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only` in `reliant trigger get`). The CLI cannot widen that. A person allows your own accounts on the automation in the app, or an admin adds an organization account.
+- **In an organization with two or more members, runs spend only the organization's AI accounts** by default (`Unattended funding: org_only` in `reliant trigger get`). The CLI cannot widen that. A person allows your own accounts on the automation in the app, or an admin adds an organization account.
 
 ## Troubleshooting
 

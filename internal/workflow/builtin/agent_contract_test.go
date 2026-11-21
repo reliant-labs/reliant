@@ -43,7 +43,10 @@ const (
 	//
 	// The ask_user edge excludes incomplete: a paused turn is not finished,
 	// so there is nothing to ask the user yet.
-	agentWhileExpr             = `outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true`
+	//
+	// max_turns bounds all of it; 0, the default, is no limit, so a chat's
+	// agent loops exactly as it did before the input existed.
+	agentWhileExpr             = `(outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)`
 	edgeCallLLMToApproval      = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeCallLLMToAskQuestion   = `size(nodes.call_llm.tool_calls) == 0 && nodes.call_llm.stop_reason != 'incomplete' && inputs.ask`

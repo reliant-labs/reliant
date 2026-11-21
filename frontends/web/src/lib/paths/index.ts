@@ -26,18 +26,46 @@
 
 import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
 import type { SettingsSection } from "../../routeSchemas";
-import { withOrg, type PathContext } from "./org";
+import { orgRootPath, withOrg, type PathContext } from "./org";
 
 export { withOrg, type PathContext } from "./org";
 export { withSearch } from "./search";
 
-const seg = encodeURIComponent;
+/**
+ * A path segment exactly as a URL already carries it, percent-encoded: for a
+ * redirect that moves a segment it captured from one path into another
+ * (a retired path's id, a desktop path's mobile twin) byte for byte. Decoding
+ * and re-encoding it could change the bytes (`%2F`, `%252F`, a raw `:`) of a
+ * link someone printed.
+ */
+export interface EncodedSegment {
+  readonly encoded: string;
+}
+
+/** `encoded`, a segment as captured from a URL, for a builder that takes one (see EncodedSegment). */
+export function encodedSegment(encoded: string): EncodedSegment {
+  return { encoded };
+}
+
+/** A builder's path segment: a value to encode, or one already encoded. */
+export type Segment = string | EncodedSegment;
+
+const seg = (value: Segment): string => (typeof value === "string" ? encodeURIComponent(value) : value.encoded);
 
 // ── Chats and projects ──────────────────────────────────────────────────────
 
-/** The chat home: every project's chats. (`/o/<org>/` in U3.) */
+/** The chat home: every project's chats (`/o/<org>` in the org form). */
 export function homePath(ctx?: PathContext): string {
   return withOrg("/", ctx);
+}
+
+/**
+ * An org's home, `/o/<org>`, whatever the flag says: a way into one of the
+ * person's orgs by name (the "no access" page's list). The org routes are
+ * always mounted, so it resolves with the flag off too.
+ */
+export function orgHomePath(org: string): string {
+  return orgRootPath(org);
 }
 
 /** The chat home filtered to one project (the sidebar's project filter). */
@@ -93,7 +121,7 @@ export function workflowLibraryPath(ctx?: PathContext): string {
 }
 
 /** One workflow's page in the Workflows area, by its ref (`builtin://get-it-right`, a user workflow's name). */
-export function workflowDetailPath(workflowRef: string, ctx?: PathContext): string {
+export function workflowDetailPath(workflowRef: Segment, ctx?: PathContext): string {
   return withOrg(`/workflows/library/${seg(workflowRef)}`, ctx);
 }
 
@@ -103,7 +131,7 @@ export function runsPath(ctx?: PathContext): string {
 }
 
 /** One run's page. A run is a chat: `runId` is its chat id. */
-export function runPath(runId: string, ctx?: PathContext): string {
+export function runPath(runId: Segment, ctx?: PathContext): string {
   return withOrg(`/workflows/runs/${seg(runId)}`, ctx);
 }
 
@@ -113,7 +141,7 @@ export function automationsPath(ctx?: PathContext): string {
 }
 
 /** The redirect an automation id resolves through, to its row on its workflow's page. */
-export function automationPath(triggerId: string, ctx?: PathContext): string {
+export function automationPath(triggerId: Segment, ctx?: PathContext): string {
   return withOrg(`/workflows/automations/${seg(triggerId)}`, ctx);
 }
 
@@ -194,7 +222,7 @@ export function acceptInvitePath(): string {
   return "/accept-invite";
 }
 
-/** CLI login consent (`forge login`, `reliant auth login`). */
+/** CLI login consent (`forge cloud login`, `reliant auth login`). */
 export function oauthCliPath(): string {
   return "/oauth/cli";
 }
@@ -227,7 +255,7 @@ export function mobileChatsPath(): string {
   return "/m/chats";
 }
 
-export function mobileChatPath(chatId: string): string {
+export function mobileChatPath(chatId: Segment): string {
   return `/m/chats/${seg(chatId)}`;
 }
 
@@ -264,7 +292,7 @@ export function mobileWorkflowsPath(): string {
   return "/m/workflows";
 }
 
-export function mobileWorkflowPath(workflowName: string): string {
+export function mobileWorkflowPath(workflowName: Segment): string {
   return `/m/workflows/${seg(workflowName)}`;
 }
 
@@ -277,7 +305,7 @@ export function mobileRunsPath(): string {
 }
 
 /** Resolves an automation id to its workflow, on the mobile surface. */
-export function mobileAutomationPath(triggerId: string): string {
+export function mobileAutomationPath(triggerId: Segment): string {
   return `/m/automations/${seg(triggerId)}`;
 }
 
