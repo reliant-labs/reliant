@@ -326,6 +326,39 @@ func TestRemoveIfSame_WithoutHardLinksNeverRenamesOverAFileCreatedAtPath(t *test
 	}
 }
 
+// The move aside never replaces a file another process puts at the hidden
+// name it picked, even in the instant before the rename: that name is left
+// alone and another is used, and the cleanup still completes.
+func TestRemoveIfSame_TheMoveAsideNeverReplacesAFileAtItsName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shot.png")
+	if err := os.WriteFile(path, []byte("ours"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ours, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs := []byte("another process's file at the picked name")
+	var taken string
+	orig := renameFile
+	t.Cleanup(func() { renameFile = orig })
+	renameFile = func(oldname, newname string) error {
+		if taken == "" {
+			taken = newname
+			if err := os.WriteFile(newname, theirs, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return orig(oldname, newname)
+	}
+	removeIfSame(path, ours)
+	if got, err := os.ReadFile(taken); err != nil || !bytes.Equal(got, theirs) {
+		t.Fatalf("the file at the picked name must survive; read %q, err %v", got, err)
+	}
+	assertOnlyEntries(t, dir, filepath.Base(taken))
+}
+
 // errSender answers every command with a daemon-reported error.
 type errSender struct {
 	commandType string
