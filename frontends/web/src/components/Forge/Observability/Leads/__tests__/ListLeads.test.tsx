@@ -86,6 +86,28 @@ describe("ErrorsLead", () => {
     expect(screen.getByTestId("lead-summary")).toHaveTextContent("across every environment");
   });
 
+  it("says the headline chart covers only the loaded issues while more pages remain", async () => {
+    const hour = Math.floor(NOW / 3_600_000) * 3_600_000;
+    const trend = [
+      { hourMs: hour - 3_600_000, events: 2 },
+      { hourMs: hour, events: 1 },
+    ];
+    const open = [issue({ id: "a", trend }), issue({ id: "b", trend })];
+    const paged = (token: string): Partial<ObservabilityApi> => ({
+      listIssues: async (req) => ({ issues: req.statuses.includes("resolved") ? [] : open, nextPageToken: token }),
+    });
+    const { unmount } = renderWithApi(api(paged("next")), <ErrorsLead scope={SCOPE} env="prod" hrefOf={hrefOf} />);
+    const headline = await screen.findByTestId("lead-errors-headline");
+    expect(within(headline).getByTestId("lead-errors-partial")).toHaveTextContent("Events of the 2 issues loaded");
+    expect(headline).toHaveTextContent("Events6+");
+    unmount();
+
+    renderWithApi(api(paged("")), <ErrorsLead scope={SCOPE} env="prod" hrefOf={hrefOf} />);
+    const whole = await screen.findByTestId("lead-errors-headline");
+    expect(within(whole).queryByTestId("lead-errors-partial")).toBeNull();
+    expect(whole).toHaveTextContent("Events6Affected");
+  });
+
   it("says when the inbox could not be read, and still links to the full list", async () => {
     renderWithApi(api({ listIssues: async () => Promise.reject(new Error("down")) }), <ErrorsLead scope={SCOPE} env="prod" hrefOf={hrefOf} />);
     expect(await screen.findByText(/could not be read/, {}, { timeout: 5000 })).toBeInTheDocument();

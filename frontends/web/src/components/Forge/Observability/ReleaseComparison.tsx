@@ -448,7 +448,7 @@ function Change({
       <ArrowRight className="h-3 w-3 self-center text-ink-muted" aria-label="to" />
       <span className="font-medium text-ink">{after == null ? "—" : format(after)}</span>
       {text && (
-        <span className={cn("text-2xs font-medium", MOVE_TONE[move])} title={MOVE_WORD[move]}>
+        <span className={cn("text-meta font-medium", MOVE_TONE[move])} title={MOVE_WORD[move]}>
           {text}
           {higherIsWorse !== null && MOVE_WORD[move] && move !== "flat" ? <span className="sr-only"> ({MOVE_WORD[move]})</span> : null}
         </span>
