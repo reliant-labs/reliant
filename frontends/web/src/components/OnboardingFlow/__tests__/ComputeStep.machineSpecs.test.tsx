@@ -340,7 +340,7 @@ describe("ComputeStep — every size says what it gives you", () => {
   it("makes the free option a row in the machine list, under the heading", () => {
     renderStep();
 
-    const list = screen.getByRole("group", { name: /choose your machine/i });
+    const list = screen.getByRole("group", { name: /choose your agent sandbox/i });
 
     const rows = within(list);
     const local = rows.getByRole("button", { name: /your own computer/i });
@@ -432,7 +432,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     // Last thing on the step: after the machine list, and outside the box
     // that holds the options — it is the consequence of choosing, not one of
     // the choices.
-    const list = screen.getByRole("group", { name: /choose your machine/i });
+    const list = screen.getByRole("group", { name: /choose your agent sandbox/i });
     expect(
       list.compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

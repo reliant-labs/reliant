@@ -1,5 +1,5 @@
 /**
- * What /apps says right after a claim: the app is highlighted, and a claimer
+ * What the apps list (Projects' apps) says right after a claim: the app is highlighted, and a claimer
  * who chose between their two free static sites is told which one is paused and
  * that subscribing undoes it (a membership claim, W11).
  */
@@ -30,9 +30,8 @@ vi.mock('@/hooks/observability-queries', () => ({
   useObservabilityOrg: () => ({ orgId: null, isLoading: false, error: null }),
   useAlerts: () => ({ data: [] }),
 }))
-vi.mock('../../Layout/AreaShell', () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 
-import { AppsPage } from '../AppsPage'
+import { AppsBody } from '../AppsPage'
 
 // jsdom has no layout, so no scrollIntoView; the card scrolls itself into view when highlighted.
 const scrollIntoView = vi.fn()
@@ -42,14 +41,22 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = scrollIntoView
 })
 
-describe('/apps after a claim', () => {
+describe('the apps after a claim', () => {
   it('says the app is yours now, with nothing about an allowance when there is no problem', async () => {
     search = { claimed: 'storefront' }
-    render(<AppsPage />)
+    render(<AppsBody />)
     expect(await screen.findByTestId('apps-claimed')).toHaveTextContent('storefront is yours now')
     expect(screen.getByTestId('app-row-storefront')).toHaveAttribute('data-highlighted', 'true')
     expect(screen.queryByTestId('apps-claimed-paused')).toBeNull()
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: {}, replace: true }))
+    // Dropped from the URL once shown, on the page it is on: the filter stays.
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '.', replace: true })))
+    const [{ search: next }] = navigate.mock.calls[0] as [{ search: (prev: object) => object }]
+    expect(next({ show: 'apps', claimed: 'storefront', pausedSite: 'blog', kept: 'claimed' })).toEqual({
+      show: 'apps',
+      claimed: undefined,
+      pausedSite: undefined,
+      kept: undefined,
+    })
   })
 
   it.each([
@@ -57,7 +64,7 @@ describe('/apps after a claim', () => {
     ['existing', /you kept free hosting where it was/i],
   ] as const)('names the reported paused site and offers billing (kept %s)', async (kept, said) => {
     search = { claimed: 'storefront', pausedSite: 'blog', kept }
-    render(<AppsPage />)
+    render(<AppsBody />)
     const note = await screen.findByTestId('apps-claimed-paused')
     expect(note).toHaveTextContent(said)
     expect(note).toHaveTextContent(/blog/)

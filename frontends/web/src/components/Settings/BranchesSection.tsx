@@ -29,10 +29,44 @@ type BranchesTab = "active" | "archived" | "settings";
  * the app into it. "Open" does that, and then leaves Settings.
  */
 export function BranchesSection() {
+  const { activeDaemon } = useDaemonStatus();
+  const closeSettings = useSettingsClose();
+
+  return (
+    <div className="flex flex-col" data-testid="branches-section">
+        <SettingsPageHeader
+          title="Workspaces"
+          description="Each branched chat works in its own workspace, an isolated copy of your repo on its own git branch (a git worktree), so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
+          meta={
+            <>
+              <SettingsProjectScope hint="Workspaces are listed for this project" />
+              {activeDaemon && (
+                <span className={workspaceChip} title="The machine these workspaces live on">
+                  <Monitor className="h-3 w-3" aria-hidden="true" />
+                  <span className="sr-only">Machine:</span>
+                  {machineDisplayName(activeDaemon)}
+                </span>
+              )}
+            </>
+          }
+          className="mb-4"
+        />
+        <WorkspacesBody onOpened={closeSettings} />
+    </div>
+  );
+}
+
+/**
+ * The current project's workspaces — Active, Archived and the cleanup
+ * settings, a row drilling into its detail — without Settings' header. Shared
+ * by Settings → Workspaces and a project page's Workspaces tab (R9), which
+ * makes its project the current one first. `onOpened` runs after "Open" has
+ * switched the app into a workspace or chat.
+ */
+export function WorkspacesBody({ onOpened }: { onOpened?: () => void }) {
   const [activeTab, setActiveTab] = useState<BranchesTab>("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { activeDaemon } = useDaemonStatus();
-  const closeSettings = useSettingsClose();
   const currentProject = useProjectStore((state) => state.currentProject);
   const { worktrees, hasMore: hasMoreActive } = useWorktreeList(currentProject?.id);
   // Read only: the Archived tab loads the archived list when it is opened.
@@ -68,30 +102,12 @@ export function BranchesSection() {
   };
 
   return (
-    <div className="flex flex-col" data-testid="branches-section">
-        <SettingsPageHeader
-          title="Workspaces"
-          description="Each branched chat works in its own workspace, an isolated copy of your repo on its own git branch (a git worktree), so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
-          meta={
-            <>
-              <SettingsProjectScope hint="Workspaces are listed for this project" />
-              {activeDaemon && (
-                <span className={workspaceChip} title="The machine these workspaces live on">
-                  <Monitor className="h-3 w-3" aria-hidden="true" />
-                  <span className="sr-only">Machine:</span>
-                  {machineDisplayName(activeDaemon)}
-                </span>
-              )}
-            </>
-          }
-          className="mb-4"
-        />
-
+    <div className="flex flex-col">
         {selected ? (
           <WorktreeDetailView
             worktreeId={selected.id}
             onBack={() => setSelectedId(null)}
-            onOpened={closeSettings}
+            onOpened={onOpened}
             embedded
           />
         ) : (
@@ -112,7 +128,7 @@ export function BranchesSection() {
                   daemonId={activeDaemon?.daemonId}
                   onSelect={(worktree) => setSelectedId(worktree.id)}
                   selectedId={null}
-                  onOpened={closeSettings}
+                  onOpened={onOpened}
                 />
               )}
               {activeTab === "archived" && <ArchivedWorktreesPanel paddingClass="" />}

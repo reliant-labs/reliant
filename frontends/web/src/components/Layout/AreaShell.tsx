@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import ErrorBoundary from "../ErrorBoundary";
 import Tooltip from "../forge-ui/tooltip";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { LearnLink, type LearnSection } from "@/lib/learnLinks";
 import { orgFreePath } from "@/lib/paths/org";
 import { PageMain, ShellPageHeader, useShellFrame } from "./shell/shellFrame";
 
@@ -34,6 +35,8 @@ interface AreaShellProps {
   areaLabel: string;
   /** Lower-case noun for the list page's exit tooltip, e.g. "inbox". */
   areaNoun: string;
+  /** The guide the area's bar links to (lib/learnLinks.tsx), if any. */
+  learn?: LearnSection;
   children: ReactNode;
 }
 
@@ -43,7 +46,7 @@ export function AreaShell(props: AreaShellProps) {
 }
 
 /** The area inside the one shell: no exit, no org switcher, no title-bar chrome of its own. */
-function ShellArea({ areaPath, areaLabel, children }: AreaShellProps) {
+function ShellArea({ areaPath, areaLabel, learn, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isDetail = orgFreePath(pathname).startsWith(`${orgFreePath(areaPath)}/`);
@@ -55,7 +58,7 @@ function ShellArea({ areaPath, areaLabel, children }: AreaShellProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-background" data-testid="area-shell">
-      <ShellPageHeader>
+      <ShellPageHeader actions={learn ? <LearnLink section={learn} /> : undefined}>
         {isDetail && (
           <button
             type="button"
@@ -101,7 +104,7 @@ function useEscape(onEscape: (() => void) | null) {
   }, [onEscape]);
 }
 
-function StandaloneArea({ areaPath, areaLabel, areaNoun, children }: AreaShellProps) {
+function StandaloneArea({ areaPath, areaLabel, areaNoun, learn, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } =
@@ -158,6 +161,11 @@ function StandaloneArea({ areaPath, areaLabel, areaNoun, children }: AreaShellPr
           </div>
         </div>
         <div className="flex-1 self-stretch" style={dragRegionStyle} />
+        {learn && (
+          <div className="pr-3" style={noDragRegionStyle}>
+            <LearnLink section={learn} />
+          </div>
+        )}
         <div className="max-w-64 pr-3" style={noDragRegionStyle}>
           <OrgSwitcher />
         </div>
