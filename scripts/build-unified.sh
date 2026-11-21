@@ -298,22 +298,22 @@ export NODE_ENV=production
 
 if [[ "$BUILD_ALL_PLATFORMS" == "true" ]]; then
     echo "Building for all platforms..."
-    run_cmd pnpm run dist -- --publish=never --mac --win --linux
+    run_cmd pnpm run dist --publish=never --mac --win --linux
 else
     echo "Building for current platform..."
     case "$PLATFORM" in
         darwin)
-            run_cmd pnpm run dist -- --publish=never --mac
+            run_cmd pnpm run dist --publish=never --mac
             ;;
         linux)
-            run_cmd pnpm run dist -- --publish=never --linux
+            run_cmd pnpm run dist --publish=never --linux
             ;;
         windows)
-            run_cmd pnpm run dist -- --publish=never --win
+            run_cmd pnpm run dist --publish=never --win
             ;;
         *)
             echo "Building for default platform..."
-            run_cmd pnpm run dist -- --publish=never
+            run_cmd pnpm run dist --publish=never
             ;;
     esac
 fi
