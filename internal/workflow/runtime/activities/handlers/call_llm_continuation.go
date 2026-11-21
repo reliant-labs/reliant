@@ -79,14 +79,10 @@ func continuationNudgeText(kind string) (string, bool) {
 	return "", false
 }
 
-// requestedContinuation is the continuation this call should perform: the
-// node's continuation arg when it names a known kind, and "" when the mailbox
-// delivered new input this turn (newInput) — that input is what the model
-// answers, and a nudge after it would talk over the user.
-func requestedContinuation(args *reliantv1.CallLLMArgs, newInput bool) string {
-	if newInput {
-		return ""
-	}
+// requestedContinuation is the node's continuation arg when it names a known
+// kind. Mailbox input is already in history before the nudge is appended; it
+// resets the saved-nudge counts, but does not cancel the requested continuation.
+func requestedContinuation(args *reliantv1.CallLLMArgs) string {
 	kind := strings.TrimSpace(model.CelStringValue(args.GetContinuation()))
 	if _, ok := continuationNudgeText(kind); !ok {
 		return ""

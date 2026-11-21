@@ -188,12 +188,10 @@ func TestRequestedContinuation(t *testing.T) {
 	args := func(v string) *reliantv1.CallLLMArgs {
 		return &reliantv1.CallLLMArgs{Continuation: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: v}}}
 	}
-	assert.Equal(t, continuationTruncated, requestedContinuation(args("truncated"), false))
-	assert.Equal(t, continuationCommentary, requestedContinuation(args("commentary"), false))
-	assert.Equal(t, "", requestedContinuation(args("truncated"), true),
-		"new input this turn is what the model answers; no nudge after it")
-	assert.Equal(t, "", requestedContinuation(args("some_future_kind"), false), "an unknown kind is ignored")
-	assert.Equal(t, "", requestedContinuation(&reliantv1.CallLLMArgs{}, false), "unset is the old behavior")
+	assert.Equal(t, continuationTruncated, requestedContinuation(args("truncated")))
+	assert.Equal(t, continuationCommentary, requestedContinuation(args("commentary")))
+	assert.Equal(t, "", requestedContinuation(args("some_future_kind")), "an unknown kind is ignored")
+	assert.Equal(t, "", requestedContinuation(&reliantv1.CallLLMArgs{}), "unset is the old behavior")
 }
 
 // --- the activity: the provider is really called, with the nudge ---
@@ -362,6 +360,52 @@ func TestCallLLM_TruncationContinuationsStopAtTheCap(t *testing.T) {
 	require.Equal(t, 1, driver.calls(), "the third continuation itself still runs")
 	assert.Equal(t, stopreason.Truncated, output.StopReason, "past the cap the turn ends honestly as truncated, not done")
 	assert.Empty(t, output.Continuation, "three nudged continuations in a row is the cap")
+}
+
+// Mailbox delivery resets the old nudge run, but the requested continuation
+// must still be nudged and counted so repeated truncation reaches the cap.
+func TestCallLLM_MailboxDeliveryPreservesContinuationTracking(t *testing.T) {
+	t.Parallel()
+
+	driver := &turnScriptDriver{turns: []llm.DriverResponse{
+		{Content: "...still going", FinishReason: message.FinishReasonMaxTokens},
+	}}
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+	for range maxTruncationContinuations {
+		saveHiddenNudge(t, h, chat.ID, continuationTruncated)
+		saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "partial answer")
+	}
+	const mailboxText = "Also check the migration."
+	queueHumanMessage(t, h.Repo(), chat.ID, chat.ID, mailboxText)
+	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, turnScriptResolver(driver), nil)
+
+	for i := 1; i <= maxTruncationContinuations; i++ {
+		var output CallLLMOutput
+		require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
+			withPosition(withContinuation(callLLMInput(chat.ID, chat.ID, "mock-model"), continuationTruncated)), &output))
+		require.Equal(t, i, driver.calls())
+		sent := driver.lastSent()
+		role, text := lastText(sent)
+		assert.Equal(t, message.User, role)
+		assert.Equal(t, truncationNudgeText, text)
+		assert.Equal(t, i, trailingNudges(sent)[continuationTruncated], "mailbox resets the old run, not the requested nudge")
+		if i == 1 {
+			require.GreaterOrEqual(t, len(sent), 2)
+			assert.Contains(t, sent[len(sent)-2].Content().Text, mailboxText, "mailbox input precedes the nudge")
+		}
+		assert.Equal(t, stopreason.Truncated, output.StopReason)
+		if i < maxTruncationContinuations {
+			assert.Equal(t, continuationTruncated, output.Continuation)
+		} else {
+			assert.Empty(t, output.Continuation, "retruncation after mailbox delivery must still reach the cap")
+		}
+		saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, output.ResponseText)
+	}
 }
 
 // nudgeSaveFailingRepo fails every save of a hidden continuation nudge (its

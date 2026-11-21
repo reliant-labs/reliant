@@ -446,7 +446,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// Best-effort, exactly as the boundary drain was: a mailbox hiccup must not
 	// fail the turn. The rows stay queued (status=1) and the next call picks
 	// them up.
-	delivered := a.drainAgentMailbox(ctx, rtx.ChatID, thread)
+	a.drainAgentMailbox(ctx, rtx.ChatID, thread)
 
 	// Load conversation history
 	history, err := a.loadConversationHistory(ctx, rtx.ChatID, thread, rtx.ContextSequence)
@@ -480,7 +480,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	}
 
 	// Stream LLM response and collect data in memory
-	output, err := a.streamLLMResponse(ctx, chat, thread, history, rtx, args, requestedContinuation(args, delivered > 0))
+	output, err := a.streamLLMResponse(ctx, chat, thread, history, rtx, args, requestedContinuation(args))
 	if err != nil {
 		return nil, fmt.Errorf("failed to stream LLM response: %w", err)
 	}
