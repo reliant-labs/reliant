@@ -27,6 +27,7 @@ func TestReleaseServerImageIsBuildOnlyAndReceivesVersionStamp(t *testing.T) {
 			Type       string            `json:"type"`
 			Dockerfile string            `json:"dockerfile"`
 			BuildArgs  map[string]string `json:"build_args"`
+			Inputs     []string          `json:"inputs"`
 		} `json:"build"`
 	}
 	type bundle struct {
@@ -47,6 +48,15 @@ func TestReleaseServerImageIsBuildOnlyAndReceivesVersionStamp(t *testing.T) {
 			"-D", "stamp_branch=release/test", "-D", "stamp_commit_time=1795132800",
 		}, want: map[string]string{
 			"VERSION": "v1.42.0", "COMMIT": "0123456789abcdef0123456789abcdef01234567", "BUILD_DATE": "2026-11-20T00:00:00Z", "BRANCH": "release/test", "COMMIT_TIME": "1795132800",
+		}},
+		// The release recipe passes no stamp_date: BUILD_DATE is the commit
+		// time, so the build args are a function of the commit and a second
+		// release of it reuses the first one's image.
+		{name: "build date from the commit time", opts: []string{
+			"-D", "stamp_version=v1.42.0", "-D", "stamp_commit=0123456789abcdef0123456789abcdef01234567",
+			"-D", "stamp_branch=release/test", "-D", "stamp_commit_time=1709164809",
+		}, want: map[string]string{
+			"VERSION": "v1.42.0", "COMMIT": "0123456789abcdef0123456789abcdef01234567", "BUILD_DATE": "2024-02-29T00:00:09Z", "BRANCH": "release/test", "COMMIT_TIME": "1709164809",
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -72,6 +82,9 @@ func TestReleaseServerImageIsBuildOnlyAndReceivesVersionStamp(t *testing.T) {
 			assert.Equal(t, "docker", image.Build.Type)
 			assert.Equal(t, "Dockerfile", image.Build.Dockerfile)
 			assert.Equal(t, tc.want, image.Build.BuildArgs)
+			// Declared inputs are what lets a release reuse an earlier
+			// release's image; the Go module files must be among them.
+			assert.Subset(t, image.Build.Inputs, []string{"Dockerfile", "go.mod", "go.sum", "cmd/**", "internal/**"})
 		})
 	}
 }
