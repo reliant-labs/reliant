@@ -8,8 +8,9 @@ import (
 
 // TestReviewMarkerScript runs scripts/test-ci-review-marker.sh, the hermetic
 // self-test of the `Reliant review` required check: an exact-head pass marker
-// passes a branch of this repository, and nothing passes a fork's head
-// (control-plane finding CPI-1).
+// passes a branch of this repository, nothing passes a fork's head
+// (control-plane finding CPI-1), no label grants a pass, and a merge group
+// judges every queue entry ahead of it and fails closed on an unreadable queue.
 func TestReviewMarkerScript(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs bash and jq subprocesses; runs in full scoped tests")

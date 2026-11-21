@@ -302,6 +302,7 @@ type fallbackLease struct {
 	Model    string
 	Provider string
 	Until    time.Time
+	Manual   bool // the wait banner, not automatic failover or a picker hint
 	// Returning is true from the first turn after Until, which tries the
 	// chat's own model again. A refused attempt extends the stay; the next
 	// turn after one that was not refused ends it.
@@ -326,6 +327,10 @@ type usageLimitWaiter struct {
 	// waits that began before useModelEpoch was reached.
 	useModel      string
 	useModelEpoch int
+	// Keep the banner selection independently of picker/background wakes:
+	// waits can still be completing marker activities when those arrive.
+	manualModel string
+	manualEpoch int
 	// leases are the threads currently on a fallback model.
 	leases map[string]*fallbackLease
 	// keepStays is the usage-limit-stay version of this run: a lease outlives
@@ -384,6 +389,21 @@ func (w *usageLimitWaiter) listen(ch workflow.ReceiveChannel, onWake func(workfl
 			}
 			w.retryEpoch++
 			w.useModel, w.useModelEpoch = sig.UseModel, w.retryEpoch
+			// Picker and background wakes must not erase a banner click that
+			// targeted waits have yet to consume. Its own epoch excludes waits
+			// that begin later; picker clearing of established leases stays below.
+			if sig.ManualFallback && sig.UseModel != "" {
+				w.manualModel, w.manualEpoch = sig.UseModel, w.retryEpoch
+			}
+			if sig.UseModel != "" && !sig.ManualFallback {
+				// A picker choice takes precedence over banner leases, even
+				// when it did not change the saved provider binding.
+				for thread, lease := range w.leases {
+					if lease.Manual {
+						delete(w.leases, thread)
+					}
+				}
+			}
 			if onWake != nil {
 				onWake(gCtx, sig)
 			}
@@ -466,10 +486,15 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	case usageLimitRetryNow:
 		return w.continueNow(ctx, req, pc, limit, "another account of the same provider can serve it; retrying now")
 	case usageLimitSwitchModel:
-		w.startLease(ctx, req.Thread, limit, facts, decision.Model, decision.Until, decision.Probing)
+		w.startLease(ctx, req.Thread, limit, facts, decision.Model, decision.Until, decision.Probing, false)
 		return w.continueNow(ctx, req, pc, limit, "continuing on "+decision.Model+" until the provider resets")
 	}
 
+	// The banner can see the durable marker before its activity returns.
+	// Accept explicit clicks across that gap, but keep the later epoch for
+	// legacy wakes so old histories still park and retry as recorded.
+	markerEpoch := w.retryEpoch
+	manualSinceMarker := func() bool { return w.manualEpoch > markerEpoch }
 	// The marker goes down BEFORE the park, or a supervisor reading the chat
 	// cannot tell this run from a wedged one. See db.ProviderBackoff.
 	w.recordMarker(ctx, req.Thread, limit.Provider, decision)
@@ -493,7 +518,7 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	}
 
 	woken, err := workflow.AwaitWithTimeout(ctx, decision.Until.Sub(now), func() bool {
-		return w.retryEpoch > startEpoch ||
+		return w.retryEpoch > startEpoch || manualSinceMarker() ||
 			w.tracker.threadWakeCount(req.Thread) > startWakes ||
 			w.pauser.pauseSignals > startPauses ||
 			cancelled()
@@ -517,14 +542,17 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 		logger.Info("[UsageLimit] Woken before the reset; retrying the step",
 			"workflowID", w.workflowID, "thread", req.Thread, "stepID", req.StepID)
 	}
-	// "Use <model> now" answers the wait with a stay on that model until the
-	// wait's own end instead of a retry on the same provider. A capacity wake
-	// carries one when the user switched the chat to another provider; it is a
-	// way out only for a thread that waits on a different provider than the
-	// model's, so a thread already on that provider just retries.
-	alreadyOnIt := (w.capacityWake && sameProvider(w.useModel, facts.Provider)) || w.tracker.chatProvider != ""
-	if failover && w.useModel != "" && w.useModelEpoch > startEpoch && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
-		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until, decision.Probing)
+	// A banner click can override the saved pin; a picker hint cannot. In
+	// either case a thread already waiting on the requested provider retries
+	// without switching. Preserve the legacy rule for older wake payloads.
+	manual := manualSinceMarker()
+	model := w.useModel
+	if manual {
+		model = w.manualModel
+	}
+	alreadyOnIt := ((w.capacityWake || manual) && sameProvider(model, facts.Provider)) || (!manual && w.tracker.chatProvider != "")
+	if failover && model != "" && (manual || w.useModelEpoch > startEpoch) && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
+		w.startLease(ctx, req.Thread, limit, facts, model, decision.Until, decision.Probing, manual)
 	}
 	// A message that cut the wait short is read by the step retried below (its
 	// call_llm drains the mailbox), so it is not owed another turn.
@@ -573,16 +601,16 @@ func (w *usageLimitWaiter) continueNow(ctx workflow.Context, req usageLimitWaitR
 // the stay's end has not been acted on yet) goes on with it: the user was told
 // at the switch and nothing has changed since, so the stay is extended and not
 // announced again. probing says until is the next recheck, not a reset.
-func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit usageLimit, facts types.UsageLimitFacts, model string, until time.Time, probing bool) {
+func (w *usageLimitWaiter) startLease(ctx workflow.Context, thread string, limit usageLimit, facts types.UsageLimitFacts, model string, until time.Time, probing, manual bool) {
 	if lease := w.leases[thread]; lease != nil && w.keepStays && lease.Model == model {
-		lease.Until, lease.Returning = until, false
+		lease.Until, lease.Returning, lease.Manual = until, false, lease.Manual || manual
 		return
 	}
 	provider := facts.Provider
 	if provider == "" {
 		provider = limit.Provider
 	}
-	w.leases[thread] = &fallbackLease{Model: model, Provider: provider, Until: until}
+	w.leases[thread] = &fallbackLease{Model: model, Provider: provider, Until: until, Manual: manual}
 	err := workflow.ExecuteActivity(markerContext(ctx), "UsageLimitWait", map[string]interface{}{
 		"chat_id":     w.chatID,
 		"thread":      thread,
@@ -688,6 +716,16 @@ func (pc *PauseController) liveFallback(ctx workflow.Context, thread string) str
 		delete(w.leases, thread)
 	}
 	return ""
+}
+
+// activeManualFallback reports whether this dispatch should ignore the saved
+// provider pin. The pin itself stays in the tracker throughout the lease.
+func (pc *PauseController) activeManualFallback(ctx workflow.Context, thread string) bool {
+	if pc == nil || pc.UsageLimit == nil {
+		return false
+	}
+	lease := pc.UsageLimit.leases[thread]
+	return lease != nil && lease.Manual && workflow.Now(ctx).Before(lease.Until)
 }
 
 // fallbackFor is usageLimitWaiter.fallbackFor, nil-safe like every

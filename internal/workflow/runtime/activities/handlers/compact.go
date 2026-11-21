@@ -477,7 +477,11 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 
 	// Pick the summarization model. With an injected resolver (tests) the
 	// resolver supplies its own driver/model, mirroring CallLLM.
-	if a.driverResolver == nil {
+	if a.driverResolver == nil && rtx.ManualFallback && fallbackModel != "" {
+		// A banner lease supplies the summarizer. Do not fail on the old
+		// selector before the shared resolver can check the requested model.
+		spec.Selector = models.ModelSelector{ID: fallbackModel, RequireOutputModality: models.ModalityText}
+	} else if a.driverResolver == nil {
 		selector, reason, err := resolveCompactionModelForCall(ctx, summarizeWith, spec)
 		if err != nil {
 			return "", err

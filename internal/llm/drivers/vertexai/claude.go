@@ -227,9 +227,20 @@ func (c *VertexAIClient) streamResponseClaude(ctx context.Context, prompts []str
 		endpoint := c.getClaudeEndpoint(true)
 		logging.DebugContext(ctx, "Vertex AI Claude: Starting stream", "endpoint", endpoint, "model", c.options.Model.APIModel)
 
-		resp, err := c.makeClaudeStreamRequest(ctx, endpoint, req, token)
+		emitCancelled := false
+		resp, err := c.makeClaudeStreamRequest(ctx, endpoint, req, token, func(wait llm.RetryWait) error {
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
 		if err != nil {
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			}
 			return
 		}
 		defer resp.Body.Close()
@@ -593,23 +604,9 @@ func (c *VertexAIClient) getAccessToken(ctx context.Context) (string, error) {
 
 // makeClaudeRequest makes an HTTP request to the Claude API
 func (c *VertexAIClient) makeClaudeRequest(ctx context.Context, endpoint string, req *claudeRequest, token string) ([]byte, error) {
-	reqBody, err := json.Marshal(req)
+	resp, err := c.openClaude(ctx, llm.ResilientHTTPClient(), endpoint, req, token, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+token)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	client := llm.ResilientHTTPClient()
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -617,44 +614,33 @@ func (c *VertexAIClient) makeClaudeRequest(ctx context.Context, endpoint string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
 	return body, nil
 }
 
-// makeClaudeStreamRequest makes a streaming HTTP request
-func (c *VertexAIClient) makeClaudeStreamRequest(ctx context.Context, endpoint string, req *claudeRequest, token string) (*http.Response, error) {
+// makeClaudeStreamRequest makes a streaming HTTP request. emit receives each
+// retry wait before it is slept.
+func (c *VertexAIClient) makeClaudeStreamRequest(ctx context.Context, endpoint string, req *claudeRequest, token string, emit func(llm.RetryWait) error) (*http.Response, error) {
+	// Use streaming HTTP client for streaming responses — includes idle timeout
+	// to detect silent hangs during SSE streaming.
+	return c.openClaude(ctx, llm.StreamingHTTPClient(), endpoint, req, token, emit)
+}
+
+// openClaude POSTs req through the retry ladder and returns the 2xx response
+// with its body unread.
+func (c *VertexAIClient) openClaude(ctx context.Context, client *http.Client, endpoint string, req *claudeRequest, token string, emit func(llm.RetryWait) error) (*http.Response, error) {
 	reqBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+token)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	// Use streaming HTTP client for streaming responses — includes idle timeout
-	// to detect silent hangs during SSE streaming.
-	streamClient := llm.StreamingHTTPClient()
-	resp, err := streamClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	return resp, nil
+	return c.retryer().OpenHTTP(ctx, client.Do, func() (*http.Request, error) {
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqBody))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+		httpReq.Header.Set("Content-Type", "application/json")
+		return httpReq, nil
+	}, claudeFailure, emit)
 }
 
 // processClaudeStream processes the SSE stream from Claude API

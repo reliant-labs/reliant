@@ -64,7 +64,7 @@ export function fundingQuestionText(q: FundingQuestion, orgName: string, modelNa
 
 /** A note an admin can act on, for "Ask an admin". */
 function adminNote(orgName: string): string {
-  return `Hi, ${orgName}'s AI accounts aren't serving my chats in Reliant. Could you check Settings › Organization › AI accounts?`;
+  return `Hi, ${orgName}'s AI accounts aren't serving my chats in Reliant. Could you check Settings › AI › Organization accounts?`;
 }
 
 /** The chat's question popup, and the trigger that opens it. Mount once per open chat. */
@@ -118,7 +118,7 @@ function FundingDialog({ question, onClose }: { question: FundingQuestion; onClo
       await navigator.clipboard.writeText(adminNote(orgName));
       toast.success(`Copied a note: send it to an owner or admin of ${orgName}.`);
     } catch {
-      toast.info(`Ask an owner or admin of ${orgName} to check Settings › Organization › AI accounts.`);
+      toast.info(`Ask an owner or admin of ${orgName} to check Settings › AI › Organization accounts.`);
     }
   };
 
@@ -189,7 +189,7 @@ function FundingDialog({ question, onClose }: { question: FundingQuestion; onClo
         <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
           Change this any time in{" "}
           <a href={settingsPath("ai")} className="font-medium text-primary-ink hover:underline">
-            Settings › AI providers
+            Settings › AI › Personal accounts
           </a>
           .
         </p>

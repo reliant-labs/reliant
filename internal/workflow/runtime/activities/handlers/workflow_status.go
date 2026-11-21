@@ -865,12 +865,27 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 		RunID:        temporalRunID(ctx),
 		Outcome:      outcome,
 		Summary:      summary,
-		Error:        input.Error,
+		Error:        terminalEventError(input, outcome),
 	}, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("record run event: %w", err)
 	}
 	return nil
+}
+
+// terminalEventError is a failed run event's trigger.payload.error. A run that
+// completed at a node declaring `outcome: failure` returned no error, so
+// input.Error is empty; a trigger chained on its failure was handed an empty
+// error with nothing to say where or why the source failed. It names the node,
+// in the words the on_failure handler uses (runtime.Failure).
+func terminalEventError(input WorkflowStatusInput, outcome core.RunEventOutcome) string {
+	if input.Error != "" || outcome != core.RunEventFailed {
+		return input.Error
+	}
+	if input.OutcomeNode != "" {
+		return fmt.Sprintf("the run reached node %q, which declares outcome: failure", input.OutcomeNode)
+	}
+	return "the run reached a node that declares outcome: failure"
 }
 
 // recordRootRunID keeps chats.run_id naming the run that is executing the

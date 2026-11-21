@@ -1,6 +1,6 @@
 ---
 title: "Autopilot"
-description: "Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and take your alerts and errors on call, on your GitHub repositories, and never merge"
+description: "Reliant Autopilot: five built-in workflows that review and security-review pull requests, work issues, answer review feedback and triage alerts. None merge."
 ---
 
 **Autopilot** is a pack of five built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
@@ -17,7 +17,7 @@ The three that touch code form a loop. The issue worker opens a PR labelled `age
 
 ## What it will never do
 
-- **Merge.** There is no merge action in the GitHub integration, and no workflow in the pack calls one.
+- **Merge, or cut a release.** No workflow in the pack calls a merge or a release. The GitHub integration does have a merge action, `github/pr.merge@1`, but it is a workflow step only, never an agent tool, so no agent in the pack can reach it. It exists for a pipeline you compose yourself: a custom workflow can call it in an [action node](/reference/nodes#action) when a person decides that workflow should merge, and it merges only the exact head commit the workflow passes it, so a push after the review is never merged.
 - **Approve.** PR review's verdict is `COMMENT` or `REQUEST_CHANGES`. The event is computed in one node from the reviewer's answer by an expression with exactly those two outcomes, so a reviewer that returns `APPROVE` (confused, or steered by text in the PR) still posts a `COMMENT`. The reviewer is also given no tool that can post a review.
 - **Push to your default branch, to a protected branch, to a fork, or with `--force`.** Pushes go through a `git_publish` node, which checks the branch against GitHub's own answers before anything leaves your machine and refuses a push that is not a plain fast-forward. The issue worker may only push `autopilot/*` branches; the review responder only the head branch of the PR it is answering, and only if the PR is in the same repository.
 - **Add `agent:ready`.** On-call files issues as `agent:triage`. A human promotes them.
@@ -189,7 +189,7 @@ On-call takes two kinds of page, through one pipeline:
 - **Alerts**: the rules your environments declare, and the platform's own (a failed deploy, an exhausted quota), that are `critical` or `error`.
 - **Errors**: the platform groups the errors your services and frontends report into **issues**, and raises an alert when one is **new** (`NewIssue`), when a resolved one comes back in a later release (`IssueRegressed`), and when an open one's error rate spikes to five times its previous day (`IssueSpike`). These pass whatever their severity.
 
-Both reach Autopilot the way they reach Slack, PagerDuty and the console: through your organization's Alertmanager. So a [silence](/forge/observability/dashboards-and-alerts#alerts) mutes Autopilot too, and an error that pages Slack is one that Autopilot investigates.
+Both reach Autopilot the way they reach Slack, PagerDuty and the console: through your organization's Alertmanager. So a [silence](/hosting/observability/dashboards-and-alerts#alerts) mutes Autopilot too, and an error that pages Slack is one that Autopilot investigates.
 
 **On Reliant's hosted platform** there is nothing to wire. Turning on-call on connects it to every alert of the project's environments that passes the filter above, with no token to copy and no route to write; your other receivers and routes are unchanged. Turning it off disconnects it.
 

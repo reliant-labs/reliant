@@ -67,6 +67,7 @@ import { ApprovalActions } from "../Chat/ApprovalActions";
 import { ApprovalBatchConfirm } from "../Chat/ApprovalBatchConfirm";
 import { ApprovalCardView } from "../Chat/ApprovalCardView";
 import { parseApprovalCard, planApprovalBatch, type ApprovalBatchPlan } from "@/lib/approvalCard";
+import { LinkifiedText } from "../Chat/LinkifiedText";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
@@ -651,13 +652,13 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
           node: (
             <>
               <span className="text-muted-foreground">Not blocking · </span>
-              {prompt}
+              <LinkifiedText text={prompt} />
             </>
           ),
           title,
         };
       }
-      return prompt ? { node: prompt, title: prompt } : null;
+      return prompt ? { node: <LinkifiedText text={prompt} />, title: prompt } : null;
     }
     case "waitingForMachine": {
       const text = `${machineName(payload.value.daemonName, payload.value.daemonId)} is asleep`;
