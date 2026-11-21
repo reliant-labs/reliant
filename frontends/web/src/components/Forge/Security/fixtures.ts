@@ -36,8 +36,15 @@ import type {
 } from "@/services/controlPlane/vulnerabilities/types";
 import { SEVERITY_ORDER } from "@/services/controlPlane/vulnerabilities/types";
 
-/** A fixed "now", so relative times in snapshots do not move. */
-export const FIXTURE_NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
+/**
+ * A fixed "now", so relative times do not move: the visual harness's and the
+ * preview's frozen clock, FIXED_NOW in e2e/visual/fixtures/base.ts (2026-11-18
+ * 15:30 UTC). src cannot import e2e/, so it is repeated here and
+ * __tests__/fixtures.test.ts holds the two equal. Every fixture time here is
+ * relative to it, so nothing that already happened lands in the preview's
+ * future (only an exemption's expiry is ahead of it).
+ */
+export const FIXTURE_NOW = Date.UTC(2026, 10, 18, 15, 30, 0);
 const DAY = 86_400_000;
 
 export const FIXTURE_PROJECT = "shop";
