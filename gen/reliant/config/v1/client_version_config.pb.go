@@ -290,21 +290,21 @@ var File_reliant_config_v1_client_version_config_proto protoreflect.FileDescript
 
 const file_reliant_config_v1_client_version_config_proto_rawDesc = "" +
 	"\n" +
-	"-reliant/config/v1/client_version_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf6\"\n" +
-	"\x13ClientVersionPolicy\x12\x98\x02\n" +
-	"\x0fweb_min_version\x18\x01 \x01(\tB\xef\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18f\n" +
+	"-reliant/config/v1/client_version_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf6%\n" +
+	"\x13ClientVersionPolicy\x12\xd8\x02\n" +
+	"\x0fweb_min_version\x18\x01 \x01(\tB\xaf\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18f\n" +
 	"\x17RELIANT_MIN_WEB_VERSION*KOldest web app version served, semver without a leading v (empty: no floor)R\rwebMinVersion\x12\x80\x01\n" +
 	"\x0fweb_upgrade_url\x18\x02 \x01(\tBX\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18I\n" +
 	"\x17RELIANT_WEB_UPGRADE_URL*.Where a below-floor web app is sent to upgradeR\rwebUpgradeUrl\x12\x86\x01\n" +
 	"\x13web_upgrade_command\x18\x03 \x01(\tBV\x82\xce\x18R\n" +
-	"\x1bRELIANT_WEB_UPGRADE_COMMAND*3What a below-floor web app is told to do to upgradeR\x11webUpgradeCommand\x12\xa8\x02\n" +
-	"\x13desktop_min_version\x18\x04 \x01(\tB\xf7\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18n\n" +
+	"\x1bRELIANT_WEB_UPGRADE_COMMAND*3What a below-floor web app is told to do to upgradeR\x11webUpgradeCommand\x12\xe8\x02\n" +
+	"\x13desktop_min_version\x18\x04 \x01(\tB\xb7\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18n\n" +
 	"\x1bRELIANT_MIN_DESKTOP_VERSION*OOldest desktop app version served, semver without a leading v (empty: no floor)R\x11desktopMinVersion\x12\x90\x01\n" +
 	"\x13desktop_upgrade_url\x18\x05 \x01(\tB`\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Q\n" +
 	"\x1bRELIANT_DESKTOP_UPGRADE_URL*2Where a below-floor desktop app is sent to upgradeR\x11desktopUpgradeUrl\x12\x96\x01\n" +
 	"\x17desktop_upgrade_command\x18\x06 \x01(\tB^\x82\xce\x18Z\n" +
-	"\x1fRELIANT_DESKTOP_UPGRADE_COMMAND*7What a below-floor desktop app is told to do to upgradeR\x15desktopUpgradeCommand\x12\xa0\x02\n" +
-	"\x12daemon_min_version\x18\a \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
+	"\x1fRELIANT_DESKTOP_UPGRADE_COMMAND*7What a below-floor desktop app is told to do to upgradeR\x15desktopUpgradeCommand\x12\xe0\x02\n" +
+	"\x12daemon_min_version\x18\a \x01(\tB\xb1\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
 	"\x1aRELIANT_MIN_DAEMON_VERSION*JOldest daemon version served, semver without a leading v (empty: no floor)R\x10daemonMinVersion\x12\x90\x01\n" +
 	"\x12daemon_upgrade_url\x18\b \x01(\tBb\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18S\n" +
 	"\x1aRELIANT_DAEMON_UPGRADE_URL*5Where a below-floor daemon's owner is sent to upgradeR\x10daemonUpgradeUrl\x12\x96\x01\n" +
@@ -312,20 +312,20 @@ const file_reliant_config_v1_client_version_config_proto_rawDesc = "" +
 	"\x1eRELIANT_DAEMON_UPGRADE_COMMAND*:What a below-floor daemon's owner is told to do to upgradeR\x14daemonUpgradeCommand\x12\xc9\x01\n" +
 	"\x1bdaemon_min_commit_time_unix\x18\n" +
 	" \x01(\x03B\x8a\x01\xbaH\x04\"\x02(\x00\x82\xce\x18\x7f\n" +
-	"#RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX*XOldest daemon build served, by its commit time in Unix seconds (0: no commit-time floor)R\x17daemonMinCommitTimeUnix\x12\x94\x02\n" +
-	"\x0fcli_min_version\x18\v \x01(\tB\xeb\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18b\n" +
+	"#RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX*XOldest daemon build served, by its commit time in Unix seconds (0: no commit-time floor)R\x17daemonMinCommitTimeUnix\x12\xd4\x02\n" +
+	"\x0fcli_min_version\x18\v \x01(\tB\xab\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18b\n" +
 	"\x17RELIANT_MIN_CLI_VERSION*GOldest CLI version served, semver without a leading v (empty: no floor)R\rcliMinVersion\x12\x83\x01\n" +
 	"\x0fcli_upgrade_url\x18\f \x01(\tB[\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18L\n" +
 	"\x17RELIANT_CLI_UPGRADE_URL*1Where a below-floor CLI's user is sent to upgradeR\rcliUpgradeUrl\x12\x89\x01\n" +
 	"\x13cli_upgrade_command\x18\r \x01(\tBY\x82\xce\x18U\n" +
-	"\x1bRELIANT_CLI_UPGRADE_COMMAND*6What a below-floor CLI's user is told to do to upgradeR\x11cliUpgradeCommand\x12\x9f\x02\n" +
-	"\x12sdk_go_min_version\x18\x0e \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
+	"\x1bRELIANT_CLI_UPGRADE_COMMAND*6What a below-floor CLI's user is told to do to upgradeR\x11cliUpgradeCommand\x12\xdf\x02\n" +
+	"\x12sdk_go_min_version\x18\x0e \x01(\tB\xb1\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
 	"\x1aRELIANT_MIN_SDK_GO_VERSION*JOldest Go SDK version served, semver without a leading v (empty: no floor)R\x0fsdkGoMinVersion\x12\x8e\x01\n" +
 	"\x12sdk_go_upgrade_url\x18\x0f \x01(\tBa\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18R\n" +
 	"\x1aRELIANT_SDK_GO_UPGRADE_URL*4Where a below-floor Go SDK's user is sent to upgradeR\x0fsdkGoUpgradeUrl\x12\x94\x01\n" +
 	"\x16sdk_go_upgrade_command\x18\x10 \x01(\tB_\x82\xce\x18[\n" +
-	"\x1eRELIANT_SDK_GO_UPGRADE_COMMAND*9What a below-floor Go SDK's user is told to do to upgradeR\x13sdkGoUpgradeCommand\x12\xa7\x02\n" +
-	"\x12sdk_ts_min_version\x18\x11 \x01(\tB\xf9\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18p\n" +
+	"\x1eRELIANT_SDK_GO_UPGRADE_COMMAND*9What a below-floor Go SDK's user is told to do to upgradeR\x13sdkGoUpgradeCommand\x12\xe7\x02\n" +
+	"\x12sdk_ts_min_version\x18\x11 \x01(\tB\xb9\x02\xbaH\xc1\x01\xd8\x01\x01r\xbb\x012\xb8\x01^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18p\n" +
 	"\x1aRELIANT_MIN_SDK_TS_VERSION*ROldest TypeScript SDK version served, semver without a leading v (empty: no floor)R\x0fsdkTsMinVersion\x12\x96\x01\n" +
 	"\x12sdk_ts_upgrade_url\x18\x12 \x01(\tBi\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Z\n" +
 	"\x1aRELIANT_SDK_TS_UPGRADE_URL*<Where a below-floor TypeScript SDK's user is sent to upgradeR\x0fsdkTsUpgradeUrl\x12\x9c\x01\n" +

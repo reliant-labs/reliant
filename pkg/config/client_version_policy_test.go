@@ -32,15 +32,24 @@ func TestClientVersionPolicyValidatesFloors(t *testing.T) {
 		{name: "two components", minVersion: "1.9", wantErr: true},
 		{name: "leading zero", minVersion: "01.9.0", wantErr: true},
 		{name: "garbage", minVersion: "latest", wantErr: true},
+		{name: "alphanumeric prerelease with leading digit", minVersion: "1.9.0-0rc"},
+		{name: "prerelease zero", minVersion: "1.9.0-0"},
+		{name: "numeric prerelease with leading zero", minVersion: "1.9.0-01", wantErr: true},
+		{name: "dotted numeric prerelease with leading zero", minVersion: "1.9.0-rc.01", wantErr: true},
+		{name: "build metadata may lead with zero", minVersion: "1.9.0+01"},
 		{name: "relative upgrade url", upgradeURL: "reliantlabs.io/download", wantErr: true},
 		{name: "negative commit time", commitTime: -1, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.ServerProcessConfig{ClientVersions: &configv1.ClientVersionPolicy{
+				WebMinVersion:           tc.minVersion,
+				DesktopMinVersion:       tc.minVersion,
 				DaemonMinVersion:        tc.minVersion,
 				DaemonUpgradeUrl:        tc.upgradeURL,
 				DaemonMinCommitTimeUnix: tc.commitTime,
+				CliMinVersion:           tc.minVersion,
+				SdkGoMinVersion:         tc.minVersion,
 				SdkTsMinVersion:         tc.minVersion,
 			}}
 			err := forgeconfig.Validate(cfg)
