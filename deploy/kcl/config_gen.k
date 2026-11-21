@@ -516,7 +516,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=407c5fc8b7989b6d8afc333d726c72fbd981cc32b27ee70ca3c32d044cb63f90
+# forge:hash=4be5cf857d4f32a35c78fd3f27f82862de8d40f7977a63619b8050a0b23b05d8
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -574,6 +574,8 @@ schema DaemonConfig:
     egress_host_max_concurrent: int = 0
     # Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)
     labels: str = ""
+    # Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)
+    auto_update: bool = False
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -633,7 +635,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=e1503c791c4a49dc99efec72ced4e5791633de13befdf747221ecd9f217c8b2f
+        # forge:hash=2408933b35dc915dfb6f50b70dbb9c72852c4e6fca18129611777a763c89a9d2
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -662,6 +664,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT" = str(c.egress_user_max_concurrent)
         "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_DAEMON_LABELS" = c.labels
+        "RELIANT_DAEMON_AUTO_UPDATE" = "true" if c.auto_update else "false"
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421

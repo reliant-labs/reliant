@@ -1140,6 +1140,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--auto-update (RELIANT_DAEMON_AUTO_UPDATE) has the daemon install new signed
+releases by itself: it stages each one in the background and installs it at a
+quiet moment (no tool call or background process running, and no activity for
+ten minutes), restarting in place. Only a reliant nothing else owns does: one
+unpacked from a release archive into a directory you can write. The desktop
+app's, Homebrew's or a system package's is left to them, and the log says so.
+Off by default; 'reliant update' updates by hand.
+
 --attach `<dir>` links a checkout to Reliant once the daemon is connected: the
 folder becomes a project on this machine. When it is a checkout of an existing
 project's git remote (say, an app you just deployed), that project is attached
@@ -1158,6 +1166,7 @@ reliant daemon start [flags]
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
+| `--auto-update` | `bool` | - | Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default) [env: RELIANT_DAEMON_AUTO_UPDATE] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=`<name>` joins that machine pool |

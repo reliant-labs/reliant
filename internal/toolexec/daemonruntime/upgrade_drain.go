@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -116,6 +117,24 @@ type upgradeDrain struct {
 	// afterFunc arms the upgrade exit's backstop: time.AfterFunc when nil.
 	// A test replaces it to see the backstop armed, and to fire it at once.
 	afterFunc func(time.Duration, func())
+
+	// Self-update (upgrade_self.go). self is the RestartRequested an
+	// auto-updating daemon was sent, nil until one arrives; selfWake wakes
+	// its loop when one does. lastActivity is the last tool or terminal
+	// activity, unix nanoseconds on now's clock.
+	self         *selfRequest
+	selfWake     chan struct{}
+	lastActivity atomic.Int64
+
+	// Self-update test seams: the clock every self-update wait reads, the
+	// background-process count, and the waits; zero means the real clock,
+	// the shell manager's processes and the constants.
+	now             func() time.Time
+	backgroundCount func() int
+	stageEvery      time.Duration
+	selfRetry       time.Duration
+	quietIdle       time.Duration
+	quietDrain      time.Duration
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -265,6 +284,10 @@ func upgradeAdvice(req *reliantv1.RestartRequested) string {
 	return defaultUpgradeAdvice
 }
 
+// selfUpdateHint is what a person's daemon adds to its upgrade advice when
+// its install can replace itself (cliupdate: a self-owned install).
+const selfUpdateHint = "This reliant can update itself: run `reliant update`, or start the daemon with --auto-update to have it install new releases at quiet moments."
+
 // awaitingOwnerNotice is the console notice a person's daemon prints when the
 // platform asks it to upgrade.
 func awaitingOwnerNotice(reason, advice string) string {
@@ -304,15 +327,30 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 		"deadline_unix_ms", req.GetDeadlineUnixMs(), "reason", req.GetReason(), "managed", d.host.Managed())
 
 	if !d.host.Managed() {
-		// Never block a person's machine (D6). Nothing here can update it:
-		// its owner's app or package manager does, and stops it as it
-		// always does. So the owner is told why and how, in the log, on the
-		// console once, and in `reliant daemon status` (the detail).
+		if d.autoUpdating() {
+			// Its owner opted in to auto-update: the daemon installs the
+			// newest release itself, at a quiet moment (upgrade_self.go).
+			d.selfRestartRequested(ctx, req)
+			return
+		}
+		// Never block a person's machine (D6). Nothing here updates it
+		// unasked: its owner does — `reliant update`, the desktop app or a
+		// package manager — and stops it as they always do. So the owner is
+		// told why and how, in the log, on the console once, and in
+		// `reliant daemon status` (the detail).
 		advice := upgradeAdvice(req)
 		logging.WarnContext(ctx, logPrefix+" The platform asked this daemon to upgrade; it keeps serving until its owner does",
 			"reason", req.GetReason(), "upgrade", advice)
+		selfOwned := d.selfUpdate != nil && d.selfUpdate.SelfOwned()
+		if selfOwned {
+			logging.WarnContext(ctx, logPrefix+" "+selfUpdateHint)
+		}
 		if !u.awaitingOwner() {
-			fmt.Fprint(logging.Notices(), awaitingOwnerNotice(req.GetReason(), advice))
+			notice := awaitingOwnerNotice(req.GetReason(), advice)
+			if selfOwned {
+				notice = strings.TrimSuffix(notice, "\n") + "    " + selfUpdateHint + "\n\n"
+			}
+			fmt.Fprint(logging.Notices(), notice)
 		}
 		u.publish(&reliantv1.DaemonUpgradeStatus{
 			State:          reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER,
