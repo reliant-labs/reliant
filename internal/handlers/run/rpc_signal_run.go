@@ -67,9 +67,13 @@ func (s *Service) SignalRun(
 	if err != nil {
 		// Live, but no agent is running in it to read the message: nothing
 		// was queued. The documented answer to "nowhere to put the event"
-		// is delivered=false, not an error; the header says why.
+		// is delivered=false, not an error; not_delivered_reason says why,
+		// and the header repeats it for clients older than the field.
 		if errors.Is(err, core.ErrRunNoListeningAgent) {
-			out := connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false})
+			out := connect.NewResponse(&reliantv1.SignalRunResponse{
+				Delivered:          false,
+				NotDeliveredReason: errreason.RunNoListeningAgent,
+			})
 			out.Header().Set(errreason.NotDeliveredHeader, errreason.RunNoListeningAgent)
 			return out, nil
 		}

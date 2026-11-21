@@ -73,12 +73,19 @@ func (s *Service) listEverywhere(ctx context.Context, userID string) []*reliantv
 		wg  sync.WaitGroup
 	)
 	for _, d := range daemons {
-		if !authz.CanReadMachine(ctx, userID, d) || !s.online(ctx, userID, d.ID) {
+		if !authz.CanReadMachine(ctx, userID, d) {
 			continue
 		}
 		wg.Add(1)
 		go func(daemonID string) {
 			defer wg.Done()
+			// The liveness probe is a round trip of its own (a registry read
+			// and a ping, which an asleep machine answers only by timing
+			// out), so each machine is probed inside its own goroutine: the
+			// list costs the slowest machine, not the sum of every probe.
+			if !s.online(ctx, userID, daemonID) {
+				return
+			}
 			listed, err := s.listOn(ctx, userID, daemonID)
 			if err != nil {
 				logging.WarnContext(ctx, "[PackageCommands] could not list a machine's processes", "daemonID", daemonID, "error", err)

@@ -3,9 +3,14 @@ import { SettingsHeader } from "./SettingsHeader";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import {
   SettingsNavigation,
+  activeSettingsNavEntryIndex,
+  getVisibleSettingsNavEntries,
   getVisibleSettingsSectionIds,
+  settingsNavEntrySelector,
+  type SettingsNavEntry,
   type SettingsSection,
 } from "./SettingsNavigation";
+import type { AISettingsTab, SettingsTab } from "../../routeSchemas";
 import { cn } from "../../lib/utils";
 
 const SettingsContent = lazy(() =>
@@ -18,28 +23,36 @@ interface SettingsViewerTabProps {
   // The URL-driven section. Controlled by SettingsPage which reads it from
   // useParams and validates it against SETTINGS_SECTION_IDS.
   section: SettingsSection;
+  // The URL's `?tab=`. Settings → AI has two sidebar entries (Personal
+  // accounts, Models & tools); the tab says which one is current.
+  tab?: SettingsTab;
   // Called with the next section when the user clicks a nav item or uses arrow
-  // keys. SettingsPage turns this into a navigate({to:'/settings/$section'}).
-  onSectionChange: (section: SettingsSection) => void;
+  // keys. SettingsPage turns this into a navigate({to:'/settings/$section'}),
+  // with `?tab=` when the entry names one.
+  onSectionChange: (section: SettingsSection, tab?: AISettingsTab) => void;
   onClose: () => void;
 }
 
-export function SettingsViewerTab({ section, onSectionChange, onClose }: SettingsViewerTabProps) {
+export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: SettingsViewerTabProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
   const chrome = useTitleBarChrome();
-  const pendingFocus = useRef<SettingsSection | null>(null);
+  const pendingFocus = useRef<SettingsNavEntry | null>(null);
 
-  const focusSection = useCallback((id: SettingsSection) => {
-    const button = navigationRef.current?.querySelector<HTMLButtonElement>(`button[data-section-id="${id}"]`);
+  const focusEntry = useCallback((entry: SettingsNavEntry) => {
+    const button = navigationRef.current?.querySelector<HTMLButtonElement>(settingsNavEntrySelector(entry));
     button?.focus();
     return Boolean(button);
   }, []);
 
   useEffect(() => {
-    if (pendingFocus.current === section && focusSection(section)) pendingFocus.current = null;
-  }, [section, focusSection]);
+    if (pendingFocus.current?.section === section && focusEntry(pendingFocus.current)) pendingFocus.current = null;
+  }, [section, tab, focusEntry]);
+
+  // Every sidebar entry in order: the arrow keys walk these, so Personal
+  // accounts and Models & tools are two stops though they share a section.
+  const navEntries = useMemo(() => getVisibleSettingsNavEntries(), []);
 
   // Same order as SettingsNavigation sidebar (single source: settingsSections)
   const visibleSections = useMemo(
@@ -70,22 +83,23 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
         e.preventDefault();
         e.stopPropagation();
 
-        const currentIndex = visibleSections.indexOf(section);
+        const currentIndex = activeSettingsNavEntryIndex(navEntries, section, tab);
         if (currentIndex === -1) return;
 
         let newIndex: number;
         if (e.key === "ArrowUp") {
-          newIndex = currentIndex > 0 ? currentIndex - 1 : visibleSections.length - 1;
+          newIndex = currentIndex > 0 ? currentIndex - 1 : navEntries.length - 1;
         } else {
-          newIndex = currentIndex < visibleSections.length - 1 ? currentIndex + 1 : 0;
+          newIndex = currentIndex < navEntries.length - 1 ? currentIndex + 1 : 0;
         }
 
-        const newSection = visibleSections[newIndex];
-        if (newSection) {
-          onSectionChange(newSection);
+        const next = navEntries[newIndex];
+        if (next) {
+          if (next.tab) onSectionChange(next.section, next.tab);
+          else onSectionChange(next.section);
           // Advanced's buttons only exist once it is open, which the new
           // section does by itself: focus them after it renders if need be.
-          if (!focusSection(newSection)) pendingFocus.current = newSection;
+          if (!focusEntry(next)) pendingFocus.current = next;
         }
       }
     };
@@ -94,7 +108,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [section, visibleSections, onSectionChange, focusSection]);
+  }, [section, tab, navEntries, onSectionChange, focusEntry]);
 
   // Detect width and collapse sidebar when narrow
   useEffect(() => {
@@ -134,6 +148,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
         <div ref={navigationRef} className="flex min-h-0 flex-1 flex-col">
           <SettingsNavigation
             activeSection={section}
+            activeTab={tab}
             onSectionChange={onSectionChange}
             isCollapsed={isCollapsed}
           />

@@ -222,7 +222,7 @@ func generateMDX(releases []Release) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
 	sb.WriteString("title: \"Changelog\"\n")
-	sb.WriteString("description: \"Release notes and version history\"\n")
+	sb.WriteString("description: \"Reliant release notes: what changed in each version of the desktop app, CLI, daemon, workflows and Forge, newest first.\"\n")
 	sb.WriteString("---\n\n")
 	sb.WriteString("{/*\n")
 	sb.WriteString("GENERATED FILE - DO NOT EDIT DIRECTLY\n\n")

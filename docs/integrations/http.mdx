@@ -1,6 +1,6 @@
 ---
 title: "HTTP"
-description: "Call any public API from a workflow"
+description: "Call any public API from a Reliant workflow with the http/request@1 action: methods, headers, JSON or form bodies, timeouts and blocked private addresses."
 ---
 
 The HTTP integration is the escape hatch for services that have no integration of their own. It sends a request to a public `http(s)` URL and returns the status, headers and body. It needs no connection: the caller supplies the URL and any headers.
@@ -24,7 +24,7 @@ Reliant refuses requests to private, loopback, link-local and cloud-metadata add
 | `follow_redirects` | `true` | Follow up to 5 redirects; turn off to receive the redirect itself |
 | `connection` | | A saved API-key or basic-auth connection for the `http` integration |
 
-It returns `status`, `headers` (names lower-cased), `json` (the parsed body, or null) and `text` (the raw body). Responses are limited to 1 MiB.
+It returns `status`, `headers` (names lower-cased), `json` (the parsed body, or null) and `text` (the raw body), under the action node's `data`: read them as `nodes.<id>.data.status`, `nodes.<id>.data.json` and so on. Responses are limited to 1 MiB.
 
 ```yaml
 name: ping-status
@@ -103,7 +103,7 @@ The value is fetched by the worker for one step attempt, through the control pla
 
 A request that carries a secret is held to the same transport rules as one that carries a saved connection: it is sent only over HTTPS, and redirects and pagination links are followed only within the host the request started at (an integration credential also only to the integration's own hosts). A redirect to another host fails the step instead of being followed.
 
-What a remote server sends back is its own: an API that echoes your request headers (such as a debugging endpoint) returns the value in its response, exactly as it would for a saved connection. Send a secret only to the API it belongs to.
+The remote server receives the value, and what it does with it is its own. If it echoes your request headers back (such as a debugging endpoint), the step's recorded output shows `[secret]` in place of the value, but the server has still seen it. Send a secret only to the API it belongs to.
 
 Text that reaches a step as data, such as a workflow input or the output of an earlier step, is never treated as a secret reference, even if it contains `{{ secrets.NAME }}`.
 

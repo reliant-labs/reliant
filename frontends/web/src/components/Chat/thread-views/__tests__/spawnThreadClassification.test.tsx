@@ -45,6 +45,10 @@ vi.mock("../../../Settings/SpawnDisplaySettings", () => ({
   getSpawnDisplayMode: () => "inline",
 }));
 
+vi.mock("../../WorkflowErrorMessage", () => ({
+  WorkflowErrorMessage: ({ error }: { error: { error_message: string } }) => <div>{error.error_message}</div>,
+}));
+
 vi.mock("../../ChatMessage", () => ({
   ChatMessage: ({ message }: { message: Message }) => (
     <div data-testid={`msg-${message.id}`}>{message.id}</div>
@@ -169,6 +173,36 @@ beforeEach(() => {
 });
 
 describe("spawn thread classification", () => {
+  it.each(["persisted workflow", "live announcement"])("keeps spawn errors off the main transcript with a %s", (source) => {
+    const child = RESUMED_THREAD;
+    const fromTree = source === "persisted workflow";
+    const tree = fromTree ? bigTree() : undefined;
+    if (!fromTree) activeThreadsRef.current = [{ thread: child, origin: "spawn" } as ActiveThreadUpdate];
+    const props = {
+      chatId: CHAT,
+      messages: [message("main-user", CHAT, 0, MessageRole.USER)],
+      workflowExecution: tree,
+      isStreaming: false,
+      errorEvents: [CHAT, child].map((thread, i) => ({
+        update_type: "error" as const,
+        chat_id: CHAT,
+        id: `error-${i}`,
+        thread,
+        activity_type: "CallLLM",
+        activity_id: `llm-${i}`,
+        error_message: i === 0 ? "Main provider failed" : "Child provider reached its limit",
+        timestamp: new Date(Date.UTC(2026, 9, 4, 0, 0, i + 1)).toISOString(),
+        sequence_number: i + 1,
+      })),
+    };
+    const view = render(<InterleavedTimeline {...props} />);
+    expect(view.getByText("Main provider failed")).toBeInTheDocument();
+    expect(view.queryByText("Child provider reached its limit")).not.toBeInTheDocument();
+
+    view.rerender(<InterleavedTimeline {...props} selectedThreads={new Set([child])} />);
+    expect(view.getByText("Child provider reached its limit")).toBeInTheDocument();
+    expect(view.queryByText("Main provider failed")).not.toBeInTheDocument();
+  });
   it("classifies every spawn from the tree alone — 73 workflows, including a resumed thread", () => {
     const view = render(
       <InterleavedTimeline messages={transcript()} chatId={CHAT} workflowExecution={bigTree()} isStreaming={false} />,
