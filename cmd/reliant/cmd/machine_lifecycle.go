@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -71,13 +72,19 @@ func newMachineDeleteCmd() *cobra.Command {
 		Short: "Delete a machine and its workspace",
 		Long: `Delete one of your machines. A cloud machine's disk is deleted with it: every
 checkout, branch workspace and file on it, including work that was never
-pushed. --snapshot keeps a snapshot of the disk first. A computer of your own
-is only disconnected from your account; nothing on it is deleted.
+pushed: push it, or copy it off, first. A computer of your own is only
+disconnected from your account; nothing on it is deleted.
 
 It needs --yes: there is no undo.`,
 		Args:    cobra.ExactArgs(1),
 		PreRunE: refuseMachineFromAgentShell,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if snapshot {
+				// DeleteDaemon carries snapshot_before_delete, but the
+				// workspace operator deletes the disk without reading it, so
+				// the flag would promise a snapshot nobody takes.
+				return errors.New("--snapshot is not supported yet: deleting a machine does not snapshot its disk. Push your work, or copy it off the machine, then delete it without --snapshot")
+			}
 			client, err := machineClient(cmd.Context(), cmd)
 			if err != nil {
 				return err
@@ -90,8 +97,7 @@ It needs --yes: there is no undo.`,
 				return fmt.Errorf("deleting %s (%s) deletes its disk and every unpushed change on it; pass --yes to delete it", d.GetName(), d.GetId())
 			}
 			if _, err := client.DeleteDaemon(cmd.Context(), connect.NewRequest(&daemonv1.DeleteDaemonRequest{
-				DaemonId:             d.GetId(),
-				SnapshotBeforeDelete: snapshot,
+				DaemonId: d.GetId(),
 			})); err != nil {
 				return explainMachineErr(err)
 			}
@@ -100,7 +106,7 @@ It needs --yes: there is no undo.`,
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Confirm the deletion")
-	cmd.Flags().BoolVar(&snapshot, "snapshot", false, "Snapshot the disk before deleting the machine")
+	cmd.Flags().BoolVar(&snapshot, "snapshot", false, "Not supported yet: refused, because deleting a machine does not snapshot its disk")
 	return cmd
 }
 

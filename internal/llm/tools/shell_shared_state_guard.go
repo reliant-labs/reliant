@@ -640,7 +640,7 @@ That state is shared by every agent and build on this machine. On 2026-10-26 the
 
 Safe ways to get what you need:
   - Disk full? Load the `+"`machine-disk`"+` skill: it shows what is using the disk and what is safe to free. The machine's steward and the daemon trim the build caches beside running builds, and keep what live builds use; you do not need to.
-  - To free space on purpose, use forge's storage tool, which removes only what is eligible: `+"`reliant forge storage gc`"+` previews, `+"`reliant forge storage gc --apply`"+` runs it (`+"`reliant forge storage gocache --apply`"+` for the Go build cache alone).
+  - To free space on purpose, use forge's storage tool, which removes only what is eligible: `+"`reliant forge machine storage gc`"+` previews, `+"`reliant forge machine storage gc --apply`"+` runs it (`+"`reliant forge machine storage gocache --apply`"+` for the Go build cache alone).
 %s
   - Archive the worktrees you are done with (the worktree tool's delete) and remove only files you created yourself.
 

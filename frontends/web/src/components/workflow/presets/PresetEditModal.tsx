@@ -45,7 +45,7 @@ function ParamField({
   if (label === 'model') {
     return (
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
         {readOnly ? (
           <div className="p-2 text-sm bg-muted/50 rounded-md border border-border/50 text-muted-foreground">
             {(typeof value === 'object' ? (value?.id || JSON.stringify(value)) : value) || 'Default'}
@@ -64,7 +64,7 @@ function ParamField({
   if (label === 'tools') {
     return (
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
         {readOnly ? (
           <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md border border-border/50">
             {Array.isArray(value) && value.length > 0 ? (
@@ -91,7 +91,7 @@ function ParamField({
   if (label === 'agent' || label === 'agent_id') {
     return (
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
         {readOnly ? (
           <div className="p-2 text-sm bg-muted/50 rounded-md border border-border/50 text-muted-foreground">
             {typeof value === 'object' ? JSON.stringify(value) : (value || 'General')}
@@ -119,7 +119,7 @@ function ParamField({
 
     return (
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
         {readOnly ? (
           <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md border border-border/50">
             {Array.isArray(value) && value.length > 0 ? (

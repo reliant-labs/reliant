@@ -1,6 +1,6 @@
-# P7a C0 — svcerr worklist (`forge fix connect-errors` report)
+# P7a C0 — svcerr worklist (`forge lint fix connect-errors` report)
 
-Generated from the report of `forge fix connect-errors` at the forge pin
+Generated from the report of `forge lint fix connect-errors` at the forge pin
 `v0.1.47-0.20261022063914-6a7c22c22a05` over reliant (plan: `11-svcerr-plan.md`, §4 C0). Line numbers are
 those of commit `d0a0162c`, the codemod commit, from the idempotent re-run (0 changes).
 This is the lanes' input. Re-run the codemod to refresh it: it is idempotent, and

@@ -37,20 +37,20 @@ Who may do what after sign-in is code you write. Forge proves who the caller is;
     ```bash terminal
     reliant forge env render prod > /dev/null && reliant forge lint --quiet
     ```
-    The prod render now hands the API one more value, `IDP_LOGIN_POLICY`, from which the broker mounts each method's routes. The `forgeconv-identity-methods` rule in the full `lint` fails a declaration your broker doesn't serve. A broker scaffolded before forge v1.1 serves none of them; `reliant forge skill load migrations/v1.1.0/identity-v2` has the edit.
+    The prod render now hands the API one more value, `IDP_LOGIN_POLICY`, from which the broker mounts each method's routes. The `forgeconv-identity-methods` rule in the full `lint` fails a declaration your broker doesn't serve. A broker scaffolded before forge v1.1 serves none of them; `reliant forge agent skill load migrations/v1.1.0/identity-v2` has the edit.
   </Step>
   <Step title="Start the stack">
     ```bash terminal
     reliant forge env up dev
     ```
     ```text
-    [up] identity identity: warning: social github: secret GITHUB_CLIENT_SECRET is not in the env's store, so github sign-in is off in this env. Create a DEV OAuth app (its callback is printed below), then `forge secret set --env <env> GITHUB_CLIENT_SECRET`
+    [up] identity identity: warning: social github: secret GITHUB_CLIENT_SECRET is not in the env's store, so github sign-in is off in this env. Create a DEV OAuth app (its callback is printed below), then `forge env secret set --env <env> GITHUB_CLIENT_SECRET`
     [up] identity identity: Mail: http://localhost:8026
     [up]   updated login policy "instance" (allowDomainDiscovery, allowExternalIdp, allowRegister, passwordlessType)
     [up]   updated login policy "instance" (second factor SECOND_FACTOR_TYPE_OTP_EMAIL added)
     [up] identity identity: wrote IDP_BASE, IDP_LOGIN_POLICY, IDP_LOGIN_URI, JWT_ISSUER, OIDC_REDIRECT_URI to secrets/dev.yaml
     ```
-    The dev identity provider takes the same declaration a hosted environment does. GitHub stays off until you create a separate dev OAuth app whose callback is the dev provider's `/idps/callback` and store its secret with `reliant forge secret set --env dev GITHUB_CLIENT_SECRET`. The other methods work without it. Ask the API what the sign-in screen will offer, through the web dev server's `/_api` proxy (use the web URL `env up` printed):
+    The dev identity provider takes the same declaration a hosted environment does. GitHub stays off until you create a separate dev OAuth app whose callback is the dev provider's `/idps/callback` and store its secret with `reliant forge env secret set --env dev GITHUB_CLIENT_SECRET`. The other methods work without it. Ask the API what the sign-in screen will offer, through the web dev server's `/_api` proxy (use the web URL `env up` printed):
     ```bash terminal
     WEB=http://localhost:3000
     curl -s $WEB/_api/auth/options
@@ -112,7 +112,7 @@ Who may do what after sign-in is code you write. Forge proves who the caller is;
     ```tsx frontends/web/src/lib/auth/route-guard.tsx
     const publicExactPaths: string[] = ["/products"];
     ```
-    Route guards scaffolded before forge v1.8 have only `publicPaths`, which matches prefixes: adding `"/products"` there also opens `/products/new`, though its create call still answers 401.
+    Route guards scaffolded before forge v1.8 have only `publicPaths`, which matches prefixes: adding `"/products"` there also opens `/products/new` and `/products/edit`, though their create and update calls still answer 401. The guard is scaffolded once and is yours, so upgrading forge does not replace it. Don't list a section's root in the prefix list to publish one page. Port the exact list first: `reliant forge project upgrade --check` shows the newer template's `route-guard.tsx`, and you copy its `publicExactPaths` list and its `RouteAccessContext.Provider` into your own.
   </Step>
   <Step title="Read the caller in a handler">
     Replace the scaffolded stub. `middleware.GetUser` returns the claims the auth interceptor validated, or `unauthenticated` when there are none:
@@ -162,7 +162,7 @@ Who may do what after sign-in is code you write. Forge proves who the caller is;
 
 <AccordionGroup>
   <Accordion title="[forgeconv-identity-methods] the identity declares methods &quot;passkey&quot; but internal/app/login_broker.go does not serve it">
-    Your broker reads the policy but doesn't mount that method's route, or predates the policy entirely. Apply the edits in `reliant forge skill load migrations/v1.1.0/identity-v2`, or drop the method from `identity.k`. `lint --conventions` alone doesn't run this rule; run the full `reliant forge lint`.
+    Your broker reads the policy but doesn't mount that method's route, or predates the policy entirely. Apply the edits in `reliant forge agent skill load migrations/v1.1.0/identity-v2`, or drop the method from `identity.k`. `lint --conventions` alone doesn't run this rule; run the full `reliant forge lint`.
   </Accordion>
   <Accordion title="identity: failed: the control plane refused the declaration">
     `reliant forge env status <env>` shows why a hosted identity was refused, while `env deploy` keeps reporting "still applying" and exits 8. Remove the method it names (social, or magic links without `smtp`) and deploy a new release.

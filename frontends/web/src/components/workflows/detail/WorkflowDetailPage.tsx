@@ -399,7 +399,7 @@ function DefinitionCard({
               />
             </CardInset>
             <div>
-              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inputs</h3>
+              <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">Inputs</h3>
               {definition.loading ? (
                 <p className="text-sm text-muted-foreground">Loading inputs…</p>
               ) : inputs.length === 0 ? (

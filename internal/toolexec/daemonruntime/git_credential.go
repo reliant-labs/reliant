@@ -130,11 +130,11 @@ func setupManagedGitCredentials(managed bool) {
 		}
 	}
 	go func() {
-		remotes, lines := healLeakedGitCredentials(ctx, managedProjectsDir, home)
+		remotes, lines, helpers := healLeakedGitCredentials(ctx, managedProjectsDir, home)
 		cancel()
-		if remotes > 0 || lines > 0 {
+		if remotes > 0 || lines > 0 || helpers > 0 {
 			logging.Info(logPrefix+" Removed git tokens left by an older release",
-				"remote_urls", remotes, "credential_lines", lines)
+				"remote_urls", remotes, "credential_lines", lines, "clone_credential_helpers", helpers)
 		}
 	}()
 }
@@ -166,20 +166,25 @@ func wireGlobalGitCredentialHelper(ctx context.Context, argv []string) error {
 	return nil
 }
 
-// healLeakedGitCredentials removes tokens older releases persisted: a password
-// in the userinfo of any remote URL of a checkout under projectsDir, and the
-// x-access-token lines of ~/.git-credentials. It returns counts only; values
-// are never logged. Best-effort.
-func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (remotes, lines int) {
+// healLeakedGitCredentials removes what older releases persisted: a password
+// in the userinfo of any remote URL of a checkout under projectsDir, the
+// `credential.helper store` they wrote into each such clone's own config, and
+// the x-access-token lines of ~/.git-credentials. It returns counts only;
+// values are never logged. Best-effort.
+func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (remotes, lines, helpers int) {
 	found, err := repo.Discover(ctx, projectsDir, repo.Options{})
 	if err != nil {
 		logging.WarnContext(ctx, logPrefix+" git token heal: could not scan projects", "error", err)
 	} else if found.Truncated {
 		logging.WarnContext(ctx, logPrefix+" git token heal: scanned part of the projects", "reason", found.TruncatedReason)
 	}
+	env := isolatedGitEnv()
 	for _, f := range found.Repos {
 		dir := filepath.Join(projectsDir, f.RelativePath)
 		remotes += healRemoteURLs(ctx, dir)
+		if healCloneCredentialHelper(ctx, dir, env) {
+			helpers++
+		}
 	}
 	if home != "" {
 		n, err := pruneGitCredentialsFile(filepath.Join(home, ".git-credentials"))
@@ -188,7 +193,53 @@ func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (re
 		}
 		lines = n
 	}
-	return remotes, lines
+	return remotes, lines, helpers
+}
+
+// legacyCloneHelper is the credential.helper value releases before on-demand
+// credentials (6efd6eaa1) wrote into the config of every repository the daemon
+// cloned (`git -C <clone> config credential.helper store`). git_publish
+// refuses any helper in a checkout's own config, and worktrees share it, so a
+// clone that still carries it can never publish.
+const legacyCloneHelper = "store"
+
+// healCloneCredentialHelper removes credential.helper from the repository
+// config of dir (a clone or any of its worktrees) when its one value is the
+// one an older daemon wrote. Any other value — a user's own helper, or store
+// beside another — is theirs and is left alone. It reports whether it removed
+// one; a second run finds nothing. Values are never logged.
+func healCloneCredentialHelper(ctx context.Context, dir string, env []string) bool {
+	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--local", "--null", "--get-all", "credential.helper")
+	if err != nil || res.exit != 0 {
+		return false // exit 1 = not set
+	}
+	if strings.TrimSuffix(res.stdout, "\x00") != legacyCloneHelper {
+		return false
+	}
+	// --fixed-value removes only that exact value, so a helper the user added
+	// between the read and this write survives.
+	res, err = pubRunGit(ctx, dir, env, "", false, nil, "config", "--local", "--fixed-value", "--unset-all", "credential.helper", legacyCloneHelper)
+	if err != nil || res.exit != 0 {
+		logging.WarnContext(ctx, logPrefix+" git token heal: could not remove a clone's credential.helper", "repo", dir)
+		return false
+	}
+	return true
+}
+
+// healManagedCheckoutHelper is healCloneCredentialHelper for the checkout a
+// publish is about to push from, applied only when the repository it belongs
+// to (a worktree's is its main clone's) lives under managedProjectsDir: the
+// only place a daemon ever cloned to. A repository anywhere else is the user's
+// own and is left as it is.
+func healManagedCheckoutHelper(ctx context.Context, checkout string, env []string) bool {
+	res, err := pubRunGit(ctx, checkout, env, "", false, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil || res.exit != 0 {
+		return false
+	}
+	if !pathWithin(comparablePath(strings.TrimSpace(res.stdout)), comparablePath(managedProjectsDir)) {
+		return false
+	}
+	return healCloneCredentialHelper(ctx, checkout, env)
 }
 
 // stripURLPassword returns rawURL without userinfo when it carries a

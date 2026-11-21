@@ -131,7 +131,7 @@ func pinnedMemoryUnavailable(cause error) []byte {
 		"project does not have — so it is deliberately not used in its place.\n\n" +
 		"```\n" + strings.TrimSpace(cause.Error()) + "\n```\n\n" +
 		"Until this is fixed, read the conventions from the pinned forge's own skills: `" + name +
-		" skill load forge` (in this project, `" + name + "` runs the pinned forge, and fails the same way " +
+		" agent skill load forge` (in this project, `" + name + "` runs the pinned forge, and fails the same way " +
 		"if it cannot be obtained). To fix it: get the pinned forge (offline? a pin nobody published?), " +
 		"or move the pin deliberately with `" + name + " project upgrade`.\n")
 }

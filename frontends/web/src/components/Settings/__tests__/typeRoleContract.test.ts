@@ -13,7 +13,8 @@
  *     unknown `text-<word>` as a color, so without lib/typeRoles.ts
  *     `cn("text-muted-foreground", "text-meta")` silently drops the color.
  *   - The radius ladder the roles pair with: control `rounded-md`, container
- *     `rounded-xl`, hero `rounded-2xl`, on `--radius: 0.5rem`.
+ *     `rounded-xl`, hero `rounded-2xl`, on `--radius: 0.625rem` (restyle v1:
+ *     softer, still restrained).
  *   - `text-2xs`/`text-3xs` are for badges and chart axes only
  *     (src/styles/stylingContract.json `tinyText.allow`). The call sites
  *     that predate the roles are a ratchet (`tinyText.legacy`): a count may
@@ -112,8 +113,8 @@ describe('type roles', () => {
 })
 
 describe('radius ladder', () => {
-  it('keeps --radius at 0.5rem and leaves xl / 2xl at Tailwind’s defaults', () => {
-    expect(fs.readFileSync(path.join(SRC, 'index.css'), 'utf-8')).toMatch(/--radius:\s*0\.5rem;/)
+  it('keeps --radius at 0.625rem and leaves xl / 2xl at Tailwind’s defaults', () => {
+    expect(fs.readFileSync(path.join(SRC, 'index.css'), 'utf-8')).toMatch(/--radius:\s*0\.625rem;/)
     const radius = CONFIG.slice(CONFIG.indexOf('borderRadius: {'), CONFIG.indexOf('}', CONFIG.indexOf('borderRadius: {')))
     expect(radius).toContain('md: "calc(var(--radius) - 2px)"')
     expect(radius).not.toMatch(/\bxl:|"2xl"/)

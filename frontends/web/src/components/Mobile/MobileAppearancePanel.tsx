@@ -239,7 +239,7 @@ export function MobileAppearancePanel() {
       />
 
       <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Fonts
         </h3>
         <button

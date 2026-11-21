@@ -84,7 +84,11 @@ func TestMachineLifecycleAndPreviewAccess(t *testing.T) {
 
 	_, err = executeRoot(t, "machine", "delete", "cicd")
 	assert.ErrorContains(t, err, "--yes", "delete without --yes deletes nothing")
+	// The server deletes the disk without a snapshot whatever the request
+	// says, so --snapshot is refused before anything is called.
 	_, err = executeRoot(t, "machine", "delete", "cicd", "--yes", "--snapshot")
+	assert.ErrorContains(t, err, "--snapshot is not supported yet")
+	_, err = executeRoot(t, "machine", "delete", "cicd", "--yes")
 	require.NoError(t, err)
 
 	_, err = executeRoot(t, "machine", "grow-disk", "cicd", "205")
@@ -114,7 +118,7 @@ func TestMachineLifecycleAndPreviewAccess(t *testing.T) {
 
 	assert.Equal(t, []string{
 		"create build-box managed m 30m",
-		"delete d-cicd snapshot=true",
+		"delete d-cicd snapshot=false",
 		"grow d-cicd 200",
 		"set d-cicd 5173 public",
 		"remove d-cicd 5173",

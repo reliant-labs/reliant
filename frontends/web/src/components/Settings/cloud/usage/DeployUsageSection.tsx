@@ -304,7 +304,7 @@ export function DeployUsageSection({
 /** Section label rung of the heading ladder — see ../ui/card.tsx. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <h3 className="text-xs font-semibold text-muted-foreground">
       {children}
     </h3>
   );
@@ -313,7 +313,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 /** Stat caption — one rung below the ladder, lighter than a section label. */
 function StatCaption({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <p className="text-xs font-medium text-muted-foreground">
       {children}
     </p>
   );
