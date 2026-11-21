@@ -1,0 +1,31 @@
+version: v2
+# forge's proto module holds one file, proto/forge/v1/forge.proto: the
+# annotation definitions every forge project imports. Its Go is the PUBLIC
+# package github.com/reliant-labs/forge/pkg/forgepb (the file's go_package),
+# which pkg/config and every scaffolded project link. This config regenerates
+# that package in place, so `forge generate` keeps it in sync with the proto
+# and `forge ci verify-generated` catches a proto edit committed without it.
+#
+# `module=` strips the module prefix from go_package, so the output lands at
+# pkg/forgepb/forge.pb.go. Do not switch to paths=source_relative: that writes
+# <out>/forge/v1/forge.pb.go, an orphan copy nothing imports. That is exactly
+# what this file did after the package moved from internal/gen/forge/v1 to
+# pkg/forgepb, leaving an untracked internal/gen/ after every generate.
+#
+# A `local:` plugin, as in the scaffolded buf.gen.yaml: no BSR access (a
+# remote plugin fails on the BSR's anonymous rate limit), and `forge tools
+# install` puts protoc-gen-go on PATH at the version go.mod pins, which is the
+# version the committed file names in its header.
+#
+# No protoc-gen-connect-go: forge.proto declares no service, so it would emit
+# nothing.
+#
+# `strategy: all`, as on every local plugin forge writes: one plugin process
+# over every file rather than one per proto directory
+# (internal/cli/buf_strategy_guard_test.go).
+plugins:
+  - local: protoc-gen-go
+    out: .
+    strategy: all
+    opt:
+      - module=github.com/reliant-labs/forge

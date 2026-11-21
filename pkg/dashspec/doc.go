@@ -1,0 +1,55 @@
+// Package dashspec is forge's renderer-neutral dashboard vocabulary
+// (forge.dashboards/v1) and its validator: the types a dashboard file is
+// written in, and ParseDashboard, which judges one with every problem located
+// by line, column and path.
+//
+// forge generates dashboards in this vocabulary (deploy/observability/), a
+// release bundle carries them, and the Reliant control plane saves and promotes
+// them. Every one of those reads the same rules from here, so a dashboard forge
+// writes is one every reader accepts, and a new panel kind reaches all of them
+// with one forge pin bump instead of one hand-kept copy per reader.
+//
+// Fields are OpenTelemetry names keyed by signal (see CheckField); nothing here
+// names a ClickHouse column, a HyperDX field or a chart library.
+//
+// # Adding to the vocabulary: readers first
+//
+// ParseDashboard is strict: a panel kind it does not know (`"browse" is not
+// one of: ...`) and a field it does not know (`unknown field "link"`) are
+// problems, so a typo is never a panel that silently draws nothing. The cost
+// is that a reader pinned to an older forge REFUSES a dashboard using a newer
+// kind or field, rather than skipping it. So a new kind or field (KindBrowse,
+// Panel.Browse, Panel.Link) rolls out readers first:
+//
+//  1. forge releases the vocabulary;
+//  2. every reader that validates (the control plane's dashboard service, a
+//     release bundle's reader) pins that forge;
+//  3. only then does anything write it: the console, an author, a generator.
+//
+// The dashboards forge generates must not use a kind or field in the release
+// that introduces it (none uses browse or link), or a reader on the previous
+// pin would refuse the bundle carrying them. The one deliberate exception is
+// the delivery kinds (release_health, promotions, delivery), which the
+// generated Releases dashboard uses from the release that adds them: the
+// control plane records a bundle's dashboards with a structural check only
+// (forge validated them at the cut) and serves them without re-validating, and
+// the console draws a kind it does not know as "not yet", so an older reader
+// still shows the dashboard. Only saving a copy of it (which re-validates)
+// waits for the control plane's pin. Panel.SubtitleSQL is the same exception
+// for the same reason: the generated Users and Overview dashboards use it
+// from the release that adds it, and a console that does not know it draws
+// the panel without a subtitle. Promotion
+// (PromoteDashboardToCode) carries a saved dashboard from the control plane
+// into the repository, the reader that already accepted it, never the other
+// way. Once validated, the HyperDX renderer needs no change: it skips every
+// IsConsoleKind panel and ignores the console-only fields.
+//
+// The product analytics presentation is the same exception for the same
+// reason: the built-in product dashboards (pkg/obsbuiltin) use
+// StyleBarList, StyleKPI, Display.Good, .Bar, .Share, .Units and .Layout,
+// Panel.Drill and KindAttention from the release that adds them. Each
+// changes the picture only, never a query: a console that predates a style
+// draws the kind's default (a bar list's rows as the table they were, a KPI
+// as figures), ignores the fields it does not know, and draws an attention
+// panel as "not yet".
+package dashspec

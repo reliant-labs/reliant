@@ -1,0 +1,19 @@
+=== RUN   TestFlaky
+    flaky_test.go:12: got 1, want 2
+--- FAIL: TestFlaky (0.01s)
+FAIL
+FAIL	example.com/m/internal/a	0.104s
+=== RUN   TestRacy
+==================
+WARNING: DATA RACE
+Write at 0x00c000123456 by goroutine 7:
+  example.com/m/internal/b.(*T).inc()
+==================
+    testing.go:1490: race detected during execution of test
+--- FAIL: TestRacy (0.02s)
+FAIL	example.com/m/internal/b	0.3s
+--- FAIL: TestNet (5.00s)
+    net_test.go:20: dial tcp 10.0.0.1:443: connect: connection refused
+FAIL	example.com/m/internal/c	5.1s
+--- FAIL: TestOrphan (0.00s)
+ok  	example.com/m/internal/d	0.1s

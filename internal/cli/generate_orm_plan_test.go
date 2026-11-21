@@ -1,0 +1,197 @@
+package cli
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/reliant-labs/forge/internal/codegen"
+)
+
+// Forge bug 22dc63db: two tables projecting to one entity name was reported
+// by the ORM step two dozen steps in, as a soft failure, so the run spent
+// the frontend installs, codegen, tidies and the validation build (about 25
+// minutes on a loaded machine) before exiting non-zero. The plan step
+// decides it as soon as the descriptor the CRUD join reads is fresh.
+func TestPlanORMEntities_RunsBeforeEverySlowStep(t *testing.T) {
+	steps := generateSteps()
+	at := map[string]int{}
+	for i, s := range steps {
+		at[s.Name] = i
+	}
+	plan, ok := at[planORMEntitiesStep]
+	if !ok {
+		t.Fatalf("no %q step", planORMEntitiesStep)
+	}
+	if at["descriptor extraction"] > plan {
+		t.Error("the plan joins against the descriptor, so it must follow descriptor extraction")
+	}
+	for _, slow := range []string{
+		"TypeScript stubs (frontends)",
+		"frontend CRUD pages",
+		"service stubs",
+		"internal/db/ ORM (entity-driven)",
+		"go mod tidy (pre-composition)",
+		"regenerate infra files",
+		"go build (validate generated code)",
+	} {
+		if at[slow] < plan {
+			t.Errorf("%q runs before %q: a schema that cannot project would be discovered after it", slow, planORMEntitiesStep)
+		}
+	}
+	// Planned exactly when the ORM step would run, so it never refuses a
+	// project whose ORM is off.
+	for _, ctx := range []*pipelineContext{{}, {HasWorkers: true}, {HasServices: true}} {
+		if steps[plan].Gate(ctx) != gateORMHasServices(ctx) {
+			t.Errorf("plan gate and ORM gate disagree for %+v", ctx)
+		}
+	}
+}
+
+func writeORMPlanFixture(t *testing.T, migration string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for rel, body := range map[string]string{
+		"go.mod":                          "module example.com/app\n\ngo 1.22\n",
+		"db/migrations/00001_init.up.sql": migration,
+	} {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// forge/pkg/audit's audit_log beside the app's audit_logs: control-plane's
+// schema. The plan leaves the library's table off, and the ORM step projects
+// the app's AuditLog alone.
+const libraryTableFixture = `CREATE SCHEMA app;
+CREATE TABLE app.audit_logs (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, action TEXT NOT NULL);
+CREATE TABLE app.audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id VARCHAR(255),
+    email VARCHAR(255),
+    procedure VARCHAR(512) NOT NULL,
+    peer_address VARCHAR(255),
+    duration_ms INTEGER,
+    status VARCHAR(50) NOT NULL DEFAULT 'success',
+    error_code VARCHAR(50),
+    error_message TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`
+
+func TestPlanORMEntities_LeavesALibraryTableOffAndRefusesACollision(t *testing.T) {
+	if testing.Short() {
+		t.Skip("applies the fixture's migrations to a shadow postgres; runs in task test")
+	}
+
+	// A new project (no store yet): the library table is excluded at once.
+	t.Run("library table", func(t *testing.T) {
+		dir := writeORMPlanFixture(t, libraryTableFixture)
+		ctx := &pipelineContext{ProjectDir: dir, ModulePath: "example.com/app"}
+		var planErr, ormErr error
+		out := captureStdout(t, func() {
+			planErr = stepPlanORMEntities(ctx)
+			ormErr = stepInternalDBORM(ctx)
+		})
+		if planErr != nil || ormErr != nil || ctx.ORMFailure != nil {
+			t.Fatalf("plan: %v / ORM: %v / %v\n%s", planErr, ormErr, ctx.ORMFailure, out)
+		}
+		body, err := os.ReadFile(filepath.Join(dir, "internal/db/audit_log_orm_gen.go"))
+		if err != nil {
+			t.Fatalf("the app's audit_logs was not projected: %v\n%s", err, out)
+		}
+		if !strings.Contains(string(body), "of table audit_logs.") {
+			t.Errorf("audit_log_orm_gen.go is not the projection of the app's audit_logs:\n%s", body)
+		}
+		if !strings.Contains(out, "audit_log is forge/pkg/audit's table") {
+			t.Errorf("the run should say why audit_log has no store:\n%s", out)
+		}
+	})
+
+	// forge#2410 removed the compat path that kept a library table's store
+	// because an older forge already generated one: an existing
+	// <entity>_orm_gen.go no longer counts. The table is left off like any
+	// other library table, and `forge:entity` is the way to keep its store.
+	existingStore := func(t *testing.T, fixture string) (existing, stdout, stderr string) {
+		t.Helper()
+		dir := writeORMPlanFixture(t, strings.Replace(fixture,
+			"CREATE TABLE app.audit_logs (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, action TEXT NOT NULL);\n", "", 1))
+		existing = filepath.Join(dir, "internal/db/audit_log_orm_gen.go")
+		if err := os.MkdirAll(filepath.Dir(existing), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(existing, []byte("// Code generated by forge. DO NOT EDIT.\n"+
+			"// Source: the APPLIED schema (db/migrations) of table audit_log.\npackage db\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		ctx := &pipelineContext{ProjectDir: dir, ModulePath: "example.com/app"}
+		var planErr, ormErr error
+		stdout, stderr = captureStdoutAndStderr(t, func() {
+			planErr = stepPlanORMEntities(ctx)
+			ormErr = stepInternalDBORM(ctx)
+		})
+		if planErr != nil || ormErr != nil || ctx.ORMFailure != nil {
+			t.Fatalf("plan: %v / ORM: %v / %v\n%s%s", planErr, ormErr, ctx.ORMFailure, stdout, stderr)
+		}
+		return existing, stdout, stderr
+	}
+
+	t.Run("existing store not kept", func(t *testing.T) {
+		existing, stdout, stderr := existingStore(t, libraryTableFixture)
+		if body, err := os.ReadFile(existing); err == nil && strings.Contains(string(body), "type AuditLog struct") {
+			t.Errorf("an older forge's store over a library table must not be regenerated:\n%s", body)
+		}
+		if !strings.Contains(stdout, "audit_log is forge/pkg/audit's table") {
+			t.Errorf("the run should say why audit_log has no store:\n%s", stdout)
+		}
+		if strings.Contains(stdout+stderr, "deprecated:") {
+			t.Errorf("the removed deprecation must not be printed:\n%s%s", stdout, stderr)
+		}
+	})
+
+	t.Run("forge:entity keeps the store", func(t *testing.T) {
+		existing, stdout, stderr := existingStore(t,
+			libraryTableFixture+"COMMENT ON TABLE app.audit_log IS 'forge:entity';\n")
+		body, err := os.ReadFile(existing)
+		if err != nil || !strings.Contains(string(body), "type AuditLog struct") {
+			t.Fatalf("forge:entity must keep audit_log's store (err %v):\n%s\n%s%s", err, body, stdout, stderr)
+		}
+	})
+
+	t.Run("collision", func(t *testing.T) {
+		dir := writeORMPlanFixture(t, `CREATE SCHEMA app;
+CREATE TABLE app.widget (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE app.widgets (id TEXT PRIMARY KEY, label TEXT NOT NULL);
+`)
+		ctx := &pipelineContext{ProjectDir: dir, ModulePath: "example.com/app"}
+		var err error
+		out := captureStdout(t, func() { err = stepPlanORMEntities(ctx) })
+		var collision *codegen.EntityCollisionError
+		if !errors.As(err, &collision) {
+			t.Fatalf("the plan must refuse the collision, got %v\n%s", err, out)
+		}
+		for _, want := range []string{
+			"refused before generating anything",
+			"tables widget and widgets both project to the entity Widget",
+			"COMMENT ON TABLE app.widgets IS 'forge:entity-name=<Name>'",
+			"COMMENT ON TABLE app.widget IS 'forge:no-entity'",
+		} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("refusal should say %q:\n%v", want, err)
+			}
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "internal/db")); statErr == nil {
+			t.Error("the refused plan wrote internal/db")
+		}
+	})
+}

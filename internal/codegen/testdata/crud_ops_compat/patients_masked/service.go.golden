@@ -1,0 +1,11 @@
+package patients
+
+import "github.com/reliant-labs/forge/pkg/orm"
+
+type Deps struct {
+	DB orm.Context
+}
+
+type Service struct {
+	deps Deps
+}

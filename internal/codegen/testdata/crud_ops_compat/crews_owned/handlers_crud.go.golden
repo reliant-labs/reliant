@@ -1,0 +1,184 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Each method delegates to github.com/reliant-labs/forge/pkg/crud (error mapping, cursor
+// pagination, page-size clamping, ordering, total counts, update masks); the per-entity wiring is
+// regenerated in handlers_crud_ops_gen.go.
+// pkg/crud never reads the caller on its own. The interceptor already turned away anyone without a
+// valid token (unless the rpc declares auth_required: false; pkg/middleware/procedures_gen.go).
+// For a table whose migration declares `forge:owner=`, the generated op asks your
+// crud.OwnerResolver (Deps.Owners) who the caller is and scopes every read and write to their
+// rows. For every other table, WHO MAY DO WHAT and WHICH ROWS THEY MAY SEE are yours: import
+// "example.com/test/pkg/middleware", resolve the caller with middleware.GetUser(ctx), and wrap the
+// op's Filters in a WHERE on those claims. See `forge skill load auth`.
+// SOME METHODS BELOW ARE ALREADY SCOPED (an entity declares a `forge:owner` column): claims
+// resolved, op seam wrapped. The POLICY — how claims map onto that column — is left under a
+// FORGE_SCAFFOLD marker, and `forge lint` fails while it stands.
+// EACH METHOD'S `Auth:` LINE says which case it is, read from its rpc's auth_required and its
+// table's forge:owner declaration:
+// SCOPED — the table declares a forge:owner column, so the body already resolves the caller and
+// scopes the rows it touches; only its FORGE_SCAFFOLD owner mapping is left to you.
+// Customize an RPC by replacing its delegation here; CRUD RPCs added later are appended by `forge
+// generate`, and your content is never modified.
+package crews
+
+import (
+	"context"
+
+	"connectrpc.com/connect"
+	pb "example.com/test/gen/proto/services/crews/v1"
+	"example.com/test/internal/db"
+	"example.com/test/internal/metrics"
+	"example.com/test/pkg/middleware"
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// CreateCrew delegates CRUD create to pkg/crud.
+// Auth: SCOPED to company_id (forge:owner) via middleware.GetUser(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+func (s *Service) CreateCrew(
+	ctx context.Context,
+	req *connect.Request[pb.CreateCrewRequest],
+) (*connect.Response[pb.CreateCrewResponse], error) {
+	claims, err := middleware.GetUser(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// Crew.company_id that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+	op := s.crudCreateCrewOp()
+	build := op.Entity
+	op.Entity = func(ctx context.Context, r *pb.CreateCrewRequest) (*db.Crew, error) {
+		e, err := build(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		// Stamped from the caller, never from the request: a create that
+		// took company_id off the wire would let anyone file a row
+		// under anyone else's name.
+		e.CompanyID = owner
+		return e, nil
+	}
+	resp, err := crud.HandleCreate(op)(ctx, req)
+	metrics.RecordCreated(ctx, "Crew", err)
+	return resp, err
+}
+
+// GetCrew delegates CRUD get to pkg/crud.
+// Auth: SCOPED to company_id (forge:owner) via middleware.GetUser(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+func (s *Service) GetCrew(
+	ctx context.Context,
+	req *connect.Request[pb.GetCrewRequest],
+) (*connect.Response[pb.GetCrewResponse], error) {
+	claims, err := middleware.GetUser(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// Crew.company_id that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+	op := s.crudGetCrewOp()
+	// Passed as a query option rather than compared after the fetch: a row
+	// that is not this caller's is never read, and reports NotFound exactly
+	// as an unknown id does. A distinguishable "exists but is not yours"
+	// tells an attacker which ids are real.
+	fetch := op.Fetch
+	op.Fetch = func(ctx context.Context, id string, opts ...orm.QueryOption) (*db.Crew, error) {
+		return fetch(ctx, id, append(opts, orm.WhereEq("company_id", owner))...)
+	}
+	return crud.HandleGet(op)(ctx, req)
+}
+
+// ListCrews delegates CRUD list to pkg/crud.
+// Auth: SCOPED to company_id (forge:owner) via middleware.GetUser(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+func (s *Service) ListCrews(
+	ctx context.Context,
+	req *connect.Request[pb.ListCrewsRequest],
+) (*connect.Response[pb.ListCrewsResponse], error) {
+	claims, err := middleware.GetUser(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// Crew.company_id that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+	op := s.crudListCrewsOp()
+	// The predicate goes in the QUERY, never on the returned page: Count runs
+	// over these same opts, so a post-filtered page would report a total
+	// including rows this caller may not see.
+	filters := op.Filters // nil when the RPC declares no filter fields
+	op.Filters = func(ctx context.Context, r *pb.ListCrewsRequest) ([]orm.QueryOption, error) {
+		var opts []orm.QueryOption
+		if filters != nil {
+			var err error
+			if opts, err = filters(ctx, r); err != nil {
+				return nil, err
+			}
+		}
+		return append(opts, orm.WhereEq("company_id", owner)), nil
+	}
+	return crud.HandleList(op)(ctx, req)
+}
+
+// UpdateCrew delegates CRUD update to pkg/crud.
+// Auth: SCOPED to company_id (forge:owner) via middleware.GetUser(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+// No update_mask field, so every Update is a whole-row write (op.ReadOnly columns are still kept); add one for AIP-134 partial updates.
+func (s *Service) UpdateCrew(
+	ctx context.Context,
+	req *connect.Request[pb.UpdateCrewRequest],
+) (*connect.Response[pb.UpdateCrewResponse], error) {
+	claims, err := middleware.GetUser(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// Crew.company_id that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+	op := s.crudUpdateCrewOp()
+	// Two halves, and both are needed. The predicate is checked against the
+	// STORED row, so a caller cannot take ownership by rewriting
+	// company_id in the request they send; the stamp then keeps the
+	// written row on the same owner, since a maskless update writes every
+	// column of the submitted entity.
+	build := op.Entity
+	op.Entity = func(ctx context.Context, r *pb.UpdateCrewRequest) (*db.Crew, error) {
+		e, err := build(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		e.CompanyID = owner
+		return e, nil
+	}
+	persist := op.Persist
+	op.Persist = func(ctx context.Context, e *db.Crew, opts ...orm.QueryOption) error {
+		return persist(ctx, e, append(opts, orm.WhereEq("company_id", owner))...)
+	}
+	return crud.HandleUpdate(op)(ctx, req)
+}
+
+// DeleteCrew delegates CRUD delete to pkg/crud.
+// Auth: SCOPED to company_id (forge:owner) via middleware.GetUser(ctx) — finish the FORGE_SCAFFOLD owner mapping below.
+func (s *Service) DeleteCrew(
+	ctx context.Context,
+	req *connect.Request[pb.DeleteCrewRequest],
+) (*connect.Response[pb.DeleteCrewResponse], error) {
+	claims, err := middleware.GetUser(ctx)
+	if err != nil {
+		return nil, err // connect.CodeUnauthenticated
+	}
+	// FORGE_SCAFFOLD: `claims.UserID` is forge's placeholder for the value of
+	// Crew.company_id that belongs to this caller. Only your app
+	// knows that mapping — replace the expression, then remove this comment.
+	owner := claims.UserID
+	op := s.crudDeleteCrewOp()
+	// Scoped like Get: a row that is not this caller's is not deleted, and
+	// the absent-row check reports NotFound.
+	del := op.Persist
+	op.Persist = func(ctx context.Context, id string, opts ...orm.QueryOption) error {
+		return del(ctx, id, append(opts, orm.WhereEq("company_id", owner))...)
+	}
+	return crud.HandleDelete(op)(ctx, req)
+}
