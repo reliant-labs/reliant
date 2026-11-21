@@ -9,7 +9,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { inboxPath, mobileChatPath, mobileChatsPath, mobileInboxPath, mobileRunsPath, mobileSettingsPath, chatPath, homePath, runsPath, settingsPath } from "@/lib/paths";
+import {
+  chatPath,
+  homePath,
+  inboxPath,
+  mobileChatPath,
+  mobileChatsPath,
+  mobileChatWorkflowPath,
+  mobileInboxPath,
+  mobileRunsPath,
+  mobileSettingsPath,
+  mobileWorkflowPath,
+  mobileWorkflowsPath,
+  runPath,
+  runsPath,
+  settingsPath,
+  workflowDetailPath,
+  workflowLibraryPath,
+} from "@/lib/paths";
 
 import { consolePath } from "../../../Forge/Console/paths";
 
@@ -43,6 +60,11 @@ describe("desktopPathOfMobile", () => {
     [mobileRunsPath(), runsPath()],
     [mobileSettingsPath(), settingsPath()],
     ["/forge/p/shopfront", "/forge/p/shopfront"],
+    // The detail screens: one workflow, and a workflow chat's run.
+    [mobileWorkflowsPath(), workflowLibraryPath()],
+    [mobileWorkflowPath("deploy"), workflowDetailPath("deploy")],
+    [mobileWorkflowPath("builtin://get-it-right"), workflowDetailPath("builtin://get-it-right")],
+    [mobileChatWorkflowPath("c1"), runPath("c1")],
   ])("%s reads as %s", (phone, desktop) => {
     expect(desktopPathOfMobile(phone)).toBe(desktop);
   });
@@ -67,6 +89,16 @@ describe("the phone's nav", () => {
     expect(screen.getByTestId("mobile-nav-chats")).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByTestId("nav-back"));
     expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "overview" }), { drill: true });
+  });
+
+  it.each([
+    ["a workflow's screen", mobileWorkflowPath("deploy"), "nav-workflows-library"],
+    ["a workflow chat's run", mobileChatWorkflowPath("c1"), "nav-workflows-runs"],
+  ])("drills into Agents on %s, its Workflows tab lit", (_, phone, row) => {
+    renderAt(phone);
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.getByTestId(row)).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("mobile-nav-chats")).not.toHaveAttribute("aria-current");
   });
 
   it("drills into Observability, landing on its first view, with the divider's rows showing", () => {
