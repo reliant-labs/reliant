@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,7 @@ type eventsEnv struct {
 	store    *fakeStore
 	intake   *fakeIntake
 	registry *Registry
+	receiver *EventsReceiver
 	handler  http.Handler
 	provider *TestProvider
 }
@@ -41,7 +43,7 @@ func newEventsEnv(t *testing.T, publicURL string) *eventsEnv {
 	receiver := NewEventsReceiver(EventsOptions{Store: store, Intake: intake, Registry: registry, PublicURL: publicURL})
 	mux := http.NewServeMux()
 	receiver.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
-	return &eventsEnv{store: store, intake: intake, registry: registry, handler: mux, provider: provider}
+	return &eventsEnv{store: store, intake: intake, registry: registry, receiver: receiver, handler: mux, provider: provider}
 }
 
 func (e *eventsEnv) route(t *core.Trigger, account, status string) {
@@ -233,4 +235,48 @@ func TestEventsAreRecordedWhenTheSenderHangsUp(t *testing.T) {
 	env.handler.ServeHTTP(httptest.NewRecorder(), req)
 
 	assert.Equal(t, []string{"t1"}, env.intake.triggerIDs())
+}
+
+// One delivery reaching many triggers records each in a step of its own: a
+// trigger that stalls until its budget runs out costs the triggers after it
+// nothing (prod issues c1b84ec9, dcead605: under one shared minute, the late
+// triggers of a pull_request delivery failed before writing their rows). The
+// stalled one is unrecorded, so the sender is asked to retry.
+func TestEventsATriggerThatStallsDoesNotStarveTheRest(t *testing.T) {
+	env := newEventsEnv(t, "https://api.example.com")
+	env.receiver.stepTimeout = 50 * time.Millisecond
+	env.intake.stall = "stalls"
+	for _, id := range []string{"stalls", "after-1", "after-2"} {
+		env.route(integrationTrigger(t, id, "alice", core.IntegrationConfig{Events: []string{"issues.opened"}}, ""), "100", core.ConnectionStatusActive)
+	}
+
+	rec := env.deliver(t, issueOpened("delivery-1", "100", "acme/app"))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+	assert.Equal(t, []string{"after-1", "after-2"}, env.intake.triggerIDs(),
+		"the triggers after the stalled one are recorded")
+}
+
+// The triggers one delivery reaches share one triggers.Batch, so the ones
+// reading one workflow catalog pin it once; another delivery gets its own.
+func TestEventsShareOneBatchPerDelivery(t *testing.T) {
+	env := newEventsEnv(t, "https://api.example.com")
+	for _, id := range []string{"t1", "t2", "t3"} {
+		env.route(integrationTrigger(t, id, "alice", core.IntegrationConfig{Events: []string{"issues.opened"}}, ""), "100", core.ConnectionStatusActive)
+	}
+
+	require.Equal(t, http.StatusOK, env.deliver(t, issueOpened("delivery-1", "100", "acme/app")).Code)
+	require.Equal(t, http.StatusOK, env.deliver(t, issueOpened("delivery-2", "100", "acme/app")).Code)
+	accepted := env.intake.all()
+	require.Len(t, accepted, 6)
+	first, second := accepted[0].Batch, accepted[3].Batch
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+	assert.NotSame(t, first, second, "each delivery has its own batch")
+	for i, a := range accepted {
+		want := first
+		if i >= 3 {
+			want = second
+		}
+		assert.Same(t, want, a.Batch, "trigger %s of %s", a.TriggerID, a.Event.DedupeKey)
+	}
 }

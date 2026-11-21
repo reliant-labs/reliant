@@ -46,13 +46,17 @@ untracked files, commits only its reflog reached) into a local ref of the
 repository, refs/reliant/reclaimed/<key>/<time>, and checks that ref against
 the files immediately before deleting them.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (the default: report
-only, nothing captured or deleted) or on. In mode on, a clean worktree whose
-HEAD is on a remote is reclaimed after a day idle; one with work only it holds
-is never reclaimed on its own: after about five days idle it is proposed in
-the report and the machine's Inbox item, for a person to approve or free by
-hand. Mode on runs on its own schedule; dry-run passes run where the storage
-reaper runs (RELIANT_STORAGE_REAPER: managed machines by default).
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (the default: it
+classifies every worktree and reports what it would reclaim, but captures and
+deletes nothing) or on. In mode on, a clean worktree whose HEAD is on a remote
+is reclaimed after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE); one with
+work only it holds is never reclaimed on its own: after about five days idle
+it is proposed in the report and the machine's Inbox item, for a person to
+approve or free by hand. Mode on runs on its own schedule; dry-run and off
+passes run where the storage reaper runs (RELIANT_STORAGE_REAPER: managed
+machines by default, your own computer only with RELIANT_STORAGE_REAPER=on),
+and there that schedule also runs the older worktree reap, which removes
+unlocked, clean, pushed worktrees idle for a day without capturing them first.
 'reclaim scan' runs a pass now, and 'reclaim scan --capture' captures what it
 would reclaim, so a restore can be tried, and deletes nothing.
 
