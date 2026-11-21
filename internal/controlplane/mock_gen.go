@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=74d1b4f2477d8d6e0749175d4421bfe2e35fc6f3bb2fed593597e57ac218bb49
+// forge:hash=bada28056e059a5053b8be57e8c62552556eefddb195ca1f2a19b0f6d58b5a55
 
 // MockService is a test mock for the Service interface.
 //
@@ -48,6 +48,7 @@ type MockService struct {
 	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
+	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
 	ListHostedAppsFunc                  func(context.Context, string, string) ([]HostedApp, error)
 }
 
@@ -256,6 +257,15 @@ func (m *MockService) GetModelListPrices(ctx context.Context, refs []ModelRef) (
 		return m.GetModelListPricesFunc(ctx, refs)
 	}
 	return nil, *new(time.Time), contractkit.MockNotSet("MockService", "GetModelListPrices")
+}
+
+// HasCoverageBlob records the call and delegates to HasCoverageBlobFunc when set.
+func (m *MockService) HasCoverageBlob(ctx context.Context, token string, orgID string, project string, blobID string) (CoverageBlob, error) {
+	m.Recorder.Record("HasCoverageBlob", ctx, token, orgID, project, blobID)
+	if m.HasCoverageBlobFunc != nil {
+		return m.HasCoverageBlobFunc(ctx, token, orgID, project, blobID)
+	}
+	return CoverageBlob{}, contractkit.MockNotSet("MockService", "HasCoverageBlob")
 }
 
 // ListHostedApps records the call and delegates to ListHostedAppsFunc when set.
