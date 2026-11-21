@@ -2,7 +2,7 @@
  * Per-daemon billing, the client half (task J, design §6.2).
  *
  * EVERY NUMBER HERE COMES FROM THE SERVER. The allowance, what is used, the
- * burn rate, when it runs out, each size's multiplier and price, and the
+ * burn rate, when it runs out, each size's cost weight and price, and the
  * storage price are read from GetCurrentUserComputeUsage's §6.1 fields and ListPlans'
  * `daemonPricing` — never restated. A client that knew "Large is 4×" would be
  * the second definition the design exists to prevent, and it would be wrong
@@ -22,8 +22,6 @@ export interface DaemonSizePriceLike {
   size: string;
   costWeight?: string;
   exactHourlyPriceCents?: string;
-  /** Deprecated fields are never used for weighted accounting. */
-  multiplier?: bigint | number;
   /** Exact decimal string, cents per wall-clock hour. */
   hourlyPriceCents: string;
   /** The size's one disk, in GiB: what a plan of this size includes. */

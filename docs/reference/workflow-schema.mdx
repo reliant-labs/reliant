@@ -28,7 +28,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `presets` | PresetsConfig | No | - |
 | `entry` | string[] | No | - |
 | `api_version` | string | No | - |
-| `daemon` | CelDaemonSelector | No | - |
+| `daemon` | CelDaemonSelector | No | *Which machine runs the workflow's tools: a kind (`local`, `cloud`, `any`), a machine name, a DaemonSelector, or a CEL template producing either. A node's own `daemon:` wins over this, and this wins over the chat's or automation's machine. `{pool: <name>}` places the run once on one member of a machine pool instead of pinning one machine. See DaemonSelector below.* |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of \{name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)\}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |
@@ -120,6 +120,22 @@ A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, p
 | `head_sha` | string | No | *A template over `trigger` naming the commit. Unset: the event's head commit (a pull request's head, the check suite's or check run's head_sha, the workflow run's head_sha, a push's new commit).* |
 | `output` | string | No | *A template over the ended run's scope (nodes, inputs, trigger, workflow, run.status) evaluating to `{title, summary, text?, annotations?}.` Unset, or one that fails: the engine's own summary. The conclusion comes from how the run ended, never from this.* |
 | `timeout` | string | No | *A Go duration from 1m to 72h (default 6h), from the firing: a check still not concluded then concludes timed_out.* |
+
+---
+
+## DaemonSelector
+
+Where tools run (`daemon:` on the workflow or a node; node > workflow > the chat's or automation's machine > the default machine). A string is shorthand: `local`, `cloud` or `any` is a kind, anything else a machine name. `{pool: <name>}` places the run (workflow level) or the node (node level, reused by every loop iteration) ONCE on one machine and holds a slot on it while the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | No | *Exact machine id. Pins one machine (lint: daemon-machine-pin).* |
+| `name` | string | No | *Machine name, or id. Pins one machine (lint: daemon-machine-pin).* |
+| `type` | string | No | *Machine kind: `local`, `cloud` or `any`.* |
+| `labels` | map[string]string | No | *Match by the labels a machine advertises when it connects (all must match), on each call. Alone or beside id, name or type; never placed.* |
+| `pool` | string | No | *Place once on one member of the owner's machine pool of this name: the least-loaded member that can take work, on the pool's agreed workflow catalog, under its max_runs_per_member (a full pool waits for a slot). Exclusive with id, name, type and labels. A pool the owner does not have fails validation at save.* |
 
 ---
 

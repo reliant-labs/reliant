@@ -59,7 +59,7 @@ interface MachinePickerProps {
   disabled?: boolean;
 }
 
-const SECTION_LABEL = "px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground";
+const SECTION_LABEL = "px-3 pb-1 pt-2 text-2xs font-medium text-muted-foreground";
 
 function placementLabel(state: PlacementState): string {
   switch (state) {

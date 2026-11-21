@@ -67,13 +67,13 @@ vars:
   GOTESTRACE: '-race'
   # SLOT runs the heavy lanes (`test`, `test:integration`, `coverage`, a full
   # `test:affected` lane, the docs check) inside one of this machine's
-  # host-wide heavy slots: `forge slot run` waits while N other heavy jobs
+  # host-wide heavy slots: `forge machine slot run` waits while N other heavy jobs
   # (builds, test lanes, codegen, lints — from any agent, worktree or
   # terminal) are running, because past a handful every one of them slows
   # down. N comes from the machine; set FORGE_HEAVY_SLOTS=<n> to change it or
   # =off to switch it off. Inside a slot already (a gate check, a parent
-  # `forge slot run`) it does not wait. Empty when forge is absent or predates
-  # `forge slot` (the probe fails), so these tasks still run without it;
+  # `forge machine slot run`) it does not wait. Empty when forge is absent or predates
+  # `forge machine slot` (the probe fails), so these tasks still run without it;
   # `task test SLOT=` skips the slot for one run. `test:short` takes no slot:
   # the scoped inner loop is not heavy and must not queue.
   #
@@ -83,7 +83,7 @@ vars:
   # `go run`. `scripts/forge.sh --machine` is FORGE_BIN, else forge on PATH or
   # in .tools/bin, else `reliant forge`.
   SLOT:
-    sh: 's=$(./scripts/forge.sh --machine --which 2>/dev/null) && $s slot status --class heavy >/dev/null 2>&1 && echo "$s slot run --class heavy --" || true'
+    sh: 's=$(./scripts/forge.sh --machine --which 2>/dev/null) && $s machine slot status --class heavy >/dev/null 2>&1 && echo "$s machine slot run --class heavy --" || true'
 
   # ── Code generation: local, pinned, reproducible ──────────────────────
   # Generated code is committed, and CI fails on any diff a regenerate makes.
@@ -144,7 +144,7 @@ tasks:
   # ── Dependencies ──────────────────────────────────────────────────────
 
   deps:
-    desc: Install Go modules and the web (pnpm), electron and protoc-gen-es (npm) packages
+    desc: Install Go modules and the web, electron and protoc-gen-es packages (pnpm)
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
@@ -160,21 +160,25 @@ tasks:
 
   deps:electron:
     # Not --ignore-scripts: electron's postinstall fetches the Electron binary
-    # its tests and the package build load.
-    desc: Install the electron app's npm packages (electron, npm ci)
+    # its tests and the package build load (electron/pnpm-workspace.yaml's
+    # allowBuilds names the scripts that may run).
+    desc: Install the electron app's packages (electron, pnpm install --frozen-lockfile)
     dir: electron
     cmds:
-      - npm ci --no-audit --no-fund
+      - pnpm install --frozen-lockfile
 
   deps:protoc-gen-es:
-    # npm ci rewrites node_modules/.package-lock.json, so it doubles as the
-    # stamp: a lockfile edit (a version bump) reinstalls, an unchanged one is a
-    # no-op. Every buf template's TypeScript plugin runs from here.
+    # node_modules/.modules.yaml is the stamp: pnpm writes it when an install
+    # changes node_modules, and the touch dates it after a no-op one (pnpm 12
+    # leaves it alone when the tree already matched). A lockfile edit (a
+    # version bump) reinstalls, an unchanged one is a no-op. Every buf
+    # template's TypeScript plugin runs from here.
     desc: Install the pinned protoc-gen-es (tools/protoc-gen-es) when its lockfile changed
     status:
-      - test tools/protoc-gen-es/node_modules/.package-lock.json -nt tools/protoc-gen-es/package-lock.json
+      - test tools/protoc-gen-es/node_modules/.modules.yaml -nt tools/protoc-gen-es/pnpm-lock.yaml
     cmds:
-      - npm ci --prefix tools/protoc-gen-es --ignore-scripts --no-audit --no-fund --loglevel=error
+      - pnpm install --dir tools/protoc-gen-es --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
+      - touch tools/protoc-gen-es/node_modules/.modules.yaml
 
   deps:go-protoc-plugins:
     # buf runs protoc-gen-go and protoc-gen-connect-go as `go tool <name>`,
@@ -471,7 +475,7 @@ tasks:
     desc: Run the electron tests (node --test)
     dir: electron
     cmds:
-      - npm test --silent
+      - pnpm --silent test
 
   # ── The gate ──────────────────────────────────────────────────────────
 
@@ -598,13 +602,11 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
-  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix). The
-  # split follows the install cost: WebKit's system packages (GStreamer, GTK 4,
-  # ~114 MB from the Ubuntu mirror) took 6.5 of a 15-minute budget on a slow
-  # mirror, and the desktop suite, which needs none of them, timed out behind
-  # that install. Each half now pays only for the browsers it runs.
+  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix, in
+  # the Playwright image, which has both browsers and their system packages).
+  # The split dates from when CI installed WebKit's system packages from the
+  # Ubuntu mirror; it still keeps one suite's failure from hiding the other's.
   test:web:e2e:desktop:
     desc: Run the desktop Chromium Playwright suite against the built renderer
     cmds:
@@ -613,7 +615,6 @@ tasks:
           BROWSERS: chromium
           PROJECTS: --project=chromium
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   test:web:e2e:responsive:
     desc: Run the touch Chromium and WebKit phone/tablet Playwright projects against the built renderer
@@ -623,7 +624,6 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
-          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   test:web:visual:
     # The visual-regression baseline (frontends/web/e2e/visual/README.md):
@@ -643,14 +643,16 @@ tasks:
       - ./scripts/visual-docker.sh {{.CLI_ARGS}}
 
   web:e2e:run:
-    # Playwright against the built renderer, no Go backend, one worker (the
-    # tests share one preview server). The runtime config document is the
+    # Playwright against the built renderer, no Go backend, two workers in CI
+    # (frontends/web/playwright.config.ts says why; the tests share only the
+    # preview server, which serves static files). The runtime config document is the
     # public KCL-sourced renderer config committed in
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
-    # packages (needs sudo). PLAYWRIGHT_DEPS_CACHE=<dir> installs them through
-    # scripts/playwright-os-deps.sh instead, from a .deb cache it fills on a
-    # miss: CI does, so a slow Ubuntu mirror cannot eat the job's budget.
+    # packages (needs sudo), for a machine that lacks them. CI needs neither:
+    # it runs in the Playwright image of this @playwright/test version, whose
+    # browsers `playwright install` finds already there (reliant#2880).
+    # The config document is read with node, not jq: the image has no jq.
     internal: true
     requires:
       vars: [BROWSERS, PROJECTS]
@@ -660,10 +662,10 @@ tasks:
         config_dir="$(mktemp -d)"
         trap 'rm -rf "$config_dir"' EXIT
         doc="$config_dir/config.js"
-        printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
+        renderer="$(node -e 'const r = require("./electron/release.config.json").renderer; if (r == null) { console.error("electron/release.config.json has no renderer"); process.exit(1) } process.stdout.write(JSON.stringify(r))')"
+        printf 'window.__FORGE_CONFIG__ = %s;\n' "$renderer" > "$doc"
         cd frontends/web
         npm run build:alpha
-        {{if .PLAYWRIGHT_DEPS_CACHE}}../../scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}{{end}}
         npx playwright install {{.BROWSERS}} {{.PLAYWRIGHT_DEPS}}
         CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- {{.PROJECTS}} {{.CLI_ARGS}}
 
@@ -671,12 +673,12 @@ tasks:
     # dist:pr runs with-release-config -> build:config -> build:web:alpha ->
     # electron-builder --dir: the same config path a release takes (the class
     # of defect that shipped v1.7.5). It compiles no Go and signs nothing.
-    desc: Package the electron app without publishing (npm run dist:pr)
+    desc: Package the electron app without publishing (pnpm run dist:pr)
     dir: electron
     env:
       CI: 'true'
     cmds:
-      - npm run dist:pr
+      - pnpm run dist:pr
 
   contract:controlplane:check:
     # proto-vendor/controlplane/ is a generated `buf export` of control-plane's

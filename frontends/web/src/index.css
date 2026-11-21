@@ -57,7 +57,7 @@
  * FORGE COMPONENT-LIBRARY TOKEN BRIDGE
  * ═══════════════════════════════════════════════════════════════════════
  *
- * `forge component install <name> --dir .` drops component SOURCE into
+ * `forge ui component install <name> --dir .` drops component SOURCE into
  * src/. Those components are written against forge's own semantic token
  * vocabulary (`bg-surface`, `text-ink`, `bg-danger-surface`, …), which is
  * not reliant's (`bg-card`, `text-foreground`, `bg-destructive`, …).
@@ -67,7 +67,7 @@
  * This block is that bridge: forge's 28 token names re-expressed in terms
  * of reliant's EXISTING HSL theme variables. Done here, once, at the theme
  * layer, every forge component — installed today or by a future
- * `forge component install` — inherits all ten of reliant's color schemes
+ * `forge ui component install` — inherits all ten of reliant's color schemes
  * plus light/dark for free.
  *
  * ── Why here and not the two obvious alternatives ────────────────────
@@ -79,7 +79,7 @@
  * reliant does not set).
  *
  * NOT by find-replacing forge's class names inside the installed files:
- * those files are overwritten by the next `forge component install`, so
+ * those files are overwritten by the next `forge ui component install`, so
  * the edit would have to be redone on every reinstall, forever.
  *
  * ── How the plumbing works (verified against the v4 compiler) ────────
@@ -269,7 +269,13 @@
    *   --row-h            nav rows, chat rows, tool rows, menu items (32px)
    *   --control-h        Button md, Input md, Select (34px)
    *   --table-row-h      a table's body rows (41px); --table-head-h its header
-   *   --chat-column      transcript, composer and new-chat screen (768px)
+   *   --chat-column      the conversation's content width at most (1200px):
+   *                      transcript rows, composer and new-chat screen. The
+   *                      column is fluid below it; answer prose keeps its
+   *                      own ~80ch measure inside (ChatMessage)
+   *   --chat-gutter      the conversation column's side gutter, outside
+   *                      --chat-column (15px, 22.5px from 640px, 30px from
+   *                      1280px)
    *   --page-max         dashboards and lists (1200px)
    *   --form-max         settings and forms (720px)
    *
@@ -284,9 +290,22 @@
   --control-h: 2.25rem;
   --table-row-h: 2.75rem;
   --table-head-h: 2.25rem;
-  --chat-column: 51.2rem;
+  --chat-column: 80rem;
+  --chat-gutter: 1rem;
   --page-max: 80rem;
   --form-max: 48rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --chat-gutter: 1.5rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --chat-gutter: 2rem;
+  }
 }
 
 /*
@@ -495,7 +514,8 @@
     /* Config panel input surfaces */
     --config-input-bg: 220 14% 97%;
     --config-input-border: 220 14% 83.5%;
-    --radius: 0.5rem;
+    /* Softer, still restrained (restyle v1): controls ~7.5px, cards xl. */
+    --radius: 0.625rem;
 
     /* Semantic colors for status, success, warning, info.
        FILL vs INK: --success / --warning are FILLS (badge tints, dots, a
@@ -530,8 +550,20 @@
      * web font does not reflow. The system stacks remain as fallbacks (and as
      * an explicit user choice via data-font="system").
      */
-    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    /* THE UI FACE — the one switch. Restyle v1 compares two by eye:
+       A = 'Inter' (vendored, /fonts/Inter-roman.woff2), B = Geist. Change
+       this line to flip it; the Appearance presets below still override. */
+    --font-ui-face: 'Geist Variable', 'Geist Fallback';
+    --font-sans: var(--font-ui-face), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: 'Geist Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+
+    /* THE SCRIM — the one backdrop behind every dialog, sheet and drawer
+       (`bg-scrim`). Black at an alpha per mode: on a white page 40% dims the
+       canvas itself; on a near-black page no black alpha can move the canvas
+       (40% shifts #0a0a0f by ~4/255), so dark dims the CONTENT harder
+       instead (60% takes body text from ~244 to ~98). One token, so every
+       overlay dims the same way (scrimToken.test.ts). */
+    --scrim: 0 0% 0% / 0.4;
 
     /* Neutral elevation */
     --surface-base: 0 0% 98%;
@@ -575,6 +607,8 @@
 
   .dark {
     color-scheme: dark;
+
+    --scrim: 0 0% 0% / 0.6;
 
     /* VIBRANT BLUE DARK THEME - colorful & modern */
     --background: 220 12% 8.5%;       /* Page — the darkest surface */
@@ -705,7 +739,9 @@
     font-size: 1rem;
     line-height: 1.6;               /* Better readability */
     font-weight: 400;
-    letter-spacing: -0.011em;
+    /* Normal tracking (restyle v1): a negative step at 13–14px read as
+       cramped and technical. Headings set their own. */
+    letter-spacing: normal;
   }
 
   /* Font family presets override the default --font-sans token. */
@@ -713,7 +749,7 @@
   /* "default" — the bundled Geist. Same stack as :root, named so the
      Appearance picker has an explicit option for it. */
   :root[data-font="default"] {
-    --font-sans: 'Geist Variable', 'Geist Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: var(--font-ui-face), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
 
   :root[data-font="system"] {

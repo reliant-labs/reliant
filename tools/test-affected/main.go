@@ -595,7 +595,7 @@ type runner struct {
 	budget time.Duration
 	owned  map[string]bool
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
-	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
+	// TEST_AFFECTED_SLOT='forge machine slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
 	// is the inner loop. Empty runs everything directly.
@@ -697,7 +697,7 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 		out = append(out, r.goSteps(pl)...)
 	}
 	if enabled[laneElectron] && pl.Electron.Full {
-		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}, exclusive: true})
+		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"pnpm", "--silent", "test"}, exclusive: true})
 	}
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)

@@ -36,7 +36,7 @@ gateway's default is `8080` and the other roles' is `8081`.
 
 control-plane's probes (kubelet, the GKE health check) use `/health` and
 `/ready`. `/healthz` and `/readyz` are forge's names for the same checks, the
-ones `forge doctor` uses (`LIVENESS_PATHS` and `READINESS_PATHS` in
+ones `forge project doctor` uses (`LIVENESS_PATHS` and `READINESS_PATHS` in
 `proto/reliant/config/v1`). The JSON `/health` the web client reads is a
 different endpoint, on the API's serving port.
 

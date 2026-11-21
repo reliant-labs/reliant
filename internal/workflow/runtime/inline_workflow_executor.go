@@ -201,6 +201,18 @@ func (e *InlineWorkflowExecutor) nodePath() string {
 	return joinNodePath(e.nodePathPrefix, e.nodeID)
 }
 
+// daemonScope is the CEL scope the node's own `daemon:` expression resolves
+// in: the scope the node sits in, as its other fields see it.
+func (e *InlineWorkflowExecutor) daemonScope() *wfcel.NodeResolutionContext {
+	iterMap, _ := e.workflowInputs["iter"].(map[string]interface{})
+	return &wfcel.NodeResolutionContext{
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
+		Iter:     iterContextFromMap(iterMap),
+	}
+}
+
 // WithExecContext sets the unified execution context.
 // Required: This is the source of truth for execution state.
 func (e *InlineWorkflowExecutor) WithExecContext(ctx *ExecutionContext) *InlineWorkflowExecutor {
@@ -628,6 +640,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		"subWorkflow", e.subWorkflowName,
 		"hasExecContext", e.execContext != nil,
 	)
+
+	// A `daemon: {pool:}` on the node places its whole sub-workflow on one
+	// member (run_placement.go): the node runs no step of its own, so
+	// StepExecutor.Start never sees it.
+	placed, err := placeStructuralDaemon(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.node, e.daemonScope, e.execContext)
+	if err != nil {
+		return nil, err
+	}
+	e.execContext = placed
 
 	// Emit thread_created for all threads this node owns
 	if e.execContext != nil {
@@ -1142,14 +1163,15 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				// attempt 1 thirty minutes later.
 				//
 				// Resuming in place is also what the top-level executor has always
-				// done (workflow.go, "Activity cancelled (pause), blocking until
-				// resume then retrying"), which is why a plain agent loop paused
+				// done (workflow.go, "Activity cancelled, blocking until resume
+				// then retrying"), which is why a plain agent loop paused
 				// correctly and only nested workflow nodes regressed.
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineWorkflow] Activity cancelled (pause), blocking until resume then retrying in place",
+						e.logger.Info("[InlineWorkflow] Activity cancelled, blocking until resume then retrying in place",
 							"stepID", running.StepID,
+							"cause", executor.cancelCause(running),
 						)
 						e.pauseCtrl.DoCheckPause(e.ctx)
 						// A genuine CancelWorkflow (not a pause) must still unwind,
@@ -1159,8 +1181,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						}
 						// Yield so replay does not trip deadlock detection.
 						_ = workflow.Sleep(e.ctx, 0)
-						// A call_llm the pause cut off continues its partial.
-						executor.noteCancelledForPause(running)
+						// A call_llm the pause cut off continues its partial;
+						// a tool batch an interrupt cancelled is settled
+						// instead of run again (interrupt_settle.go).
+						executor.noteCancelled(running)
 						newRunning := executor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

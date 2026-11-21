@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -121,11 +122,19 @@ func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
 // listener and its base URL.
 func startTestServer(t *testing.T, routes ...testRoute) (*APIListener, string) {
 	t.Helper()
-	chain, err := NewUserChain(UserChainDeps{Auth: testUserAuth(t)})
+	return startTestServerWithClientVersions(t, nil, routes...)
+}
+
+// startTestServerWithClientVersions is startTestServer with a client version
+// policy on both the chain and the listener's edge, as the api root wires it.
+func startTestServerWithClientVersions(t *testing.T, policy *configv1.ClientVersionPolicy, routes ...testRoute) (*APIListener, string) {
+	t.Helper()
+	chain, err := NewUserChain(UserChainDeps{Auth: testUserAuth(t), ClientVersions: policy})
 	require.NoError(t, err)
 	listener, err := NewAPIListener(APIListenerDeps{
-		BindAddress: "127.0.0.1",
-		Chain:       chain,
+		BindAddress:    "127.0.0.1",
+		Chain:          chain,
+		ClientVersions: policy,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			var services []string
 			for _, route := range routes {

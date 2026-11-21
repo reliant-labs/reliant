@@ -1025,6 +1025,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Numbers each spawn call's version decision (spawn_node.go); like the
 	// tracker above, not a Temporal command.
 	ctx = withSpawnVersionOccurrences(ctx)
+	// The run's node-level machine placements (run_placement.go); like the
+	// tracker above, not a Temporal command.
+	ctx = withRunPlacements(ctx)
 
 	// on_failure: where the run failed, the handler to run for it and the
 	// outputs the run had produced when it did. The latter two are filled in
@@ -1359,6 +1362,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// STEP 6.06: Evaluate workflow-level daemon selector
 	// This sets the default daemon for all tool execution in this workflow.
 	// Individual nodes can override with their own daemon field.
+	var workflowDaemon *DaemonSelectorValue
 	if wf.Daemon != nil {
 		ds, err := ResolveCelDaemonSelector(wf.Daemon, workflowDaemonScope(workflowID, input.WorkflowName, input.ChatID, input.Inputs, execCtx))
 		if err != nil {
@@ -1371,20 +1375,51 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				"type", ds.Type,
 				"name", ds.Name,
 				"id", ds.ID,
+				"pool", ds.Pool,
 			)
 		}
+		workflowDaemon = ds
 	}
 
 	// STEP 6.065: Session-level daemon fallback
 	// If no workflow-level daemon was set, use the session's active daemon.
 	// Priority: workflow daemon > session daemon > default resolution.
 	if execCtx.DaemonSelector == nil {
-		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID, Session: true}
+		if session := sessionDaemonSelector(input.Inputs); session != nil {
+			execCtx.DaemonSelector = session
 			logger.Debug("[Workflow Runtime] Using session daemon",
-				"daemonID", sessionDaemonID,
+				"daemonID", session.ID,
 			)
 		}
+	}
+
+	// STEP 6.066: A workflow-level pool or labels-only selector is placed on
+	// one machine, once per run (run_placement.go), and the run then routes
+	// to that machine. It is placed with the preflight that waits for the
+	// machine it picks, so after "started" (STEP 6.6): the run's workflows
+	// row is what counts the placement among its member's live runs, and the
+	// chat shows the run while it waits for a member. A history whose
+	// preflight still runs before "started" predates placement, and reads
+	// the gate's DefaultVersion wherever it is asked.
+	placeWorkflow := func() error {
+		if !workflowDaemon.NeedsPlacement() {
+			return nil
+		}
+		ds, err := placeWorkflowDaemon(ctx, execCtx, input.ChatID, workflowID, workflowDaemon)
+		if err != nil {
+			if temporal.IsCanceledError(err) {
+				return err
+			}
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_resolution_error", preflightFailureMessage(err))
+			return fmt.Errorf("failed to place the workflow on a machine: %w", err)
+		}
+		if ds == nil {
+			// Placed nowhere (a scenario): the workflow configures no
+			// machine after all, so the chat's pin applies as it would.
+			ds = sessionDaemonSelector(input.Inputs)
+		}
+		execCtx.DaemonSelector = ds
+		return nil
 	}
 
 	// STEP 6.07: Preflight daemon check, and WHERE it runs. A run that needs a
@@ -1394,11 +1429,24 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// before that order existed checked here instead, and must keep doing so on
 	// replay; see preflightAfterStartedChangeID.
 	preflightAfterStarted := false
-	runPreflight := func() error { return nil }
+	runPreflight := placeWorkflow
 	runNeedsDaemon := RequiresDaemon(wf, buildPreflightConfig())
+	// A run whose every machine-bound node is placed on a pool (its own
+	// `daemon: {pool:}` or an enclosing loop's or workflow node's) never
+	// routes to the machine it inherits, so it does not wait on, fail for or
+	// check requirements on that one: each pool wakes its member, and checks
+	// the run's requirements there, when a step is first placed on it.
+	onlyPools := runNeedsDaemon && onlyPoolsNeedAMachine(wf, buildPreflightConfig())
 	if runNeedsDaemon {
 		preflightAfterStarted = workflow.GetVersion(ctx, preflightAfterStartedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
 		runPreflight = func() error {
+			if err := placeWorkflow(); err != nil {
+				return err
+			}
+			if onlyPools {
+				logger.Info("[Workflow Runtime] Skipping the preflight machine check: every machine-bound node is placed on a pool")
+				return nil
+			}
 			return preflightDaemonCheck(ctx, input, execCtx, workflowID, thread)
 		}
 	}
@@ -1547,9 +1595,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// STEP 6.7: The workflow's declared requires: (tools, integrations,
 	// checkouts), checked on the machine preflight just made ready, before any
 	// node can have a side effect.
-	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread); err != nil {
+	// Checked on the inherited machine only when some node routes there; a
+	// pool member is checked when a step is first placed on it.
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools); err != nil {
 		return nil, err
 	}
+	requirementsCheckedID := ""
+	if !onlyPools {
+		if sel, ok := preflightTarget(input, execCtx)["daemon_selector"].(map[string]interface{}); ok {
+			requirementsCheckedID, _ = sel["id"].(string)
+		}
+	}
+	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID)
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
@@ -1812,6 +1869,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
 			MachineWake:        machineWake,
+			PlacedRequirements: placedReqs,
 			CapacitySlot:       capacitySlot,
 			GaveUp:             pauser.GaveUp,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
@@ -1872,6 +1930,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
 		MachineWake:        machineWake,
+		PlacedRequirements: placedReqs,
 		CapacitySlot:       capacitySlot,
 		GaveUp:             pauser.GaveUp,
 	}
@@ -2826,13 +2885,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						cancelCause := "pause"
-						if executor.threadInterruptedSince(running.ThreadInterruptEpoch) {
-							cancelCause = "interrupt"
-						}
 						logger.Info("[Workflow Runtime] Activity cancelled, blocking until resume then retrying",
 							"stepID", running.StepID,
-							"cause", cancelCause,
+							"cause", executor.cancelCause(running),
 						)
 						checkPause(ctx)
 						// If root context is genuinely cancelled (CancelWorkflow, not just pause),
@@ -2844,8 +2899,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						_ = workflow.Sleep(ctx, 0)
 						// Resumed - re-start the step with fresh activity
 						// context. A call_llm the pause cut off continues its
-						// partial.
-						executor.noteCancelledForPause(running)
+						// partial; a tool batch an interrupt cancelled is
+						// settled instead of run again (interrupt_settle.go).
+						executor.noteCancelled(running)
 						triggeredNode := &core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,
@@ -6273,6 +6329,15 @@ func preflightTarget(input WorkflowInput, execCtx *ExecutionContext) map[string]
 		}
 	}
 	return target
+}
+
+// sessionDaemonSelector is the chat's pin (session_daemon_id) as a selector
+// marked as one, or nil when the run has none.
+func sessionDaemonSelector(inputs map[string]interface{}) *DaemonSelectorValue {
+	if sessionDaemonID, ok := inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
+		return &DaemonSelectorValue{ID: sessionDaemonID, Session: true}
+	}
+	return nil
 }
 
 // preflightDaemonCheck runs a daemon-requiring run's preflight: check the

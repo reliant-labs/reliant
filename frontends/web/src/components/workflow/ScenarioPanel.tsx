@@ -262,7 +262,7 @@ function ScenarioItem({
           {/* Last run result */}
           {result && (
             <div className="mt-3 pt-3 border-t border-border">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              <div className="text-xs font-medium text-muted-foreground mb-2">
                 Last Run Result
               </div>
               <ExecutionDetails result={result} />

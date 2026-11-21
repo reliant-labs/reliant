@@ -204,12 +204,13 @@ func TestFinishReason(t *testing.T) {
 	}
 }
 
-func TestFinishReason_NilResponseKeepsTheDriverFallback(t *testing.T) {
-	if got := FinishReason(nil, 0); got != message.FinishReasonEndTurn {
-		t.Errorf("FinishReason(nil, 0) = %q, want %q", got, message.FinishReasonEndTurn)
-	}
-	if got := FinishReason(nil, 2); got != message.FinishReasonToolUse {
-		t.Errorf("FinishReason(nil, 2) = %q, want %q", got, message.FinishReasonToolUse)
+// A nil response is a stream with no terminal event. It is never a clean end
+// of turn, with or without streamed tool calls.
+func TestFinishReason_NilResponseIsNeverACleanEnd(t *testing.T) {
+	for _, calls := range []int{0, 2} {
+		if got := FinishReason(nil, calls); got != message.FinishReasonUnknown {
+			t.Errorf("FinishReason(nil, %d) = %q, want %q", calls, got, message.FinishReasonUnknown)
+		}
 	}
 }
 

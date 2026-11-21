@@ -361,6 +361,8 @@ export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "work
 export interface LegacyEnvSearch extends LegacyObsSearch {
   tab?: string;
   secret?: string;
+  /** The org the link was written for (a queued deploy's action URL); the environment page asks before switching to it. */
+  org?: string;
 }
 
 /**
@@ -380,6 +382,10 @@ function legacyWorkloadsTarget(project: string, env: string, workload: string | 
  * scoped to that environment; everything else about the
  * environment — overview, the local dev stack, domain bindings, the retired
  * tab names — is the environment's own page under Configure.
+ *
+ * `org` rides along to the environment's own page, the one page that honours
+ * it (its OrgSwitchGate asks before acting in another org): the control
+ * plane's queued-deploy link is `/forge/env/<env>?forgeProject=…&org=…`.
  */
 export function legacyEnvTarget(project: string, env: string, search: LegacyEnvSearch): string {
   switch (search.tab) {
@@ -400,9 +406,9 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
       return withSearch(consolePath(project, { kind: "domains" }), { env });
     case "identity":
     case "running":
-      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab, org: search.org });
     default:
-      return withSearch(consolePath(project, { kind: "environment", env }), { env });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, org: search.org });
   }
 }
 

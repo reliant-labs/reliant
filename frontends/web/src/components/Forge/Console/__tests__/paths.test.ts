@@ -168,6 +168,10 @@ describe("redirects from the retired URLs", () => {
     [{ tab: "secrets", secret: "DATABASE_URL" }, "/forge/p/shop/secrets?env=prod&secret=DATABASE_URL"],
     [{ tab: "observability" }, "/forge/p/shop?env=prod"],
     [{ tab: "observability", view: "usage" }, "/settings/billing"],
+    // The control plane's queued-deploy link names its org: the environment
+    // page asks before switching to it, so the redirect must not drop it.
+    [{ org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&org=org-b"],
+    [{ tab: "identity", org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&tab=identity&org=org-b"],
   ])("/forge/env/prod %o → %s", (search, target) => {
     expect(legacyEnvTarget("shop", "prod", search)).toBe(target);
   });

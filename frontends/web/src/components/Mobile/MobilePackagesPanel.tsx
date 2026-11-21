@@ -85,7 +85,7 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
     <div className="flex-1 overflow-y-auto">
       {processes.length > 0 && (
         <div className="border-b border-border">
-          <div className="px-3 pb-1 pt-3 text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+          <div className="px-3 pb-1 pt-3 text-xs font-bold text-muted-foreground/80">
             Processes
           </div>
           <div className="space-y-1 px-2 pb-2">
@@ -109,7 +109,7 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
         </div>
       )}
 
-      <div className="px-3 pb-1 pt-3 text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+      <div className="px-3 pb-1 pt-3 text-xs font-bold text-muted-foreground/80">
         Commands
       </div>
       {allCommands.length === 0 ? (
