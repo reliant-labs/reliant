@@ -182,7 +182,7 @@ By the end of this guide, a text to one of your Twilio numbers, by SMS or WhatsA
     reliant trigger activate --workflow text-answer --no-machine
     ```
 
-    It listens through your default Twilio connection; `--connection twilio=<connection-id>` picks another.
+    It listens through your default Twilio connection; `--connection twilio=<connection-id>` picks another (`reliant integrations list --integration twilio` prints the ids).
   </Step>
   <Step title="Point your number at Reliant">
     Twilio sends a number's incoming messages wherever that number says. Copy the trigger's **Webhook URL** from the app (`https://<your Reliant host>/integrations/twilio/events`). In the Twilio Console, open the number under **Phone Numbers → Manage → Active numbers** and set **A message comes in** to **Webhook**, that URL, **HTTP POST**. For WhatsApp, set the same URL on the sandbox or your approved sender ([Point your numbers at Reliant](/integrations/twilio#point-your-numbers-at-reliant)).

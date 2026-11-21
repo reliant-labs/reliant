@@ -188,14 +188,10 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
-	err = cmd.Start()
+	err = tree.Start(deadline.Context(), cmd)
 	// The child holds its own copies of the sandbox's descriptors now.
 	credsandbox.Release(cmd)
-	if err != nil {
-		tree.Started(0)
-	}
 	if err == nil {
-		tree.Started(cmd.Process.Pid)
 		// Steer the OOM killer toward the workload, away from the daemon.
 		steerOOMKiller(cmd)
 

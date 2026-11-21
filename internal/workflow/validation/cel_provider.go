@@ -302,6 +302,13 @@ func (p *workflowTypeProvider) findNodeFieldType(nodeID string) (*types.FieldTyp
 	if !exists {
 		return nil, false
 	}
+	// The same type the node's nodes_<id> variable is declared with
+	// (newValidationCELEnv): `nodes.X` is rewritten to that variable, but
+	// `nodes.?X` and `has(nodes.X)` select through here, and must not read a
+	// node whose outputs are only known at run time as a closed object.
+	if hasDynamicOutputs(p.typeCtx, nodeID) {
+		return &types.FieldType{Type: types.DynType}, true
+	}
 
 	celType := getNodeOutputCELType(p.typeCtx.Registry, nodeType, nodeID)
 	if celType == nil {
