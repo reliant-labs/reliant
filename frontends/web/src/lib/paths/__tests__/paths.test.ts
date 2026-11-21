@@ -64,8 +64,6 @@ const ROWS: Record<string, Row> = {
   },
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
-  appsPath: { build: () => paths.appsPath(), url: "/apps", template: "/apps" },
-  sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
   usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
   connectorsPath: { build: () => paths.connectorsPath(), url: "/connectors", template: "/connectors" },
@@ -195,8 +193,6 @@ const ORG_URLS: Record<string, string> = {
   threadPath: "/o/acme/c/c-1/t/t-1",
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
-  appsPath: "/o/acme/apps",
-  sitesPath: "/o/acme/sites",
   usagePath: "/o/acme/usage",
   usageBillingPath: "/o/acme/usage",
   connectorsPath: "/o/acme/connectors",
@@ -388,8 +384,8 @@ describe("the org segment", () => {
 
     it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/o/acme/apps");
-      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(paths.projectsHref("apps")).toBe("/o/acme/projects?show=apps");
+      expect(paths.projectsHref("sites")).toBe("/o/acme/projects?show=sites");
       expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 

@@ -20,6 +20,7 @@ import { ArrowRight, BarChart3 } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import { usePanelQuery } from "@/hooks/observability-queries";
+import { LearnLink } from "@/lib/learnLinks";
 import type { ObsScope, Panel, PanelResult } from "@/services/controlPlane/observability/types";
 
 import { EVENTS_PANEL } from "../../Analytics/EventsMetricsPage";
@@ -119,6 +120,7 @@ export function OverviewAnalyticsBox({ scope, analyticsHref, eventsHref }: { sco
             <Link href={eventsHref} className="no-color text-primary-ink hover:underline">
               Events &amp; metrics
             </Link>
+            <LearnLink section="analytics" />
           </div>
         </div>
       ) : (

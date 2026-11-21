@@ -40,7 +40,7 @@ export function connectorsTabOf(value: unknown): ConnectorsTab {
 /** The route's page (routes.tsx): the view in the app's area chrome. */
 export function ConnectorsPage() {
   return (
-    <AreaShell areaPath={connectorsPath()} areaLabel="Connectors" areaNoun="connectors">
+    <AreaShell areaPath={connectorsPath()} areaLabel="Connectors" areaNoun="connectors" learn="connectors">
       <ConnectorsView />
     </AreaShell>
   );

@@ -76,6 +76,14 @@ import {
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
 } from './routeSchemas'
+import { registerSecurityNav } from './components/Forge/Security/registerSecurityNav'
+
+// Security ▾'s rows (Vulnerabilities, SBOMs) join the nav from here, the
+// module that mounts the console's routes, before the nav first renders
+// (consoleNavRegistry.ts). The Security pages' routes are #3085's, mounted in
+// this file on main; this branch predates them, so until it is rebased on
+// main the rows link to /security/… pages that are not mounted yet.
+registerSecurityNav()
 
 export interface ForgeConsoleComponents {
   /** The pathless `_forge` layout. */

@@ -191,9 +191,9 @@ describe("the forge journey", () => {
     expect(active().slice(-2)).toEqual(["fg-built", "fg-done"]);
   });
 
-  it("finishes on forge's Apps in Reliant and the project picker in the forge shell", () => {
-    expect(forgeJourney.finish?.("reliant")).toEqual({ to: "/forge" });
-    expect(forgeJourney.finish?.("forge")).toEqual({ to: "/apps" });
+  it("finishes on the person's apps (Projects), on either brand", () => {
+    expect(forgeJourney.finish?.("reliant")).toEqual({ to: "/projects", search: { show: "apps" } });
+    expect(forgeJourney.finish?.("forge")).toEqual({ to: "/projects", search: { show: "apps" } });
   });
 
   it("stays on the console when it finishes on the demo host: there is nowhere to go", () => {

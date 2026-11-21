@@ -16,6 +16,7 @@
  */
 
 import type { ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useForgeConsole } from "../Console/consoleContext";
 import { AUTH_TAB_LABELS, AUTH_TABS, type AuthTab } from "../Console/paths";
 import { ScopedIdentity } from "./UsersPage";
+import { learnUrl } from "@/lib/learnLinks";
 
 const SUBTITLE: Record<AuthTab, string> = {
   users: "Who can sign in to this environment's app, through the sign-in service Reliant runs for it",
@@ -100,6 +102,9 @@ function HowSignInWorks() {
         <code className="font-mono text-code">auth_required: false</code>.
       </Fact>
       <Fact title="Your own provider">Auth0, Okta, Keycloak or another OIDC issuer: declare no identity for that environment and set its issuer in the environment&apos;s config.</Fact>
+      <Link href={learnUrl("auth")} className="no-color inline-flex items-center gap-1 text-ui text-primary-ink hover:underline">
+        Learn about sign-in <ExternalLink className="size-3.5" aria-hidden="true" />
+      </Link>
     </aside>
   );
 }

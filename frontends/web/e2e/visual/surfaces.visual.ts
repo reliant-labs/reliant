@@ -14,7 +14,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
-import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
+import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -198,6 +198,24 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('worker', { exact: true }).first(),
   },
   {
+    // The overview's Code card (AppCodeCard, U13): shopfront deployed from two
+    // repositories (the D5 warning), held by two of the person's projects
+    // (deployed from here, same name) and a teammate's shared one. Scrolled to,
+    // so the phone shows it.
+    name: 'app-code-card',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('app-code-sources'),
+    act: async (page) => {
+      // The rail fills in above the card (Recent releases), so scroll once everything has landed.
+      await expect(page.getByTestId('app-code-sources')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('overview-recent-releases').getByText('live in prod').first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
+      await page.getByTestId('app-code-card').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+    },
+    harness: { fixtures: appCodeCardFixtures },
+  },
+  {
     name: 'observability-errors',
     path: '/forge/p/shopfront/observability/errors',
     on: ['desktop', 'mobile'],
@@ -267,6 +285,27 @@ const SURFACES: Surface[] = [
     },
   },
   {
+    // The org's projects and apps, one list (design §8.3), over the same
+    // catalog and pins as the selector, plus a second app without code here:
+    // pinned and recent projects, a shared one, chips of each link kind, a
+    // static site, and two app-only rows.
+    name: 'projects',
+    path: '/projects',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('ledger-worker', { exact: true }).first(),
+    harness: { fixtures: projectsPageSurfaceFixtures },
+  },
+  {
+    // A project's page (§8.4) for a project with nothing deployed (a deployed
+    // one lands on its app's Overview): the way to deploy it, its code and
+    // machines, and its chats.
+    name: 'projects-project-page',
+    path: `/projects/${NO_APP_PROJECT_ID}`,
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('project-repo').first(),
+    harness: { fixtures: projectsPageSurfaceFixtures },
+  },
+  {
     name: 'billing',
     path: '/settings/billing',
     on: ['desktop'],
@@ -300,7 +339,8 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'shell-apps',
-    path: '/apps',
+    // Projects, narrowed to the apps: the nav's Apps heading, and where the retired /apps redirects.
+    path: '/projects?show=apps',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('shopfront', { exact: true }).first(),
   },
@@ -336,6 +376,14 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront/speed-insights?device=mobile&pct=p90',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
+  },
+  {
+    // A project with nothing deployed: the page's own action, the agent and Move to Forge
+    // calls to action, and the section's Learn link (U6 14/16).
+    name: 'shell-empty-cta',
+    path: '/forge/p/docs-site/services',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('app-section-empty'),
   },
   {
     name: 'shell-app-observability',
@@ -492,11 +540,27 @@ const SURFACES: Surface[] = [
     ready: (page) => page.locator('[data-testid="connectors-page"][data-tab="mcp"]'),
   },
   {
-    // Agents with no sandbox to run a chat: ListDaemons answers empty.
+    // Agents with no sandbox to run a chat: ListDaemons answers empty. The
+    // project's Agents page, not `/`: with no daemon the desktop home is
+    // Projects (shell-daemonless-home), outside the Agents drill-in.
     name: 'shell-agents-no-sandbox',
-    path: '/',
+    path: `/project/${IDS.project}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('nav-drill-in'),
+    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+  },
+  {
+    // The daemonless home (U6 3/4): an onboarded person whose daemon list is
+    // empty. The desktop home sends them to Projects, with the Set up chats
+    // card there and in place of the nav's chat list. The phone keeps its chat
+    // list (its home rule is unchanged; a phone opening `/` lands on /m/chats).
+    name: 'shell-daemonless-home',
+    path: '/',
+    on: ['desktop', 'mobile'],
+    ready: (page) =>
+      page.viewportSize()!.width > 768
+        ? page.getByRole('heading', { name: 'Projects' }).first()
+        : page.getByText('Write the webhooks guide').first(),
     harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
   },
   {
