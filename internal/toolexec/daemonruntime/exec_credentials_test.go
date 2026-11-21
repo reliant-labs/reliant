@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 )
@@ -36,6 +38,7 @@ func credentialedEnv(t *testing.T) {
 }
 
 func TestExecRun_CredentialsNone_ChildEnvironmentHasNoCredentials(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler; load-sensitive in the -short merge gate (obs df494f19, 29173b5f, 5283c29f)")
 	credentialedEnv(t)
 
 	res := runExec(t, daemon.RunCommandRequest{Command: "env", WorkingDir: t.TempDir(), Credentials: "none",
@@ -61,6 +64,7 @@ func TestExecRun_CredentialsNone_TypoFailsClosed(t *testing.T) {
 }
 
 func TestExecBGStart_CredentialsNone_ChildEnvironmentHasNoCredentials(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler; load-sensitive in the -short merge gate (obs df494f19, 29173b5f, 5283c29f)")
 	credentialedEnv(t)
 	payload, _ := json.Marshal(daemon.RunCommandRequest{Command: "env", WorkingDir: t.TempDir(), Credentials: "none"})
 	raw, err := handleExecBGStart(context.Background(), payload)
