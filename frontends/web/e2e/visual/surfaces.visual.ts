@@ -14,7 +14,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
-import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
+import { FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -265,6 +265,27 @@ const SURFACES: Surface[] = [
       await page.getByRole('radiogroup', { name: 'Chat thread' }).scrollIntoViewIfNeeded()
       await page.getByRole('radiogroup', { name: 'Chat thread' }).evaluate((el) => el.scrollIntoView({ block: 'end' }))
     },
+  },
+  {
+    // The org's projects and apps, one list (design §8.3), over the same
+    // catalog and pins as the selector, plus a second app without code here:
+    // pinned and recent projects, a shared one, chips of each link kind, a
+    // static site, and two app-only rows.
+    name: 'projects',
+    path: '/projects',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('ledger-worker', { exact: true }).first(),
+    harness: { fixtures: projectsPageSurfaceFixtures },
+  },
+  {
+    // A project's page (§8.4) for a project with nothing deployed (a deployed
+    // one lands on its app's Overview): the way to deploy it, its code and
+    // machines, and its chats.
+    name: 'projects-project-page',
+    path: `/projects/${NO_APP_PROJECT_ID}`,
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('project-repo').first(),
+    harness: { fixtures: projectsPageSurfaceFixtures },
   },
   {
     name: 'billing',

@@ -5,6 +5,12 @@
  * shared project, machines with and without the code, and two pins (a
  * project and the app-only row) in the person's `sidebar.projects` setting.
  * Fabricated and neutral. Every timestamp is relative to FIXED_NOW.
+ *
+ * One catalog for every surface: the shared table answers it to all of them
+ * (the selector opens from any page). The Projects page and a project's page
+ * read it with the selector's pins, plus a second app with no code here
+ * (`ledger-worker`, cut from a subdirectory of another repo), so their
+ * "Apps without code here" section has two rows.
  */
 import type { Fixtures } from '../rpc'
 import { baseFixtures, DAY, DOCS_PROJECT, HOUR, IDS, iso, MIN, PROJECT, USER } from './base'
@@ -23,6 +29,9 @@ const onCloud = [{ daemonId: IDS.cloudDaemon, daemonName: 'cloud-machine', insta
 const onLaptop = [{ daemonId: IDS.localDaemon, daemonName: 'alex-macbook', installState: 'PROJECT_INSTALL_STATE_INSTALLED' }]
 
 const p = (n: number) => `0000000${n}-0000-4000-8000-0000000000a${n}`
+
+/** A project with no app (`infra`): a project's own page, which a deployed project's id redirects past. */
+export const NO_APP_PROJECT_ID = p(2)
 
 /** The chat filter's three projects in its surfaces: shopfront, docs-site and mobile-api. */
 export const FILTER_PROJECT_IDS = [IDS.project, IDS.docsProject, p(1)]
@@ -111,4 +120,16 @@ export const selectorSurfaceFixtures: Fixtures = {
     ],
     total: baseSettings.total + 1,
   },
+}
+
+/** A second app with no code here, for the Projects page's own section. */
+const LEDGER_WORKER = hosted('ledger-worker', {
+  lastDeployedAt: iso(4 * DAY),
+  sources: [{ remote: 'github.com/acme/ledger', subpath: 'worker', commit: 'd00d123', lastSeenAt: iso(4 * DAY) }],
+})
+
+/** For the Projects page and a project's page: the selector's pins, and the catalog with LEDGER_WORKER. */
+export const projectsPageSurfaceFixtures: Fixtures = {
+  ...selectorSurfaceFixtures,
+  'reliant.v1.ProjectService/ListProjectsWithApps': { ...CATALOG, unlinkedApps: [...CATALOG.unlinkedApps, LEDGER_WORKER] },
 }

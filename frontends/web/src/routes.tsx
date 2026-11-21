@@ -197,6 +197,10 @@ const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
 const ProjectHomePage = lazyRoute(
   () => import('./components/Projects/ProjectHomePage'), 'ProjectHomePage')
+const ProjectSettingsPage = lazyRoute(
+  () => import('./components/Projects/ProjectPage'), 'ProjectSettingsPage')
+const ProjectWorkspacesPage = lazyRoute(
+  () => import('./components/Projects/ProjectPage'), 'ProjectWorkspacesPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -772,11 +776,13 @@ const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLay
 //   form 'legacy'   /, /project/$projectId, /c/$chatId[/t/$threadId], /new,
 //                   /workflow/…, /workflows/… (and their retired paths),
 //                   /inbox, /usage, /projects (and the
-//                   retired /apps, /sites), /forge/…
+//                   retired /apps, /sites), /projects/$projectId[/settings|/workspaces],
+//                   /forge/…
 //   form 'org'      /o/$org, /o/$org/project/$projectId,
 //                   /o/$org/c/$chatId[/t/$threadId], /o/$org/new, /o/$org/workflow/…,
 //                   /o/$org/workflows/…, /o/$org/inbox, /o/$org/usage,
 //                   /o/$org/projects (and the retired /o/$org/apps, /o/$org/sites),
+//                   /o/$org/projects/$projectId[/settings|/workspaces],
 //                   /o/$org/apps/$project/… (the console),
 //                   /o/$org/observability/…, /o/$org/forge (the console's entry)
 function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
@@ -899,18 +905,32 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   // (sandboxesAliasRoute.tsx).
   const sandboxesAliasRoute = createSandboxesAliasRoute(authParent)
 
-  // Projects: the nav's Projects entry — the person's apps and sites, and
-  // their code (components/Projects/ProjectsPage.tsx; U7 replaces it). Apps
-  // and Sites are its filters (`?show=apps|sites`); their old pages, /apps and
-  // /sites, are redirects to them (retiredPageRoutes).
+  // Projects: the nav's Projects entry. With several projects chosen it is
+  // their Home (the summary); `?browse=1`, or one project, the org's projects
+  // and its apps as one list (design §8.3, U7; components/Projects/ProjectsPage.tsx).
+  // Apps and Sites are its filters (`?show=apps|sites`); their old pages, /apps
+  // and /sites, are redirects to them (retiredPageRoutes).
   const projectsRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects',
     validateSearch: projectsSearchSchema,
     component: ProjectsPage,
   })
+  const projectSettingsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId/settings',
+    component: ProjectSettingsPage,
+  })
+  const projectWorkspacesRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId/workspaces',
+    component: ProjectWorkspacesPage,
+  })
 
-  // A project's Home (U6b): the project shell's first row (lib/paths projectPath).
+  // A project's page (U6b, U7): `/projects/<id>` redirects to the app's
+  // Overview when the project has a deployed app, and is the project's own
+  // page otherwise (ProjectHomePage); its Settings and Workspaces tabs are
+  // the routes above (design §8.4).
   const projectHomeRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId',
@@ -925,7 +945,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, projectSettingsRoute, projectWorkspacesRoute, ...retiredPageRoutes] as const,
   }
 }
 
