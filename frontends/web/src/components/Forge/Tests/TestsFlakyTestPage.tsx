@@ -196,7 +196,7 @@ function OutcomeStrip({ detail, runHref, now }: { detail: TestDetail; runHref: (
                     href={runHref(cell.runId)}
                     aria-label={words}
                     title={`${words}${cell.durationMs > 0 ? ` (${formatDuration(cell.durationMs)})` : ""}`}
-                    className={cn("block h-6 w-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", STRIP_CELL[cell.kind])}
+                    className={cn("block h-6 w-3 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", STRIP_CELL[cell.kind])}
                   />
                 </li>
               );
@@ -205,7 +205,7 @@ function OutcomeStrip({ detail, runHref, now }: { detail: TestDetail; runHref: (
           <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-meta text-ink-muted" aria-label="Legend">
             {STRIP_ORDER.filter((kind) => kind !== "unknown").map((kind) => (
               <li key={kind} className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className={cn("inline-block h-3 w-1.5 rounded-sm", STRIP_CELL[kind])} />
+                <span aria-hidden="true" className={cn("inline-block h-3 w-1.5 rounded-full", STRIP_CELL[kind])} />
                 {STRIP_LABEL[kind]}
               </li>
             ))}
