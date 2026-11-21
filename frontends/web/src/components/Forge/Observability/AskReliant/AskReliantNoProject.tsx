@@ -130,7 +130,7 @@ export function AskReliantNoProject({ forgeProject, onCancel, onHandoff, onRetry
                     Use a cloud machine: needs a plan
                   </h4>
                   <p className="text-ink-muted">
-                    Choose a plan in Billing, then add the machine from Settings › Machines.{" "}
+                    Choose a plan in Billing, then add the sandbox from Settings › Agent sandboxes.{" "}
                     <button type="button" className={INK_BUTTON} onClick={seePlans} data-testid="ask-reliant-see-plans">
                       See plans
                     </button>

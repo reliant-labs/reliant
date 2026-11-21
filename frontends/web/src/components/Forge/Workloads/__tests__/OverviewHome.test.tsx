@@ -205,7 +205,7 @@ describe("its states", () => {
     renderOverview({ envs: [] });
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "empty");
     expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
-    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Deploy with an agent" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Ask an agent to deploy this with forge" })).toBeInTheDocument();
     expect(screen.getByText("reliant forge env deploy <env>")).toBeInTheDocument();
   });
 

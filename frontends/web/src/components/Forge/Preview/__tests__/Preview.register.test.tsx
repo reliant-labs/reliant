@@ -32,7 +32,10 @@ import type { LiveEnv } from "@/services/forge/live";
 const routeState: { env: string; tab?: string } = { env: "staging", tab: undefined };
 const navigate = vi.fn();
 
-vi.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  // The real module under the three hooks this test drives: the secrets empty
+  // state's links (EmptyState/ProjectEmptyCta) build hrefs with its helpers.
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => navigate,
   useParams: () => ({ env: routeState.env }),
   useSearch: () => ({ tab: routeState.tab }),
