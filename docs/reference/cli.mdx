@@ -67,6 +67,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`reliant forge ci retry-failed`](#reliant-forge-ci-retry-failed) | Run ordinary Go tests, retrying exact unchanged failures once |
 | [`reliant forge ci run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
+| [`reliant forge ci secret-scan`](#reliant-forge-ci-secret-scan) | Scan the checkout's commits for committed secrets (gitleaks, pinned) |
 | [`reliant forge ci summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
 | [`reliant forge ci test-budget`](#reliant-forge-ci-test-budget) | Fail when a test not marked slow took longer than the budget in a `go test -short -json` run (reads output; runs nothing) |
 | [`reliant forge ci validate-kcl`](#reliant-forge-ci-validate-kcl) | Validate that every environment renders manifests kubectl will accept |
@@ -2055,6 +2056,7 @@ reliant forge ci [flags]
 | [`migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`retry-failed`](#reliant-forge-ci-retry-failed) | Run ordinary Go tests, retrying exact unchanged failures once |
 | [`run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
+| [`secret-scan`](#reliant-forge-ci-secret-scan) | Scan the checkout's commits for committed secrets (gitleaks, pinned) |
 | [`summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
 | [`test-budget`](#reliant-forge-ci-test-budget) | Fail when a test not marked slow took longer than the budget in a `go test -short -json` run (reads output; runs nothing) |
 | [`validate-kcl`](#reliant-forge-ci-validate-kcl) | Validate that every environment renders manifests kubectl will accept |
@@ -2263,6 +2265,47 @@ reliant forge ci run <run-id> [flags]
 | `--env` | `string` | - | Env whose declared control plane to ask (default: the project's only one) |
 | `--json` | `bool` | - | Emit the timeline as JSON (same exit codes as text mode) |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge ci secret-scan
+
+Scan the checkout's commits for committed secrets (gitleaks, pinned)
+
+Runs gitleaks v8.18.4 — the release forge pins, and the one the scaffolded
+pre-commit hook runs — over the git history of the project, and fails on any secret it
+finds. A gitleaks on PATH at another version is not used: the pin is installed into
+forge's tools cache (one time) and run from there.
+
+With no flag every commit is scanned. --branch scans the commits this checkout adds
+over the branch it merges into (since the merge-base with origin/\<default branch>,
+or CI_BASE; on the default branch, the last commit) — what `forge ci gate` runs, so a
+gate judges the change and never a credential committed long before it. A base with no
+merge-base with HEAD (a shallow clone) is an error, never a narrower scan. --since `<rev>`
+scans the commits after `<rev>` (`<rev>..HEAD`). --staged scans what `git commit` is
+about to record, for a pre-commit hook.
+
+Findings are printed redacted. A finding that is not a secret (a test fixture, a
+public key) is silenced the gitleaks way: its fingerprint in .gitleaksignore, a
+`gitleaks:allow` comment on the line, or rules in .gitleaks.toml at the project root.
+A secret that was really committed must be revoked: deleting it in a later commit
+leaves it in the history.
+
+`forge ci gate` (task ci, and the scaffolded CI's checks job) runs `--branch` as its
+secret-scan row.
+
+```
+reliant forge ci secret-scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--branch` | `bool` | - | scan only the commits this checkout adds over the branch it merges into (origin/`<default>`, or CI_BASE) |
+| `--since` | `string` | - | scan only the commits after this revision (`<rev>..HEAD`) |
+| `--staged` | `bool` | - | scan the staged changes (for a pre-commit hook) |
 
 ---
 
