@@ -1,7 +1,7 @@
 -- forge:backward-compatible — drops UNIQUE (user_id, path). The rollback target is a release that already resolves every project by org (reliant#2861) and was tested against this exact schema (db.RelaxProjectKeysForTest), and no statement of it names this constraint (no ON CONFLICT target; its create matches any "duplicate key", which projects_org_user_path_key raises).
 
 -- Migration: projects_drop_user_path_key
--- Created: 2026-11-18T11:55:11Z
+-- Created: 2026-11-21T03:50:05Z
 --
 -- Release 2 of the org keys: the contract half of
 -- 20261118111647_projects_org_user_path_key. A project is unique per (org,
