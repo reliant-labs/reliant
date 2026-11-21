@@ -95,7 +95,7 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   return (
     <div className="flex w-full flex-col items-end" data-testid="permissions-panel">
       <ul
-        className="mb-2 max-h-96 w-full divide-y divide-border overflow-auto rounded-lg border border-border bg-background"
+        className="mb-2 max-h-96 w-full divide-y divide-border-subtle overflow-auto rounded-xl border border-border bg-background"
         aria-label="Pending approvals"
       >
         {pendingApprovals.map((approval) => {
@@ -104,7 +104,7 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
           const proposal = asConnectionProposal(approval);
           if (proposal) {
             return (
-              <li key={approval.id} className="p-3" data-testid={`approval-${approval.id}`}>
+              <li key={approval.id} className="p-4" data-testid={`approval-${approval.id}`}>
                 <ConnectionProposalCard
                   approval={proposal}
                   onConnected={(connectionId) => approveOne.mutate({ requestId: approval.id, connectionId })}
@@ -128,14 +128,14 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
       {batch && (
         <div
           className={cn(
-            "flex items-center gap-3 px-4 py-3 mb-3 bg-primary/5 dark:bg-primary/10 border border-primary/30 rounded-lg elevation-3",
+            "mb-3 flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3",
             surface === "desktop" ? "inline-flex" : "w-full flex-wrap"
           )}
           data-testid="permissions-popup"
         >
           <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary-ink" aria-hidden="true" />
-            <span className="font-medium text-primary-ink">
+            <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="text-ui font-medium text-foreground">
               {count} requests
               {plan.apart.length > 0 && (
                 <span className="font-normal text-muted-foreground">
@@ -184,11 +184,11 @@ function ApprovalItem({
   const card = parseApprovalCard(approval.title);
   const subject = card.lead || "this request";
   return (
-    <li className="space-y-2.5 p-3" data-testid={`approval-${approval.id}`}>
+    <li className="space-y-3 p-4" data-testid={`approval-${approval.id}`}>
       {card.grantsPower && (
-        <p className="text-xs font-medium text-warning-ink">Grants an automation standing power: read it before you approve.</p>
+        <p className="text-ui font-medium text-warning-ink">Grants an automation standing power: read it before you approve.</p>
       )}
-      {apartReason && <p className="text-xs text-warning-ink">{apartReason}</p>}
+      {apartReason && <p className="text-ui text-warning-ink">{apartReason}</p>}
       <ApprovalCardView title={approval.title} />
       <div className={cn("flex", surface === "desktop" ? "justify-end" : "w-full")}>
         <ApprovalActions

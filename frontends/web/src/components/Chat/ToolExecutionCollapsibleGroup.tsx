@@ -1,17 +1,19 @@
 /**
- * Collapsible group for read-only tools (view, grep, websearch, etc.)
- * Similar to Cursor's "Explored X files Y searches" grouping
+ * One quiet row for a run's read-only calls (view, grep, glob, websearch, …):
+ * "Explored 5 files 3 searches", opening onto each call's own row. Like
+ * Cursor's "Explored X files Y searches" grouping.
  */
 
-import { memo, useId } from 'react';
-import { AlertCircle, ChevronDown, ChevronRight, Eye } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { memo, useEffect, useMemo } from 'react';
+import { Eye, Loader2, XCircle } from 'lucide-react';
 import { ToolExecution, type ToolResultData } from './ToolExecution';
 import type { Approval } from '../../gen/reliant/v1/approval_pb';
 import { generateReadOnlyToolsSummary } from '../../lib/toolFormatters';
 import { useSurface } from '../../lib/surfaceContext';
 import { ApprovalStatus } from '../../gen/reliant/v1/approval_pb';
 import { useToolGroupExpansion } from './useToolGroupExpansion';
+import { QuietRow } from './QuietRow';
+import { elidedBlockIdsOf, prefetchContentBlockBodies } from '../../hooks/content-block-bodies';
 
 // Mirrors the subset of lib/messageProcessor's ToolCallData this group reads.
 // `input` is OPTIONAL there — undefined while the call is still streaming and
@@ -22,6 +24,9 @@ type ToolCallData = {
   name: string;
   input?: Record<string, unknown> | string;
   finished?: boolean;
+  content_block_id?: string;
+  /** `input` is a skeleton of an elided input (see messageProcessor's ToolCallData). */
+  inputElided?: boolean;
 };
 
 interface ToolExecutionCollapsibleGroupProps {
@@ -59,9 +64,9 @@ function ToolExecutionCollapsibleGroupComponent({
     }))
   );
 
-  const hasWarnings = executions.some(
+  const failed = executions.filter(
     ({ status, result }) => status === 'failed' || result?.is_error
-  );
+  ).length;
 
   // Check if all tools are completed or running in background
   const allCompleted = executions.every(
@@ -69,63 +74,45 @@ function ToolExecutionCollapsibleGroupComponent({
   );
 
   // Open while a read is still running, closed once all of them are done.
-  const { expanded: isExpanded, toggle } = useToolGroupExpansion({
+  const { expanded, toggle } = useToolGroupExpansion({
     live: !allCompleted,
-    failed: hasWarnings,
+    failed: failed > 0,
     pendingApproval: executions.some(({ approval }) => approval?.status === ApprovalStatus.PENDING),
     collapseAll: surface !== 'desktop',
   });
-  const panelId = useId();
+
+  // An open group reads the bodies its rows were sent without in one batch
+  // (see TurnWorkFold).
+  const elidedKey = useMemo(() => elidedBlockIdsOf(executions).join(','), [executions]);
+  useEffect(() => {
+    if (!expanded || !chatId || elidedKey === '') return;
+    prefetchContentBlockBodies(chatId, elidedKey.split(','));
+  }, [expanded, chatId, elidedKey]);
 
   return (
-    <div
-      className={cn(
-        'border overflow-hidden rounded-lg',
-        hasWarnings
-          ? 'border-destructive/40 bg-destructive/5'
-          : allCompleted
-          ? 'border-muted/30 bg-muted/5'
-          : 'border-muted/50 bg-muted/10'
-      )}
-    >
-      {/* Collapsible header */}
-      <button
-        type="button"
-        className={cn(
-          "flex w-full items-center justify-between text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
-          "px-1.5 py-1"
-        )}
-        onClick={toggle}
-        aria-expanded={isExpanded}
-        aria-controls={panelId}
-      >
-        <span className="flex min-w-0 items-center gap-1.5">
-          {hasWarnings ? (
-            <AlertCircle className="w-3.5 h-3.5 shrink-0 text-destructive" aria-hidden="true" />
-          ) : (
-            <Eye className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          )}
-          <span className={cn("truncate text-xs font-mono", hasWarnings ? "text-destructive-ink" : "text-muted-foreground")}>
-            {summaryText}
-            {hasWarnings && <span className="sr-only"> (a call failed)</span>}
-          </span>
-        </span>
-
-        <span className="flex shrink-0 items-center gap-1">
-          {isExpanded ? (
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-          )}
-        </span>
-      </button>
-
-      {/* Expanded content - show individual tool executions */}
-      {isExpanded && (
-        <div id={panelId} className="border-t border-muted/30 p-1 space-y-1">
-          {executions.map((execution, index) => (
+    <QuietRow
+      as="button"
+      data-testid="read-only-tool-group"
+      icon={
+        !allCompleted ? (
+          <Loader2 className="size-3.5 animate-spin text-primary-ink" />
+        ) : failed > 0 ? (
+          <XCircle className="size-4 text-destructive-ink" />
+        ) : (
+          <Eye className="size-4" />
+        )
+      }
+      expanded={expanded}
+      onToggle={toggle}
+      ariaLabel={failed > 0 ? `${summaryText}, ${failed} failed` : summaryText}
+      trailing={
+        failed > 0 ? <span className="text-meta tabular-nums text-destructive-ink">{failed} failed</span> : undefined
+      }
+      detail={
+        <div className="flex flex-col gap-0.5">
+          {executions.map((execution) => (
             <ToolExecution
-              key={`${messageId || 'msg'}-readonly-${index}-${execution.call.id}`}
+              key={`${messageId || 'msg'}-readonly-${execution.call.id}`}
               toolCall={execution.call}
               toolResult={execution.result}
               status={execution.status}
@@ -138,8 +125,10 @@ function ToolExecutionCollapsibleGroupComponent({
             />
           ))}
         </div>
-      )}
-    </div>
+      }
+    >
+      <span className="truncate">{summaryText}</span>
+    </QuietRow>
   );
 }
 

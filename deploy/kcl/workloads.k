@@ -264,3 +264,52 @@ debug_image = fw.Workload {
     runtime = forge.BuildOnly {}
     build = forge.DockerBuild {dockerfile = "Dockerfile.debug"}
 }
+
+# ── The desktop app ─────────────────────────────────────────────────────────
+#
+# The packaged Electron app users download: .dmg/.zip on macOS, .exe on
+# Windows, .AppImage/.deb on Linux. The build is electron/scripts/pack-desktop.js,
+# the one electron-builder call release.yml's release-macos, release-linux and
+# release-windows jobs also run, here for the machine's own platform (`host`)
+# and never published (`never`). The signed, published installers are still
+# release.yml's: it holds the signing and R2 secrets this build never sees.
+#
+# PREREQUISITES. This packages; it does not build what it packages, because
+# release.yml downloads those from other jobs. pack-desktop.js refuses, naming
+# what is missing, unless they are on disk (paths from the repo root):
+#
+#   electron/node_modules                    cd electron && npm ci --legacy-peer-deps
+#   electron/resources/server/<plat>-<arch>/ scripts/build-electron.sh <mac|linux|win>
+#     reliant-backend[.exe], both arches
+#   frontends/web/dist                       cd frontends/web && pnpm install --frozen-lockfile \
+#                                              && NODE_ENV=production npm run build
+#   electron/src/build-config.js and         cd electron && node scripts/with-release-config.mjs
+#     electron/src/release-renderer-config.js  npm run build:config
+#
+# No `image`: the app is not one, and at this forge pin a build-only ShellBuild
+# needs none (`forge env build release --target reliant-desktop` runs it), so
+# this does not invent one the way control-plane's reliant-cli declaration
+# does. forge still writes a placeholder `reliant-desktop:latest` into
+# .forge/state after the build; that is a forge defect (reported), not an
+# artifact.
+#
+# No `inputs`: they would let forge skip the command when they are unchanged,
+# and with nothing recording what the last run produced, a skip would report a
+# build whose electron/dist may since have been deleted.
+#
+# FOLLOW-UP (forge #2428, open): once `Build.outputs` lands, declare the files
+# this writes so a release records them — electron/dist/ *.dmg, *.zip,
+# *-mac.yml, *.exe, latest.yml, alpha.yml, *.AppImage, *.deb, *-linux.yml,
+# *-linux-arm64.yml and *.blockmap (release.yml's upload-artifact globs).
+#
+# `cwd` resolves against the project that renders this. control-plane imports
+# this file but binds only the server workloads, so it is always reliant's.
+desktop_app = fw.Workload {
+    name = "reliant-desktop"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = forge.ShellBuild {
+        cwd = "electron"
+        cmd = "node scripts/pack-desktop.js host electron-builder.js never"
+    }
+}

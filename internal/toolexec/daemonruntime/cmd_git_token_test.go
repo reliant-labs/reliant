@@ -204,9 +204,20 @@ func TestHealLeakedGitCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	remotes, lines := healLeakedGitCredentials(context.Background(), projects, home)
-	if remotes != 1 || lines != 1 {
-		t.Fatalf("counts = %d, %d; want 1, 1", remotes, lines)
+	// An older daemon wrote `credential.helper store` into each clone; a
+	// user's own helper in another clone is theirs.
+	gitOut(t, "-C", leaked, "config", "credential.helper", "store")
+	gitOut(t, "-C", user, "config", "credential.helper", "osxkeychain")
+
+	remotes, lines, helpers := healLeakedGitCredentials(context.Background(), projects, home)
+	if remotes != 1 || lines != 1 || helpers != 1 {
+		t.Fatalf("counts = %d, %d, %d; want 1, 1, 1", remotes, lines, helpers)
+	}
+	if out, err := exec.Command("git", "-C", leaked, "config", "--local", "--get-all", "credential.helper").Output(); err == nil {
+		t.Fatalf("daemon-written helper left behind: %q", out)
+	}
+	if got := strings.TrimSpace(gitOut(t, "-C", user, "config", "--local", "--get", "credential.helper")); got != "osxkeychain" {
+		t.Fatalf("user's helper = %q", got)
 	}
 	if got := strings.TrimSpace(gitOut(t, "-C", leaked, "remote", "get-url", "origin")); got != "https://github.com/o/r.git" {
 		t.Fatalf("leaked url = %q", got)
@@ -230,8 +241,8 @@ func TestHealLeakedGitCredentials(t *testing.T) {
 	}
 
 	// Idempotent; and a file that held only the token goes away.
-	if r, l := healLeakedGitCredentials(context.Background(), projects, home); r != 0 || l != 0 {
-		t.Fatalf("second run counts = %d, %d", r, l)
+	if r, l, h := healLeakedGitCredentials(context.Background(), projects, home); r != 0 || l != 0 || h != 0 {
+		t.Fatalf("second run counts = %d, %d, %d", r, l, h)
 	}
 	if err := os.WriteFile(creds, []byte("https://x-access-token:"+testSecretToken+"@github.com\n"), 0o600); err != nil {
 		t.Fatal(err)
