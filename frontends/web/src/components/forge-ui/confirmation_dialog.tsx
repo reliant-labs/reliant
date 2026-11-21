@@ -73,7 +73,7 @@ export default function ConfirmationDialog({
       <button
         type="button"
         aria-label="Dismiss dialog"
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-scrim backdrop-blur-sm transition-opacity"
         onClick={onCancel}
       />
 

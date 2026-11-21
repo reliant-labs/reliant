@@ -218,23 +218,71 @@ func (s *Service) queueIncomingMessage(
 	return queued, nil
 }
 
-// pausedSendQueues reports whether a message sent to a paused run's thread
-// goes into the thread's mailbox, behind what is queued there, rather than
-// straight into the transcript.
+// reviveQueuedThread revives the thread a send's message was queued to, so
+// the reconciler's orphaned-mailbox sweep cannot mark the row undelivered
+// before the run that drains it starts. A no-op for a thread still running; a
+// failure is logged and the run started anyway.
+func (s *Service) reviveQueuedThread(ctx context.Context, chatID, threadID string) {
+	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {
+		logging.WarnContext(ctx, "Could not revive the thread a message was queued to; starting its run anyway",
+			"error", err, "chatID", chatID, "threadID", threadID)
+	}
+}
+
+// saveOrQueueBehindMailbox writes a send's messages for a run that is taking
+// no turn now — a paused run about to be resumed, or a failed one about to be
+// recovered — and reports the message's id and whether it was queued.
 //
-// Messages the user queued while the run was working wait in the mailbox for
-// the thread's next call_llm, which delivers them immediately before it reads
-// history. A message saved to the transcript now would be read BEFORE them,
-// though it was typed after them: pausing and sending would reorder the
-// conversation. So when the mailbox holds anything, the new message joins the
-// queue and the one drain delivers all of it, oldest first — call_llm stays
-// the only mailbox deliverer. An empty mailbox has nothing to order against,
-// and the message is saved as it always was.
+// Messages the user queued while the run was working wait in the thread's
+// mailbox for its next call_llm, which delivers them immediately before it
+// reads history. A message saved to the transcript now would be read BEFORE
+// them, though it was typed after them: pausing (or a failure) and sending
+// would reorder the conversation. So when the mailbox holds anything, the new
+// message joins the queue (queueIncomingMessage) and the one drain delivers
+// all of it, oldest first — call_llm stays the only mailbox deliverer. An
+// empty mailbox has nothing to order against, and the message is saved as it
+// always was (saveIncomingMessages).
 //
-// Read in the transaction that saves or queues the message, so a drain or an
-// enqueue that commits in between fails the transaction instead of slipping
+// The decision is read in the transaction that saves or queues, so a drain or
+// an enqueue that commits in between fails the transaction instead of slipping
 // past the decision.
-func (s *Service) pausedSendQueues(ctx context.Context, prior *priorSend, thread string) (bool, error) {
+func (s *Service) saveOrQueueBehindMailbox(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SendMessageRequest],
+	chat *db.Chat,
+	prior *priorSend,
+	userID, clientID, thread, workflowID string,
+	systemMessages []*reliantv1.InputMessage,
+	userContent string,
+	hasUserContent bool,
+) (messageID string, queued bool, err error) {
+	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		messageID, queued = "", false
+		behind, err := s.sendQueuesBehindMailbox(txCtx, prior, thread)
+		if err != nil {
+			return err
+		}
+		if behind {
+			row, err := s.queueIncomingMessage(txCtx, req, chat, userID, clientID, thread, workflowID, systemMessages, userContent)
+			if err != nil {
+				return err
+			}
+			messageID, queued = row.ID, true
+			return nil
+		}
+		messageID, err = s.saveIncomingMessages(txCtx, req, chat, thread, workflowID, systemMessages, userContent, hasUserContent)
+		return err
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return messageID, queued, nil
+}
+
+// sendQueuesBehindMailbox reports whether a send to thread goes into its
+// mailbox rather than its transcript: when the mailbox already holds messages
+// (see saveOrQueueBehindMailbox).
+func (s *Service) sendQueuesBehindMailbox(ctx context.Context, prior *priorSend, thread string) (bool, error) {
 	if prior != nil {
 		// An earlier attempt of this send already chose, and its message is
 		// where it put it.
@@ -428,9 +476,13 @@ func (s *Service) SendMessage(
 	// Set when this send's message is queued in that thread's mailbox rather
 	// than saved to its transcript, and the new run below is the one that
 	// drains it: a message queued to a run that closed before its wake
-	// (lateRunThread), or queued behind a paused run's mailbox when the
-	// paused run was lost.
+	// (lateRunThread), or queued behind the mailbox of a paused run that was
+	// lost or of a failed run restarted at its checkpoint.
 	var queuedThread string
+	// Set when the new run below recovers a failed run at its checkpoint: the
+	// message, when it is still to be written, goes behind the thread's
+	// mailbox (saveOrQueueBehindMailbox) rather than straight into history.
+	var orderBehindMailbox bool
 
 	// The status read below decides between resuming a paused run and waking a
 	// running one, and that decision is only right if no pause or resume is
@@ -545,7 +597,7 @@ func (s *Service) SendMessage(
 
 				// Save the messages in one transaction — or, when the thread's
 				// mailbox already holds messages, queue the user message
-				// behind them (pausedSendQueues), so the resumed run's next
+				// behind them (saveOrQueueBehindMailbox), so the resumed run's next
 				// call_llm delivers everything in the order it was typed. The
 				// queued rows themselves are not touched here: call_llm is the
 				// only mailbox deliverer.
@@ -573,21 +625,8 @@ func (s *Service) SendMessage(
 				var savedMessageID string
 				var queued bool
 				err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-					savedMessageID, queued = "", false
-					behindMailbox, err := s.pausedSendQueues(txCtx, prior, targetThread)
-					if err != nil {
-						return err
-					}
-					if behindMailbox {
-						row, err := s.queueIncomingMessage(txCtx, req, chat, userID, clientID, targetThread, workflowID, systemMessages, userContent)
-						if err != nil {
-							return err
-						}
-						savedMessageID, queued = row.ID, true
-						return nil
-					}
 					var saveErr error
-					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					savedMessageID, queued, saveErr = s.saveOrQueueBehindMailbox(txCtx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
 				})
 				if err != nil {
@@ -887,6 +926,13 @@ func (s *Service) SendMessage(
 				// A run whose question is on another thread takes the plain
 				// reset-and-replay below, which re-parks that thread on its
 				// still-pending question for the user to answer there.
+				//
+				// An answer is NOT queued behind the thread's mailbox, as the
+				// other recoveries below queue a message: it is the parked
+				// ask_question call's result, and a tool result must follow its
+				// tool call with nothing read in between. Anything queued for
+				// the thread is delivered at its next call_llm, after the
+				// answer — as for an answer given while the run was live.
 				targetThread := existingWorkflow.Thread
 				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
 					targetThread = *req.Msg.TargetThread
@@ -925,20 +971,29 @@ func (s *Service) SendMessage(
 				// the bounded guard has given up (deterministic failure), or the run
 				// was parked on an unanswered question (handled above).
 				if inspection.Recoverable && pendingQuestion == nil {
-					targetThread := existingWorkflow.Thread
-					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-						targetThread = *req.Msg.TargetThread
-					}
 					// Persist messages BEFORE reset so the resumed run reads
 					// them, mailbox first: the interrupted run never reached
 					// another drain boundary, so whatever was queued for this
-					// thread still belongs ahead of the new message.
-					presavedID, saveErr := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					// thread still belongs ahead of the new message, which is
+					// queued behind it (saveOrQueueBehindMailbox).
+					presavedID, queued, saveErr := s.saveOrQueueBehindMailbox(ctx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
 						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
+					if queued {
+						// The interrupted run may have left the thread
+						// terminal, the shape the reconciler's
+						// orphaned-mailbox sweep marks undelivered. Revive it
+						// BEFORE the reset, so the sweep cannot take the row
+						// before the reset run's first call_llm drains it (a
+						// resumed run returns below without reaching the
+						// new-run path's revive). The coarse restart below,
+						// if it comes to that, drains it the same way.
+						s.reviveQueuedThread(ctx, req.Msg.ChatId, targetThread)
+						queuedThread = targetThread
+					}
 
 					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId, inputUpdate)
 					if resumeErr != nil {
@@ -956,6 +1011,7 @@ func (s *Service) SendMessage(
 							Status:         "processing",
 							WorkflowStatus: &workflowStatus,
 							MessageId:      presavedID,
+							Queued:         queued,
 						}), nil
 					}
 					if outcome.HistoryLimitExceeded {
@@ -975,6 +1031,11 @@ func (s *Service) SendMessage(
 				// replayable history (ghost) or the reset guard gave up.
 				resumeInput = v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)
 				resumeThread = existingWorkflow.Thread
+				// A message not yet written lands behind the thread's mailbox,
+				// as the reset-and-replay above does. It is written by the
+				// new-run path below, after the new run's inputs are validated,
+				// so a refused send still leaves nothing behind.
+				orderBehindMailbox = true
 				logging.InfoContext(ctx, "Interrupted workflow detected - new run will resume at position",
 					"chatID", req.Msg.ChatId,
 					"workflowID", workflowID,
@@ -1092,7 +1153,9 @@ func (s *Service) SendMessage(
 	// Save messages BEFORE starting workflow for consistency: system messages,
 	// then the new user message. Anything still queued in this thread's
 	// mailbox is not touched here — the new run's first call_llm delivers it,
-	// immediately before it reads history.
+	// immediately before it reads history. A failed run's recovery
+	// (orderBehindMailbox) queues the new message behind it instead, so it is
+	// not read first.
 	//
 	// A resume branch (reset-and-replay fallback) may have already persisted the
 	// messages before its reset attempt, and so has a send whose run closed
@@ -1110,11 +1173,20 @@ func (s *Service) SendMessage(
 		// A resume continues a conversation, so it never is one.
 		greenfieldProbe = resumeInput == nil && s.launcher().WantsGreenfieldProbe(ctx, chat)
 
-		saved, err := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		var saved string
+		var queued bool
+		if orderBehindMailbox {
+			saved, queued, err = s.saveOrQueueBehindMailbox(ctx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		} else {
+			saved, err = s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		}
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 		}
 		savedMessageID = saved
+		if queued {
+			queuedThread = targetThread
+		}
 	}
 
 	// A move is announced once: the chat's selection records the moved model,
@@ -1133,10 +1205,7 @@ func (s *Service) SendMessage(
 	// BEFORE the run starts, so the sweep can never take the row first; the
 	// run's first call_llm delivers it. (A no-op for a thread still running.)
 	if queuedThread != "" {
-		if _, err := s.deps.Repo.ReviveThread(ctx, queuedThread); err != nil {
-			logging.WarnContext(ctx, "Could not revive the thread a message was queued to; starting its run anyway",
-				"error", err, "chatID", req.Msg.ChatId, "threadID", queuedThread)
-		}
+		s.reviveQueuedThread(ctx, req.Msg.ChatId, queuedThread)
 	}
 
 	workflowInput := v2.WorkflowInput{

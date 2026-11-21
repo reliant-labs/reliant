@@ -87,6 +87,12 @@ type InterruptThreadResult struct {
 // pinned by TestInterrupt_* in
 // internal/workflow/runtime/activities/handlers/execute_tools_interrupt_test.go.
 //
+// A call with no row yet -- still in its activation preview or waiting on its
+// approval card -- has nothing to cancel here. The workflow covers it: an
+// interrupt that cancels a tool step settles the batch instead of running it
+// again, answering every call that has no recorded outcome as stopped
+// (internal/workflow/runtime/interrupt_settle.go).
+//
 // # Why it takes no message id
 //
 // Interrupt is an action on the THREAD. It stops the work; the next call_llm

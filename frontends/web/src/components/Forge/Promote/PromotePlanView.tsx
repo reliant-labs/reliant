@@ -140,7 +140,7 @@ function BindingSummary({ plan }: { plan: ForgePromotePlan }) {
       data-testid="promote-binding"
     >
       <div className="space-y-1">
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+        <h4 className="text-2xs font-medium text-ink-muted">
           Currently bound
         </h4>
         {unbound ? (
@@ -178,7 +178,7 @@ function BindingSummary({ plan }: { plan: ForgePromotePlan }) {
       </div>
 
       <div className="space-y-1">
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+        <h4 className="text-2xs font-medium text-ink-muted">
           Promoting to
         </h4>
         <p className="font-mono text-sm text-ink" data-testid="promote-target-release">

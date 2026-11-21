@@ -35,8 +35,11 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { TYPE_ROLES } from "@/lib/typeRoles";
+
 const WEB_ROOT = join(__dirname, "..", "..", "..", "..");
 const INDEX_CSS = join(WEB_ROOT, "src", "index.css");
+const TAILWIND_CONFIG = join(WEB_ROOT, "tailwind.config.js");
 const FORGE_UI_DIR = join(WEB_ROOT, "src", "components", "forge-ui");
 
 /** Utility prefixes Tailwind generates from a `--color-*` theme entry. */
@@ -65,6 +68,19 @@ const NON_COLOR_SUFFIXES = new Set([
   "clip", "transparent", "current", "inherit", "white", "black", "auto",
   "md", "full", "color",
 ]);
+
+/**
+ * The app's own color tokens the restyled forge components draw (restyle v1,
+ * web-styling): the dialog backdrop (`bg-scrim`) and the quiet row rule
+ * (`border-border-subtle`). They are declared in tailwind.config.js `colors`,
+ * not in the bridge, because their value is per mode (index.css) and needs no
+ * forge name. Listed by name, so a component that strays into reliant's other
+ * vocabulary (`bg-card`) still fails as undeclared.
+ */
+const APP_COLOR_TOKENS = ["scrim", "border-subtle"];
+
+/** The type roles (`text-ui`, `text-title`, …) are font sizes, not colors. */
+const TYPE_ROLE_SUFFIXES = new Set<string>(TYPE_ROLES);
 
 function readCss(): string {
   return readFileSync(INDEX_CSS, "utf8");
@@ -103,6 +119,7 @@ function referencedTokens(): Map<string, string[]> {
       const edge = m[1] === "border" ? /^[trblxyse]-(.+)$/.exec(token) : null;
       if (edge) token = edge[1];
       if (NON_COLOR_SUFFIXES.has(token)) continue;
+      if (m[1] === "text" && TYPE_ROLE_SUFFIXES.has(token)) continue;
       // Tailwind palette colors (gray-500) are not semantic tokens.
       if (/-\d+$/.test(token)) continue;
       const seen = refs.get(token) ?? [];
@@ -116,6 +133,14 @@ function referencedTokens(): Map<string, string[]> {
 describe("forge token bridge", () => {
   it("declares every color token the installed forge components reference", () => {
     const declared = declaredTokens(readCss());
+    const config = readFileSync(TAILWIND_CONFIG, "utf8");
+    for (const token of APP_COLOR_TOKENS) {
+      expect(
+        new RegExp(`^\\s+"?${token}"?:\\s*"hsl\\(var\\(--${token}\\)`, "m").test(config),
+        `tailwind.config.js colors should declare ${token}`,
+      ).toBe(true);
+      declared.add(token);
+    }
     const referenced = referencedTokens();
 
     // Sanity: if extraction found nothing, the assertion below is vacuous.
