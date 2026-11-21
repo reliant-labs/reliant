@@ -253,6 +253,16 @@ describe("ProjectsBody with several projects in the shell", () => {
     expect(state.navigate).toHaveBeenCalledWith({ href: "/projects?browse=1" });
   });
 
+  it.each(["all", "many"] as const)("shows the list a filter names (the retired /apps and /sites), with %s projects", (several) => {
+    state.several = several;
+    for (const show of ["apps", "sites", "code"]) {
+      state.search = { show };
+      const view = render(<ProjectsBody />);
+      expect(screen.getByTestId("projects-page")).not.toHaveAttribute("data-mode", "home");
+      view.unmount();
+    }
+  });
+
   it("lists every project when asked to browse", () => {
     state.several = "all";
     state.search = { browse: 1 };

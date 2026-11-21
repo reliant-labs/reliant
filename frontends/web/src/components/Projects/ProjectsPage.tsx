@@ -174,7 +174,10 @@ export function ProjectsBody() {
     </button>
   );
 
-  if (several && browse === undefined) {
+  // A filter in the URL (`?show=…`: the retired /apps and /sites pages'
+  // redirects, a claim's landing) is a list the person asked for, so it shows
+  // the list whatever the shell's selection.
+  if (several && browse === undefined && filterOfShow(show) === "all") {
     return (
       <div className="space-y-4" data-testid="projects-page" data-mode="home">
         <div className="forge-ui">
