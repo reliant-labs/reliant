@@ -58,6 +58,17 @@ export interface GroupedNavInput extends ConsoleNavInput {
   productAnalytics?: ProductAnalyticsHub;
   /** A host page (one that is not a console page) is open: no console row is the current one. */
   hostPageActive?: boolean;
+  /** The app's own dashboards (its repo's, the org's saved ones): listed under Dashboards. */
+  customDashboards?: readonly ConsoleNavDashboard[];
+  /**
+   * Live counts other parts of the console hand the nav for its badges,
+   * keyed by the source's id (e.g. `tests`). Each is read from data a page
+   * already holds (a React Query cache entry its page reads anyway), so a
+   * badge never costs a request of its own. Filled in useConsoleNavModel;
+   * read by a nav item's `badge` (navConfig/types.ts) as
+   * `ctx.console?.navCounts?.<id>`. Absent or 0: no badge.
+   */
+  navCounts?: Readonly<Partial<Record<string, number>>>;
 }
 
 /** The group each view sits in, for the nav and the breadcrumb ("Issues › Errors"). */

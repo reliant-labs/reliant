@@ -220,7 +220,7 @@ export function buildItems(args: {
  * selector opens on rows at once and fills in apps and checkouts when the
  * catalog lands.
  */
-function useSelectorCatalog(orgId: string | null | undefined): { catalog: ProjectCatalog | undefined; loading: boolean } {
+export function useSelectorCatalog(orgId: string | null | undefined): { catalog: ProjectCatalog | undefined; loading: boolean } {
   const view = useProjectCatalog(orgId);
   const plain = useProjects();
   return useMemo(() => {

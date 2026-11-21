@@ -154,6 +154,28 @@ export type ConsolePage =
   | { kind: "domains" }
   | { kind: "activity" };
 
+
+/**
+ * What a link may name (U6c path-builder contract): every ConsolePage, plus
+ * the names the nav configs use for pages that are an Observability view
+ * underneath — `dashboards` (the top-level Dashboards page) and `metrics`
+ * (the metrics explorer). Both resolve to the obs-view page they are, so
+ * consolePageOf reads them back as that page.
+ */
+export type ConsoleTarget = ConsolePage | { kind: "dashboards" } | { kind: "metrics" };
+
+/** The page a target names. */
+export function pageOfTarget(target: ConsoleTarget): ConsolePage {
+  switch (target.kind) {
+    case "dashboards":
+      return { kind: "obs-view", view: "dashboards" };
+    case "metrics":
+      return { kind: "obs-view", view: "metrics" };
+    default:
+      return target;
+  }
+}
+
 /**
  * One app's console. Its org form (flag `web.org_routes` on) is
  * `/o/<org>/apps/<app>` (design §3.1): withOrg rewrites it (lib/paths/org.ts,
@@ -163,9 +185,10 @@ export function consoleBase(project: string, ctx?: PathContext): string {
   return withOrg(`${FORGE_ROOT}/p/${encodeURIComponent(project)}`, ctx);
 }
 
-/** The path of `page` in `project`. */
-export function consolePath(project: string, page: ConsolePage, ctx?: PathContext): string {
+/** The path of `target` in `project`. */
+export function consolePath(project: string, target: ConsoleTarget, ctx?: PathContext): string {
   const base = consoleBase(project, ctx);
+  const page = pageOfTarget(target);
   switch (page.kind) {
     case "overview":
       return base;
@@ -197,6 +220,17 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/activity`;
   }
 }
+
+// ── Named builders (U6c contract: the nav configs import these) ─────────────
+
+/** The project's landing page: Home and Overview, merged. */
+export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "overview" }, ctx);
+/** Storage: the app's buckets. */
+export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
+/** Dashboards: built-in and custom, the one place they are listed. */
+export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
+export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 
 function safeDecode(segment: string): string {
   try {

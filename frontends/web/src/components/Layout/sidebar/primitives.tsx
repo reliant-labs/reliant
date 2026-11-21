@@ -103,10 +103,27 @@ export function SidebarPrimaryAction({
 
 // --- Rows -----------------------------------------------------------------
 
+/**
+ * A link's click, kept in the app: a plain click runs `onNavigate`, and a
+ * modified one (new tab, new window) is left to the browser.
+ */
+function routedClick(onNavigate: (() => void) | undefined) {
+  return (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!onNavigate || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    onNavigate();
+  };
+}
+
 export interface SidebarRowProps {
   icon: ReactNode;
   label: string;
   onClick?: () => void;
+  /**
+   * The page the row opens. Given, the row is a link (a modified click opens
+   * it in a new tab) and a plain click runs `onClick`.
+   */
+  href?: string;
   /** Quiet trailing text inside the row: a count, a shortcut, a dot. */
   trail?: ReactNode;
   /** A control of its own after the row (it cannot nest in the row's button). */
@@ -131,6 +148,7 @@ export function SidebarRow({
   icon,
   label,
   onClick,
+  href,
   trail,
   action,
   current = false,
@@ -141,6 +159,27 @@ export function SidebarRow({
   className,
   children,
 }: SidebarRowProps) {
+  const content = (
+    <>
+      <span
+        className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>}
+      {children}
+    </>
+  );
+  const shared = {
+    "aria-current": current ? ("page" as const) : undefined,
+    "aria-expanded": expanded,
+    "aria-label": ariaLabel === null ? undefined : (ariaLabel ?? label),
+    "data-testid": testId,
+    "data-onboarding": onboardingId,
+  };
+  const target = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left";
   return (
     <div
       className={cn(
@@ -149,30 +188,118 @@ export function SidebarRow({
         className,
       )}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!onClick}
-        aria-current={current ? "page" : undefined}
-        aria-expanded={expanded}
-        aria-label={ariaLabel === null ? undefined : (ariaLabel ?? label)}
-        data-testid={testId}
-        data-onboarding={onboardingId}
-        className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left disabled:cursor-default disabled:opacity-50",
-          FOCUS_INSET,
-        )}
-      >
-        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
+      {href ? (
+        <a {...shared} href={href} onClick={routedClick(onClick)} className={cn(target, "no-color text-foreground", FOCUS_INSET)}>
+          {content}
+        </a>
+      ) : (
+        <button
+          {...shared}
+          type="button"
+          onClick={onClick}
+          disabled={!onClick}
+          className={cn(target, "disabled:cursor-default disabled:opacity-50", FOCUS_INSET)}
+        >
+          {content}
+        </button>
+      )}
+      {action && <span className="flex shrink-0 items-center pr-1">{action}</span>}
+    </div>
+  );
+}
+
+// --- Nested rows ----------------------------------------------------------
+
+/**
+ * How far a nested row's text sits in. Depth 0 is a top-level row (the
+ * project shell's app sections, drawn like the forge console's). Depth 1 lines its icon up under the
+ * parent's label (an app's sections under the app); depth 2 lines its label
+ * up with depth 1's (Errors under Issues); depth 3 steps in once more (a
+ * starred dashboard under Dashboards).
+ */
+const SUB_INDENT = ["pl-2", "pl-8", "pl-14", "pl-16"] as const;
+
+export interface SidebarSubRowProps {
+  label: string;
+  /** Depth under the top-level row, 1–3 (0: a top-level row itself). */
+  depth?: 0 | 1 | 2 | 3;
+  icon?: ReactNode;
+  /** The page the row opens; omitted, the row is a button (a group that opens in place). */
+  href?: string;
+  onClick?: () => void;
+  current?: boolean;
+  /** For a group: whether its rows show. Draws the chevron. */
+  expanded?: boolean;
+  /** Quiet trailing content: a count, a mark. */
+  trail?: ReactNode;
+  /** The accessible name, when the trail is only a hint (a shortcut); defaults to the content. */
+  ariaLabel?: string;
+  testId?: string;
+}
+
+/** A row nested under a nav row: an app's console sections, the Workflows area's tabs. */
+export function SidebarSubRow({
+  label,
+  depth = 1,
+  icon,
+  href,
+  onClick,
+  current = false,
+  expanded,
+  trail,
+  ariaLabel,
+  testId,
+}: SidebarSubRowProps) {
+  const content = (
+    <>
+      {icon && (
+        <span
+          className={cn("flex size-4 shrink-0 items-center justify-center", current ? "text-foreground" : "text-muted-foreground")}
+          aria-hidden="true"
+        >
           {icon}
         </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {trail && (
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>
-        )}
-        {children}
-      </button>
-      {action && <span className="flex shrink-0 items-center pr-1">{action}</span>}
+      )}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>}
+      {expanded !== undefined && (
+        <ChevronRight
+          className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")}
+          aria-hidden="true"
+        />
+      )}
+    </>
+  );
+  const target = cn(
+    "flex h-[var(--row-h)] w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors hover:bg-foreground/5 hover:text-foreground",
+    SUB_INDENT[depth],
+    current ? "bg-foreground/[0.08] font-medium text-foreground" : depth === 0 ? "text-foreground" : "text-foreground/75",
+    FOCUS_INSET,
+  );
+  return href ? (
+    <a
+      href={href}
+      onClick={routedClick(onClick)}
+      aria-current={current ? "page" : undefined}
+      aria-expanded={expanded}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={cn(target, "no-color")}
+    >
+      {content}
+    </a>
+  ) : (
+    <button type="button" onClick={onClick} aria-expanded={expanded} aria-label={ariaLabel} data-testid={testId} className={target}>
+      {content}
+    </button>
+  );
+}
+
+/** A quiet label over a run of nested rows ("Configure" in an app's sections). */
+export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 0 | 1 | 2 }) {
+  return (
+    <div className={cn("mt-3 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
+      {children}
     </div>
   );
 }
