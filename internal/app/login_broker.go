@@ -165,6 +165,7 @@ func RegisterLoginBroker(appMux *http.ServeMux, cfg *config.ApiServerConfig, log
 		forgotByAddress: newAttemptLimiter(3, time.Hour),
 		forgotByIP:      newAttemptLimiter(10, time.Hour),
 		resetByUser:     newAttemptLimiter(5, time.Hour),
+		resetByIP:       newAttemptLimiter(20, time.Hour),
 	}
 	for _, opt := range opts {
 		opt(broker)
@@ -304,6 +305,9 @@ type loginBroker struct {
 	forgotByAddress *attemptLimiter
 	forgotByIP      *attemptLimiter
 	resetByUser     *attemptLimiter
+	// resetByIP admits reset attempts per client before any is charged to
+	// a user id.
+	resetByIP *attemptLimiter
 }
 
 // credentials is what the sign-in form posts.
@@ -455,8 +459,11 @@ func (b *loginBroker) account(ctx context.Context, token, subject string) *sessi
 		b.logger.DebugContext(ctx, "the control-plane account could not be read; the session reports none", "error", err)
 		return nil
 	}
-	if a.ID != subject {
-		// The account must be the session's own person.
+	// The control plane answered for the caller its own token proves, and
+	// keys the account on that token's subject (its external id; the account
+	// id is control-plane's own). An answer naming another subject is not
+	// this person's.
+	if a.ExternalID != "" && a.ExternalID != subject {
 		b.logger.WarnContext(ctx, "the control plane answered for another account; the session reports none")
 		return nil
 	}
@@ -648,8 +655,16 @@ func (b *loginBroker) accessToken(r *http.Request) (string, error) {
 	if err != nil || cookie.Value == "" {
 		return "", nil
 	}
-	if b.sessions == nil || !session.IsID(cookie.Value) {
+	if b.sessions == nil {
 		return cookie.Value, nil
+	}
+	if !session.IsID(cookie.Value) {
+		// With server-side sessions the cookie holds a session id and
+		// nothing else: anything else in it (a token replayed as the cookie,
+		// one from before the switch) is no session, so /auth/session
+		// reports signed out and clears it — as the API's authenticator
+		// refuses it (auth.Authenticator.CheckChannel).
+		return "", session.ErrNoSession
 	}
 	return b.sessions.AccessToken(r.Context(), cookie.Value)
 }
@@ -1240,19 +1255,10 @@ func (b *loginBroker) handleForgot(w http.ResponseWriter, r *http.Request) {
 		if b.appBase != "" {
 			template = b.appBase + "/auth/reset?userID={{.UserID}}&code={{.Code}}&orgID={{.OrgID}}"
 		}
-		if b.devMode {
-			// A dev stack has no mail server, so asking the issuer to send
-			// would deliver nothing and leave the flow untestable. Mint the
-			// code instead and put the link in THIS PROCESS'S LOG — never in
-			// the response. Production never takes this branch.
-			code, err := b.client.MintPasswordResetCode(ctx, user.ID)
-			if err != nil {
-				b.logger.ErrorContext(ctx, "password reset: could not mint a dev code", "user_id", user.ID, "error", err)
-			} else {
-				b.logger.InfoContext(ctx, "DEV ONLY: password reset link (no mail server in development)",
-					"user_id", user.ID, "link", fmt.Sprintf("%s/auth/reset?userID=%s&code=%s", b.appBase, user.ID, code))
-			}
-		} else if err := b.client.SendPasswordResetLink(ctx, user.ID, template); err != nil {
+		// The issuer mails the link, in development too: the dev stack's
+		// identity sends to mailpit (deploy/kcl/dev/main.k). A reset code is
+		// an account-takeover credential, so it is never written to a log.
+		if err := b.client.SendPasswordResetLink(ctx, user.ID, template); err != nil {
 			b.logger.ErrorContext(ctx, "password reset: the issuer refused the request", "user_id", user.ID, "error", err)
 		} else {
 			b.logger.InfoContext(ctx, "password reset link requested", "user_id", user.ID)
@@ -1294,6 +1300,12 @@ func (b *loginBroker) handleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	// Per-client admission first, so one client cannot charge invented user
+	// ids until the per-user table is full.
+	if !b.resetByIP.reserve(devidp.ClientKey(r, b.proxyHops)) {
+		writeAuthError(w, http.StatusTooManyRequests, resetTooMany)
+		return
+	}
 	if !b.resetByUser.reserve(userID) {
 		b.logger.WarnContext(ctx, "password reset refused: attempt budget spent", "user_id", userID)
 		writeAuthError(w, http.StatusTooManyRequests, resetTooMany)
@@ -1403,9 +1415,8 @@ func (l *attemptLimiter) reserve(key string) bool {
 		if len(l.entries) >= attemptLimiterMaxKeys {
 			l.sweep(now)
 		}
-		if len(l.entries) >= attemptLimiterMaxKeys {
-			// Every window is live: refuse rather than grow. Reached only
-			// under a flood of distinct keys.
+		if len(l.entries) >= attemptLimiterMaxKeys && !l.evict() {
+			// Every live window is spent: refuse rather than grow.
 			return false
 		}
 		e = &attemptEntry{since: now}
@@ -1415,6 +1426,25 @@ func (l *attemptLimiter) reserve(key string) bool {
 		return false
 	}
 	e.used++
+	return true
+}
+
+// evict drops the oldest window that still has attempts left, so a flood of
+// distinct keys (invented user ids) cannot lock every unseen key out. A spent
+// window is never evicted: that would hand its key a fresh budget. false when
+// every window is spent.
+func (l *attemptLimiter) evict() bool {
+	var oldest string
+	var since time.Time
+	for k, e := range l.entries {
+		if e.used < l.max && (oldest == "" || e.since.Before(since)) {
+			oldest, since = k, e.since
+		}
+	}
+	if oldest == "" {
+		return false
+	}
+	delete(l.entries, oldest)
 	return true
 }
 

@@ -43,7 +43,12 @@ type RefundDestination struct {
 // Account is the caller's control-plane account, as GetCurrentAccount reads
 // it.
 type Account struct {
-	ID                  string
+	// ID is the control-plane user id: control-plane's own, not the
+	// identity's subject.
+	ID string
+	// ExternalID is the identity subject the account is keyed on (the
+	// token's sub, as control-plane's authbridge resolves it).
+	ExternalID          string
 	Email               string
 	Name                string
 	CreatedAt           time.Time
@@ -256,7 +261,7 @@ func (c *client) GetCurrentAccount(ctx context.Context, jwt string) (*Account, e
 	if u == nil {
 		return nil, errors.New("controlplane: GetCurrentUser returned no user")
 	}
-	a := &Account{ID: u.GetId(), Email: u.GetEmail(), Name: u.GetName(), OnboardingCompleted: u.GetOnboardingCompleted()}
+	a := &Account{ID: u.GetId(), ExternalID: u.GetExternalId(), Email: u.GetEmail(), Name: u.GetName(), OnboardingCompleted: u.GetOnboardingCompleted()}
 	if ts := u.GetCreatedAt(); ts != nil {
 		a.CreatedAt = ts.AsTime()
 	}
