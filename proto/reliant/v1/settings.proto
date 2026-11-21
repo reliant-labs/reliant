@@ -19,7 +19,9 @@ service SettingsService {
   // CreateSetting creates a new setting
   // forge:custom — an upsert keyed by the caller, project and key, which notifies config health
   rpc CreateSetting(CreateSettingRequest) returns (CreateSettingResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
+    };
   }
 
   // ListSettings lists all settings for the current user
@@ -33,13 +35,17 @@ service SettingsService {
   // UpdateSetting updates an existing setting
   // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc UpdateSetting(UpdateSettingRequest) returns (UpdateSettingResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
+    };
   }
 
   // DeleteSetting deletes a setting by key
   // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
   rpc DeleteSetting(DeleteSettingRequest) returns (DeleteSettingResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
+    };
   }
 
   // BatchUpsertSettings writes many settings in one round trip.
@@ -49,7 +55,9 @@ service SettingsService {
   // already exists. Writers that previously fired one RPC per key — the tour's
   // three-key save, the tool-call category toggles — now issue one.
   rpc BatchUpsertSettings(BatchUpsertSettingsRequest) returns (BatchUpsertSettingsResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user preference: a key/value upsert into the caller's settings, not product history"}
+    };
   }
 
   // ============================================
@@ -61,7 +69,9 @@ service SettingsService {
 
   // UpdateShortcuts updates user keyboard shortcuts
   rpc UpdateShortcuts(UpdateShortcutsRequest) returns (UpdateShortcutsResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user UI preference: keyboard shortcuts"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user UI preference: keyboard shortcuts"}
+    };
   }
 
   // GetPreferences retrieves user preferences
@@ -69,12 +79,16 @@ service SettingsService {
 
   // UpdatePreferences updates user preferences
   rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user UI preference"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user UI preference"}
+    };
   }
 
   // SetHiddenItem toggles the hidden state of a workflow or preset
   rpc SetHiddenItem(SetHiddenItemRequest) returns (SetHiddenItemResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user UI preference: hides a workflow or preset from the pickers"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user UI preference: hides a workflow or preset from the pickers"}
+    };
   }
 
   // ============================================
@@ -86,7 +100,9 @@ service SettingsService {
 
   // SavePrompts saves global user prompts
   rpc SavePrompts(SavePromptsRequest) returns (SavePromptsResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user prompt library, stored as one settings key like the other preferences"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user prompt library, stored as one settings key like the other preferences"}
+    };
   }
 
   // ============================================
@@ -98,12 +114,16 @@ service SettingsService {
 
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {
-    option (forge.v1.method) = {activity: {none: "checks a key against its provider and stores nothing; AddProviderAPIKey records the account"}};
+    option (forge.v1.method) = {
+      activity: {none: "checks a key against its provider and stores nothing; AddProviderAPIKey records the account"}
+    };
   }
 
   // SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
   rpc SyncReliantProvider(SyncReliantProviderRequest) returns (SyncReliantProviderResponse) {
-    option (forge.v1.method) = {activity: {none: "machine sync: onboarding hydrates the managed Reliant gateway key the control plane mints, not a change a person makes"}};
+    option (forge.v1.method) = {
+      activity: {none: "machine sync: onboarding hydrates the managed Reliant gateway key the control plane mints, not a change a person makes"}
+    };
   }
 
   // CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
@@ -167,7 +187,9 @@ service SettingsService {
   // and returns the device/user codes plus polling parameters. The frontend
   // drives polling via PollCopilotDeviceAuth.
   rpc StartCopilotDeviceAuth(StartCopilotDeviceAuthRequest) returns (StartCopilotDeviceAuthResponse) {
-    option (forge.v1.method) = {activity: {none: "device-authorization handshake in flight: PollCopilotDeviceAuth records the account once it is authorized"}};
+    option (forge.v1.method) = {
+      activity: {none: "device-authorization handshake in flight: PollCopilotDeviceAuth records the account once it is authorized"}
+    };
   }
 
   // PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
@@ -199,17 +221,23 @@ service SettingsService {
 
   // UpdatePrivacySettings updates user privacy settings
   rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user preference: the analytics and crash-reporting opt-ins, like UpdatePreferences"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user preference: the analytics and crash-reporting opt-ins, like UpdatePreferences"}
+    };
   }
 
   // TrackPageVisited tracks a page visit for analytics
   rpc TrackPageVisited(TrackPageVisitedRequest) returns (TrackPageVisitedResponse) {
-    option (forge.v1.method) = {activity: {none: "analytics ping: a page view for the analytics pipeline, not product state"}};
+    option (forge.v1.method) = {
+      activity: {none: "analytics ping: a page view for the analytics pipeline, not product state"}
+    };
   }
 
   // TrackOnboardingEvent tracks an onboarding flow event
   rpc TrackOnboardingEvent(TrackOnboardingEventRequest) returns (TrackOnboardingEventResponse) {
-    option (forge.v1.method) = {activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}};
+    option (forge.v1.method) = {
+      activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}
+    };
   }
 
   // ============================================
@@ -218,7 +246,9 @@ service SettingsService {
 
   // InstallSkill installs or previews installation of a skill into Reliant-managed paths.
   rpc InstallSkill(InstallSkillRequest) returns (InstallSkillResponse) {
-    option (forge.v1.method) = {activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}};
+    option (forge.v1.method) = {
+      activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}
+    };
   }
 
   // ListInstalledSkills returns installed skills discovered across project and global Reliant roots.
@@ -229,7 +259,9 @@ service SettingsService {
 
   // SetSkillEnabled toggles whether an installed skill definition path participates in discovery.
   rpc SetSkillEnabled(SetSkillEnabledRequest) returns (SetSkillEnabledResponse) {
-    option (forge.v1.method) = {activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}};
+    option (forge.v1.method) = {
+      activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}
+    };
   }
 
   // ListRecommendedSkills returns backend-defined recommended skills.
@@ -237,7 +269,9 @@ service SettingsService {
 
   // DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
   rpc DeleteGlobalSkill(DeleteGlobalSkillRequest) returns (DeleteGlobalSkillResponse) {
-    option (forge.v1.method) = {activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}};
+    option (forge.v1.method) = {
+      activity: {none: "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"}
+    };
   }
 
   // ============================================

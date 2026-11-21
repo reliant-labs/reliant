@@ -61,11 +61,11 @@ func (r *fsRoutingRouter) deliver(daemonID, commandType string) ([]byte, error) 
 	case "fs.get_tree":
 		return json.Marshal(map[string]any{"nodes": []any{}})
 	case "fs.read_file":
-		return json.Marshal(map[string]any{"content": "hello"})
+		return json.Marshal(map[string]any{"content": "hello", "viewer_guarded": true})
 	case "fs.preview_info":
-		return json.Marshal(map[string]any{"name": "a.txt", "path": "a.txt", "viewer_kind": "text"})
+		return json.Marshal(map[string]any{"name": "a.txt", "path": "a.txt", "viewer_kind": "text", "viewer_guarded": true})
 	case "fs.stat":
-		return json.Marshal(map[string]any{"exists": true})
+		return json.Marshal(map[string]any{"exists": true, "viewer_guarded": true})
 	}
 	return json.Marshal(map[string]any{})
 }

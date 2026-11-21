@@ -1456,7 +1456,7 @@ function handleRefetch(update: UserUpdate) {
     streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.settings);
     streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.mcp);
   }
-  // Keep existing refetchStore call for backwards compat
+  // refetchStore subscribers (useRepoChanges, useFileTreePushRefresh).
   triggerRefetch(refetchType, update.entity_id);
 
   // Also emit via event bus

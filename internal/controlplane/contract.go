@@ -126,7 +126,8 @@ type Service interface {
 	// owner's own resume gates (ownership, workspace limit, funding).
 	//
 	// resumed reports whether this call started the wake. A control plane
-	// without the door (404, or Unimplemented), or an adapter with no
+	// without the door (404, or Unimplemented: machine lifecycle is not
+	// configured on that deployment), or an adapter with no
 	// identity to sign with, answers toolexec.ErrRunResumeUnsupported. Other
 	// refusals are a *RunResumeError carrying the control plane's
 	// client-safe message.
@@ -172,8 +173,7 @@ type Service interface {
 	// touch, for the move preview: the source org's secret access, the
 	// hosted project the project deploys as, whether the target can pay and
 	// which machines are in it. It checks the actor as Prepare does and
-	// writes nothing. Errors as the steps above; a control plane that
-	// predates it is ErrProjectOrgMoveUnsupported.
+	// writes nothing. Errors as the steps above.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 
 	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider

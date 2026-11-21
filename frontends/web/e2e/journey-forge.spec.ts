@@ -151,9 +151,13 @@ test.describe('the forge journey in the forge shell', () => {
 
     await walkToAskAgent(page);
 
-    // The forge shell has no daemon and no chats at all: nothing under reliant.v1.
+    // The forge shell has no daemon and no chats at all: nothing under
+    // reliant.v1 but SystemService/Version, the public client-minimum check
+    // RootShell's ClientMinimumWatch makes on both hosts (#2980).
     expectNoDaemonOrChat(log);
-    expect(log.urls.filter((url) => url.includes('/reliant.v1.'))).toEqual([]);
+    expect(
+      log.urls.filter((url) => url.includes('/reliant.v1.') && !url.includes('/reliant.v1.SystemService/Version')),
+    ).toEqual([]);
   });
 
   test('the demo is public: /demo opens it signed out, with the tour', async ({ page }) => {

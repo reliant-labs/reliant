@@ -5,10 +5,12 @@ package servergateway
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/reliant-labs/forge/pkg/retry/retrytest"
 )
 
 // TestCreateConsumerWithRetry_RetriesWhenStreamMissing verifies the
@@ -18,7 +20,7 @@ import (
 // stream appears, creation succeeds and the reconciler proceeds.
 func TestCreateConsumerWithRetry_RetriesWhenStreamMissing(t *testing.T) {
 	t.Parallel()
-	r := &ManagedDaemonReconciler{}
+	r := &ManagedDaemonReconciler{clock: retrytest.NewClock(time.Unix(0, 0))}
 
 	calls := 0
 	create := func(ctx context.Context) (jetstream.Consumer, error) {
@@ -47,7 +49,7 @@ func TestCreateConsumerWithRetry_RetriesWhenStreamMissing(t *testing.T) {
 // is treated as retryable, not just the normalized ErrStreamNotFound sentinel.
 func TestCreateConsumerWithRetry_RetriesRawAPIError(t *testing.T) {
 	t.Parallel()
-	r := &ManagedDaemonReconciler{}
+	r := &ManagedDaemonReconciler{clock: retrytest.NewClock(time.Unix(0, 0))}
 
 	rawErr := &jetstream.APIError{
 		Code:        404,
@@ -94,6 +96,34 @@ func TestCreateConsumerWithRetry_NonRetryableSurfaces(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("expected exactly 1 attempt for non-retryable error, got %d", calls)
+	}
+}
+
+// TestCreateConsumerWithRetry_WaitLadder pins the backoff while the stream is
+// missing: 500ms doubling, capped at 10s.
+func TestCreateConsumerWithRetry_WaitLadder(t *testing.T) {
+	t.Parallel()
+	clock := retrytest.NewClock(time.Unix(0, 0))
+	r := &ManagedDaemonReconciler{clock: clock}
+
+	calls := 0
+	create := func(ctx context.Context) (jetstream.Consumer, error) {
+		calls++
+		if calls < 8 {
+			return nil, jetstream.ErrStreamNotFound
+		}
+		return nil, nil
+	}
+
+	if _, err := r.createConsumerWithRetry(context.Background(), create); err != nil {
+		t.Fatalf("expected retry to eventually succeed, got error: %v", err)
+	}
+	want := []time.Duration{
+		500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second,
+		8 * time.Second, 10 * time.Second, 10 * time.Second,
+	}
+	if got := clock.Sleeps(); !slices.Equal(got, want) {
+		t.Fatalf("waits = %v, want %v", got, want)
 	}
 }
 

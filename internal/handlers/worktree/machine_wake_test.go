@@ -128,10 +128,11 @@ func (r *asleepRouter) deliverAwake(daemonID, commandType string, payload []byte
 		return json.Marshal(map[string]any{
 			"name": "diagram.png", "path": "/w/diagram.png", "size": len(asleepTestPNG),
 			"viewer_kind": "image", "mime_type": "image/png", "is_binary": true,
+			"viewer_guarded": true,
 		})
 	case "fs.read_binary_file":
 		r.record(daemonID, commandType)
-		return json.Marshal(map[string]any{"data": base64.StdEncoding.EncodeToString(asleepTestPNG)})
+		return json.Marshal(map[string]any{"data": base64.StdEncoding.EncodeToString(asleepTestPNG), "viewer_guarded": true})
 	case "worktree.delete_directory", "worktree.delete_branch", "worktree.remove_workspace_dir":
 		r.record(daemonID, commandType)
 		return json.Marshal(map[string]any{"deleted": true})
@@ -504,7 +505,11 @@ type previewRouter struct {
 
 func (r *previewRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	if commandType == "fs.preview_info" {
-		return json.Marshal(r.info)
+		info := map[string]any{"viewer_guarded": true}
+		for k, v := range r.info {
+			info[k] = v
+		}
+		return json.Marshal(info)
 	}
 	return r.asleepRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
 }

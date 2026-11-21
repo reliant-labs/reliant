@@ -13,7 +13,7 @@ export interface WorkloadConfig {
   environmentId: string;
   workload: string;
   bundleId: string;
-  /** Verified immutable OCI manifest digest, not a secret fingerprint. Empty on older servers. */
+  /** Verified immutable OCI manifest digest, not a secret fingerprint. Empty when none was recorded. */
   bundleDigest: string;
   releaseVersion: string;
   objects: JsonObject[];

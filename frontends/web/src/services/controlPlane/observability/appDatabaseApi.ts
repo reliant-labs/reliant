@@ -150,7 +150,7 @@ export interface DbColumn {
   nullable: boolean;
   comment: string;
   isPrimaryKey: boolean;
-  /** Explicit server-projected marker only; absent on older servers. */
+  /** Explicit server-projected marker only; absent when the column names no identity. */
   identitySubject?: "id" | "email";
 }
 
