@@ -165,19 +165,18 @@ describe.each(['google', 'github', 'apple'] as const)('%s sign-in', (provider) =
     })
   })
 
-  it('falls back to the hosted callback in builds with no desktop bridge', async () => {
-    // Every build shipped before the loopback receiver existed: electronAPI is
-    // present but startOAuthRedirect is undefined.
+  it('asks for a desktop update when the preload has no sign-in bridge', async () => {
+    // An older preload is present, but cannot hand the callback to this renderer.
     ;(window as unknown as { electronAPI?: unknown }).electronAPI = {}
 
-    await call(provider)
-
-    expect(signInWithOAuthMock).toHaveBeenCalledWith({
-      provider,
-      options: {
-        redirectTo: 'https://app.reliantlabs.io/auth/callback',
-        skipBrowserRedirect: true,
-      },
+    await expect(call(provider)).rejects.toMatchObject({
+      name: 'DesktopUpdateRequiredError',
+      message:
+        'Signing in needs a newer version of the Reliant desktop app. Update the Reliant desktop app, then try again.',
     })
+    // Do not start a consent flow that cannot complete in this desktop build.
+    expect(signInWithOAuthMock).not.toHaveBeenCalled()
+    expect(windowOpenMock).not.toHaveBeenCalled()
+    expect(setSessionMock).not.toHaveBeenCalled()
   })
 })
