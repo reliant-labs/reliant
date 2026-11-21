@@ -69,6 +69,14 @@ export type NavSlotId =
 
 /** A count or a dot after a row's label. */
 export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };
+/**
+ * A badge after an item's label: a row's, a group's (drawn open or closed)
+ * or an area's. It reads the context only, so it is live from whatever the
+ * nav already holds: `ctx.console?.navCounts?.<source>` for a console count
+ * (Forge/Console/groupedNav.tsx), `ctx.console?.alertsFiring`, … Undefined:
+ * no badge. See countBadge (navConfig/model.ts) for the usual count.
+ */
+export type NavBadgeOf = (ctx: NavCtx) => NavBadge | undefined;
 
 interface NavItemBase {
   /** Unique within a config; the row's test id is `nav-<id>`. */
@@ -87,7 +95,7 @@ export interface NavRow extends NavItemBase {
   match?: NavMatch;
   /** Leaves the current area for another place (AI providers ↗ in Settings). */
   external?: boolean;
-  badge?: (ctx: NavCtx) => NavBadge | undefined;
+  badge?: NavBadgeOf;
   trail?: NavSlotId;
   /** A control after the row (Settings: the update button). */
   action?: NavSlotId;
@@ -101,6 +109,8 @@ export interface NavGroup extends NavItemBase {
   /** Routes the group holds beyond its rows' own (a slot's: the chat pages for Agents ▾). */
   match?: NavMatch;
   trail?: NavSlotId;
+  /** A count or a dot after the group's label, open or closed. */
+  badge?: NavBadgeOf;
 }
 
 export interface NavArea extends NavItemBase {
@@ -113,6 +123,8 @@ export interface NavArea extends NavItemBase {
   href?: NavHref;
   children: NavChildren;
   trail?: NavSlotId;
+  /** A count or a dot after the area's row (not drawn inside the area: its rows carry their own). */
+  badge?: NavBadgeOf;
   /** A control after its row (the footer's Settings: the update button). */
   action?: NavSlotId;
 }

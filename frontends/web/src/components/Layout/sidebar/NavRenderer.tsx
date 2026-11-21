@@ -154,6 +154,8 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         const current = isCurrent(item, ctx);
         const open = isOpen(item.id, current);
         const children = childrenOf(item, ctx);
+        const badge = item.badge?.(ctx);
+        const groupSlot = slot(item.trail, { place: "row", depth });
         return (
           <div key={item.id} data-testid={`${testId}-group`}>
             <SidebarSubRow
@@ -162,7 +164,14 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
               icon={depth === 0 ? item.icon : undefined}
               onClick={() => toggle(item.id, open)}
               expanded={open}
-              trail={slot(item.trail, { place: "row", depth }) || undefined}
+              trail={
+                groupSlot || badge ? (
+                  <>
+                    {groupSlot}
+                    {badge && <Badge badge={badge} />}
+                  </>
+                ) : undefined
+              }
               testId={testId}
             />
             {open && (
@@ -178,9 +187,11 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         // the footer's Settings stays and is lit while Settings is open.
         const href = hrefOf(item, ctx);
         const current = area?.id === item.id;
+        const badge = current ? undefined : item.badge?.(ctx);
         const trail = (
           <>
             {!current && slot(item.trail, { place: "row", depth })}
+            {badge && <Badge badge={badge} />}
             <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </>
         );

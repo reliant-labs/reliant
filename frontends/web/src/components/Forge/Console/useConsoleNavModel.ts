@@ -179,5 +179,18 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
     settled,
     scope,
     platformWide,
+    navCounts: useConsoleNavCounts(project),
   };
 }
+
+/**
+ * The nav's live badge counts for `project` (GroupedNavInput.navCounts),
+ * keyed by source. A source adds one entry here, read through a hook over
+ * the query its own page already makes, so the count is cached data, never
+ * another request; it answers 0 while loading or on failure. No source yet.
+ */
+function useConsoleNavCounts(_project: string): Readonly<Partial<Record<string, number>>> {
+  return NO_NAV_COUNTS;
+}
+
+const NO_NAV_COUNTS: Readonly<Partial<Record<string, number>>> = {};

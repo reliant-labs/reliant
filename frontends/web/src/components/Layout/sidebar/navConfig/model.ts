@@ -9,7 +9,21 @@
 import { projectPath, projectsPath } from "@/lib/paths";
 
 import { consolePath } from "../../../Forge/Console/paths";
-import type { NavArea, NavConfig, NavCtx, NavItem } from "./types";
+import type { NavArea, NavBadge, NavBadgeOf, NavConfig, NavCtx, NavItem } from "./types";
+
+/**
+ * The usual live badge: the console's count from `source`
+ * (GroupedNavInput.navCounts), labelled for a screen reader; nothing at 0 or
+ * before the console model answers.
+ *
+ *   badge: countBadge("tests", "suspected or flaky test", "suspected or flaky tests")
+ */
+export function countBadge(source: string, one: string, many: string, tone?: "danger"): NavBadgeOf {
+  return (ctx: NavCtx): NavBadge | undefined => {
+    const count = ctx.console?.navCounts?.[source] ?? 0;
+    return count > 0 ? { type: "count", value: count, label: count === 1 ? one : many, ...(tone ? { tone } : {}) } : undefined;
+  };
+}
 
 export function isAvailable(item: NavItem, ctx: NavCtx): boolean {
   return item.available?.(ctx) ?? true;
