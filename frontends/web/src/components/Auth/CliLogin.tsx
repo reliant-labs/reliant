@@ -8,7 +8,7 @@ import { AuthorizeOrgPicker, useAuthorizeOrg } from "../Orgs/AuthorizeOrgPicker"
 import { authPath, oauthCliPath } from "@/lib/paths";
 
 /**
- * CLI login consent: the human half of `forge login` / `reliant auth login`.
+ * CLI login consent: the human half of `forge cloud login` / `reliant auth login`.
  *
  * The control plane's GET /oauth/authorize validates a CLI's PKCE request and
  * sends the browser HERE, with the request's query string unchanged, because
@@ -57,7 +57,7 @@ export function CliLogin() {
   const device = params.get("device") ?? "";
   const requested = (params.get("scope") ?? "").split(" ").filter(Boolean);
 
-  // `forge login` asks for a human identity (credential_kind=human): a
+  // `forge cloud login` asks for a human identity (credential_kind=human): a
   // person's session authorized per request against their current
   // memberships, bound to no org. The control plane refuses an org on such an
   // approval, so the page neither shows the picker nor sends one.
@@ -74,7 +74,7 @@ export function CliLogin() {
       if (!params.get("redirect_uri") || !params.get("code_challenge")) {
         setPhase({
           kind: "error",
-          message: "This page was opened without a login request. Run `forge login` or `reliant auth login` again.",
+          message: "This page was opened without a login request. Run `forge cloud login` or `reliant auth login` again.",
         });
         return;
       }
@@ -223,7 +223,7 @@ export function CliLogin() {
           )}
           {requested.length > 0 && (
             <div className="space-y-2 pt-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">It asks to</p>
+              <p className="text-xs text-muted-foreground">It asks to</p>
               <ul className="space-y-1.5" data-testid="cli-login-scopes">
                 {requested.map((scope) => (
                   <li key={scope} className="text-sm flex items-start gap-2">

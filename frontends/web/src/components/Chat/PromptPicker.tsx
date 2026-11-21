@@ -93,7 +93,7 @@ export function PromptPicker({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim pt-[15vh]"
       onMouseDown={onClose}
       // Marks the modal focus context so global shortcuts stand down.
       data-modal-open="true"

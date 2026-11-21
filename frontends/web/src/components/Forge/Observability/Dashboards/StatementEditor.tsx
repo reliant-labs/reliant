@@ -257,7 +257,7 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
   return (
     <div className="space-y-2" data-testid="schema-clickhouse">
       <section>
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">Tables</h4>
+        <h4 className="text-2xs font-medium text-ink-muted">Tables</h4>
         {CLICKHOUSE_TABLES.map((table) => (
           <Disclosure key={table.name} title={table.name} testId={`schema-table-${table.name}`}>
             <p className="px-1 text-2xs text-ink-muted">{table.about}</p>
@@ -269,7 +269,7 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
         ))}
       </section>
       <section>
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">Attributes</h4>
+        <h4 className="text-2xs font-medium text-ink-muted">Attributes</h4>
         {ATTRIBUTE_KEYS.map((attribute) => (
           <div key={attribute.key}>
             <div className="flex items-center gap-1">
@@ -293,7 +293,7 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
         ))}
       </section>
       <section>
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">Metrics in this range</h4>
+        <h4 className="text-2xs font-medium text-ink-muted">Metrics in this range</h4>
         {metrics.isLoading ? (
           <p className="px-1 text-2xs text-ink-muted">Reading the metric catalog…</p>
         ) : metrics.error ? (

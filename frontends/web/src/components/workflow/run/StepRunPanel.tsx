@@ -110,7 +110,7 @@ function Section({ title, children, aside }: { title: string; children: React.Re
   return (
     <section className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
+        <h4 className="text-xs font-semibold text-muted-foreground">{title}</h4>
         {aside}
       </div>
       {children}

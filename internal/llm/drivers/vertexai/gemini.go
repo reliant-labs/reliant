@@ -12,6 +12,7 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -27,9 +28,16 @@ func (c *VertexAIClient) sendMessagesGemini(ctx context.Context, prompts []strin
 	config := c.buildGeminiConfig(prompts, toolsList)
 
 	// Generate content
-	resp, err := c.geminiClient.Models.GenerateContent(ctx, c.options.Model.APIModel, contents, config)
-	if err != nil {
-		return nil, fmt.Errorf("gemini API error: %w", err)
+	var resp *genai.GenerateContentResponse
+	if err := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var genErr error
+		resp, genErr = c.geminiClient.Models.GenerateContent(ctx, c.options.Model.APIModel, contents, config)
+		if genErr != nil {
+			return geminiFailure(fmt.Errorf("gemini API error: %w", genErr)), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
+		return nil, err
 	}
 
 	return c.convertGeminiResponse(resp)
@@ -45,69 +53,45 @@ func (c *VertexAIClient) streamResponseGemini(ctx context.Context, prompts []str
 		contents := c.convertMessagesToGemini(messages)
 		config := c.buildGeminiConfig(prompts, toolsList)
 
-		stream := c.geminiClient.Models.GenerateContentStream(ctx, c.options.Model.APIModel, contents, config)
-
-		accumulated := &llm.DriverResponse{
-			Content:   "",
-			ToolCalls: []message.ToolCall{},
-		}
-
-		for resp, err := range stream {
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
-				return
+		// The request retries through the ladder until the stream yields its
+		// first chunk. A failure after that is not retried here: its events
+		// already reached the consumer, and CallLLM's own retry owns a stream
+		// that broke mid-way.
+		var accumulated *llm.DriverResponse
+		emitCancelled := false
+		streamErr := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+			accumulated = &llm.DriverResponse{
+				Content:   "",
+				ToolCalls: []message.ToolCall{},
 			}
-
-			// Process the response
-			if len(resp.Candidates) > 0 {
-				candidate := resp.Candidates[0]
-
-				// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL)
-				if isErrorFinishReason(candidate.FinishReason) {
-					errMsg := fmt.Sprintf("gemini error: %s", candidate.FinishReason)
-					if candidate.FinishMessage != "" {
-						errMsg = fmt.Sprintf("%s: %s", errMsg, candidate.FinishMessage)
+			received := false
+			for resp, err := range c.geminiClient.Models.GenerateContentStream(ctx, c.options.Model.APIModel, contents, config) {
+				if err != nil {
+					if received {
+						return ratelimit.Failure{Err: err, Fatal: true}, false
 					}
-					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: errors.New(errMsg)}
-					return
+					return geminiFailure(err), false
 				}
-
-				// Process content parts (handle nil Content)
-				if candidate.Content != nil {
-					for _, part := range candidate.Content.Parts {
-						if part.Text != "" {
-							text := part.Text
-							accumulated.Content += text
-							eventChan <- llm.DriverEvent{
-								Type:    llm.EventContentDelta,
-								Content: text,
-							}
-						}
-
-						if part.FunctionCall != nil {
-							toolCall := geminiToolCall(part.FunctionCall)
-							accumulated.ToolCalls = append(accumulated.ToolCalls, toolCall)
-							eventChan <- llm.DriverEvent{
-								Type:     llm.EventToolUseStart,
-								ToolCall: &toolCall,
-							}
-						}
-					}
-				}
-
-				// Update usage if available
-				if resp.UsageMetadata != nil {
-					// TokenCount = TotalTokenCount (prompt + response + tool tokens)
-					accumulated.Usage = llm.TokenUsage{
-						TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
-					}
-				}
-
-				// Set finish reason
-				if candidate.FinishReason != genai.FinishReasonUnspecified {
-					accumulated.FinishReason = c.convertGeminiFinishReason(candidate.FinishReason)
+				received = true
+				if err := c.handleGeminiChunk(resp, accumulated, eventChan); err != nil {
+					return ratelimit.Failure{Err: err, Fatal: true}, false
 				}
 			}
+			return ratelimit.Failure{}, true
+		}, func(wait llm.RetryWait) error {
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if streamErr != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
+			}
+			return
 		}
 
 		// Send complete event
@@ -118,6 +102,62 @@ func (c *VertexAIClient) streamResponseGemini(ctx context.Context, prompts []str
 	}()
 
 	return eventChan
+}
+
+// handleGeminiChunk folds one streamed chunk into accumulated and emits its
+// events. An error finish reason (e.g. MALFORMED_FUNCTION_CALL) ends the
+// stream with that error.
+func (c *VertexAIClient) handleGeminiChunk(resp *genai.GenerateContentResponse, accumulated *llm.DriverResponse, eventChan chan<- llm.DriverEvent) error {
+	if len(resp.Candidates) == 0 {
+		return nil
+	}
+	candidate := resp.Candidates[0]
+
+	// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL)
+	if isErrorFinishReason(candidate.FinishReason) {
+		errMsg := fmt.Sprintf("gemini error: %s", candidate.FinishReason)
+		if candidate.FinishMessage != "" {
+			errMsg = fmt.Sprintf("%s: %s", errMsg, candidate.FinishMessage)
+		}
+		return errors.New(errMsg)
+	}
+
+	// Process content parts (handle nil Content)
+	if candidate.Content != nil {
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				text := part.Text
+				accumulated.Content += text
+				eventChan <- llm.DriverEvent{
+					Type:    llm.EventContentDelta,
+					Content: text,
+				}
+			}
+
+			if part.FunctionCall != nil {
+				toolCall := geminiToolCall(part.FunctionCall)
+				accumulated.ToolCalls = append(accumulated.ToolCalls, toolCall)
+				eventChan <- llm.DriverEvent{
+					Type:     llm.EventToolUseStart,
+					ToolCall: &toolCall,
+				}
+			}
+		}
+	}
+
+	// Update usage if available
+	if resp.UsageMetadata != nil {
+		// TokenCount = TotalTokenCount (prompt + response + tool tokens)
+		accumulated.Usage = llm.TokenUsage{
+			TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
+		}
+	}
+
+	// Set finish reason
+	if candidate.FinishReason != genai.FinishReasonUnspecified {
+		accumulated.FinishReason = c.convertGeminiFinishReason(candidate.FinishReason)
+	}
+	return nil
 }
 
 // buildGeminiConfig builds the generation configuration

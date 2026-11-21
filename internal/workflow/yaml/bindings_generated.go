@@ -227,6 +227,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"resolved_provider_account_id": {},
 			"resolved_role":                {},
 			"resolved_thinking":            {},
+			"resolved_thinking_level":      {},
 			"resolved_tool_calls":          {},
 			"resolved_tool_results":        {},
 			"role":                         {},

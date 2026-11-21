@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Settings › AI providers, for the active org (control-plane
+ * Settings › AI › Personal accounts, for the active org (control-plane
  * docs/design/org-provider-accounts.md §7, §10.4):
  *
  *   From Acme      the org's keys this person may use (label, provider,

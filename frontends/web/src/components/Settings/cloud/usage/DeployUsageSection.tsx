@@ -290,7 +290,7 @@ export function DeployUsageSection({
       {/* 4. How do I stop it? — plus where the tenant sits on the ladder. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Monthly admission budget">
-          <p className="text-sm">Your budget is recorded with the app hosting billing agreement above. Changing it is not supported here.</p>
+          <p className="text-sm">Your organization’s budget is set on the app hosting billing card above, where any owner or admin can change it.</p>
           <p className="mt-2 text-xs text-muted-foreground">Admission and suspension follow measured usage. Enforcement can lag and in-flight work may keep accruing charges; this is not a guaranteed maximum bill. Storage is not deleted.</p>
         </Panel>
         <Panel title="Enforcement">
@@ -304,7 +304,7 @@ export function DeployUsageSection({
 /** Section label rung of the heading ladder — see ../ui/card.tsx. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <h3 className="text-xs font-semibold text-muted-foreground">
       {children}
     </h3>
   );
@@ -313,7 +313,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 /** Stat caption — one rung below the ladder, lighter than a section label. */
 function StatCaption({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <p className="text-xs font-medium text-muted-foreground">
       {children}
     </p>
   );

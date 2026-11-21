@@ -598,7 +598,31 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // Finding the success and the episode with DISTINCT ON and row_number() over
 // the whole history judged every firing the triggers ever had (each joined to
 // its run's display state) on every Inbox read.
-var firingsSinceLastSuccessSQL = `SELECT ` + triggerOutcomeColumns("e") + `,
+var firingsSinceLastSuccessSQL = triggerEpisodeSQL("", "")
+
+// Both the success boundary and returned rows exclude safely managed actors
+// (the AttentionManagedChats predicate). Filtering after LIMIT/cutoff would let
+// a managed success erase an unmanaged failure, or a long managed streak push
+// it out of the episode window. An unfinished observer has no durable backstop.
+// The success search filters inside its ?2 window, so it is still the newest
+// ?2 unmanaged firings the episode itself can reach.
+var firingsSinceLastUnmanagedSuccessSQL = triggerEpisodeSQL(unmanagedAttentionFiringSQL("s"), unmanagedAttentionFiringSQL("x"))
+
+func unmanagedAttentionFiringSQL(alias string) string {
+	return ` AND NOT (` + alias + `.outcome = 'launched' AND EXISTS (
+		SELECT 1 FROM attention_actors a
+		JOIN chats ac ON ac.id = a.chat_id AND ac.user_id = a.user_id AND ac.project_id = a.project_id
+		JOIN projects ap ON ap.id = ac.project_id AND ap.user_id = ac.user_id
+		WHERE a.chat_id = ` + alias + `.chat_id AND a.user_id = ` + alias + `.user_id
+		  AND (a.finished OR (a.start_seen AND a.start_state IN ('recovering', 'action_required')
+		    AND EXISTS (SELECT 1 FROM attention_incidents i
+		      WHERE i.user_id = a.user_id AND i.project_id = a.project_id AND i.incident_key = a.incident_key
+		        AND i.state IN ('recovering', 'action_required'))))
+	))`
+}
+
+func triggerEpisodeSQL(successFilter, firingFilter string) string {
+	return `SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
 FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
 LEFT JOIN LATERAL (
@@ -606,7 +630,7 @@ LEFT JOIN LATERAL (
 	FROM (
 		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.run_outcome, s.chat_id, s.user_id
 		FROM trigger_events s
-		WHERE s.trigger_id = t.id AND s.user_id = ?0::text
+		WHERE s.trigger_id = t.id AND s.user_id = ?0::text` + successFilter + `
 		ORDER BY s.occurred_at DESC, s.id DESC
 		LIMIT ?2::integer
 	) w
@@ -622,12 +646,20 @@ CROSS JOIN LATERAL (
 	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
 	WHERE x.trigger_id = t.id
 		AND x.user_id = ?0::text
-		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))
+		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))` + firingFilter + `
 	ORDER BY x.occurred_at DESC, x.id DESC
 	LIMIT ?2::integer
 ) e
 ` + triggerFiringRunJoin + `
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+}
+
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox episode, excluding
+// registered attention-managed launched chats before both the cutoff and cap.
+// RecentTriggerOutcomes and FiringsSinceLastSuccess remain diagnostic reads.
+func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	return triggerFiringsByTrigger(ctx, db, "list unmanaged firings since last success", firingsSinceLastUnmanagedSuccessSQL, userID, triggerIDs, perTrigger)
+}
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
 // newest success (newest first, with their runs, at most perTrigger), keyed by

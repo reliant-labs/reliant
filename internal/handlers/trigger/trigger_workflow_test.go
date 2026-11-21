@@ -488,11 +488,12 @@ triggers:
 entry: [a]
 nodes:
   - id: a
-    type: approval
-    args: {title: ok}
+    type: call_llm
+    args:
+      model: {tags: [fast]}
 `)
 	unresolved := env.enable(t, env.enableRequest(nil))
-	assert.False(t, unresolved.Enabled, "a trigger with no prompt anywhere is refused")
+	assert.False(t, unresolved.Enabled, "a trigger with no prompt anywhere is refused when the workflow runs an agent")
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(unresolved)["bare"])
 	assert.Contains(t, resultFor(unresolved, "bare").Message, "message is required")
 	assert.Empty(t, env.storedTriggers(t))
@@ -876,4 +877,26 @@ func TestRetireDeletedTriggersDeletesTheirSchedules(t *testing.T) {
 		{ID: "w1", UserID: env.userID, Kind: core.TriggerKindWebhook},
 	})
 	assert.Equal(t, []string{"s1"}, env.backend.deleted, "only a schedule-backed trigger has a schedule to delete")
+}
+
+// A workflow that runs no agent needs no prompt: an activation of its
+// declared trigger with none is accepted, and its runs start from
+// triggers.DefaultSeedPrompt (north-star AW-50).
+func TestEnableWorkflowAgentlessNeedsNoPrompt(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "chain", `name: chain
+triggers:
+  - name: bare
+    schedule: {cron: "0 10 * * *"}
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`)
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "chain" }))
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Empty(t, resultFor(resp, "bare").Activation.GetMessage())
 }

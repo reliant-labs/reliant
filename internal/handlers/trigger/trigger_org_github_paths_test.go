@@ -79,8 +79,8 @@ func TestEveryDefinitionToRowPathBindsTheOrgInstallation(t *testing.T) {
 	}
 	sort.Strings(callers)
 	require.NotEmpty(t, callers, "the scan found no triggerFromDefinition call: it stopped seeing them")
-	require.Contains(t, callers, "trigger.go:CreateTrigger")
-	require.Contains(t, callers, "trigger.go:UpdateTrigger")
+	require.Contains(t, callers, "rpc_create_trigger.go:CreateTrigger")
+	require.Contains(t, callers, "rpc_update_trigger.go:UpdateTrigger")
 	require.Contains(t, callers, "trigger_org_github.go:activationRow")
 }
 

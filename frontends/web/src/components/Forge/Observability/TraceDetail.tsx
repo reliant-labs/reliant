@@ -311,7 +311,7 @@ function SpanDetails({
       <div className="space-y-3">
         {(span.links?.length ?? 0) > 0 && (
           <section aria-label="Span links">
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Span links</h4>
+            <h4 className="mb-1 text-xs font-semibold text-ink-muted">Span links</h4>
             <p className="mb-1 text-xs text-ink-muted">Causal references, not parent/child edges. Linked spans may be outside this range, sampled out, or past retention.</p>
             <ul className="space-y-1">
               {span.links?.map((link, index) => (
@@ -327,7 +327,7 @@ function SpanDetails({
         <AttributeTable title="Attributes" attributes={span.attributes} />
         {span.events.length > 0 && (
           <section aria-label="Events">
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Events</h4>
+            <h4 className="mb-1 text-xs font-semibold text-ink-muted">Events</h4>
             <ul className="space-y-2">
               {span.events.map((event, index) => (
                 <li key={`${event.name}-${index}`} className="rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs">
@@ -359,7 +359,7 @@ function SpanDetails({
 function Fact({ label, value, tone, mono }: { label: string; value: string; tone?: "error"; mono?: boolean }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dt className="text-xs font-medium text-ink-muted">{label}</dt>
       <dd className={`${mono ? "font-mono " : ""}${tone === "error" ? "text-danger-ink" : "text-ink"}`}>{value}</dd>
     </div>
   );

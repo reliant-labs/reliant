@@ -136,8 +136,10 @@ func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*ArchivedChatInfo, error) {
-	return store.ListArchivedChats(ctx, r.ORM(), userID, org)
+// ListArchivedChats lists the user's archived chats, a page of them when
+// page.Limit is set; the bool says whether more follow.
+func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page ArchivedChatPage) ([]*ArchivedChatInfo, bool, error) {
+	return store.ListArchivedChats(ctx, r.ORM(), userID, org, page)
 }
 
 // ListRuns is the cross-cutting run list, scoped to filters.UserID.
@@ -2067,9 +2069,10 @@ func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktre
 }
 
 // ListMainWorktreesForUser returns the main workspace of each of the user's
-// projects, or of the one project when projectID is set and the user owns it.
-func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*Worktree, error) {
-	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projectID)
+// projects, or of each project named that the user owns when projects is
+// non-empty.
+func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projects []string) ([]*Worktree, error) {
+	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projects)
 }
 
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2804,7 +2807,7 @@ func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int6
 		logging.DebugContext(ctx, "[GetThreadTokenCount] Thread record not found, trying direct query",
 			"thread", thread,
 			"error", err)
-		return r.getThreadTokenCountDirect(ctx, thread, thread, maxSeq)
+		return r.getThreadTokenCountDirect(ctx, thread, maxSeq)
 	}
 
 	// Get current context sequence for the thread
@@ -2869,11 +2872,9 @@ func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int6
 	return r.GetThreadTokenCount(ctx, parentThreadID, &forkMsg.Seq)
 }
 
-// getThreadTokenCountDirect queries token count directly using chat_id and thread.
+// getThreadTokenCountDirect queries the thread's token count directly.
 // Used as fallback when Thread record doesn't exist.
-func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
-	_ = chatID // kept for API compatibility
-
+func (r *Repo) getThreadTokenCountDirect(ctx context.Context, thread string, maxSeq *int64) (int64, error) {
 	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
@@ -2987,7 +2988,12 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 		return fmt.Errorf("workflow cannot be nil")
 	}
 
-	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// READ COMMITTED: the write is one INSERT … ON CONFLICT DO NOTHING (the
+	// activity emit runs after commit), and its admission triggers are
+	// row-lock protocols that bump the chat's worktree rows. SERIALIZABLE
+	// failed every insert that waited on another run's admission in the same
+	// chat with SQLSTATE 40001 (threads.Service.CreateWorkflowWithThread).
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
@@ -3809,6 +3815,16 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
+// Attention-managed actors are excluded before the success boundary and cap;
+// callers needing diagnostic health continue to use the unfiltered reads.
+func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 // GetLatestTriggerEvent returns the trigger's latest firing, optionally
@@ -4779,22 +4795,6 @@ func generateID() string {
 func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
-}
-
-// backfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
-// number of rows sealed. Requires EnableCredentialSealing.
-func (r *Repo) backfillAPIKeys(ctx context.Context, batch int) (int, error) {
-	return r.apiKeys.BackfillAPIKeys(ctx, batch)
-}
-
-// countUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
-func (r *Repo) countUnsealedAPIKeys(ctx context.Context) (int64, error) {
-	return r.apiKeys.CountUnsealedAPIKeys(ctx)
-}
-
-// validateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
-func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
-	return r.apiKeys.ValidateAPIKeysSealedConstraint(ctx)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without

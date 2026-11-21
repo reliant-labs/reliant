@@ -163,7 +163,7 @@ When you want forge's output to behave differently, the answer is almost always 
 1. **Change the input.** The proto, the migration, `config.proto` or the KCL. Most "generated code is wrong" cases are an input that says something different from what you meant.
 2. **Use the owned file beside it.** Each generated file names its sibling: CRUD behavior in `handlers_crud.go`, custom queries in `<entity>_repo_ext.go`, construction and wiring in `providers.go` and `compose.go`.
 3. **Disown the file**, with a reason.
-4. **Report it.** If the generated form is wrong rather than merely different, that is a forge bug. A disown reason is read as design feedback, and `forge report-bug` is the direct route.
+4. **Report it.** If the generated form is wrong rather than merely different, that is a forge bug. A disown reason is read as design feedback, and `forge agent report-bug` is the direct route.
 
 ## Related topics
 
