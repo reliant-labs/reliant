@@ -83,7 +83,7 @@ export function AppChip({ app, interactive = true, className }: AppChipProps) {
           aria-label={label}
           data-testid="app-chip"
           data-app-state={app.state}
-          className={cn(chipClass, "hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring")}
+          className={cn(chipClass, "no-color hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring")}
         >
           {body}
         </Link>
