@@ -20,6 +20,7 @@ var lintCleanBuiltins = map[string]bool{
 	"autopilot-oncall":          true,
 	"autopilot-security-review": true,
 	"build-workflow":            true,
+	"forge-migrate":             true,
 	"forge-one-shot":            true,
 }
 
