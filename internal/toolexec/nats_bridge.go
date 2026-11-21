@@ -458,6 +458,14 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.online").Inc()
 
+		// Connected, but draining for a restart: say until when, so a
+		// waiting tool call waits that long (daemon_upgrade.go).
+		if up, ok := b.mgr.(DaemonUpgradeReporter); ok {
+			if until, updating := up.DaemonUpdatingUntil(userID, daemonID); updating {
+				_ = msg.Respond(EncodeOnlineReplyUpdating(until))
+				return
+			}
+		}
 		_ = msg.Respond([]byte("true"))
 	}))
 
@@ -600,6 +608,10 @@ type daemonCommandWire struct {
 // router's SendDaemonCommandToDaemon exists so an operation and its recorded
 // owner agree — and the user's default daemon may be a different machine.
 func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg, userID, daemonID string, req *daemonCommandWire) {
+	if req.CommandType == RequestRestartCommand {
+		b.respondRequestRestart(ctx, msg, userID, daemonID, req)
+		return
+	}
 	protoReq := &reliantv1.DaemonCommandRequest{
 		RequestId:   req.RequestID,
 		CommandType: req.CommandType,
@@ -744,6 +756,8 @@ func transportErrorCode(err error) string {
 		return ErrorCodeDaemonInterrupted
 	case errors.Is(err, ErrDaemonReconnecting):
 		return ErrorCodeDaemonReconnecting
+	case errors.Is(err, ErrDaemonUpdating):
+		return ErrorCodeDaemonUpdating
 	}
 	return ErrorCodeDaemonRoundTrip
 }

@@ -43,6 +43,33 @@ func printFundingWarning(out io.Writer, w *reliantv1.TriggerFundingWarning) {
 		return
 	}
 	fmt.Fprintf(out, "\nWarning: %s\n", w.GetMessage())
+	// What to do about it, which the server's one sentence leaves out: the
+	// fix is an org admin's, in the app, or a model an org account serves.
+	fmt.Fprintf(out, "  An organization admin adds an API key or turns on Reliant credits in the app (%s),\n", orgAccountsSettingsPlace)
+	fmt.Fprintf(out, "  or choose a model one of its accounts can run (--param model=...). `reliant providers list --org %s` shows them.\n", orDash(w.GetOrgId()))
+}
+
+// pausedReasonLabel says why Reliant paused a trigger itself
+// (Trigger.paused_reason), and how it resumes; "" when a person paused it or
+// it is enabled. An unknown reason, from a newer server, is shown as sent.
+func pausedReasonLabel(t *reliantv1.Trigger) string {
+	if t.GetEnabled() {
+		return ""
+	}
+	switch reason := t.GetPausedReason(); reason {
+	case "":
+		return ""
+	case "no_org_account":
+		return "no_org_account: two firings in a row found no account of its organization able to run its model; resume it (`reliant trigger enable`) once an admin adds one"
+	case "org_policy":
+		return "org_policy: an organization policy refused its run; resume it once that is resolved"
+	case "creator_left_org":
+		return "creator_left_org: its creator is no longer a member of its organization; it resumes when they rejoin and enable it"
+	case "project_deleted":
+		return "project_deleted: its project is scheduled for deletion; restoring the project turns it back on"
+	default:
+		return reason
+	}
 }
 
 // onlyFundingChanged reports whether --org-accounts-only is the one

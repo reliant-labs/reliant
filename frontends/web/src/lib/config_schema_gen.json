@@ -117,6 +117,11 @@
       "source": "runtime"
     },
     {
+      "name": "IDENTITY_DATA_LINKS",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "OTEL_ENDPOINT",
       "type": "string",
       "source": "config"
@@ -143,6 +148,11 @@
     },
     {
       "name": "REPLAY_SAMPLE_RATE",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
+      "name": "RPC_FORENSICS",
       "type": "string",
       "source": "runtime"
     },

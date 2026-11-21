@@ -34,6 +34,7 @@ import { FloatingChromeFrame } from "../Chat/floatingChrome";
 import { useChatListPaneVisible } from "./mobileSplitPane";
 import { loadMainWorktree } from "../../hooks/worktree-actions";
 import { useMainWorktree } from "../../hooks/worktree-queries";
+import { useChatMachineName } from "../../hooks/useChatMachineName";
 
 const NO_MESSAGES: Message[] = [];
 
@@ -44,6 +45,7 @@ export function MobileChatScreen() {
   // "Could not find an active match" and took down the whole screen.
   const { chatId } = useParams({ strict: false });
   const chat = useChat(chatId);
+  const machineName = useChatMachineName(chat);
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const [showWorkspace, setShowWorkspace] = useState(false);
@@ -145,6 +147,7 @@ export function MobileChatScreen() {
         onBackToThread={() => setSelectedThreadId(backTargetId)}
         listPaneVisible={listPaneVisible}
         noMachine={chat?.noMachine}
+        machineName={machineName}
         contextUsage={contextUsage}
         onOpenWorkspace={openWorkspace}
       />
