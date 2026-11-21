@@ -230,8 +230,29 @@ func TestHooksDedupeOnIdempotencyKey(t *testing.T) {
 	require.Len(t, got, 1, "a redelivery with the same Idempotency-Key is one event")
 	assert.Equal(t, "trig-1:key:abc", got[0].Event.DedupeKey)
 
-	env.post("/hooks/trig-1/"+hookToken, `{"n":1}`, map[string]string{"X-Request-Id": "xyz"})
-	assert.Len(t, env.intake.all(), 2, "X-Request-Id is a key too")
+	env.post("/hooks/trig-1/"+hookToken, `{"n":1}`, map[string]string{"X-Delivery-Id": "xyz"})
+	assert.Len(t, env.intake.all(), 2, "X-Delivery-Id is a key too")
+}
+
+// X-Request-Id names a request, and a proxy sets a fresh one on every
+// delivery (Envoy, in front of the hosted service, overwrites the sender's).
+// It is no event id: a retry of the same body carrying a new one is still
+// the same event, by the body-hash fallback.
+func TestHooksDedupeIgnoresProxyRequestIDs(t *testing.T) {
+	env := newHooksEnv(t, core.WebhookConfig{}, "")
+	env.post("/hooks/trig-1/"+hookToken, `{"n":1}`, map[string]string{"X-Request-Id": "8b0d6c1e-proxy-1"})
+	env.now = env.now.Add(10 * time.Second)
+	env.post("/hooks/trig-1/"+hookToken, `{"n":1}`, map[string]string{"X-Request-Id": "f3a9e2d4-proxy-2"})
+	got := env.intake.all()
+	require.Len(t, got, 1, "a retry the proxy stamped with a new X-Request-Id is one event")
+	assert.Contains(t, got[0].Event.DedupeKey, "trig-1:body:")
+
+	// A sender's own idempotency key still wins over the body hash when a
+	// proxy id rides along.
+	env.post("/hooks/trig-1/"+hookToken, `{"n":1}`, map[string]string{"X-Request-Id": "proxy-3", "Idempotency-Key": "evt-9"})
+	got = env.intake.all()
+	require.Len(t, got, 2)
+	assert.Equal(t, "trig-1:key:evt-9", got[1].Event.DedupeKey)
 }
 
 func TestHooksDedupeWithoutAKeyIsBodyHashPerMinute(t *testing.T) {

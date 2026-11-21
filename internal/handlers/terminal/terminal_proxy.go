@@ -4,13 +4,10 @@ package terminal
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -81,19 +78,6 @@ func sendToMachine(ctx context.Context, router SessionRouter, userID, daemonID, 
 	return router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
 }
 
-// terminalSessionNotFound is how the daemon's terminal manager says a session
-// id names no live session (terminal.Manager.CloseSession). The daemon
-// transport carries a command's error as its message only
-// (daemon_router_nats.go), so the text is what reaches this server; daemons
-// already in the field send exactly this.
-const terminalSessionNotFound = "session not found"
-
-// isTerminalSessionNotFound reports whether a terminal.close failure is the
-// daemon having no such session.
-func isTerminalSessionNotFound(err error) bool {
-	return err != nil && strings.Contains(err.Error(), terminalSessionNotFound)
-}
-
 // daemonFailure is a failed daemon round trip as the svcerr kind the rpc
 // returns. A machine that is starting, asleep or absent is not a server
 // fault: its state picks the code, the message prefixed with machineDoing
@@ -114,114 +98,4 @@ func daemonFailure(machineDoing, doing string, err error) error {
 		msg += ": " + text
 	}
 	return svcerr.WithCause(svcerr.Internal(msg), err)
-}
-
-// ListSessions returns all active terminal sessions.
-func (s *Service) ListSessions(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListTerminalSessionsRequest],
-) (*connect.Response[reliantv1.ListTerminalSessionsResponse], error) {
-	userID, err := s.getUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	payload, err := json.Marshal(struct{}{})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
-	if err != nil {
-		return nil, daemonFailure("", "daemon command terminal.list", err)
-	}
-
-	var cmdResp struct {
-		Sessions []struct {
-			ID         string `json:"id"`
-			WorkingDir string `json:"working_dir"`
-			CreatedAt  string `json:"created_at"`
-			LastActive string `json:"last_active"`
-			PID        int    `json:"pid"`
-		} `json:"sessions"`
-	}
-	if err := json.Unmarshal(respBytes, &cmdResp); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
-	}
-
-	sessions := make([]*reliantv1.TerminalSession, len(cmdResp.Sessions))
-	for i, s := range cmdResp.Sessions {
-		session := &reliantv1.TerminalSession{
-			Id:         s.ID,
-			WorkingDir: s.WorkingDir,
-			CreatedAt:  s.CreatedAt,
-			LastActive: s.LastActive,
-		}
-		if s.PID > 0 {
-			pid := int32(s.PID)
-			session.Pid = &pid
-		}
-		sessions[i] = session
-	}
-
-	return connect.NewResponse(&reliantv1.ListTerminalSessionsResponse{
-		Sessions: sessions,
-		Total:    int32(len(sessions)),
-	}), nil
-}
-
-// CloseSession closes a specific terminal session.
-func (s *Service) CloseSession(
-	ctx context.Context,
-	req *connect.Request[reliantv1.CloseTerminalSessionRequest],
-) (*connect.Response[reliantv1.CloseTerminalSessionResponse], error) {
-	userID, err := s.getUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if req.Msg.SessionId == "" {
-		return nil, svcerr.InvalidArgument("session_id is required")
-	}
-
-	cmdReq := map[string]any{
-		"session_id": req.Msg.SessionId,
-	}
-	payload, err := json.Marshal(cmdReq)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-
-	respBytes, err := sendToMachine(ctx, s.deps.Router, userID, req.Msg.GetDaemonId(), "terminal.close", payload, 30000)
-	if err != nil {
-		// Closing a session that is already gone has achieved what close
-		// asks for. The race is built in: the terminal connection's deferred
-		// close (closeDaemonTerminalSession) and the browser's explicit
-		// CloseSession both close the same session when a tab is closed,
-		// and whichever lands second used to fail as INTERNAL (ELECTRON-97).
-		if isTerminalSessionNotFound(err) {
-			return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
-				Success: true,
-				Message: "Session already closed",
-			}), nil
-		}
-		return nil, daemonFailure("", "daemon command terminal.close", err)
-	}
-
-	var cmdResp struct {
-		Success bool `json:"success"`
-	}
-	if err := json.Unmarshal(respBytes, &cmdResp); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
-	}
-
-	msg := "Session closed successfully"
-	if !cmdResp.Success {
-		msg = "Failed to close session"
-	}
-
-	return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
-		Success: cmdResp.Success,
-		Message: msg,
-	}), nil
 }

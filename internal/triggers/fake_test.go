@@ -231,6 +231,9 @@ func (r *fakeRepo) eventsFor(triggerID string) []*core.TriggerEvent {
 type fakeLauncher struct {
 	mu    sync.Mutex
 	calls []launchCall
+	// defaultWorkflow is what ResolveDefaultWorkflow names; empty is the
+	// system default.
+	defaultWorkflow string
 
 	err    error
 	result *launch.Result
@@ -328,4 +331,14 @@ func (r *fakeRepo) GetIntegrationAccessSubject(_ context.Context, userID, integr
 		return s.id, nil
 	}
 	return "", nil
+}
+
+func (l *fakeLauncher) ResolveDefaultWorkflow(_ context.Context, _, reqWorkflow string) string {
+	switch {
+	case reqWorkflow != "":
+		return reqWorkflow
+	case l.defaultWorkflow != "":
+		return l.defaultWorkflow
+	}
+	return "builtin://agent"
 }

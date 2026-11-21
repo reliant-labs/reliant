@@ -8,10 +8,16 @@
  * Neither retries: a PermissionDenied (no billing:read) is a settled answer
  * the view renders, and any other failure is shown as unavailable with a
  * Refresh, never papered over with an old or empty result.
+ *
+ * Every key names the organization, and every answer must name it back: an
+ * answer for any other organization never enters the cache. The read asks
+ * once more, and if the second answer is foreign too it fails like any other
+ * read (forOrg).
  */
 
 import { useQuery } from "@tanstack/react-query";
 
+import { logger } from "@/lib/logger";
 import { getOrganizationCostSummary } from "@/services/controlPlane/observability/organizationCostsApi";
 import { listOrganizationUsage, type OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
@@ -22,10 +28,42 @@ export const organizationUsageKeys = {
   costSummary: (orgId: string) => ["organization-cost-summary", orgId] as const,
 };
 
+/** A billing answer that named another organization than the one asked about, twice. */
+export class ForeignOrganizationAnswerError extends Error {
+  readonly asked: string;
+  readonly answered: string;
+
+  constructor(asked: string, answered: string) {
+    super(`the billing answer named organization "${answered}", not "${asked}"`);
+    this.name = "ForeignOrganizationAnswerError";
+    this.asked = asked;
+    this.answered = answered;
+  }
+}
+
+/**
+ * `read`'s answer, which must name `orgId`. A foreign answer is logged (the
+ * ids only) and asked for once more; a second foreign answer is an error, so
+ * the panel says it could not load rather than show another organization's
+ * figures.
+ */
+export async function forOrg<T extends { orgId: string }>(orgId: string, rpc: string, read: () => Promise<T>): Promise<T> {
+  let answer = await read();
+  if (answer.orgId === orgId) return answer;
+  logger.warn(`${rpc}: the answer named another organization; asking again`, { asked: orgId, answered: answer.orgId || "(none)" });
+  answer = await read();
+  if (answer.orgId === orgId) return answer;
+  logger.warn(`${rpc}: the answer named another organization again; not shown`, { asked: orgId, answered: answer.orgId || "(none)" });
+  throw new ForeignOrganizationAnswerError(orgId, answer.orgId);
+}
+
 export function useOrganizationUsage(req: OrganizationUsageRequest | null) {
   return useQuery({
     queryKey: req ? organizationUsageKeys.usage(req) : ["organization-usage", "disabled"],
-    queryFn: () => listOrganizationUsage(req as OrganizationUsageRequest),
+    queryFn: () => {
+      const r = req as OrganizationUsageRequest;
+      return forOrg(r.orgId, "ListOrganizationUsage", () => listOrganizationUsage(r));
+    },
     enabled: !!req?.orgId,
     staleTime: 60_000,
     retry: false,
@@ -35,7 +73,7 @@ export function useOrganizationUsage(req: OrganizationUsageRequest | null) {
 export function useOrganizationCostSummary(orgId: string | null) {
   return useQuery({
     queryKey: organizationUsageKeys.costSummary(orgId ?? ""),
-    queryFn: () => getOrganizationCostSummary(orgId as string),
+    queryFn: () => forOrg(orgId as string, "GetOrganizationCostSummary", () => getOrganizationCostSummary(orgId as string)),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: false,

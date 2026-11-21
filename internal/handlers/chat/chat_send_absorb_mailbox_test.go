@@ -353,8 +353,11 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 }
 
 // TestSendMessage_PausedResumeLeavesMailboxForCallLLM covers the other
-// non-running entry point. Resume mechanics remain separate from queue delivery;
-// the resumed run drains on its next call_llm.
+// non-running entry point. Resume mechanics remain separate from queue
+// delivery: SendMessage neither drains the mailbox nor writes the new message
+// ahead of it. With messages already queued, the new one joins the queue
+// behind them, and the resumed run's next call_llm delivers all of it in the
+// order it was typed (chat_send_paused_mailbox_order_test.go drains it).
 func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	t.Parallel()
 
@@ -362,39 +365,32 @@ func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Paused())
-	temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
+		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}}
 	service := &Service{
 		deps: Deps{
 			Repo:     repo,
 			Temporal: temporal,
 		},
-		// No pause controller: the resume panics after the messages are
-		// saved, which is exactly the seam this test wants.
-		runs: runs.NewService(repo, temporal, nil),
+		runs: runs.NewService(repo, temporal, succeedingPauseController{}),
 	}
 
 	queueHumanMessage(t, repo, fx.chatID, fx.rootThreadID, fx.rootThreadID,
 		"queued while paused", time.Now().UTC().Add(-time.Minute))
 
-	// The run-lifecycle service is nil, so the resume itself panics after the
-	// messages are saved. The transaction under test has already committed by
-	// then; recover and assert on what it persisted.
-	func() {
-		defer func() { _ = recover() }()
-		_, _ = service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
-			ChatId: fx.chatID,
-			Messages: []*reliantv1.InputMessage{{
-				Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
-				Content: "resume now",
-			}},
-		}))
-	}()
+	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "resume now"))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.Queued, "the receipt says the message joined the queue")
 
-	assert.Equal(t, []string{"resume now"}, transcriptBodies(t, ctx, repo, fx.chatID),
-		"resume persists the new message but does not deliver the mailbox")
+	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued while paused", "resume now"),
+		"neither the queued message nor the new one is written into history by SendMessage")
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	require.Len(t, remaining, 1)
+	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued while paused", remaining[0].Body)
+	assert.Equal(t, "resume now", remaining[1].Body,
+		"the new message waits behind what was queued before it")
+	assert.Equal(t, resp.Msg.MessageId, remaining[1].ID, "the receipt names the queued row")
 }

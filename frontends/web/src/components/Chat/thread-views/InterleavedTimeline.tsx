@@ -976,8 +976,16 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // one row carrying a count. They stay separate rows in the store and the
     // database, where they really are separate events; this is derived render
     // state only. See groupVisibleErrors.
+    const streamedOrigins = new Map(activeThreads.map((thread) => [thread.thread, thread.origin]));
     const errorGroups = groupVisibleErrors(errorEvents, {
-      isVisible,
+      isVisible: (thread) => {
+        if (!isVisible(thread)) return false;
+        if (!thread) return true;
+        // A sub-agent's retry belongs in its own thread, even when detailed
+        // mode shows its ordinary messages inline. Prefer persisted origin.
+        const origin = displays.get(thread)?.origin ?? streamedOrigins.get(thread);
+        return !isSpawnOrigin(origin) || selectedThreads?.has(thread) === true;
+      },
       collapseAcrossThreads: showAll || (selectedThreads?.size ?? 0) > 1,
     });
 

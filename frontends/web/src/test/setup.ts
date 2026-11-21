@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeEach, vi } from 'vitest'
 import { configSchema, resetConfigForTests } from '@/lib/config_gen'

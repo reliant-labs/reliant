@@ -55,7 +55,9 @@ type ValidationOptions struct {
 	// `reliant workflow validate`, the workflow tools), not run. Findings that
 	// depend on this release's vocabulary rather than the definition's
 	// correctness (CategoryToolTag) are errors only then: a workflow saved
-	// before a tag was renamed still starts, with a warning.
+	// before a tag was renamed still starts, with a warning. So is a
+	// credentials: value the daemon refuses (CategoryCredentials): an
+	// existing workflow keeps starting, and only the step carrying it fails.
 	Authoring bool
 }
 
@@ -180,9 +182,14 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	// parameters. Unconditional — the catalog is generated and always present,
 	// so unlike the skill layer there is no optional dependency to skip on.
 	validateToolsConfigBindings(wf, result)
+	validateCredentialValues(wf, result)
 
 	if !opts.Authoring {
 		result.demote(CategoryToolTag)
+		// A workflow saved before this check still starts: the bad value
+		// fails only the node (or shell call) that carries it, as it always
+		// did, while an author is told before it ships.
+		result.demote(CategoryCredentials)
 	}
 	return result
 }

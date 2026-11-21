@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Check, Send, MessageSquare, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { LinkifiedText } from "./LinkifiedText";
 
 interface QuestionOption {
   label: string;
@@ -171,7 +172,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
 
       {/* Question text */}
       <p className="text-ui font-medium text-foreground mb-3 leading-relaxed">
-        {current.question}
+        <LinkifiedText text={current.question} />
       </p>
 
       <div>
@@ -181,11 +182,23 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
           {hasOptions &&
             current.options.map((option) => {
               const isSelected = selected.has(option.label);
+              // A div, not a <button>: an option's text may hold a link, and a
+              // link inside a button is invalid HTML. The role, the tab stop
+              // and Enter/Space give it a button's behaviour.
               return (
-                <button
+                <div
                   key={option.label}
-                  type="button"
+                  tabIndex={0}
                   onClick={() => toggleOption(option.label)}
+                  onKeyDown={(e) => {
+                    // Only the option's own keys: Enter on a link inside it
+                    // opens the link.
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleOption(option.label);
+                    }
+                  }}
                   className={cn(
                     "group flex items-start gap-3 w-full text-left rounded-lg px-3 py-2.5",
                     "touch:min-h-[44px] touch:py-2.5",
@@ -219,15 +232,15 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
                       "text-ui block",
                       isSelected ? "text-foreground" : "text-foreground/80"
                     )}>
-                      {option.label}
+                      <LinkifiedText text={option.label} />
                     </span>
                     {option.description && (
                       <span className="text-ui text-muted-foreground leading-relaxed block mt-0.5">
-                        {option.description}
+                        <LinkifiedText text={option.description} />
                       </span>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
 

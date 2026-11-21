@@ -46,7 +46,7 @@ import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { MetricCatalogEntry, MetricExemplar, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
-import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
@@ -55,10 +55,10 @@ import { CloudNotice } from "../../SourceNotices";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { ObsChartMarkersProvider } from "../charts/UPlotChart";
 import { AlertFromPanelDialog } from "../Dashboards/AlertFromPanelDialog";
-import { compareTarget, rangeParam, COMPARE_LABELS, type CompareMode } from "../Dashboards/dashboardModel";
+import { compareTarget, COMPARE_LABELS, type CompareMode } from "../Dashboards/dashboardModel";
 import { BUTTON_SMALL, Segmented } from "../Dashboards/parts";
 import { deliveryScopeOf } from "../deliveryScope";
-import { filterParam, filterTokensOf, scopeFiltersOf, type FilterToken } from "../obsFilters";
+import { filterParam, type FilterToken } from "../obsFilters";
 import type { ObsEnvironment } from "../obsPlace";
 import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { ObsScopeBar } from "../ObsScopeBar";
@@ -71,6 +71,7 @@ import { ExemplarPopover } from "./ExemplarPopover";
 import { displaySeries, ExplorerChart } from "./ExplorerChart";
 import { useDebouncedPanel, useExplorerPanelQuery } from "./explorerQueries";
 import { MetricDetail } from "./MetricDetail";
+import { useMetricSearchScope } from "./metricSearchScope";
 import { canonicalPanel, cliCommand, defaultSeriesFor, linkProblem, searchFromState, sqlPanelOf, stateFromSearch, type ChartKind, type ExplorerState } from "./model/explorerState";
 import { seriesLabel } from "./model/metricSemantics";
 import { formulaProblem, quantileLabel, QueryBuilder } from "./QueryBuilder";
@@ -230,8 +231,7 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const strings = useMemo(() => stringsOf(search), [search]);
-  const range: RangePreset = rangeParam(search.range) ?? DEFAULT_RANGE;
-  const filterTokens = useMemo(() => filterTokensOf(Array.isArray(search.f) ? search.f.map(String) : typeof search.f === "string" ? [search.f] : undefined), [search.f]);
+  const { range, filterTokens, scopeFilters } = useMetricSearchScope(search);
 
   // ── State: the URL's, mirrored locally so a query too large for a link still works ──
   const incoming = stateKeyOf(strings);
@@ -257,7 +257,6 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
   // ── Scope ──
   const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = env !== ENV_ALL && !envId;
-  const scopeFilters = useMemo(() => scopeFiltersOf(filterTokens), [filterTokens]);
   const envIdsKey = orgPlace ? orgPlace.envIds.join(",") : (envId ?? "");
   const barScope = useMemo<ObsScope | null>(
     () => (orgId && !unrecorded ? { orgId, projectId: project, envIds: envIdsKey ? envIdsKey.split(",") : [], filters: scopeFilters } : null),
