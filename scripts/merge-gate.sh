@@ -5,7 +5,7 @@
 # release gate (scripts/release-gate.sh), on main, before a release is cut.
 # dev-docs/merge-and-release-gates.md is the design and the trade-offs.
 #
-#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--skip-golangci] [--queue]
+#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--skip-golangci] [--skip-vitest] [--queue]
 #
 #   --base <rev>  diff base (default: the merge-base of HEAD and origin/main)
 #   --amend       a regenerate that changes only generated paths is amended
@@ -22,6 +22,12 @@
 #   --skip-golangci  leave golangci to a golangci (changed) job beside this
 #                 gate (ci.yml's ci:run pull request runs one); nothing else
 #                 changes. --queue implies it.
+#   --skip-vitest leave the selected vitest files to the merge queue's `vitest`
+#                 job beside this gate: 4 legs, each `scripts/vitest-shard.sh`,
+#                 vitest --shard over the SAME plan's file list (#2935 reached
+#                 ~1100 files, more than one runner runs in 30 minutes). The
+#                 test phase keeps the Go and electron lanes; typecheck stays.
+#                 Only where that job runs: `CI result` requires it.
 #   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
 #                 whose budget is five minutes of wall time (owner, 2026-11-01):
 #                 vet is left to the release gate and golangci to the queue's
@@ -108,7 +114,7 @@ set -uo pipefail
 # `set -u` an empty array expands as unbound unless written ${a[@]+"${a[@]}"}.
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
-base="" amend=0 regen=0 queue=0 skip_lint=0 skip_golangci=0
+base="" amend=0 regen=0 queue=0 skip_lint=0 skip_golangci=0 skip_vitest=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
@@ -117,6 +123,8 @@ while [ $# -gt 0 ]; do
     --skip-lint) skip_lint=1; shift ;;
     # A golangci (changed) job runs beside the gate: the queue's, or ci.yml's.
     --skip-golangci) skip_golangci=1; shift ;;
+    # The merge queue's vitest job runs the selected files, in shards.
+    --skip-vitest) skip_vitest=1; shift ;;
     # The queue tier skips vet (below), never forge lint.
     --queue) queue=1; shift ;;
     -h|--help) awk 'NR > 1 && /^set -uo pipefail/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -139,7 +147,7 @@ export FORGE_NO_MERGE_DRIVER=1
 # (scripts/forge.sh --machine; never a `go run`).
 read -r -a slotforge <<<"$(scripts/forge.sh --machine --which 2>/dev/null || true)"
 if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$skip_vitest" = 1 ] && echo --skip-vitest) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -522,7 +530,12 @@ lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-mark
 # package.json changes made the lane FULL. The rest run in the release gate's
 # `task test` (dev-docs/testing-affected.md, "A FULL web lane in the merge gate").
 test_lanes=go,web,electron
-if [ "$webfull" = true ]; then
+if [ "$skip_vitest" = 1 ]; then
+  # --skip-vitest: the merge queue's vitest job (scripts/vitest-shard.sh)
+  # runs the same plan's files, split across its legs.
+  test_lanes=go,electron
+  notes+=("web: the $nweb vitest file(s) the plan selects run in the merge queue's vitest job (vitest --shard, scripts/vitest-shard.sh); tsc -b runs here")
+elif [ "$webfull" = true ]; then
   notes+=("web: FULL fallback; tsc -b and the $nweb vitest file(s) the diff's modules reach run here, the whole vitest suite in the release gate")
 fi
 # demo_build: the forge demo bundle (frontends/web/vite.config.ts's demo
@@ -542,13 +555,26 @@ if [ "$fail" = 0 ]; then
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
-  if [ "$webdemo" = true ]; then
-    phase demo demo_build & pids+=($!)
-  fi
-  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
-  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
-  if [ "$webbuild" = true ]; then
-    phase webbuild scripts/web-release-build.sh & pids+=($!)
+  # The two vite builds are the gate's largest phases: on reliant#2935's merge
+  # with main the demo bundle peaked at 9.1 GB RSS and the renderer's release
+  # bundle at 11.8 GB, each on its own. Beside test, tsc -b and lint on the
+  # queue's 16 GiB runner the demo build alone took the gate to 14.6 GiB
+  # (cgroup memory.peak); with both, the runner ran out (#2935 twice, #3009
+  # twice: "The runner has received a shutdown signal", or a job with no log
+  # at its 30-minute timeout). So on a small host (gen_alone, the memory
+  # budget above) they run after every other phase, one at a time
+  # (run_bundles, below); on a bigger host, beside the rest.
+  if [ "$gen_alone" = 1 ]; then
+    bundles_after=1
+  else
+    if [ "$webdemo" = true ]; then
+      phase demo demo_build & pids+=($!)
+    fi
+    # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+    # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+    if [ "$webbuild" = true ]; then
+      phase webbuild scripts/web-release-build.sh & pids+=($!)
+    fi
   fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
@@ -617,6 +643,18 @@ fi
 # Every launched phase is waited for, the generators too when the gate failed
 # before build: cleanup must not remove a checkout a generator still writes.
 for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done
+# run_bundles: a small host's vite builds, deferred above, one at a time now
+# that nothing else runs. They run even when another phase failed, so the
+# summary names every failure, and before an --amend failure resets the tree.
+run_bundles() {
+  local rc=0
+  [ "$webdemo" = true ] || [ "$webbuild" = true ] || return 0
+  notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; the vite builds (demo, release) ran one at a time after the other phases")
+  if [ "$webdemo" = true ]; then phase demo demo_build || rc=1; fi
+  if [ "$webbuild" = true ]; then phase webbuild scripts/web-release-build.sh || rc=1; fi
+  return "$rc"
+}
+if [ "${bundles_after:-0}" = 1 ]; then run_bundles || fail=1; fi
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq
@@ -653,7 +691,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

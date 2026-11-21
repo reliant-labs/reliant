@@ -71,6 +71,12 @@ const (
 	// DeployServiceDeleteRetainedDatabaseProcedure is the fully-qualified name of the DeployService's
 	// DeleteRetainedDatabase RPC.
 	DeployServiceDeleteRetainedDatabaseProcedure = "/controlplane.v1.DeployService/DeleteRetainedDatabase"
+	// DeployServiceSetRetainedDatabaseRetentionProcedure is the fully-qualified name of the
+	// DeployService's SetRetainedDatabaseRetention RPC.
+	DeployServiceSetRetainedDatabaseRetentionProcedure = "/controlplane.v1.DeployService/SetRetainedDatabaseRetention"
+	// DeployServiceGetManagedDatabaseProcedure is the fully-qualified name of the DeployService's
+	// GetManagedDatabase RPC.
+	DeployServiceGetManagedDatabaseProcedure = "/controlplane.v1.DeployService/GetManagedDatabase"
 	// DeployServiceEnsureEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// EnsureEnvironment RPC.
 	DeployServiceEnsureEnvironmentProcedure = "/controlplane.v1.DeployService/EnsureEnvironment"
@@ -233,8 +239,25 @@ type DeployServiceClient interface {
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.
-	// IRREVERSIBLE; nothing else ever deletes retained data.
+	// IRREVERSIBLE. A retained database kept with a grace window
+	// (KEEP_DATA_RETENTION_GRACE_WINDOW) is also purged automatically once its
+	// purge_after has passed; one kept without (every keep_data delete before
+	// the field existed, and any that does not name a retention) only by this.
 	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
+	// SetRetainedDatabaseRetention keeps a retained database LONGER: it moves
+	// its automatic purge later, or cancels it so the database is kept until it
+	// is purged by hand. It never brings a purge closer (DeleteRetainedDatabase
+	// is the way to purge now) and never schedules one for a database kept
+	// until purged. Refused once a purge has been requested. ADMIN.
+	SetRetainedDatabaseRetention(context.Context, *connect.Request[v1.SetRetainedDatabaseRetentionRequest]) (*connect.Response[v1.SetRetainedDatabaseRetentionResponse], error)
+	// GetManagedDatabase reports one managed database of an environment: its
+	// lifecycle phase, size, engine version, and its backups (the newest, the
+	// next scheduled run, the retention window and the recent history). MEMBER
+	// (deploy:read for a machine credential), like the other environment
+	// reads. The environment is addressed by (project, environment) inside the
+	// caller's org, so another org's database is NotFound, never readable.
+	// forge:custom
+	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -727,6 +750,19 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
 			connect.WithClientOptions(opts...),
 		),
+		setRetainedDatabaseRetention: connect.NewClient[v1.SetRetainedDatabaseRetentionRequest, v1.SetRetainedDatabaseRetentionResponse](
+			httpClient,
+			baseURL+DeployServiceSetRetainedDatabaseRetentionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("SetRetainedDatabaseRetention")),
+			connect.WithClientOptions(opts...),
+		),
+		getManagedDatabase: connect.NewClient[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse](
+			httpClient,
+			baseURL+DeployServiceGetManagedDatabaseProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetManagedDatabase")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		ensureEnvironment: connect.NewClient[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceEnsureEnvironmentProcedure,
@@ -996,62 +1032,64 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
-	resolveHostedProject    *connect.Client[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse]
-	getCapabilities         *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
-	getTenant               *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
-	createTenant            *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
-	createEnvironment       *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
-	getEnvironment          *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
-	listEnvironments        *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
-	listApps                *connect.Client[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse]
-	updateEnvironment       *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
-	deleteEnvironment       *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
-	listRetainedDatabases   *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
-	deleteRetainedDatabase  *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
-	ensureEnvironment       *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
-	createDeployment        *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
-	getDeployment           *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
-	listDeployments         *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
-	updateDeployment        *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
-	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
-	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
-	setRollbackFloor        *connect.Client[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse]
-	liftRollbackFloor       *connect.Client[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse]
-	listRollbackFloors      *connect.Client[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse]
-	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
-	setEnvironmentRunState  *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
-	restartWorkload         *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
-	getStatus               *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
-	streamLogs              *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
-	cutRelease              *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
-	recordReleaseMigrations *connect.Client[v1.RecordReleaseMigrationsRequest, v1.RecordReleaseMigrationsResponse]
-	listReleases            *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
-	getRelease              *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
-	listPromotions          *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
-	compareReleases         *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
-	getRollout              *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
-	recordGate              *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
-	listGates               *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
-	getRun                  *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
-	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
-	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
-	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
-	getWorkloadConfig       *connect.Client[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse]
-	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
-	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
-	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
-	closeDeployAttempt      *connect.Client[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse]
-	listDeployAttempts      *connect.Client[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse]
-	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
-	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
-	getEnvironmentShape     *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
-	getProjectTopology      *connect.Client[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse]
-	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
-	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
-	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
-	mintLocalTelemetryToken *connect.Client[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse]
-	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
-	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+	resolveHostedProject         *connect.Client[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse]
+	getCapabilities              *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
+	getTenant                    *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
+	createTenant                 *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
+	createEnvironment            *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
+	getEnvironment               *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
+	listEnvironments             *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	listApps                     *connect.Client[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse]
+	updateEnvironment            *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
+	deleteEnvironment            *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
+	listRetainedDatabases        *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
+	deleteRetainedDatabase       *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
+	setRetainedDatabaseRetention *connect.Client[v1.SetRetainedDatabaseRetentionRequest, v1.SetRetainedDatabaseRetentionResponse]
+	getManagedDatabase           *connect.Client[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse]
+	ensureEnvironment            *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
+	createDeployment             *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
+	getDeployment                *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
+	listDeployments              *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
+	updateDeployment             *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
+	deleteDeployment             *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
+	promote                      *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	setRollbackFloor             *connect.Client[v1.SetRollbackFloorRequest, v1.SetRollbackFloorResponse]
+	liftRollbackFloor            *connect.Client[v1.LiftRollbackFloorRequest, v1.LiftRollbackFloorResponse]
+	listRollbackFloors           *connect.Client[v1.ListRollbackFloorsRequest, v1.ListRollbackFloorsResponse]
+	scale                        *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
+	setEnvironmentRunState       *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
+	restartWorkload              *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
+	getStatus                    *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
+	streamLogs                   *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
+	cutRelease                   *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
+	recordReleaseMigrations      *connect.Client[v1.RecordReleaseMigrationsRequest, v1.RecordReleaseMigrationsResponse]
+	listReleases                 *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
+	getRelease                   *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
+	listPromotions               *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	compareReleases              *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
+	getRollout                   *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
+	recordGate                   *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
+	listGates                    *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
+	getRun                       *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
+	listUsage                    *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
+	recordBundle                 *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
+	getBundle                    *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	getWorkloadConfig            *connect.Client[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse]
+	listConvergences             *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
+	openDeployAttempt            *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
+	reportDeployAttempt          *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
+	closeDeployAttempt           *connect.Client[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse]
+	listDeployAttempts           *connect.Client[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse]
+	getDeployAttempt             *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
+	getLiveView                  *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	getEnvironmentShape          *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
+	getProjectTopology           *connect.Client[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse]
+	planDeploy                   *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
+	checkDeployCapacity          *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
+	reportLocalSession           *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	mintLocalTelemetryToken      *connect.Client[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse]
+	importLedger                 *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
+	getDrift                     *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
 
 // ResolveHostedProject calls controlplane.v1.DeployService.ResolveHostedProject.
@@ -1112,6 +1150,16 @@ func (c *deployServiceClient) ListRetainedDatabases(ctx context.Context, req *co
 // DeleteRetainedDatabase calls controlplane.v1.DeployService.DeleteRetainedDatabase.
 func (c *deployServiceClient) DeleteRetainedDatabase(ctx context.Context, req *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
 	return c.deleteRetainedDatabase.CallUnary(ctx, req)
+}
+
+// SetRetainedDatabaseRetention calls controlplane.v1.DeployService.SetRetainedDatabaseRetention.
+func (c *deployServiceClient) SetRetainedDatabaseRetention(ctx context.Context, req *connect.Request[v1.SetRetainedDatabaseRetentionRequest]) (*connect.Response[v1.SetRetainedDatabaseRetentionResponse], error) {
+	return c.setRetainedDatabaseRetention.CallUnary(ctx, req)
+}
+
+// GetManagedDatabase calls controlplane.v1.DeployService.GetManagedDatabase.
+func (c *deployServiceClient) GetManagedDatabase(ctx context.Context, req *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
+	return c.getManagedDatabase.CallUnary(ctx, req)
 }
 
 // EnsureEnvironment calls controlplane.v1.DeployService.EnsureEnvironment.
@@ -1370,8 +1418,25 @@ type DeployServiceHandler interface {
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.
-	// IRREVERSIBLE; nothing else ever deletes retained data.
+	// IRREVERSIBLE. A retained database kept with a grace window
+	// (KEEP_DATA_RETENTION_GRACE_WINDOW) is also purged automatically once its
+	// purge_after has passed; one kept without (every keep_data delete before
+	// the field existed, and any that does not name a retention) only by this.
 	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
+	// SetRetainedDatabaseRetention keeps a retained database LONGER: it moves
+	// its automatic purge later, or cancels it so the database is kept until it
+	// is purged by hand. It never brings a purge closer (DeleteRetainedDatabase
+	// is the way to purge now) and never schedules one for a database kept
+	// until purged. Refused once a purge has been requested. ADMIN.
+	SetRetainedDatabaseRetention(context.Context, *connect.Request[v1.SetRetainedDatabaseRetentionRequest]) (*connect.Response[v1.SetRetainedDatabaseRetentionResponse], error)
+	// GetManagedDatabase reports one managed database of an environment: its
+	// lifecycle phase, size, engine version, and its backups (the newest, the
+	// next scheduled run, the retention window and the recent history). MEMBER
+	// (deploy:read for a machine credential), like the other environment
+	// reads. The environment is addressed by (project, environment) inside the
+	// caller's org, so another org's database is NotFound, never readable.
+	// forge:custom
+	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -1860,6 +1925,19 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceSetRetainedDatabaseRetentionHandler := connect.NewUnaryHandler(
+		DeployServiceSetRetainedDatabaseRetentionProcedure,
+		svc.SetRetainedDatabaseRetention,
+		connect.WithSchema(deployServiceMethods.ByName("SetRetainedDatabaseRetention")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetManagedDatabaseHandler := connect.NewUnaryHandler(
+		DeployServiceGetManagedDatabaseProcedure,
+		svc.GetManagedDatabase,
+		connect.WithSchema(deployServiceMethods.ByName("GetManagedDatabase")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceEnsureEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceEnsureEnvironmentProcedure,
 		svc.EnsureEnvironment,
@@ -2150,6 +2228,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceListRetainedDatabasesHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteRetainedDatabaseProcedure:
 			deployServiceDeleteRetainedDatabaseHandler.ServeHTTP(w, r)
+		case DeployServiceSetRetainedDatabaseRetentionProcedure:
+			deployServiceSetRetainedDatabaseRetentionHandler.ServeHTTP(w, r)
+		case DeployServiceGetManagedDatabaseProcedure:
+			deployServiceGetManagedDatabaseHandler.ServeHTTP(w, r)
 		case DeployServiceEnsureEnvironmentProcedure:
 			deployServiceEnsureEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceCreateDeploymentProcedure:
@@ -2293,6 +2375,14 @@ func (UnimplementedDeployServiceHandler) ListRetainedDatabases(context.Context, 
 
 func (UnimplementedDeployServiceHandler) DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.DeleteRetainedDatabase is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) SetRetainedDatabaseRetention(context.Context, *connect.Request[v1.SetRetainedDatabaseRetentionRequest]) (*connect.Response[v1.SetRetainedDatabaseRetentionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.SetRetainedDatabaseRetention is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetManagedDatabase is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) EnsureEnvironment(context.Context, *connect.Request[v1.EnsureDeployEnvironmentRequest]) (*connect.Response[v1.EnsureDeployEnvironmentResponse], error) {

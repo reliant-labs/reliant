@@ -57,6 +57,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/pull_request_record"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -192,6 +193,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
+		ClientVersions:  g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -972,6 +974,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgProviderAccount: g.OrgProviderAccount(),
 		OrgUsage:           g.OrgUsage(),
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
+		PullRequestRecord:  g.PullRequestRecord(),
 	})
 }
 
@@ -1568,5 +1571,15 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
 		Membership:  g.OrgResolver(),
+	})
+}
+
+// newPullRequestRecord constructs the pull-request-record handler (internal/handlers/pull_request_record).
+func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
+	return pull_request_record.New(pull_request_record.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
 	})
 }
