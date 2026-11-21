@@ -111,6 +111,11 @@ func (s *Service) ListProjectsWithApps(
 	}
 
 	hosted := <-appsDone
+	// Only an OK read takes part in the link. On NO_ACCESS or UNAVAILABLE
+	// the apps are never read (hostedApps drops them too): every ref is the
+	// same NOT_HOSTED whatever the org deploys, no ProjectApp carries hosted
+	// metadata, and no app-only row is listed, so a caller without
+	// deploy:read learns nothing about the org's apps.
 	links, unlinked := linkProjectApps(refs, hosted.apps, hosted.state == pb.HostedAppsState_HOSTED_APPS_STATE_OK)
 
 	out := &pb.ListProjectsWithAppsResponse{

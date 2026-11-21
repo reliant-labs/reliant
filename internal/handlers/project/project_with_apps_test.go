@@ -292,6 +292,12 @@ func TestListProjectsWithApps_HostedAppsUnreadable(t *testing.T) {
 		want reliantv1.HostedAppsState
 	}{
 		{"no deploy:read", &fakeHostedApps{err: fmt.Errorf("%w: permission_denied", controlplane.ErrHostedAppsDenied)}, reliantv1.HostedAppsState_HOSTED_APPS_STATE_NO_ACCESS},
+		// A refusal that came with apps anyway (a misbehaving adapter or
+		// control plane) still discloses none of them: the denied result
+		// is never read, so no hosted metadata, no app-only rows, and a
+		// link that is the same NOT_HOSTED whether or not the app exists.
+		{"no deploy:read, apps returned anyway", &fakeHostedApps{apps: f.Apps, err: fmt.Errorf("%w: permission_denied", controlplane.ErrHostedAppsDenied)}, reliantv1.HostedAppsState_HOSTED_APPS_STATE_NO_ACCESS},
+		{"unreachable, apps returned anyway", &fakeHostedApps{apps: f.Apps, err: errors.New("502 bad gateway")}, reliantv1.HostedAppsState_HOSTED_APPS_STATE_UNAVAILABLE},
 		{"unreachable", &fakeHostedApps{err: errors.New("dial tcp: connection refused")}, reliantv1.HostedAppsState_HOSTED_APPS_STATE_UNAVAILABLE},
 		{"no control plane", nil, reliantv1.HostedAppsState_HOSTED_APPS_STATE_UNAVAILABLE},
 	} {
@@ -306,6 +312,13 @@ func TestListProjectsWithApps_HostedAppsUnreadable(t *testing.T) {
 			}
 			if links := appLinks(byProjectID(resp)[f.ProjectID]); links != "shop@:NOT_HOSTED,draft@tools:NOT_HOSTED,site@web:NOT_HOSTED" {
 				t.Fatalf("apps %s, want every one NOT_HOSTED", links)
+			}
+			for _, p := range resp.GetProjects() {
+				for _, a := range p.GetApps() {
+					if a.GetHosted() != nil || a.GetLink() != reliantv1.ProjectAppLink_PROJECT_APP_LINK_NOT_HOSTED {
+						t.Fatalf("project %s app %s: link %v hosted %v, want NOT_HOSTED and no hosted metadata", p.GetProject().GetId(), a.GetName(), a.GetLink(), a.GetHosted())
+					}
+				}
 			}
 		})
 	}
