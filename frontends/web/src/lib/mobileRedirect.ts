@@ -104,9 +104,10 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/forge",
     "/apps",
     "/sites",
-    // A row of the one nav (U6e) with no phone twin: the org's Usage &
-    // billing is a page of the shell, which fits a phone, so the nav's drawer
-    // opens it rather than the chat list.
+    // Rows of the one nav (U6e) with no phone twin: Connectors and the org's
+    // Usage & billing are pages of the shell, which fits a phone, so the nav's
+    // drawer opens them rather than the chat list.
+    "/connectors",
     "/usage",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

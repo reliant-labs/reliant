@@ -68,6 +68,7 @@ const ROWS: Record<string, Row> = {
   sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
   usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
+  connectorsPath: { build: () => paths.connectorsPath(), url: "/connectors", template: "/connectors" },
   forgeLandingPath: { build: () => paths.forgeLandingPath(), url: "/forge", template: "/forge" },
   forgeDemoPath: { build: () => paths.forgeDemoPath(), url: "/forge/demo", template: "/forge/demo" },
   workflowsPath: { build: () => paths.workflowsPath(), url: "/workflows", template: "/workflows" },
@@ -198,6 +199,7 @@ const ORG_URLS: Record<string, string> = {
   sitesPath: "/o/acme/sites",
   usagePath: "/o/acme/usage",
   usageBillingPath: "/o/acme/usage",
+  connectorsPath: "/o/acme/connectors",
   forgeLandingPath: "/o/acme/forge",
   workflowsPath: "/o/acme/workflows",
   workflowLibraryPath: "/o/acme/workflows/library",
@@ -286,6 +288,10 @@ describe("lib/paths", () => {
     expect(paths.projectsHref("sites")).toBe("/projects?show=sites");
   });
 
+  it("opens Connectors on a tab, Integrations by default", () => {
+    expect(paths.connectorsPath("integrations")).toBe("/connectors");
+    expect(paths.connectorsPath("mcp")).toBe(hrefOf({ to: "/connectors", search: { tab: "mcp" } } as never));
+  });
 
   it("joins a search the way the router writes one", () => {
     expect(paths.withSearch(paths.runsPath(), { project: "p-1", allProjects: true, empty: "" })).toBe(
