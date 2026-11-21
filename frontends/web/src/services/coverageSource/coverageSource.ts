@@ -13,17 +13,23 @@
  * one line saying why, and every coverage figure stays (they never needed
  * source).
  *
- * NOT WIRED YET. The real fetch is reliant's `GetCoverageSource(project,
- * blob_id)` RPC (task W2b), which reads the blob through the project's
- * GitHub connection (`GET /repos/{o}/{r}/git/blobs/{sha}`) and serves only
- * blob ids a retained report of that project names. Until it exists, the
- * real implementation answers `not-yet-available`; previews and tests hand
- * the context a fixture (components/Forge/Tests/coverageFixtures.ts).
+ * The real fetch is reliant's `CoverageSourceService.GetCoverageSource(project,
+ * blob_id)`, which reads the blob from the project's GitHub repository
+ * (`GET /repos/{o}/{r}/git/blobs/{sha}`) with the viewer's own GitHub token,
+ * and serves only blob ids a retained report of that project names (it asks
+ * control-plane first). A reliant without the RPC (Unimplemented) is
+ * `not-yet-available`; previews and tests hand the context a fixture
+ * (components/Forge/Tests/coverageFixtures.ts).
  *
  * Whatever answers, the page draws highlights only over text whose git blob
  * id IS the report's (`verifySource`): coverage shown over other bytes is
  * silently wrong, so a mismatch is one more reason, never a best effort.
  */
+
+import { Code, ConnectError } from "@connectrpc/connect";
+
+import { CoverageSourceService, CoverageSourceUnavailable } from "@/gen/reliant/v1/coverage_source_pb";
+import { connectClient } from "@/lib/connect";
 
 /**
  * Why a file has no source to show.
@@ -34,13 +40,24 @@
  *   uncommitted        the run had uncommitted changes: the blob is in no commit
  *   gone               GitHub no longer has the blob (history rewritten, the
  *                      repository deleted or moved)
- *   revoked            the GitHub connection that reads it was revoked, or no
- *                      longer reaches the repository
- *   not-yet-available  this build cannot fetch source yet (GetCoverageSource, W2b)
+ *   revoked            the viewer's GitHub is not connected, needs reconnecting,
+ *                      or GitHub refused their token
+ *   not-yet-available  this deployment cannot fetch source yet (no
+ *                      GetCoverageSource, or its control plane cannot say which
+ *                      blobs a report holds)
+ *   too-large          the file is larger than the viewer shows (2 MiB)
  *   mismatch           what came back is not the blob the report names
  *   unreachable        GitHub or reliant did not answer
  */
-export type CoverageSourceUnavailableReason = "no-repo" | "uncommitted" | "gone" | "revoked" | "not-yet-available" | "mismatch" | "unreachable";
+export type CoverageSourceUnavailableReason =
+  | "no-repo"
+  | "uncommitted"
+  | "gone"
+  | "revoked"
+  | "not-yet-available"
+  | "too-large"
+  | "mismatch"
+  | "unreachable";
 
 export type CoverageSource = { text: string } | { unavailable: CoverageSourceUnavailableReason };
 
@@ -52,12 +69,43 @@ export interface CoverageSourceOptions {
 
 export type FetchCoverageSource = (project: string, blobId: string, opts?: CoverageSourceOptions) => Promise<CoverageSource>;
 
+const REASONS: Partial<Record<CoverageSourceUnavailable, CoverageSourceUnavailableReason>> = {
+  [CoverageSourceUnavailable.NO_REPO]: "no-repo",
+  [CoverageSourceUnavailable.UNCOMMITTED]: "uncommitted",
+  [CoverageSourceUnavailable.GONE]: "gone",
+  [CoverageSourceUnavailable.REVOKED]: "revoked",
+  [CoverageSourceUnavailable.NOT_YET_AVAILABLE]: "not-yet-available",
+  [CoverageSourceUnavailable.TOO_LARGE]: "too-large",
+};
+
 /**
- * The real fetch. Until reliant's GetCoverageSource exists (W2b), there is no
- * source to read: every file shows its line numbers and hits, and says so.
+ * The real fetch: reliant's GetCoverageSource. A file the run changed without
+ * committing has no blob, and nothing is asked. Every reason is an answer; a
+ * reliant without the RPC is `not-yet-available`; any other failure throws
+ * (the page shows `unreachable`). The bytes are decoded as UTF-8 here and
+ * re-hashed by `verifySource` before anything is drawn over them.
  */
-export const fetchCoverageSource: FetchCoverageSource = (_project, blobId) =>
-  Promise.resolve(blobId ? { unavailable: "not-yet-available" } : { unavailable: "uncommitted" });
+export const fetchCoverageSource: FetchCoverageSource = async (project, blobId, opts) => {
+  if (!blobId) return { unavailable: "uncommitted" };
+  try {
+    const res = await connectClient(CoverageSourceService).getCoverageSource(
+      { project, blobId, orgId: opts?.orgId ?? undefined },
+      { signal: opts?.signal }
+    );
+    switch (res.result.case) {
+      case "content":
+        return { text: new TextDecoder().decode(res.result.value) };
+      case "unavailable":
+        // A reason this build does not know yet: no source, and no guess why.
+        return { unavailable: REASONS[res.result.value] ?? "unreachable" };
+      default:
+        return { unavailable: "unreachable" };
+    }
+  } catch (err) {
+    if (ConnectError.from(err).code === Code.Unimplemented) return { unavailable: "not-yet-available" };
+    throw err;
+  }
+};
 
 /** The reason, or null when there is source. */
 export function unavailableReason(source: CoverageSource): CoverageSourceUnavailableReason | null {
