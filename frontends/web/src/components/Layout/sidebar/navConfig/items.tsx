@@ -15,7 +15,11 @@ import {
   Activity,
   ArrowUpRight,
   BarChart3,
+  Boxes,
   Inbox,
+  Plug,
+  ShieldCheck,
+  CreditCard,
   Database,
   Gauge,
   Globe,
@@ -25,6 +29,7 @@ import {
   LayoutGrid,
   Layers,
   Rocket,
+  Receipt,
   Server,
   Settings,
   Tag,
@@ -34,10 +39,11 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
-import { consolePath, OBS_NAV_LABELS, orgPath, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
 import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
@@ -80,12 +86,11 @@ export const overview: NavRow = {
   },
   match: (ctx) =>
     ctx.page?.kind === "overview" ||
-    // A workload's page is reached from the Overview's roster.
-    ctx.page?.kind === "workload" ||
     (ctx.mode !== "one" && isAt(ctx.pathname, projectsPath())) ||
     (!!ctx.projectId && isAt(ctx.pathname, projectPath(ctx.projectId))),
 };
 
+export const services = consoleRow("services", "Services", { kind: "services" }, icon(Boxes), ["services", "service", "workload"]);
 /** Buckets and managed Postgres (PAGES makes the page top-level). */
 export const storage = consoleRow("storage", "Storage", { kind: "storage" }, icon(HardDrive), ["storage"]);
 export const data = consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]);
@@ -111,8 +116,9 @@ export const previews: NavRow = {
 };
 
 /**
- * Deployments ▾ (U6e, Vercel's word; owner): how what runs got there — the
- * releases list, the long-lived environments, the previews. Promote and roll back stay on those pages.
+ * Deployments ▾ (U6e, Vercel's word; owner): what runs and how it got there —
+ * Services first, then the releases list, the long-lived environments, the
+ * previews. Promote and roll back stay on those pages.
  */
 export const deploymentsGroup: NavGroup = {
   kind: "group",
@@ -120,20 +126,33 @@ export const deploymentsGroup: NavGroup = {
   label: "Deployments",
   icon: icon(Rocket),
   available: hasApp,
-  children: [releases, environments, previews],
+  children: [services, releases, environments, previews],
 };
 export const secrets = consoleRow("secrets", "Secrets", { kind: "secrets" }, icon(KeyRound), ["secrets"]);
 export const domains = consoleRow("domains", "Domains", { kind: "domains" }, icon(Globe), ["domains"]);
-/** Users: who can sign in to the app (its managed identity). Beside Data and Storage. */
-export const users = consoleRow("users", "Users", { kind: "users" }, icon(UserRound), ["users"]);
+/**
+ * Auth: who can sign in to the app (its managed identity) and how. Beside
+ * Data and Storage; "Sign-in users" left Configure for it (U6d).
+ */
+export const auth: NavRow = {
+  kind: "row",
+  id: "auth",
+  label: "Auth",
+  icon: icon(UserRound),
+  href: (ctx) => (ctx.app ? withSearch(authPath(ctx.app), { env: ctx.console?.env }) : undefined),
+  match: pageIs("auth", "users"),
+  available: hasApp,
+};
 
 /** Inbox: a top-level row with its count, under Overview (owner, 15:02Z); the one place it is. */
 export const inbox: NavSlot = slot("inbox");
 /** Its href and match, for the slot's row and the tests. */
 export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
 export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
+/** What this project's hosting costs (the org's is Usage & billing, in the footer). */
+export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage" }, icon(Receipt), ["usage"]);
 
-/** Configure ▾: Secrets, Domains, Activity (Environments moved to Deployments, U6e). */
+/** Configure ▾: Secrets, Domains, Usage, Activity (Environments moved to Deployments, U6e). */
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
@@ -141,7 +160,26 @@ export const configureGroup: NavGroup = {
   icon: icon(Wrench),
   available: hasApp,
   // Activity (the audit log) stays its last row (owner): no page loses its nav entry.
-  children: [secrets, domains, activity],
+  children: [secrets, domains, projectUsage, activity],
+};
+
+// ── Security (U6d) ──────────────────────────────────────────────────────────
+
+const securityRows = (ctx: NavCtx): NavRow[] => registeredRows(ctx, "security");
+
+/**
+ * Security ▾: its rows are the pages that register into it
+ * (consoleNavRegistry.ts, `group: "security"`: Vulnerabilities and SBOMs,
+ * from the Security pages' own module). Until one has, the group is not
+ * drawn, so the nav never links to a page that is not mounted.
+ */
+export const securityGroup: NavGroup = {
+  kind: "group",
+  id: "security",
+  label: "Security",
+  icon: icon(ShieldCheck),
+  available: (ctx) => hasApp(ctx) && securityRows(ctx).length > 0,
+  children: securityRows,
 };
 
 // ── Dashboards (one place only: bug 4) ──────────────────────────────────────
@@ -207,6 +245,15 @@ function obsRow(view: ObsNavView, extra: Partial<NavRow> = {}): NavRow {
   };
 }
 
+const speedInsights: NavRow = {
+  kind: "row",
+  id: "speed-insights",
+  label: "Speed insights",
+  href: consoleHref({ kind: "speed-insights" }),
+  match: pageIs("speed-insights"),
+  available: hasApp,
+};
+
 const alertsRow = obsRow("alerts", {
   badge: (ctx) => {
     const firing = ctx.console?.alertsFiring ?? 0;
@@ -230,53 +277,102 @@ export const performanceRows: readonly NavItem[] = [
   obsRow("errors"),
   alertsRow,
   obsRow("traces"),
+  speedInsights,
   sessionsRow,
 ];
 
-/** The routes that are Observability: every view but Dashboards (top-level), and the org-wide pages. */
+/** The Observability Overview: golden signals, top errors, slowest endpoints, firing alerts (OVERVIEW agent's page). */
+const isObsOverview = (ctx: NavCtx) => ctx.page?.kind === "obs-overview" || ctx.orgPage?.kind === "observability";
+
+export const obsOverview: NavRow = {
+  kind: "row",
+  id: "obs-overview",
+  label: "Overview",
+  href: (ctx) =>
+    ctx.mode !== "one" ? orgPath({ kind: "observability" }) : ctx.app ? withSearch(obsOverviewPath(ctx.app), { env: ctx.console?.env }) : undefined,
+  match: isObsOverview,
+  available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
+};
+
+/** The routes that are Observability: its Overview, every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
+  isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
+  ctx.page?.kind === "speed-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
-/** Observability › — one of the two drill-ins; drilling in lands on its first view (the org's page across several projects). */
+/** Observability › — one of the two drill-ins; drilling in lands on its Overview. */
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
   label: "Observability",
   icon: icon(Gauge),
   match: isObservabilityRoute,
-  href: (ctx) => (ctx.mode !== "one" ? orgPath({ kind: "observability" }) : consoleHref({ kind: "obs-view", view: "graph" })(ctx)),
+  href: obsOverview.href,
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
-  children: [...observabilityRows, ...performanceRows],
+  children: [obsOverview, ...observabilityRows, ...performanceRows],
 };
 
 // ── Analytics ───────────────────────────────────────────────────────────────
 
-/** The routes that are Analytics: the built-in Product analytics hub's dashboards. */
-export const isAnalyticsRoute = (ctx: NavCtx): boolean => ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key);
+const analyticsTabOf = (ctx: NavCtx): AnalyticsTab | null =>
+  ctx.page?.kind === "analytics" ? (ctx.page.tab ?? "overview") : ctx.page?.kind === "events" ? "events" : null;
 
-const hasHub = (ctx: NavCtx) => hasApp(ctx) && !!ctx.console?.productAnalytics;
+/** One Analytics tab as a row (Product overview, Users, Product, Acquisition, Events & metrics). */
+function analyticsTabRow(tab: AnalyticsTab): NavRow {
+  return {
+    kind: "row",
+    id: `analytics-${tab}`,
+    label: ANALYTICS_TAB_LABELS[tab],
+    href: consoleHref({ kind: "analytics", tab }),
+    match: (ctx) => analyticsTabOf(ctx) === tab,
+    available: hasApp,
+  };
+}
 
-/** Insights: the built-in Product analytics hub (Users · Product · Acquisition), when the app has it. */
-const insights: NavRow = {
-  kind: "row",
-  id: "analytics-insights",
-  label: "Insights",
-  href: (ctx) => (ctx.console?.productAnalytics ? consoleHref(ctx.console.productAnalytics.open)(ctx) : undefined),
-  match: isAnalyticsRoute,
-  available: hasHub,
-};
+/** Which nav group a registered entry joins: Security's, or Analytics (every other entry). */
+const groupOf = (entry: ConsoleNavEntry): ConsoleNavGroup => (entry.group === "security" ? "security" : "product-analytics");
 
-/** Analytics ▾: the app's Product analytics hub. */
+function registeredEntryOf(ctx: NavCtx, group: ConsoleNavGroup): ConsoleNavEntry | undefined {
+  return consoleNavEntries().find((entry) => groupOf(entry) === group && consoleNavEntryLights(entry, ctx.page));
+}
+
+/**
+ * The rows other modules register (consoleNavRegistry.ts; Experiments, first)
+ * into `group`, each while the app has it: the end of Analytics, or Security.
+ */
+function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
+  const model = ctx.console;
+  if (!model) return [];
+  return consoleNavEntries()
+    .filter((entry) => groupOf(entry) === group && (entry.available?.(model) ?? true))
+    .map((entry) => ({
+      kind: "row" as const,
+      id: `registered-${entry.id}`,
+      label: entry.label,
+      href: consoleHref(consoleNavEntryTarget(entry)),
+      match: (c: NavCtx) => consoleNavEntryLights(entry, c.page),
+    }));
+}
+
+const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [...ANALYTICS_TABS.map(analyticsTabRow), ...registeredRows(ctx, "product-analytics")];
+
+/** The routes that are Analytics: its page, Events & metrics, the built-in hub's dashboards, the registered pages. */
+export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
+  analyticsTabOf(ctx) !== null ||
+  (ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key)) ||
+  !!registeredEntryOf(ctx, "product-analytics");
+
+/** Analytics ▾: the built-in dashboards' tabs, Events & metrics, then registered rows (Experiments). */
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",
   label: "Analytics",
   icon: icon(BarChart3),
-  available: hasHub,
+  available: hasApp,
   match: isAnalyticsRoute,
-  children: [insights],
+  children: analyticsChildren,
 };
 
 // ── Agents ──────────────────────────────────────────────────────────────────
@@ -293,23 +389,34 @@ export const workflowsGroup: NavGroup = {
   ],
 };
 
-/** The machines agents run on (Settings › Machines), under Agents. */
+/** "Machines" in the UI is "Agent sandboxes" now (round 5); under Agents, "Sandboxes". */
 export const sandboxes: NavRow = {
   kind: "row",
   id: "sandboxes",
-  label: "Machines",
+  label: "Sandboxes",
   icon: icon(Server),
-  href: () => settingsPath("machines"),
-  match: (ctx) => isAtOrBelow(ctx.pathname, settingsPath("machines")),
+  href: () => sandboxesPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
 };
 
-/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the machines. */
+
+/** Connectors: integrations and MCP servers on one page (owner, U6d). */
+export const connectors: NavRow = {
+  kind: "row",
+  id: "connectors",
+  label: "Connectors",
+  icon: icon(Plug),
+  href: () => connectorsPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, connectorsPath()) || isAtOrBelow(ctx.pathname, connectorsPath("mcp")),
+};
+
+/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes, Connectors. */
 export const isAgentsRoute = (ctx: NavCtx): boolean =>
-  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, settingsPath("machines"));
+  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath()) || connectors.match!(ctx);
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, slot("chat-list")];
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
@@ -325,6 +432,15 @@ export const agentsArea: NavArea = {
 };
 
 // ── The footer ──────────────────────────────────────────────────────────────
+
+export const usageBilling: NavRow = {
+  kind: "row",
+  id: "usage-billing",
+  label: "Usage & billing",
+  icon: icon(CreditCard),
+  href: () => usageBillingPath(),
+  match: (ctx) => isAt(ctx.pathname, usageBillingPath()),
+};
 
 /**
  * One Settings entry as a row. A section with two entries (Settings → AI:
@@ -383,6 +499,6 @@ export const settingsSections: NavArea = {
   children: settingsChildren,
 };
 
-export const footer: readonly NavItem[] = [settings];
+export const footer: readonly NavItem[] = [usageBilling, settings];
 
 export const externalMark = <ArrowUpRight className="size-3.5" aria-hidden="true" />;

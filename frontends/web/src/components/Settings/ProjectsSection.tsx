@@ -19,6 +19,7 @@ import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CurrentProjectDetails } from "./projects/CurrentProjectDetails";
 import { MoveProjectOrgDialog } from "./projects/MoveProjectOrgDialog";
 import { ProjectMachines } from "./projects/ProjectMachines";
+import { ProjectMoveSection } from "./projects/ProjectMoveSection";
 import { ProjectsTable } from "./projects/ProjectsTable";
 import { projectMatchesQuery, sortProjectsForSettings } from "./projects/projectSource";
 import { projectChatsPath, settingsPath } from "@/lib/paths";
@@ -230,26 +231,7 @@ export function ProjectsSection() {
         )}
 
         {currentProject && canSwitchOrg && (
-          <section
-            aria-labelledby="settings-projects-danger"
-            className="flex flex-col gap-3 rounded-lg border border-danger-border px-4 py-3"
-            data-testid="settings-projects-danger-zone"
-          >
-            <h2 id="settings-projects-danger" className="text-sm font-semibold text-foreground">
-              Danger zone
-            </h2>
-            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Move {currentProject.name} to another organization</p>
-                <p className="text-xs text-muted-foreground">
-                  Its chats, runs and automations go with it, and its next run bills the new organization.
-                </p>
-              </div>
-              <Button variant="danger" size="sm" onClick={() => setMovingProject(currentProject)}>
-                Move project…
-              </Button>
-            </div>
-          </section>
+          <ProjectMoveSection project={currentProject} onMove={() => setMovingProject(currentProject)} />
         )}
       </div>
 

@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /apps — everything the user has built and deployed, with the links to open
- * it. The sidebar's Apps entry lands here.
+ * The apps list — everything the user has built and deployed, with the links
+ * to open it. Projects shows it (`/projects`, and `?show=apps` for it alone;
+ * the nav's Apps heading lands there, and the retired /apps redirects there).
  *
  * An app is a forge project (services/forge/apps.ts), and the page is ONE
  * table of them (forge-ui DataTable, the list every console page is made of):
@@ -18,9 +19,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUpRight, CircleCheck, Plus } from "lucide-react";
-import { forgeAppOrigin } from "@/lib/shell";
-import { isElectron } from "@/lib/constants";
+import { CircleCheck, Plus } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -34,27 +33,23 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { isDeployed, isLive, isNeverDeployed, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
-import { AreaShell } from "../Layout/AreaShell";
 import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
 import { ForgeFirstRun } from "../ForgeShell/ForgeFirstRun";
-import { appsPath } from "@/lib/paths";
-
-export function AppsPage() {
-  return (
-    <AreaShell areaPath={appsPath()} areaLabel="Apps" areaNoun="apps">
-      <AppsBody />
-    </AreaShell>
-  );
-}
 
 /**
- * The list itself, without Reliant's area chrome. The forge shell
- * (lib/shell.ts) mounts it in its own layout as `variant="forge"`: no chat
- * builds apps there, so the empty state and the header say how to deploy one
- * from a checkout instead of offering "Build an app".
+ * The list itself, without the page's chrome. `variant="forge"` says how to
+ * deploy an app from a checkout instead of offering "Build an app", for a
+ * surface where no chat builds apps.
  */
-export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge" }) {
+export function AppsBody({
+  variant = "reliant",
+  header: showHeader = true,
+}: {
+  variant?: "reliant" | "forge";
+  /** False under a page that heads the list itself (Projects). */
+  header?: boolean;
+}) {
   const forge = variant === "forge";
   const { apps, loading, availability, detail } = useApps();
   const startBuilding = useStartBuildingApp();
@@ -77,15 +72,7 @@ export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge
       actions={
         forge
           ? []
-          : [
-              // The same apps in forge's own console (lib/shell.ts), for a user
-              // who wants it without Reliant around it. A website: not offered
-              // inside the desktop app, whose window would navigate away.
-              ...(isElectron()
-                ? []
-                : [{ label: "Open Forge console", href: forgeAppOrigin(), variant: "secondary" as const, icon: <ArrowUpRight className="h-4 w-4" aria-hidden="true" /> }]),
-              { label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> },
-            ]
+          : [{ label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> }]
       }
       className="mb-0"
     />
@@ -93,7 +80,7 @@ export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge
 
   return (
     <div className="space-y-5" data-testid="apps-page">
-      {header}
+      {showHeader && header}
       {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
@@ -326,9 +313,9 @@ function ClaimedBanner({
 }
 
 /**
- * The app a finished claim just made the user's own (`/apps?claimed=<project>`,
- * set by components/Claim/useClaimFlow.ts). Remembered, then dropped from the
- * URL, so a reload or a shared link does not highlight it again. Holds off
+ * The app a finished claim just made the user's own (`?claimed=<project>` on
+ * Projects' apps, set by components/Claim/useClaimFlow.ts). Remembered, then
+ * dropped from the URL (the page's other search, its filter, stays), so a reload or a shared link does not highlight it again. Holds off
  * until the list has loaded: the claim moved the site into the user's org, and
  * the list is what shows it.
  */
@@ -346,7 +333,11 @@ function useClaimedApp(names: string[], loading: boolean): { name: string | null
     if (!claimed) return;
     setName(claimed);
     setPaused(pausedSite && kept ? { name: pausedSite, kept } : null);
-    void navigate({ to: appsPath(), search: {}, replace: true });
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, claimed: undefined, pausedSite: undefined, kept: undefined }),
+      replace: true,
+    } as never);
   }, [claimed, pausedSite, kept, navigate]);
 
   return { name, found: !loading && name !== null && names.includes(name), paused };

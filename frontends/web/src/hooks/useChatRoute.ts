@@ -147,6 +147,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
           project: typeof search.project === "string" ? search.project : undefined,
           machine: typeof search.machine === "string" ? search.machine : undefined,
           ws: typeof search.ws === "string" ? search.ws : undefined,
+          app: typeof search.app === "string" ? search.app : undefined,
         }
       : null;
   const appliedFor = useRef<string | null>(null);
@@ -176,7 +177,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
       void newChatAppliedShown().then(settle);
       return;
     }
-    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws }).then(
+    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws, appName: newSearch.app }).then(
       () => settle(true),
       (error) => {
         void toast.error(error);

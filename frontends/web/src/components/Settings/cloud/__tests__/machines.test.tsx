@@ -147,12 +147,12 @@ describe('MachinesSection', () => {
     renderSection()
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /machines/i }),
+      screen.getByRole('heading', { level: 1, name: /agent sandboxes/i }),
     ).toBeInTheDocument()
 
     // The daemons query resolves to [] → the "No machines" empty state.
     expect(
-      await screen.findByRole('heading', { level: 3, name: /no machines/i }),
+      await screen.findByRole('heading', { level: 3, name: /no sandboxes/i }),
     ).toBeInTheDocument()
   })
 
@@ -165,12 +165,12 @@ describe('MachinesSection', () => {
     renderSection()
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /machines/i }),
+      screen.getByRole('heading', { level: 1, name: /agent sandboxes/i }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', { level: 3, name: /no machines/i }),
+      await screen.findByRole('heading', { level: 3, name: /no sandboxes/i }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /add machine/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add sandbox/i })).not.toBeInTheDocument()
     expect(mocks.getComputeEligibility).not.toHaveBeenCalled()
     expect(mocks.getComputeSubscription).not.toHaveBeenCalled()
   })
@@ -183,7 +183,7 @@ describe('MachinesSection', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: /run reliant on your own machine/i,
+        name: /run reliant on your own computer/i,
       }),
     ).toBeInTheDocument()
     // Rendered by the shared panel, in reference mode, not by this page.
@@ -203,7 +203,7 @@ describe('MachinesSection', () => {
       allowedDaemonSizes: [],
     })
     renderSection()
-    const [add] = await screen.findAllByRole('button', { name: /add machine/i })
+    const [add] = await screen.findAllByRole('button', { name: /add sandbox/i })
     fireEvent.click(add!)
     expect(screen.getByRole('dialog', { name: 'Add a machine' })).toBeInTheDocument()
     expect(mocks.navigate).not.toHaveBeenCalled()
@@ -215,7 +215,7 @@ describe('MachinesSection', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: /run reliant on your own machine/i,
+        name: /run reliant on your own computer/i,
       }),
     ).toBeInTheDocument()
   })
@@ -253,8 +253,8 @@ describe('MachinesSection', () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon, externalDaemon] })
       renderSection()
 
-      expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
-      expect(screen.getByText('Self-hosted machines')).toBeInTheDocument()
+      expect(await screen.findByText('Cloud sandboxes')).toBeInTheDocument()
+      expect(screen.getByText('Self-hosted sandboxes')).toBeInTheDocument()
 
       // Managed row keeps its real name.
       expect(screen.getByText('onboarding-daemon')).toBeInTheDocument()
@@ -267,7 +267,7 @@ describe('MachinesSection', () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon, externalDaemon] })
       renderSection()
 
-      await screen.findByText('Self-hosted machines')
+      await screen.findByText('Self-hosted sandboxes')
 
       // Managed table still has a Resources column and a Suspend action.
       expect(screen.getByRole('columnheader', { name: /resources/i })).toBeInTheDocument()
@@ -332,8 +332,8 @@ describe('MachinesSection', () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
       renderSection()
 
-      expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
-      expect(screen.queryByText('Self-hosted machines')).not.toBeInTheDocument()
+      expect(await screen.findByText('Cloud sandboxes')).toBeInTheDocument()
+      expect(screen.queryByText('Self-hosted sandboxes')).not.toBeInTheDocument()
     })
 
     // The open machine is the URL, so Back, refresh and links work: opening

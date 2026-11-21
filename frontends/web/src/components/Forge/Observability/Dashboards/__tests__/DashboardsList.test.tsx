@@ -2,8 +2,8 @@
 
 /**
  * Observability › Dashboards against the in-memory DashboardService: the
- * landing (starred chips, a card per hub or provided dashboard, the team's
- * own as rows), search across everything, the control-plane shape of sixteen
+ * gallery (a card per hub or dashboard, stars first, each with its source
+ * badge and preview), search and the source filter, the control-plane shape of sixteen
  * services — the filters, starring, the template
  * gallery and New dashboard — each write naming its environment — and the
  * read-only, empty, unavailable and failed states.
@@ -56,90 +56,76 @@ describe("Dashboards", () => {
       lastViewedAtMs: null, panelCount: 0, previewPanels: [], release: null, workspace: null, category: "organization",
     }] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
-    // The built-in is a card of its own.
-    const costs = await screen.findByTestId("dashboards-hub-org-costs");
+    // The built-in is a card of its own, badged, saying what opening it needs and that it has no chart to preview.
+    const costs = await screen.findByTestId("dashboards-card-org-costs");
     expect(within(costs).getByRole("link", { name: /Organization costs/ })).toHaveAttribute("href", "/d/builtin/org-costs");
     expect(within(costs).getByText("Requires cost-read permission")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboards-card-org-costs-badge")).toHaveTextContent("Built-in");
+    expect(screen.getByTestId("dashboards-card-org-costs-preview")).toHaveTextContent("No chart to preview");
     expect(screen.queryByTestId("dashboards-empty")).not.toBeInTheDocument();
   });
 
-  it("leads with what forge provides as a few cards, the team's own as rows, for the scoped environment", async () => {
+  it("lays every dashboard out as a card, stars first, forge's hubs one card each, for the scoped environment", async () => {
     const { onCall } = renderList();
-    const starred = await screen.findByTestId("dashboards-starred");
+    const gallery = await screen.findByTestId("dashboards-gallery");
     expect(onCall).toHaveBeenCalledWith("ListDashboards", expect.objectContaining({ projectId: FIXTURE_PROJECT, envId: "env-prod" }));
-    // Inside the project, "shop: " says nothing: it is dropped.
-    expect(within(starred).getAllByRole("link").map((a) => a.textContent)).toEqual(["Overview", "Frontend · web", "Checkout latency"]);
-    // Stars are one row of chips: no panel previews, so the page runs no panel query.
-    expect(onCall).not.toHaveBeenCalledWith("QueryPanel", expect.anything());
-
-    const cards = within(screen.getByTestId("dashboards-hubs")).getAllByRole("listitem").map((li) => li.dataset.testid);
-    expect(cards).toEqual(["dashboards-hub-overview", "dashboards-hub-services", "dashboards-hub-releases", "dashboards-hub-workloads", "dashboards-hub-org-llm"]);
+    const titles = within(gallery).getAllByRole("link").map((a) => a.textContent);
+    // Inside the project, "shop: " says nothing: it is dropped. The caller's stars lead.
+    expect(new Set(titles.slice(0, 3))).toEqual(new Set(["Overview", "Frontend · web", "Checkout latency"]));
     // Every service's dashboard (and the jobs one) is one card, opening the first.
-    const services = screen.getByTestId("dashboards-hub-services");
+    const services = screen.getByTestId("dashboards-card-services");
     expect(within(services).getByRole("link", { name: "Services" })).toHaveAttribute("href", "/d/release/service-api");
-    expect(within(screen.getByTestId("dashboards-hub-services-tabs"))).toBeTruthy();
-    expect(screen.getByTestId("dashboards-hub-services-tabs")).toHaveTextContent("api · orders · Jobs");
-    expect(within(screen.getByTestId("dashboards-hub-org-llm")).queryByText("Requires cost-read permission")).not.toBeInTheDocument();
-
-    const own = screen.getByTestId("dashboards-own");
-    expect(within(own).getAllByRole("link").map((a) => a.textContent)).toEqual(["Checkout funnel", "Frontend · web", "Checkout latency", "Daemon fleet", "Billing funnel"]);
-    expect(screen.getByTestId("dashboards-own-count")).toHaveTextContent("5");
-    // Where a row came from is said quietly; the release and the file are its tooltip.
-    const checkout = within(own).getByText("Checkout funnel").closest("li")!;
-    expect(within(checkout).getByTestId("dashboards-row-source")).toHaveTextContent("repo");
-    expect(within(checkout).getByTestId("dashboards-row-source").closest("[aria-describedby]")).toHaveAccessibleDescription(/Shipped in v1\.8\.2.*deploy\/observability\/dashboards\/checkout\.json/);
+    expect(screen.getByTestId("dashboards-card-services-tabs")).toHaveAttribute("title", "api · orders · Jobs");
+    // Each card says where it came from.
+    expect(screen.getByTestId("dashboards-card-checkout-badge")).toHaveTextContent("From repo");
+    expect(within(screen.getByTestId("dashboards-card-org-llm")).queryByText("Requires cost-read permission")).not.toBeInTheDocument();
+    // And the gallery ends on a way to make one.
+    expect(screen.getByTestId("dashboards-gallery-new")).toHaveTextContent("New dashboard");
   });
 
-  it("finds one service's dashboard by search, and narrows by group, source and owner", async () => {
+  it("finds one service's dashboard by search, and narrows by source", async () => {
     const user = userEvent.setup();
     renderList();
-    await screen.findByTestId("dashboards-hubs");
+    await screen.findByTestId("dashboards-gallery");
     await user.type(screen.getByTestId("dashboards-search"), "orders");
-    const results = () => within(screen.getByTestId("dashboards-results")).getAllByTestId("dashboards-row").map((row) => row.querySelector("a")?.getAttribute("aria-label"));
-    expect(results()).toContain("shop: orders service");
-    expect(screen.queryByTestId("dashboards-hubs")).not.toBeInTheDocument();
+    // A search lists every match as its own card, the ones inside a hub included.
+    expect(screen.queryByTestId("dashboards-card-services")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("dashboards-gallery")).getByRole("link", { name: /orders service/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboards-gallery-new")).not.toBeInTheDocument();
 
     await user.clear(screen.getByTestId("dashboards-search"));
     await user.type(screen.getByTestId("dashboards-search"), "daemons");
-    expect(results()).toEqual(["Daemon fleet"]);
-    await user.click(screen.getByTestId("dashboards-chip-release"));
+    expect(within(screen.getByTestId("dashboards-gallery")).getAllByRole("link").map((a) => a.textContent)).toEqual(["Daemon fleet"]);
+    // Each filter counts what it would show for the search.
+    expect(screen.getByTestId("dashboards-source-all")).toHaveTextContent("1");
+    await user.click(screen.getByTestId("dashboards-source-builtin"));
+    expect(screen.getByTestId("dashboards-source-builtin")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("dashboards-no-match")).toHaveTextContent("No dashboards match");
-    await user.click(screen.getByTestId("dashboards-clear"));
-    await user.click(screen.getByTestId("dashboards-chip-group"));
-    await user.click(screen.getByRole("menuitemradio", { name: "Jobs" }));
-    expect(results()).toEqual(["shop: jobs"]);
-    await user.click(screen.getByTestId("dashboards-clear"));
-    await user.click(screen.getByTestId("dashboards-chip-owner"));
-    await user.click(screen.getByRole("menuitemradio", { name: "repo" }));
-    expect(results()).toEqual(["Checkout funnel", "Frontend · web"]);
+    await user.click(screen.getByTestId("dashboards-source-all"));
+    expect(screen.queryByTestId("dashboards-no-match")).not.toBeInTheDocument();
   });
 
   it("stays a handful of cards over control-plane's sixteen services and hosted built-ins", async () => {
     renderList({ dashboardsManyServices: true });
-    const hubs = await screen.findByTestId("dashboards-hubs");
-    expect(within(hubs).getAllByRole("listitem").map((li) => li.dataset.testid)).toEqual([
-      "dashboards-hub-overview",
-      "dashboards-hub-product",
-      "dashboards-hub-services",
-      "dashboards-hub-releases",
-      "dashboards-hub-workloads",
-      "dashboards-hub-org-llm",
-    ]);
-    expect(within(screen.getByTestId("dashboards-hub-services")).getByLabelText("16 services")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboards-hub-product-tabs")).toHaveTextContent("Users · Product · Acquisition");
+    await screen.findByTestId("dashboards-gallery");
+    expect(screen.getByTestId("dashboards-card-services")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboards-card-product-tabs")).toHaveAttribute("title", expect.stringContaining("Users · Product · Acquisition"));
+    expect(screen.getAllByTestId(/^dashboards-card-[^-]+(-[^-]+)*$/).filter((el) => el.tagName === "LI").length).toBeLessThan(10);
     // The built-in Product usage is what forge's Users, Product and Acquisition say: it is not listed twice.
     expect(screen.queryAllByRole("link").map((a) => a.getAttribute("href"))).not.toContain("/d/builtin/usage");
-    expect(within(screen.getByTestId("dashboards-own")).getAllByTestId("dashboards-row")).toHaveLength(1);
   });
 
-  it("stars and unstars at once, for the caller, and pins the star at the top", async () => {
+  it("stars and unstars at once, for the caller, and moves the star to the front", async () => {
     const user = userEvent.setup();
     const { onCall } = renderList();
-    const workloads = await screen.findByTestId("dashboards-hub-workloads");
-    await user.click(within(workloads).getByRole("button", { name: "Star shop: workloads" }));
-    expect(within(workloads).getByRole("button", { name: "Unstar shop: workloads" })).toHaveAttribute("aria-pressed", "true");
+    const workloads = await screen.findByTestId("dashboards-card-workloads");
+    await user.click(within(workloads).getByRole("button", { name: "Star Workloads" }));
+    expect(within(screen.getByTestId("dashboards-card-workloads")).getByRole("button", { name: "Unstar Workloads" })).toHaveAttribute("aria-pressed", "true");
     expect(onCall).toHaveBeenCalledWith("StarDashboard", expect.objectContaining({ ref: expect.objectContaining({ kind: "release", key: "workloads" }) }));
-    await waitFor(() => expect(within(screen.getByTestId("dashboards-starred")).getByText("Workloads")).toBeInTheDocument());
+    await waitFor(() => {
+      const titles = within(screen.getByTestId("dashboards-gallery")).getAllByRole("link").map((a) => a.textContent);
+      expect(titles.indexOf("Workloads")).toBeLessThan(4);
+    });
   });
 
   it("starts from a template: the copy names its environment, and opens when saved", async () => {
@@ -206,11 +192,11 @@ describe("Dashboards is the dashboard browser, not a second Overview", () => {
     }
   });
 
-  it("works for a young app with two dashboards: their cards, and nothing of the team's yet", async () => {
+  it("works for a young app with two dashboards: their cards, and a way to make one", async () => {
     renderList({ dashboardsFew: true });
     await screen.findByTestId("dashboards-list");
-    expect(within(screen.getByTestId("dashboards-hubs")).getAllByRole("listitem").map((li) => li.dataset.testid)).toEqual(["dashboards-hub-overview", "dashboards-hub-services", "dashboards-hub-org-llm"]);
-    expect(screen.getByTestId("dashboards-own-empty")).toHaveTextContent("None yet");
+    for (const id of ["overview", "services", "org-llm"]) expect(screen.getByTestId(`dashboards-card-${id}`)).toBeInTheDocument();
+    expect(screen.getByTestId("dashboards-gallery-new")).toBeInTheDocument();
   });
 
   it("opens the template gallery from New dashboard", async () => {

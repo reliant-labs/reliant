@@ -186,7 +186,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
         // This sheet waits for a machine to connect. A CLI sign-in's code is
         // approved on the page its terminal linked, which says what it is.
         setApproval({ kind: "enter" });
-        setError("That code signs in the Reliant CLI, not a machine. Open the link your terminal printed to approve it.");
+        setError("That code signs in the Reliant CLI, not a sandbox. Open the link your terminal printed to approve it.");
         return;
       }
       setApproval({ kind: "confirm", machine });
@@ -194,7 +194,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
       setApproval({ kind: "enter" });
       setError(
         err instanceof PairingError && err.notFound
-          ? "No machine is waiting with that code. Check it against your terminal — a code lasts ten minutes."
+          ? "No computer is waiting with that code. Check it against your terminal — a code lasts ten minutes."
           : err instanceof Error
             ? err.message
             : "Could not look up the code",
@@ -218,11 +218,11 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
   const installLikelyDone = cliInstalled === true || isElectron || daemons.length > 0;
   const installEvidenceNote =
     cliInstalled === true
-      ? "The reliant CLI is already installed on this machine."
+      ? "The reliant CLI is already installed on this computer."
       : isElectron
         ? "You are running the Reliant desktop app, so it is already installed here."
         : daemons.length > 0
-          ? "You already have a machine connected. Open this if you are setting up another one."
+          ? "You already have a sandbox connected. Open this if you are setting up another one."
           : undefined;
   const terminal = describeTerminal(detectedOS);
 
@@ -254,7 +254,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
       <section className="space-y-4 rounded-lg border border-border/60 bg-background p-4">
         <div className="space-y-2">
           <StepHeading index={2} title="Run the command" />
-          <p className="text-xs text-muted-foreground">On the machine you want to connect. It prints a pairing code.</p>
+          <p className="text-xs text-muted-foreground">On the computer you want to connect. It prints a pairing code.</p>
           {isElectron && cliInstalled === false && (
             <div className="space-y-2 rounded border border-warning/30 bg-warning/5 p-2.5">
               <p className="flex items-start gap-2 text-xs text-warning-ink">
@@ -300,7 +300,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {[approval.machine.platform, `code ${approval.machine.userCode}`].filter(Boolean).join(" · ")}. It
-                    will run your projects as you — only approve a machine you just started.
+                    will run your projects as you — only approve a computer you just started.
                   </p>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                 orgId={authorizeOrg.orgId}
                 onChoose={authorizeOrg.choose}
                 disabled={approval.kind === "deciding"}
-                noun="this machine"
+                noun="this computer"
               />
               <div className="flex gap-2">
                 <Button
@@ -328,7 +328,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   onClick={() => void decide(approval.machine, false)}
                   disabled={approval.kind === "deciding"}
                 >
-                  Not my machine
+                  Not my computer
                 </Button>
               </div>
             </div>
@@ -336,7 +336,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
             <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>
-                Approved. Waiting for {approval.machine.hostname || "the machine"} to connect…
+                Approved. Waiting for {approval.machine.hostname || "the computer"} to connect…
               </span>
             </div>
           ) : (
@@ -363,7 +363,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
             </form>
           )}
           {approval.kind === "declined" && (
-            <p className="text-xs text-muted-foreground">Declined. That machine was not connected.</p>
+            <p className="text-xs text-muted-foreground">Declined. That computer was not connected.</p>
           )}
 
         </div>
@@ -376,10 +376,10 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
         {installEvidenceNote && <p>{installEvidenceNote}</p>}
         {cliPath && <p>CLI location: <code>{cliPath}</code></p>}
         <p>{terminal.howToOpen} Paste the command and press Enter.</p>
-        {mode !== "reference" && <p>This moves on by itself once the machine connects.</p>}
+        {mode !== "reference" && <p>This moves on by itself once the computer connects.</p>}
         {getControlPlaneURL() && (approval.kind === "enter" || approval.kind === "looking") && (
           <div className="space-y-2" data-testid="pair-no-code-hint">
-            <p><strong>Not seeing a code?</strong> That machine may be signed in to another account. Sign it out there, then start it again:</p>
+            <p><strong>Not seeing a code?</strong> That computer may be signed in to another account. Sign it out there, then start it again:</p>
             <CommandLine command={authLogoutCommand()} />
             <CommandLine command={daemonStartCommand()} />
           </div>
