@@ -47,7 +47,7 @@ function renderProduction(fetchRpc: (input: RequestInfo | URL) => Promise<Respon
   // No VulnerabilityApiProvider: the context's default is the production client.
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <VulnerabilitiesView scope={{ project: "shop" }} search={search} onSearch={() => undefined} advisoryHref={(id) => `/advisory/${id}`} sbomsHref={() => "/sboms"} />
+      <VulnerabilitiesView scope={{ project: "shop", environmentId: undefined }} search={search} onSearch={() => undefined} advisoryHref={(id) => `/advisory/${id}`} sbomsHref={() => "/sboms"} />
     </QueryClientProvider>
   );
 }
