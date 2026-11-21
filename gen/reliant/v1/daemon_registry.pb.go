@@ -1874,7 +1874,14 @@ type DaemonInfo struct {
 	// From the attachment lease like the memory telemetry, so it is set only
 	// while the daemon is attached; an attached daemon that reports no health
 	// (one that predates the report) reads MACHINE_HEALTH_STATE_OK.
-	Health        *v1.MachineHealth `protobuf:"bytes,31,opt,name=health,proto3" json:"health,omitempty"`
+	Health *v1.MachineHealth `protobuf:"bytes,31,opt,name=health,proto3" json:"health,omitempty"`
+	// The machine's and the daemon process's CPU, memory and file
+	// descriptors, as the daemon's heartbeats last reported them (the gateway
+	// stores the newest at most once a minute). From the attachment lease
+	// like the memory telemetry, so it is set only while the daemon is
+	// attached and has sent one; a daemon that predates the report leaves it
+	// unset.
+	Resources     *v1.DaemonResourceStats `protobuf:"bytes,32,opt,name=resources,proto3" json:"resources,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2126,6 +2133,13 @@ func (x *DaemonInfo) GetHealth() *v1.MachineHealth {
 	return nil
 }
 
+func (x *DaemonInfo) GetResources() *v1.DaemonResourceStats {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -2231,7 +2245,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
 	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
 	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
-	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xa2\v\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xe1\v\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -2268,7 +2282,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"is_default\x18\x1c \x01(\bR\tisDefault\x12:\n" +
 	"\x06labels\x18\x1d \x03(\v2\".reliant.v1.DaemonInfo.LabelsEntryR\x06labels\x12\x14\n" +
 	"\x05pools\x18\x1e \x03(\tR\x05pools\x121\n" +
-	"\x06health\x18\x1f \x01(\v2\x19.reliant.v1.MachineHealthR\x06health\x1a9\n" +
+	"\x06health\x18\x1f \x01(\v2\x19.reliant.v1.MachineHealthR\x06health\x12=\n" +
+	"\tresources\x18  \x01(\v2\x1f.reliant.v1.DaemonResourceStatsR\tresources\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xd1\x01\n" +
@@ -2375,6 +2390,7 @@ var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	(*v1.DiscoveredProject)(nil),           // 40: reliant.v1.DiscoveredProject
 	(*v1.DiskReport)(nil),                  // 41: reliant.v1.DiskReport
 	(*v1.MachineHealth)(nil),               // 42: reliant.v1.MachineHealth
+	(*v1.DaemonResourceStats)(nil),         // 43: reliant.v1.DaemonResourceStats
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
 	33, // 0: reliant.v1.RenameMachineResponse.daemon:type_name -> reliant.v1.DaemonInfo
@@ -2407,37 +2423,38 @@ var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
 	41, // 27: reliant.v1.DaemonInfo.disk:type_name -> reliant.v1.DiskReport
 	37, // 28: reliant.v1.DaemonInfo.labels:type_name -> reliant.v1.DaemonInfo.LabelsEntry
 	42, // 29: reliant.v1.DaemonInfo.health:type_name -> reliant.v1.MachineHealth
-	20, // 30: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	22, // 31: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	24, // 32: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	26, // 33: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	29, // 34: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
-	31, // 35: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
-	17, // 36: reliant.v1.DaemonRegistryService.ClearMachineCaches:input_type -> reliant.v1.ClearMachineCachesRequest
-	15, // 37: reliant.v1.DaemonRegistryService.SetDefaultDaemon:input_type -> reliant.v1.SetDefaultDaemonRequest
-	4,  // 38: reliant.v1.DaemonRegistryService.SetMachineLabels:input_type -> reliant.v1.SetMachineLabelsRequest
-	2,  // 39: reliant.v1.DaemonRegistryService.RenameMachine:input_type -> reliant.v1.RenameMachineRequest
-	6,  // 40: reliant.v1.DaemonRegistryService.ListMachinePools:input_type -> reliant.v1.ListMachinePoolsRequest
-	8,  // 41: reliant.v1.DaemonRegistryService.PutMachinePool:input_type -> reliant.v1.PutMachinePoolRequest
-	10, // 42: reliant.v1.DaemonRegistryService.DeleteMachinePool:input_type -> reliant.v1.DeleteMachinePoolRequest
-	21, // 43: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	23, // 44: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	25, // 45: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	27, // 46: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	30, // 47: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
-	32, // 48: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
-	18, // 49: reliant.v1.DaemonRegistryService.ClearMachineCaches:output_type -> reliant.v1.ClearMachineCachesResponse
-	16, // 50: reliant.v1.DaemonRegistryService.SetDefaultDaemon:output_type -> reliant.v1.SetDefaultDaemonResponse
-	5,  // 51: reliant.v1.DaemonRegistryService.SetMachineLabels:output_type -> reliant.v1.SetMachineLabelsResponse
-	3,  // 52: reliant.v1.DaemonRegistryService.RenameMachine:output_type -> reliant.v1.RenameMachineResponse
-	7,  // 53: reliant.v1.DaemonRegistryService.ListMachinePools:output_type -> reliant.v1.ListMachinePoolsResponse
-	9,  // 54: reliant.v1.DaemonRegistryService.PutMachinePool:output_type -> reliant.v1.PutMachinePoolResponse
-	11, // 55: reliant.v1.DaemonRegistryService.DeleteMachinePool:output_type -> reliant.v1.DeleteMachinePoolResponse
-	43, // [43:56] is the sub-list for method output_type
-	30, // [30:43] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	43, // 30: reliant.v1.DaemonInfo.resources:type_name -> reliant.v1.DaemonResourceStats
+	20, // 31: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	22, // 32: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	24, // 33: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	26, // 34: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	29, // 35: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
+	31, // 36: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
+	17, // 37: reliant.v1.DaemonRegistryService.ClearMachineCaches:input_type -> reliant.v1.ClearMachineCachesRequest
+	15, // 38: reliant.v1.DaemonRegistryService.SetDefaultDaemon:input_type -> reliant.v1.SetDefaultDaemonRequest
+	4,  // 39: reliant.v1.DaemonRegistryService.SetMachineLabels:input_type -> reliant.v1.SetMachineLabelsRequest
+	2,  // 40: reliant.v1.DaemonRegistryService.RenameMachine:input_type -> reliant.v1.RenameMachineRequest
+	6,  // 41: reliant.v1.DaemonRegistryService.ListMachinePools:input_type -> reliant.v1.ListMachinePoolsRequest
+	8,  // 42: reliant.v1.DaemonRegistryService.PutMachinePool:input_type -> reliant.v1.PutMachinePoolRequest
+	10, // 43: reliant.v1.DaemonRegistryService.DeleteMachinePool:input_type -> reliant.v1.DeleteMachinePoolRequest
+	21, // 44: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	23, // 45: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	25, // 46: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	27, // 47: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	30, // 48: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
+	32, // 49: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
+	18, // 50: reliant.v1.DaemonRegistryService.ClearMachineCaches:output_type -> reliant.v1.ClearMachineCachesResponse
+	16, // 51: reliant.v1.DaemonRegistryService.SetDefaultDaemon:output_type -> reliant.v1.SetDefaultDaemonResponse
+	5,  // 52: reliant.v1.DaemonRegistryService.SetMachineLabels:output_type -> reliant.v1.SetMachineLabelsResponse
+	3,  // 53: reliant.v1.DaemonRegistryService.RenameMachine:output_type -> reliant.v1.RenameMachineResponse
+	7,  // 54: reliant.v1.DaemonRegistryService.ListMachinePools:output_type -> reliant.v1.ListMachinePoolsResponse
+	9,  // 55: reliant.v1.DaemonRegistryService.PutMachinePool:output_type -> reliant.v1.PutMachinePoolResponse
+	11, // 56: reliant.v1.DaemonRegistryService.DeleteMachinePool:output_type -> reliant.v1.DeleteMachinePoolResponse
+	44, // [44:57] is the sub-list for method output_type
+	31, // [31:44] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }

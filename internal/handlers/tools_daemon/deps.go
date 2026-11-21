@@ -37,6 +37,7 @@ type Repository interface {
 	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
 	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
 	UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health db.MachineHealth) error
+	UpdateDaemonAttachmentResources(ctx context.Context, daemonID, statsJSON string) error
 
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column

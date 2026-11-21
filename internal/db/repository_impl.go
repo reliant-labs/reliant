@@ -1622,6 +1622,21 @@ func (r *Repo) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string
 	return nil
 }
 
+// UpdateDaemonAttachmentResources records the resource reading a daemon
+// heartbeat carried (protojson of reliantv1.DaemonResourceStats) on the
+// attachment (liveness) record. Mirrors UpdateDaemonAttachmentMemory: a no-op
+// when the attachment row doesn't exist, and it does NOT touch
+// last_stream_activity.
+func (r *Repo) UpdateDaemonAttachmentResources(ctx context.Context, daemonID, statsJSON string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if err := store.SetDaemonAttachmentResources(ctx, r.ORM(), daemonID, statsJSON); err != nil {
+		return fmt.Errorf("updating daemon attachment resources: %w", err)
+	}
+	return nil
+}
+
 // SetDaemonLocalModels stores the daemon's last-published local model
 // inventory (protojson of reliant.v1.LocalModelInventory). The value replaces
 // the previous one wholesale: the daemon always publishes its complete view.

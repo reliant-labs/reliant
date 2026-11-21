@@ -88,7 +88,8 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 			health_state = '',
 			health_code = '',
 			health_reason = '',
-			health_since = NULL
+			health_since = NULL,
+			resource_stats = ''
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
 		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)`,
 		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
@@ -163,6 +164,15 @@ func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID str
 	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldHealthState, DaemonAttachmentFieldHealthCode, DaemonAttachmentFieldHealthReason, DaemonAttachmentFieldHealthSince},
 		crud.NoReadBack()))
+}
+
+// SetDaemonAttachmentResources records a heartbeat's resource reading on the
+// lease (protojson of reliantv1.DaemonResourceStats). A no-op when there is
+// no lease.
+func SetDaemonAttachmentResources(ctx context.Context, db orm.Context, daemonID, statsJSON string) error {
+	row := &DaemonAttachment{DaemonID: daemonID, ResourceStats: statsJSON}
+	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
+		[]string{DaemonAttachmentFieldResourceStats}, crud.NoReadBack()))
 }
 
 // ReleaseDaemonAttachment deletes the lease a stream session created when it
@@ -295,12 +305,13 @@ func listDaemonAttachments(ctx context.Context, db orm.Context, filter func(*bun
 			row.AttachedAt, row.LastStreamActivity, row.MemoryUsedBytes, row.MemoryLimitBytes, row.MemoryPressure, detected,
 			core.DaemonBuild{Version: row.BuildVersion, Commit: row.BuildCommit, CommitTimeUnix: row.BuildCommitTimeUnix, ForgeVersion: row.BuildForgeVersion},
 			machineHealth(row.HealthState, row.HealthCode, row.HealthReason, row.HealthSince))
+		out[i].ResourceStats = row.ResourceStats
 	}
 	return out, nil
 }
 
 // daemonAttachmentColumns is the column list scanDaemonAttachments reads, in order.
-const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version, health_state, health_code, health_reason, health_since`
+const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version, health_state, health_code, health_reason, health_since, resource_stats`
 
 func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 	defer rows.Close()
@@ -316,10 +327,11 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			build                              core.DaemonBuild
 			healthState, healthCode, healthWhy string
 			healthSince                        sql.NullTime
+			resources                          string
 		)
 		if err := rows.Scan(&daemonID, &userID, &source, &podIP, &podPort, &attachedAt, &lastActivity, &used, &limit, &pressure, &detected,
 			&build.Version, &build.Commit, &build.CommitTimeUnix, &build.ForgeVersion,
-			&healthState, &healthCode, &healthWhy, &healthSince); err != nil {
+			&healthState, &healthCode, &healthWhy, &healthSince, &resources); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		var ip *string
@@ -335,8 +347,10 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 		if healthSince.Valid {
 			since = &healthSince.Time
 		}
-		out = append(out, daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
-			attachedAt, lastActivity, used, limit, pressure, detected, build, machineHealth(healthState, healthCode, healthWhy, since)))
+		att := daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
+			attachedAt, lastActivity, used, limit, pressure, detected, build, machineHealth(healthState, healthCode, healthWhy, since))
+		att.ResourceStats = resources
+		out = append(out, att)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating attachments: %w", err)

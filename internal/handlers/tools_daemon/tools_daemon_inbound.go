@@ -341,7 +341,11 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 				// whatever these caches say was written is gone.
 				conn.lastDetectedPortsKey = ""
 				conn.healthWritten = false
+				conn.resourcesWrittenAt = time.Time{}
 			}
+			// The machine's and the daemon's CPU, memory and fds, at most
+			// once a minute, for DaemonInfo.resources.
+			s.recordResourceStats(ctx, conn, hb, s.now())
 			// Whether the machine can do work (the daemon's fork
 			// watchdog), on the attachment record where the registry,
 			// the UI and wait_for_machine read it.

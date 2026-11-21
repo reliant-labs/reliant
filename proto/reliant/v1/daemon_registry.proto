@@ -498,6 +498,13 @@ message DaemonInfo {
   // while the daemon is attached; an attached daemon that reports no health
   // (one that predates the report) reads MACHINE_HEALTH_STATE_OK.
   MachineHealth health = 31;
+  // The machine's and the daemon process's CPU, memory and file
+  // descriptors, as the daemon's heartbeats last reported them (the gateway
+  // stores the newest at most once a minute). From the attachment lease
+  // like the memory telemetry, so it is set only while the daemon is
+  // attached and has sent one; a daemon that predates the report leaves it
+  // unset.
+  DaemonResourceStats resources = 32;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

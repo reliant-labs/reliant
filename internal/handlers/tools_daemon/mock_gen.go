@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=55388fc5f55b08647a2767a1d0d1c190d9aa13884f5c72531b8409b2135aa170
+// forge:hash=f00b2224e11ea38b412a17a251eed7733ca18bb866b0c921372292dbc391c5d0
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -40,6 +40,7 @@ type MockRepository struct {
 	UpdateDaemonAttachmentPortsFunc             func(context.Context, string, []uint32) error
 	UpdateDaemonAttachmentMemoryFunc            func(context.Context, string, int64, int64, bool) error
 	UpdateDaemonAttachmentHealthFunc            func(context.Context, string, db.MachineHealth) error
+	UpdateDaemonAttachmentResourcesFunc         func(context.Context, string, string) error
 	GetProjectByPathAndUserInScopeFunc          func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
 	GetProjectWithUserCheckFunc                 func(context.Context, string, string) (*db.Project, error)
 	CreateProjectFunc                           func(context.Context, *db.Project) error
@@ -173,6 +174,15 @@ func (m *MockRepository) UpdateDaemonAttachmentHealth(ctx context.Context, daemo
 		return m.UpdateDaemonAttachmentHealthFunc(ctx, daemonID, health)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentHealth")
+}
+
+// UpdateDaemonAttachmentResources records the call and delegates to UpdateDaemonAttachmentResourcesFunc when set.
+func (m *MockRepository) UpdateDaemonAttachmentResources(ctx context.Context, daemonID string, statsJSON string) error {
+	m.Recorder.Record("UpdateDaemonAttachmentResources", ctx, daemonID, statsJSON)
+	if m.UpdateDaemonAttachmentResourcesFunc != nil {
+		return m.UpdateDaemonAttachmentResourcesFunc(ctx, daemonID, statsJSON)
+	}
+	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentResources")
 }
 
 // GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.

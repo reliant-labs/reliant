@@ -28,9 +28,10 @@
 //
 // Self-hosted machines. A machine a person (or the platform) runs pairs with
 // us but ships no logs anywhere, so the Sampler does not run there. Instead
-// every daemon that can read /proc sends its host's load and memory on each
-// heartbeat (HostStats, DaemonHeartbeat.machine_stats) beside the disk report
-// it already sends. The daemon gateway, whose own logs land in tenant zero
+// every daemon sends its host's load, CPU, memory, swap and open files, and
+// its own process and cgroup figures, on each heartbeat (Resources, a
+// projection of forge/pkg/resmetrics samples: DaemonHeartbeat.machine_stats,
+// process_stats, cgroup_stats) beside the disk report it already sends. The daemon gateway, whose own logs land in tenant zero
 // (ServiceName daemon-gateway), writes the same two messages from those
 // heartbeats once a minute (HeartbeatLines) for the machines it is told to
 // watch: those in its MACHINE_STATS_ORGS that carry the durable label
