@@ -22,25 +22,13 @@
  * remembered scope, and two pages deriving it separately could disagree.
  */
 
-import { createContext, useContext } from "react";
+import { useContext } from "react";
 
-import type { useForgeRoster } from "@/hooks/forge-queries";
+import { ForgeConsoleContext, type ForgeConsole } from "./consoleContextValue";
 
-import type { ConsolePage } from "./paths";
-
-export interface ForgeConsole {
-  forgeProject: string;
-  projectId: string | null;
-  page: ConsolePage;
-  env: string;
-  setEnv: (env: string) => void;
-  /** The project's environments — the same roster the nav and scope control read. */
-  roster: ReturnType<typeof useForgeRoster>;
-  /** A console page's href, carrying the scope. */
-  href: (page: ConsolePage, search?: Record<string, unknown>) => string;
-}
-
-export const ForgeConsoleContext = createContext<ForgeConsole | null>(null);
+// The context object lives in its own module (consoleContextValue.ts) so a
+// shared component can read it optionally even where a test mocks this one.
+export { ForgeConsoleContext, type ForgeConsole };
 
 /**
  * The roster's control-plane read FAILED (unreachable, no access, not

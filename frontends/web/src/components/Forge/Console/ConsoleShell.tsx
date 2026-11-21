@@ -54,6 +54,8 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
+  ANALYTICS_TAB_LABELS,
+  AUTH_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -61,6 +63,7 @@ import {
   withSearch,
   type ConsolePage,
 } from "./paths";
+import { consoleNavEntries } from "./consoleNavRegistry";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -230,6 +233,8 @@ export function consoleCrumbs(
       return [{ label: "Releases" }];
     case "release":
       return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
+    case "obs-overview":
+      return [{ label: "Observability" }, { label: "Overview" }];
     case "obs-view":
       return [{ label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) }, { label: OBS_NAV_LABELS[page.view] }];
     case "dashboard":
@@ -254,6 +259,22 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "services":
+      return [{ label: "Services" }];
+    case "service":
+      return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
+    case "events":
+      return [{ label: "Product analytics" }, { label: "Events & metrics" }];
+    case "analytics":
+      return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
+    case "speed-insights":
+      return [{ label: "Observability" }, { label: "Speed insights" }];
+    case "extension":
+      return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
+    case "auth":
+      return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
   }
 }
 

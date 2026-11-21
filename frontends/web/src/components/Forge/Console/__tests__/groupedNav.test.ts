@@ -29,17 +29,21 @@ describe("buildGroupedConsoleNav", () => {
     const { items, footer } = nav({ productAnalytics: HUB });
     expect(items.map((item) => [item.label, (item.children ?? []).map((child) => child.label).join(",")])).toEqual([
       ["Overview", ""],
+      ["Services", ""],
+      ["Storage", ""],
+      ["Dashboards", ""],
       ["Issues", "Errors,Alerts"],
       ["Performance", "Traces,RPC explorer"],
       ["Sessions", ""],
-      ["Product analytics", ""],
+      ["Product analytics", "Insights,Events & metrics"],
       ["Releases", ""],
       ["Data", ""],
       ["Users", ""],
-      ["More tools", "Dashboards,Logs,Metrics,Profiles,Service graph,Storage"],
+      ["More tools", "Logs,Metrics,Profiles,Service graph"],
       ["Environments", "prod"],
       ["Secrets", ""],
       ["Domains", ""],
+      ["Usage", ""],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
   });
@@ -52,10 +56,10 @@ describe("buildGroupedConsoleNav", () => {
     for (const view of OBS_NAV_VIEWS) expect([...grouped].some((href) => href.includes(`/observability/${view}`))).toBe(true);
   });
 
-  it("has no Product analytics row without a hub, and lights it on any of the hub's tabs", () => {
-    expect(nav().items.map((item) => item.label)).not.toContain("Product analytics");
-    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Product analytics"]);
-    // Any other dashboard lights Dashboards, under More tools.
+  it("has no Insights row without a hub, and lights Insights on any of the hub's tabs", () => {
+    expect(nav().items.find((item) => item.label === "Product analytics")!.children!.map((child) => child.label)).toEqual(["Events & metrics"]);
+    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Insights"]);
+    // Any other dashboard lights Dashboards (top-level, the one place).
     expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "api" } }).items)).toEqual(["Dashboards"]);
   });
 
@@ -91,16 +95,17 @@ describe("buildGroupedConsoleNav", () => {
 });
 
 describe("groupedCrumbs", () => {
-  it("puts a view under its group, a hub tab under Product analytics, and a dashboard under More tools", () => {
-    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Issues" }, { label: "Errors" }]);
-    expect(groupedCrumbs({ kind: "obs-view", view: "sessions" }, [])).toEqual([{ label: "Sessions" }]);
-    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Users" }]);
+  it("puts a view under its variant group, a hub tab under Analytics, and a dashboard under Dashboards", () => {
+    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Performance & issues" }, { label: "Errors" }]);
+    expect(groupedCrumbs({ kind: "obs-view", view: "logs" }, [])).toEqual([{ label: "Observability" }, { label: "Logs" }]);
+    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Analytics" }, { label: "Users" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "api" }, [{ label: "Observability" }, { label: "Dashboards", href: "/d" }, { label: "api" }])).toEqual([
-      { label: "More tools" },
       { label: "Dashboards", href: "/d" },
       { label: "api" },
     ]);
-    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toBeNull();
+    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toEqual([{ label: "Deployments" }, { label: "Releases" }]);
+    expect(groupedCrumbs({ kind: "services" }, [{ label: "Services" }])).toEqual([{ label: "Deployments" }, { label: "Services" }]);
+    expect(groupedCrumbs({ kind: "secrets" }, [{ label: "Secrets" }])).toBeNull();
   });
 });
 

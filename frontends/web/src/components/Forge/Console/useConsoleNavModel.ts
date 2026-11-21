@@ -13,6 +13,7 @@
  */
 
 import { useMemo } from "react";
+import { useMatches } from "@tanstack/react-router";
 
 import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
 import { useForgeRoster } from "@/hooks/forge-queries";
@@ -43,6 +44,29 @@ export interface ConsoleNavModel extends GroupedNavInput {
 }
 
 const OVERVIEW: ConsolePage = { kind: "overview" };
+
+/**
+ * THE ENV-SCOPE OPT-OUT. A console page that does not read the console's one
+ * environment scope (`?env=`; envScope.ts) says so on its route:
+ *
+ *   createRoute({ path: "tests", staticData: { envScope: false }, ... })
+ *
+ * While the match on screen declares it, the bar draws no environment
+ * selector (ConsoleFrame), so it never offers a choice the page ignores. The
+ * scope itself is untouched: `?env=` is still carried, remembered, and every
+ * other page opens with it. Omitted (every page today), the page is scoped.
+ */
+declare module "@tanstack/react-router" {
+  interface StaticDataRouteOption {
+    /** `false`: the page does not read the console's environment scope (useRouteUsesEnvScope). */
+    envScope?: boolean;
+  }
+}
+
+/** Whether the page on screen reads the environment scope: no route in the match opted out (`staticData.envScope: false`). */
+export function useRouteUsesEnvScope(): boolean {
+  return useMatches({ select: (matches) => !matches.some((match) => match.staticData?.envScope === false) });
+}
 
 export function useConsoleNavModel(project: string, pathname: string, search: { env?: unknown }): ConsoleNavModel {
   const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? OVERVIEW, [pathname]);
@@ -118,6 +142,17 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
       : undefined;
   }, [dashboards.data, project]);
 
+  // The app's own dashboards — from its repo, or saved by people in the org —
+  // not the generated ones, the templates, the built-ins or a hub's tabs.
+  const customDashboards = useMemo<ConsoleNavDashboard[]>(() => {
+    const hubKeys = new Set(productAnalytics?.keys ?? []);
+    return (dashboards.data?.dashboards ?? []).flatMap((d) =>
+      (d.source === "repo" || d.source === "workspace") && !hubKeys.has(d.ref.key) && d.ref.kind !== "template" && d.ref.kind !== "builtin"
+        ? [{ title: displayTitle(d.title, project), dashKind: d.ref.kind, key: d.ref.key }]
+        : [],
+    );
+  }, [dashboards.data, project, productAnalytics]);
+
   // The open dashboard's own scope (the same cached read the page makes): a
   // platform dashboard is not per environment, and the control must not imply it is.
   const openDashboard = useDashboard(
@@ -134,6 +169,7 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
     envs,
     alertsFiring,
     starred,
+    customDashboards,
     dashboardTitle,
     optionalViews,
     productAnalytics,

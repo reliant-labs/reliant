@@ -14,6 +14,7 @@ import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
+import { createSandboxesAliasRoute } from './sandboxesAliasRoute'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import { createOrgLayoutRoute } from './orgRoutes'
@@ -188,10 +189,14 @@ const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
-const UsagePage = lazyRoute(
-  () => import('./components/ForgeShell/ForgeUsagePage'), 'ForgeUsagePage')
+const UsageBillingPage = lazyRoute(
+  () => import('./components/Usage/UsageBillingPage'), 'UsageBillingPage')
+const ConnectorsPage = lazyRoute(
+  () => import('./components/Connectors/ConnectorsPage'), 'ConnectorsPage')
 const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
+const ProjectHomePage = lazyRoute(
+  () => import('./components/Projects/ProjectHomePage'), 'ProjectHomePage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -873,14 +878,26 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: InboxPage,
   })
 
-  // Usage: the org's spend on what forge provisions
-  // (ForgeShell/ForgeUsagePage.tsx). The forge host's own page until one
-  // router served both hosts (U6); now every host serves it, in both forms.
+  // Usage & billing: the org's spend over time, per project, AI and sandbox
+  // time, plan, credits and invoices (components/Usage/UsageBillingPage.tsx;
+  // U6c). Its period is the page's `?range=` search, read without a route id.
   const usageRoute = createRoute({
     getParentRoute: authParent,
     path: '/usage',
-    component: UsagePage,
+    component: UsageBillingPage,
   })
+
+  // Connectors: integrations and MCP servers, a tab each (`?tab=`, read
+  // without a route id; components/Connectors/ConnectorsPage.tsx, U6d).
+  const connectorsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/connectors',
+    component: ConnectorsPage,
+  })
+
+  // /machines: an alias for Agent sandboxes, Settings' machines page
+  // (sandboxesAliasRoute.tsx).
+  const sandboxesAliasRoute = createSandboxesAliasRoute(authParent)
 
   // Projects: the nav's Projects entry — the person's apps and sites, and
   // their code (components/Projects/ProjectsPage.tsx; U7 replaces it). Apps
@@ -893,6 +910,13 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: ProjectsPage,
   })
 
+  // A project's Home (U6b): the project shell's first row (lib/paths projectPath).
+  const projectHomeRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId',
+    component: ProjectHomePage,
+  })
+
   // The retired org-scoped pages (/apps, /sites), in this form: each only
   // redirects to the page that replaced it (lib/paths/legacy.ts RETIRED_PAGES).
   const retiredPageRoutes = createRetiredPageRoutes(authParent, 'org-scoped')
@@ -901,7 +925,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, projectsRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
   }
 }
 

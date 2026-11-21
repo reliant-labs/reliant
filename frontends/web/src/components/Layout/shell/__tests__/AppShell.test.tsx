@@ -17,21 +17,34 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
-const probe = vi.hoisted(() => ({ navMounts: 0, pageMounts: 0, signedIn: true }));
+const probe = vi.hoisted(() => ({ navMounts: 0, pageMounts: 0, signedIn: true, narrow: false }));
 
 // The nav itself is covered in Sidebar*.test.tsx; here it only says when it
 // mounts and which page it was told is on screen.
 vi.mock("../../Sidebar", () => ({
-  Sidebar: ({ pathname }: { pathname: string }) => {
+  Sidebar: ({ pathname, onNavigate }: { pathname: string; onNavigate?: (href: string, options?: { drill?: boolean }) => void }) => {
     useEffect(() => {
       probe.navMounts += 1;
     }, []);
-    return <div data-testid="nav-probe">{pathname}</div>;
+    return (
+      <>
+        <div data-testid="nav-probe">{pathname}</div>
+        <button type="button" onClick={() => onNavigate?.("/inbox", { drill: true })}>drill</button>
+        <button type="button" onClick={() => onNavigate?.("/forge/p/shop")}>destination</button>
+      </>
+    );
   },
+}));
+
+vi.mock("@/hooks/useNarrowViewport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useNarrowViewport")>()),
+  useNarrowViewport: () => probe.narrow,
 }));
 
 vi.mock("@/store/authStore", () => ({
@@ -39,7 +52,7 @@ vi.mock("@/store/authStore", () => ({
 }));
 
 import { AppShellFrame } from "../AppShell";
-import { shellFrameScope, toggleShellNav, useShellFrame } from "../shellFrame";
+import { PageMain, shellFrameScope, toggleShellNav, useShellFrame } from "../shellFrame";
 
 /** A page that counts its mounts and says what the frame told it. */
 function Page({ name }: { name: string }) {
@@ -103,6 +116,7 @@ beforeEach(() => {
   probe.navMounts = 0;
   probe.pageMounts = 0;
   probe.signedIn = true;
+  probe.narrow = false;
   useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
 });
 
@@ -243,5 +257,105 @@ describe("shellFrameScope", () => {
     expect(scope(["__root__", "/_authenticated", "/_authenticated/_mobile"], "/m/chats")).toBe(false);
     expect(scope(["__root__", "/o/$org", "/o/$org/_authenticated", "/o/$org/_authenticated/workflow/$workflowName"], "/o/acme/workflow/x")).toBe(false);
     expect(scope(["__root__", "/forge/demo"], "/forge/demo")).toBe(false);
+  });
+});
+
+// ── One main landmark ───────────────────────────────────────────────────────
+
+describe("the shell's main landmark", () => {
+  // Pages that draw a body region of their own (the chat shell, AreaShell,
+  // ConsoleFrame, a project's Home) render it as PageMain: inside the shell
+  // the frame is the ONE main.
+  function renderPageAt(path: string) {
+    const root = createRootRoute({
+      component: () => (
+        <AppShellFrame>
+          <Outlet />
+        </AppShellFrame>
+      ),
+    });
+    const app = createRoute({ getParentRoute: () => root, id: "_app", component: () => <Outlet /> });
+    const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
+    const body = (name: string) => () => (
+      <PageMain data-testid="page-body">
+        <Page name={name} />
+      </PageMain>
+    );
+    const router = createRouter({
+      routeTree: root.addChildren([
+        app.addChildren([
+          createRoute({ getParentRoute: () => app, path: "/", component: body("home") }),
+          createRoute({ getParentRoute: () => app, path: "c/$chatId", component: body("chat") }),
+        ]),
+        authenticated.addChildren([
+          createRoute({ getParentRoute: () => authenticated, path: "/projects/$projectId", component: body("project-home") }),
+          createRoute({ getParentRoute: () => authenticated, path: "/forge/p/$project", component: body("console") }),
+          createRoute({ getParentRoute: () => authenticated, path: "/inbox", component: body("inbox") }),
+        ]),
+      ]),
+      history: createMemoryHistory({ initialEntries: [path] }),
+    });
+    render(<RouterProvider router={router} />);
+  }
+
+  it.each(["/", "/c/c0ffee00-2222-4aaa-8bbb-00000000000a", "/projects/00000002-0000-4000-8000-0000000000a2", "/forge/p/shop", "/inbox"])(
+    "has exactly one main on %s, the frame's",
+    async (path) => {
+      renderPageAt(path);
+      await screen.findByTestId("page");
+      const mains = screen.getAllByRole("main");
+      expect(mains).toHaveLength(1);
+      expect(mains[0]).toHaveAttribute("data-testid", "shell-main");
+    },
+  );
+
+  it("lets a page body be the main landmark outside the shell", async () => {
+    probe.signedIn = false;
+    renderPageAt("/inbox");
+    await screen.findByTestId("page");
+    expect(screen.getAllByRole("main")).toEqual([screen.getByTestId("page-body")]);
+  });
+
+  // A <main> rendered by a page inside the shell would be a second landmark.
+  // The ones allowed: forge-ui's SidebarLayout (the public demo's console frame,
+  // outside the shell), the demo's 404, and the dev previews.
+  it("no shell page renders a <main> of its own", () => {
+    const src = join(__dirname, "../../../..");
+    const allowed = new Set(["components/forge-ui/sidebar_layout.tsx", "demoShellRoutes.tsx"]);
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) {
+          if (entry === "__tests__" || entry === "__preview__" || entry === "gen" || entry === "node_modules") continue;
+          walk(path);
+        } else if (/\.tsx$/.test(entry) && /<main[\s>]/.test(readFileSync(path, "utf8"))) {
+          const rel = relative(src, path);
+          if (!allowed.has(rel)) offenders.push(rel);
+        }
+      }
+    };
+    walk(src);
+    expect(offenders).toEqual([]);
+  });
+
+  // U6e, mobile: the narrow window's drawer draws the one nav; a drill-in
+  // (Agents, Observability, or back out) keeps it open on the area's rows, a
+  // destination closes it.
+  it("keeps the narrow drawer open through a drill-in and closes it on a destination", async () => {
+    probe.narrow = true;
+    const router = renderAt("/");
+    await screen.findByTestId("nav-probe");
+    const { useNavDrawer } = await import("../shellFrame");
+    act(() => useNavDrawer.getState().setOpen(true));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "open");
+
+    act(() => screen.getByRole("button", { name: "drill", hidden: true }).click());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/inbox"));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "open");
+
+    act(() => screen.getByRole("button", { name: "destination", hidden: true }).click());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "closed");
   });
 });

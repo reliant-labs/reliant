@@ -17,11 +17,18 @@
  *       /releases, /releases/$version
  *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
- *       /storage                            the storage browser (the scope's buckets)
- *       /data                               the data browser (the scope's databases)
- *       /users                              who can sign in to the scope (its managed identity)
+ *       /storage                            the storage browser (the scope's buckets; buckets only, U6e)
+ *       /data                               the database's home and the data browser (U6e)
+ *       /auth, /auth/$tab                   Auth: who can sign in to the scope, and how (U6d)
+ *       /users                              → /auth (the old Users page), search kept
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
+ *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
+ *                                           (a database's name → /data, client-side: ServiceDetail)
+ *       /usage                              what the app's hosting costs this month
+ *       /events                             Product analytics › Events & metrics
+ *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
+ *       /speed-insights                     web vitals per page (U6c)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -45,9 +52,10 @@ import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
-import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isAuthTab, isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
+  forgeConsoleAnalyticsSearchSchema,
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
@@ -57,7 +65,9 @@ import {
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
+  forgeConsoleEnvironmentsSearchSchema,
   forgeConsoleSecretsSearchSchema,
+  forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
   forgeConsoleWorkloadSearchSchema,
@@ -78,6 +88,8 @@ export interface ForgeConsoleComponents {
   releases: RouteComponent
   release: RouteComponent
   observabilityView: RouteComponent
+  /** Observability's Overview (U6e): /observability. */
+  obsOverview: RouteComponent
   /** Observability › Dashboards, and one dashboard. */
   dashboards: RouteComponent
   dashboard: RouteComponent
@@ -85,13 +97,25 @@ export interface ForgeConsoleComponents {
   storage: RouteComponent
   /** Data: the scoped environment's databases, read-only. */
   data: RouteComponent
-  /** Users: who can sign in to the scoped environment (its managed identity). */
-  users: RouteComponent
+  /** Auth (U6d): who can sign in to the scoped environment, and how. The old `users` route only redirects here. */
+  auth: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
   domains: RouteComponent
   activity: RouteComponent
+  /** Services: every workload, the site and the database, live. */
+  services: RouteComponent
+  /** One of them. */
+  service: RouteComponent
+  /** Usage: the app's hosting cost this month. */
+  usage: RouteComponent
+  /** Product analytics › Events & metrics. */
+  events: RouteComponent
+  /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
+  analytics: RouteComponent
+  /** Speed insights (U6c): web vitals per page. */
+  speedInsights: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -207,12 +231,13 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   })
   // The retired Observability home: its health strip, services and recent
   // releases were the Overview's, so the Overview is where it lands.
+  // Observability's Overview (U6e): where drilling into Observability lands.
+  // It was a redirect to the project Overview; the view URLs below are unchanged.
   const observabilityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'observability',
-    beforeLoad: memberOnly(({ location }) => {
-      throw redirect({ href: `${location.pathname.replace(/\/observability\/?$/, '')}${location.searchStr}`, replace: true })
-    }),
+    validateSearch: forgeConsoleOverviewSearchSchema,
+    component: components.obsOverview,
   })
   // A view that is not a nav entry (a hand-edited URL) lands on the first
   // view rather than an empty page.
@@ -258,17 +283,37 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleDataSearchSchema,
     component: components.data,
   })
-  // Who can sign in to the scoped environment (components/Forge/Users).
+  // Auth (U6d): who can sign in (the old Users page) and how (components/Forge/Users/AuthPage.tsx).
+  const authRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'auth',
+    validateSearch: forgeConsoleUsersSearchSchema,
+    component: components.auth,
+  })
+  // A tab that is not one (a hand-edited URL) lands on the first.
+  const authTabRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'auth/$tab',
+    validateSearch: forgeConsoleUsersSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isAuthTab(params.tab)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.auth,
+  })
+  // The old Users page is Auth's Users tab: the link keeps its search (`user`, `q`, `env`).
   const usersRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'users',
     validateSearch: forgeConsoleUsersSearchSchema,
-    component: components.users,
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/users\/?$/, '/auth')}${location.searchStr}`, replace: true })
+    }),
   })
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'environments',
-    validateSearch: forgeConsoleSearchSchema,
+    validateSearch: forgeConsoleEnvironmentsSearchSchema,
     component: components.environments,
   })
   const environmentRoute = createRoute({
@@ -304,6 +349,53 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
+  const servicesRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'services',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.services,
+  })
+  const serviceRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'services/$name',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.service,
+  })
+  const usageRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'usage',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.usage,
+  })
+  const eventsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'events',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.events,
+  })
+  const analyticsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    component: components.analytics,
+  })
+  // A tab that is not one (a hand-edited URL) lands on the first.
+  const analyticsTabRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics/$tab',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isAnalyticsTab(params.tab)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.analytics,
+  })
+  const speedInsightsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'speed-insights',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.speedInsights,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -338,6 +430,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       storageRoute,
       dataRoute,
       usersRoute,
+      authRoute,
+      authTabRoute,
       environmentsRoute,
       environmentRoute,
       secretsRoute,
@@ -345,6 +439,13 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       monitoringRoute,
       settingsRoute,
       activityRoute,
+      servicesRoute,
+      serviceRoute,
+      usageRoute,
+      eventsRoute,
+      analyticsRoute,
+      analyticsTabRoute,
+      speedInsightsRoute,
     ]),
   ])
 }

@@ -39,7 +39,7 @@ import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { orgCrumbs, OrgShell } from "./OrgShell";
 import Link from "@/components/forge-ui/link";
-import { ShellPageHeader, useShellFrame } from "@/components/Layout/shell/shellFrame";
+import { PageMain, ShellPageHeader, useShellFrame } from "@/components/Layout/shell/shellFrame";
 import { projectsHref } from "@/lib/paths";
 
 // One preference for both consoles: collapsing the rail in an app keeps it collapsed up here.
@@ -110,10 +110,10 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
             ))}
           </nav>
         </ShellPageHeader>
-        <main className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">
+        <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">
           <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>
           <Outlet />
-        </main>
+        </PageMain>
       </div>
     );
   }

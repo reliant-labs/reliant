@@ -232,7 +232,8 @@ export function SidebarRow({
 // --- Nested rows ----------------------------------------------------------
 
 /**
- * How far a nested row's text sits in. Depth 1 lines its icon up under the
+ * How far a nested row's text sits in. Depth 0 is a top-level row (the
+ * project shell's app sections, drawn like the forge console's). Depth 1 lines its icon up under the
  * parent's label (an app's sections under the app); depth 2 lines its label
  * up with depth 1's (Errors under Issues); depth 3 steps in once more (a
  * starred dashboard under Dashboards).
@@ -241,8 +242,8 @@ const SUB_INDENT = ["pl-2", "pl-8", "pl-14", "pl-16"] as const;
 
 export interface SidebarSubRowProps {
   label: string;
-  /** Depth under the top-level row, 1–3. */
-  depth?: 1 | 2 | 3;
+  /** Depth under the top-level row, 1–3 (0: a top-level row itself). */
+  depth?: 0 | 1 | 2 | 3;
   icon?: ReactNode;
   /** The page the row opens; omitted, the row is a button (a group that opens in place). */
   href?: string;
@@ -252,6 +253,8 @@ export interface SidebarSubRowProps {
   expanded?: boolean;
   /** Quiet trailing content: a count, a mark. */
   trail?: ReactNode;
+  /** The accessible name, when the trail is only a hint (a shortcut); defaults to the content. */
+  ariaLabel?: string;
   testId?: string;
 }
 
@@ -265,6 +268,7 @@ export function SidebarSubRow({
   current = false,
   expanded,
   trail,
+  ariaLabel,
   testId,
 }: SidebarSubRowProps) {
   const content = (
@@ -290,7 +294,7 @@ export function SidebarSubRow({
   const target = cn(
     "flex h-[var(--row-h)] w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors hover:bg-foreground/5 hover:text-foreground",
     SUB_INDENT[depth],
-    current ? "bg-foreground/[0.08] font-medium text-foreground" : "text-foreground/75",
+    current ? "bg-foreground/[0.08] font-medium text-foreground" : depth === 0 ? "text-foreground" : "text-foreground/75",
     FOCUS_INSET,
   );
   return href ? (
@@ -299,30 +303,32 @@ export function SidebarSubRow({
       onClick={routedClick(onClick)}
       aria-current={current ? "page" : undefined}
       aria-expanded={expanded}
+      aria-label={ariaLabel}
       data-testid={testId}
       className={cn(target, "no-color")}
     >
       {content}
     </a>
   ) : (
-    <button type="button" onClick={onClick} aria-expanded={expanded} data-testid={testId} className={target}>
+    <button type="button" onClick={onClick} aria-expanded={expanded} aria-label={ariaLabel} data-testid={testId} className={target}>
       {content}
     </button>
   );
 }
 
 /** A quiet label over a run of nested rows ("Configure" in an app's sections). */
-export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 1 | 2 }) {
+export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 0 | 1 | 2 }) {
   return (
-    <div className={cn("mt-2 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
+    <div className={cn("mt-3 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
       {children}
     </div>
   );
 }
 
-/** The footer block under the list: whitespace above it, no rule. */
+/** The footer block under the nav: a hairline above it, where the nav scrolls under. */
 export function SidebarFooter({ children }: { children: ReactNode }) {
-  return <div className="shrink-0 space-y-0.5 p-2">{children}</div>;
+  // The hairline is the edge the scrolling nav above passes under.
+  return <div className="shrink-0 space-y-0.5 border-t border-border-subtle p-2">{children}</div>;
 }
 
 // --- The Chats heading ----------------------------------------------------
@@ -471,6 +477,71 @@ export function WorkspaceSubheading({
   );
 }
 
+/**
+ * A section of the chat list (U6d, owner): "project · branch" as one small
+ * heading at the list's left edge, its chats under it at the same edge. The
+ * project and the workspace read at a glance without a deep indent.
+ */
+export function ChatSectionHeading({
+  project,
+  branch,
+  expanded,
+  onToggle,
+  trail,
+  actions,
+  testId,
+  onContextMenu,
+}: {
+  project?: string;
+  branch: string;
+  expanded: boolean;
+  onToggle: () => void;
+  /** At rest: a pin, the needs-you dot. */
+  trail?: ReactNode;
+  /** On hover or focus only: New chat here, Archive, the project's menu. */
+  actions?: ReactNode;
+  testId?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="group/ws sticky top-0 z-10 mt-2 flex h-7 items-center gap-1 rounded-md bg-background pl-2 pr-1 text-meta text-muted-foreground first:mt-0"
+      data-testid={testId}
+      onContextMenu={onContextMenu}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded-md text-left hover:text-foreground", FOCUS_INSET)}
+      >
+        {project && (
+          <>
+            <span className="min-w-0 max-w-[60%] shrink-0 truncate font-medium text-foreground/80" title={project}>
+              {project}
+            </span>
+            <span aria-hidden="true">·</span>
+          </>
+        )}
+        <span className="min-w-0 shrink-[2] truncate" title={branch}>
+          {branch}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            expanded ? "hidden rotate-90 group-hover/ws:block group-focus-within/ws:block" : "block",
+          )}
+          aria-hidden="true"
+        />
+        {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">{trail}</span>}
+      </button>
+      {actions && (
+        <span className="hidden shrink-0 items-center group-hover/ws:flex group-focus-within/ws:flex has-[[aria-expanded=true]]:flex">{actions}</span>
+      )}
+    </div>
+  );
+}
+
 // --- Chat rows ------------------------------------------------------------
 
 export interface ChatRowProps {
@@ -480,7 +551,10 @@ export interface ChatRowProps {
   tooltip?: string;
   current?: boolean;
   unread?: boolean;
-  /** Indented under a project's header, so titles line up with its name. */
+  /**
+   * Under a section heading. Rows sit at the list's one left edge either way
+   * (U6d, owner: no deep indent); kept so callers say where a row is.
+   */
   inProject?: boolean;
   /** The 16px state slot at the left (ChatStateSlot). */
   slot?: ReactNode;
@@ -509,7 +583,7 @@ export function ChatRow({
   tooltip,
   current = false,
   unread = false,
-  inProject = false,
+  inProject: _inProject = false,
   slot,
   suffix,
   glyph,
@@ -519,7 +593,7 @@ export function ChatRow({
   onClick,
   onContextMenu,
 }: ChatRowProps) {
-  const indent = inProject ? "pl-8" : "pl-2";
+  const indent = "pl-2";
   return (
     <div
       data-chat-id={chatId}

@@ -1,0 +1,56 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * The nav's Find box, at its very top (U6c, owner item 7: Vercel's "Find  F").
+ * It opens the existing command palette (the keyboard host's, so it searches
+ * the same commands and settings everywhere). F opens it from anywhere you are
+ * not typing; the palette's own chord still works.
+ */
+
+import { useEffect } from "react";
+import { Search } from "lucide-react";
+
+import { isInputFocused } from "@/hooks/useFocusManager";
+import { useShortcutHost } from "@/hooks/useShortcutHost";
+import { useShortcutLabel } from "@/store/shortcutsStore";
+
+function typingIn(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return !!element?.closest?.("input, textarea, select, [contenteditable=''], [contenteditable='true'], .monaco-editor");
+}
+
+export function FindBox() {
+  const host = useShortcutHost();
+  const paletteShortcut = useShortcutLabel("commandPalette");
+  const open = () => void host?.run("onCommandPalette");
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key !== "f" && event.key !== "F") return;
+      if (typingIn(event.target) || isInputFocused() || document.querySelector('[aria-modal="true"], [role="dialog"]')) return;
+      event.preventDefault();
+      void host?.run("onCommandPalette");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [host]);
+
+  return (
+    <div className="shrink-0 px-2 pb-1 pt-2">
+      <button
+        type="button"
+        onClick={open}
+        data-testid="nav-find"
+        aria-label="Find"
+        aria-keyshortcuts={paletteShortcut ? `F ${paletteShortcut}` : "F"}
+        title={paletteShortcut ? `Find (F, or ${paletteShortcut})` : "Find (F)"}
+        className="flex h-8 w-full items-center gap-2 rounded-md border border-border bg-background px-2 text-left text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Search className="size-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">Find…</span>
+        <kbd className="rounded border border-border px-1.5 font-sans text-meta text-muted-foreground">F</kbd>
+      </button>
+    </div>
+  );
+}

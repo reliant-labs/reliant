@@ -25,7 +25,7 @@ import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
 import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
-import { toggleShellNav, useShellFrame } from "./components/Layout/shell/shellFrame";
+import { PageMain, toggleShellNav, useShellFrame } from "./components/Layout/shell/shellFrame";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
@@ -1641,7 +1641,7 @@ function App() {
       <div className="flex flex-1 min-h-0 relative">
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 flex overflow-hidden relative">
+          <PageMain className="flex-1 flex overflow-hidden relative">
             {/* Main Chat Content Area */}
             <div
               id="layout-main-content"
@@ -1692,7 +1692,7 @@ function App() {
               </ResizableSidebar>
             )}
 
-          </main>
+          </PageMain>
         </div>
       </div>
 

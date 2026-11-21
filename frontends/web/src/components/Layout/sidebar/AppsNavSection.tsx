@@ -1,33 +1,25 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The nav's Apps section (U6, design §4.1 with the owner's 2026-11-19
- * amendment): every app the person can see, each with its live state and one
- * click from its console; the OPEN app (the one whose console is on screen)
- * expands in place into its console's sections — Overview, Issues,
- * Performance, … Configure — so an app's pages are rows of this nav, never a
- * second nav column. While the org-wide Observability views are open, they
- * nest under an Observability row here too.
+ * The current project's app in the project shell's nav (U6b, prototype): its
+ * console sections as top-level rows — Overview, Issues, Performance,
+ * Sessions, … Configure — straight from the console's grouped nav
+ * (Forge/Console/groupedNav.tsx), so the nav reads like the forge console's.
+ * While the org-wide Observability views are open, they nest
+ * under an Observability row here too.
  */
 
 import { useMemo } from "react";
-import { ExternalLink, Gauge } from "lucide-react";
+import { Activity, Gauge } from "lucide-react";
 
-import Status from "@/components/forge-ui/status";
-import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
-import { projectsHref } from "@/lib/paths";
-import { cn } from "@/lib/utils";
-import { primaryLink, type AppSummary } from "@/services/forge/apps";
 
-import { verdictBusy, verdictTone } from "../../Apps/appParts";
-import { buildGroupedConsoleNav } from "../../Forge/Console/groupedNav";
-import { consolePageOf, consolePath, orgPageOf } from "../../Forge/Console/paths";
+import { buildGroupedConsoleNav, type GroupedNavInput } from "../../Forge/Console/groupedNav";
+import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
 import { buildOrgNav } from "../../Forge/Org/OrgShell";
-import { isAt } from "./navLocation";
 import { SidebarNavTree } from "./NavTree";
-import { SIDEBAR_ICON_BUTTON, SidebarHeading, SidebarRow } from "./primitives";
+import { SidebarRow } from "./primitives";
 
 export interface AppsNavSectionProps {
   pathname: string;
@@ -35,105 +27,62 @@ export interface AppsNavSectionProps {
   onNavigate: (href: string) => void;
 }
 
-/** The app's live state: the health of the environment its site opens from, else its first. */
-function AppDot({ app }: { app: AppSummary | undefined }) {
-  const link = app ? primaryLink(app) : undefined;
-  const env = app && (app.envs.find((candidate) => link && candidate.links.includes(link)) ?? app.envs[0]);
-  if (!env) return <Status tone="neutral" size="md" />;
-  // Mid-rollout the dot is a spinner, so a deploy never reads as a fault.
-  return <Status tone={verdictTone(env.verdict)} size="md" busy={verdictBusy(env.verdict)} />;
+/**
+ * The current project's app sections. Every project has them (owner,
+ * 2026-11-20): on an app with nothing deployed, each page says what it will
+ * show and how to deploy (Forge/Console/AppSectionEmptyState.tsx).
+ */
+export function ProjectAppNav({ app, pathname, search, onNavigate }: { app: string | null } & AppsNavSectionProps) {
+  const orgPage = orgPageOf(pathname);
+  return (
+    <>
+      {app && <AppSections app={app} pathname={pathname} search={search} onNavigate={onNavigate} />}
+      {orgPage && <OrgObservabilityRows pathname={pathname} search={search} onNavigate={onNavigate} />}
+    </>
+  );
 }
 
-export function AppsNavSection({ pathname, search, onNavigate }: AppsNavSectionProps) {
-  const { apps } = useApps();
-  const openApp = consolePageOf(pathname)?.project ?? null;
-  const orgPage = orgPageOf(pathname);
-  // The open app has its rows even before the list answers (a deep link, a cold load).
-  const names = useMemo(() => {
-    const listed = apps.map((app) => app.name);
-    return openApp && !listed.includes(openApp) ? [openApp, ...listed] : listed;
-  }, [apps, openApp]);
-  // The heading opens every app: Projects, narrowed to the apps.
-  const allApps = projectsHref("apps");
-  const onAllApps = isAt(pathname, allApps) && search.show === "apps";
+/**
+ * The app's rows for the page on screen. Off the console (a chat, the Inbox)
+ * the model's page defaults to the Overview, but no app row is the current
+ * one there: they are all ways out.
+ */
+export function appNavFor(model: GroupedNavInput, pathname: string) {
+  return buildGroupedConsoleNav({ ...model, hostPageActive: model.hostPageActive || !consolePageOf(pathname) });
+}
 
+function AppSections({ app, pathname, search, onNavigate }: { app: string } & AppsNavSectionProps) {
+  const model = useConsoleNavModel(app, pathname, search);
+  const nav = appNavFor(model, pathname);
   return (
-    <section aria-label="Apps" data-testid="sidebar-apps">
-      <SidebarHeading>
-        <a
-          href={allApps}
-          onClick={(event) => {
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-            event.preventDefault();
-            onNavigate(allApps);
-          }}
-          aria-current={onAllApps ? "page" : undefined}
-          data-testid="sidebar-forge-button"
-          data-onboarding="apps-button"
-          className={cn(
-            "no-color -mx-1 rounded-md px-1 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            onAllApps ? "font-medium text-foreground" : "text-muted-foreground",
-          )}
-        >
-          Apps
-        </a>
-      </SidebarHeading>
-      <div className="space-y-0.5 px-2">
-        {names.map((name) => {
-          const app = apps.find((candidate) => candidate.name === name);
-          const open = name === openApp;
-          const link = app ? primaryLink(app) : undefined;
-          return (
-            <div key={name}>
-              <SidebarRow
-                icon={<AppDot app={app} />}
-                label={name}
-                href={consolePath(name, { kind: "overview" })}
-                onClick={() => onNavigate(consolePath(name, { kind: "overview" }))}
-                expanded={open}
-                className="group/app"
-                testId={`sidebar-app-${name}`}
-                action={
-                  link && (
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Open ${name} at ${link.host}`}
-                      title={`Open ${link.host}`}
-                      className={cn(SIDEBAR_ICON_BUTTON, "no-color hidden group-hover/app:inline-flex group-focus-within/app:inline-flex")}
-                      data-testid={`sidebar-app-link-${name}`}
-                    >
-                      <ExternalLink className="size-3.5" aria-hidden="true" />
-                    </a>
-                  )
-                }
-              />
-              {open && <OpenAppSections project={name} pathname={pathname} search={search} onNavigate={onNavigate} />}
-            </div>
-          );
-        })}
-        {orgPage && <OrgObservabilityRows pathname={pathname} search={search} onNavigate={onNavigate} />}
-      </div>
+    <section
+      aria-label={`${app} app`}
+      // The forge journey's "A Forge app's console" step spotlights the app's sections.
+      data-tour="forge-console-nav"
+      data-testid="sidebar-app-sections"
+      data-app={app}
+      className="space-y-0.5 px-2"
+    >
+      <SidebarNavTree items={nav.items} depth={0} onNavigate={onNavigate} testIdPrefix="sidebar-app-section" />
     </section>
   );
 }
 
-/** The open app's console sections, nested under its row. */
-function OpenAppSections({ project, pathname, search, onNavigate }: { project: string } & AppsNavSectionProps) {
-  const model = useConsoleNavModel(project, pathname, search);
-  const nav = buildGroupedConsoleNav(model);
+/** The app's Activity, for the nav's footer (as in the forge console). */
+export function AppActivityRow({ app, pathname, search, onNavigate }: { app: string } & AppsNavSectionProps) {
+  const model = useConsoleNavModel(app, pathname, search);
+  const activity = appNavFor(model, pathname).footer[0];
+  if (!activity?.href) return null;
+  const href = activity.href;
   return (
-    <div
-      role="group"
-      aria-label={`${project} sections`}
-      // The forge journey's "A Forge app's console" step spotlights the app's sections.
-      data-tour="forge-console-nav"
-      data-testid="sidebar-app-sections"
-      className="space-y-0.5 pb-2 pt-0.5"
-    >
-      <SidebarNavTree items={[...nav.items, ...nav.footer]} onNavigate={onNavigate} testIdPrefix="sidebar-app-section" />
-    </div>
+    <SidebarRow
+      icon={<Activity className="size-4" />}
+      label={activity.label}
+      href={href}
+      onClick={() => onNavigate(href)}
+      current={!!activity.active}
+      testId="sidebar-app-activity"
+    />
   );
 }
 
@@ -147,7 +96,7 @@ function OrgObservabilityRows({ pathname, search, onNavigate }: AppsNavSectionPr
   if (!observability?.href) return null;
   const href = observability.href;
   return (
-    <div data-testid="sidebar-org-observability">
+    <div data-testid="sidebar-org-observability" className="mt-4 px-2">
       <SidebarRow
         icon={<Gauge className="size-4" />}
         label="All apps' observability"

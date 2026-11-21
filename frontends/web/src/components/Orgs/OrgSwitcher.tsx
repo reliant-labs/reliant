@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Building2, Check, ChevronDown, ChevronsUpDown, Plus } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
@@ -33,14 +33,23 @@ export function OrgSwitcher({
   variant = "sidebar",
   fallback = null,
 }: {
-  variant?: "sidebar" | "sidebar-top" | "list";
+  /** `sidebar-switcher`: the project shell's `[Org ▾] / [Project ▾]` row, the org half sized to its name. */
+  variant?: "sidebar" | "sidebar-top" | "sidebar-switcher" | "list";
   /** What to render with no org (no control plane, or a person in none). */
   fallback?: ReactNode;
 }) {
   const { orgs, active, canSwitch, select } = useActiveOrg();
   if (!active) return fallback;
   if (variant === "list") return canSwitch ? <OrgList orgs={orgs} activeId={active.id} onSelect={select} /> : null;
-  return <SidebarOrgSwitcher orgs={orgs} active={active} onSelect={select} top={variant === "sidebar-top"} />;
+  return (
+    <SidebarOrgSwitcher
+      orgs={orgs}
+      active={active}
+      onSelect={select}
+      top={variant === "sidebar-top" || variant === "sidebar-switcher"}
+      compact={variant === "sidebar-switcher"}
+    />
+  );
 }
 
 /** The org's role, in words. */
@@ -53,11 +62,13 @@ function SidebarOrgSwitcher({
   active,
   onSelect,
   top,
+  compact = false,
 }: {
   orgs: MyOrg[];
   active: MyOrg;
   onSelect: (id: string) => void;
   top: boolean;
+  compact?: boolean;
 }) {
   const setDefault = useSetDefaultOrg();
   const [creating, setCreating] = useState(false);
@@ -111,8 +122,19 @@ function SidebarOrgSwitcher({
         triggerClassName="w-full"
         trigger={(props) =>
           top ? (
-            <button {...props} type="button" data-testid="org-switcher" className={SIDEBAR_ORG_TRIGGER}>
-              <SidebarOrgLabel name={active.name} menu nameTestId="org-switcher-name" />
+            <button {...props} type="button" data-testid="org-switcher" className={cn(SIDEBAR_ORG_TRIGGER, compact && "w-auto max-w-full flex-none gap-1.5 px-1.5")}>
+              {compact ? (
+                // Sized to the name (a flex-1 name would shrink-wrap to nothing beside the project);
+                // no mark: the row is tight, and the project half carries one.
+                <>
+                  <span className="min-w-0 truncate font-semibold" data-testid="org-switcher-name">
+                    {active.name}
+                  </span>
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </>
+              ) : (
+                <SidebarOrgLabel name={active.name} menu nameTestId="org-switcher-name" />
+              )}
             </button>
           ) : (
             <button

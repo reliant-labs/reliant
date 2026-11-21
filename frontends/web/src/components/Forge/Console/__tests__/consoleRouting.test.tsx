@@ -229,16 +229,23 @@ function renderAt(
     releases: probe("releases"),
     release: probe("release"),
     observabilityView: options.metrics ? MetricsExplorerPage : probe("observability-view"),
+    obsOverview: probe("obs-overview"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
-    users: probe("users"),
+    auth: probe("auth"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
     domains: probe("domains"),
     activity: probe("activity"),
+    services: probe("services"),
+    service: probe("service"),
+    usage: probe("usage"),
+    events: probe("events"),
+    analytics: probe("analytics"),
+    speedInsights: probe("speed-insights"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -468,9 +475,10 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
   });
 
-  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+  it("opens Observability's own Overview at /observability (U6e)", async () => {
     const router = renderAt("/forge/p/alpha/observability?env=e2e");
-    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "obs-overview");
+    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
   });
 
   it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {
@@ -525,6 +533,15 @@ describe("the environment scope", () => {
     );
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("routes Auth's tabs, and sends the old Users URL to Auth with its search", async () => {
+    const router = renderAt("/forge/p/alpha/auth/sign-in?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "auth");
+    await landsOn(router, "/forge/p/alpha/auth/sign-in", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
+    await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {
@@ -604,7 +621,7 @@ describe("the nav", () => {
     // The console's own "Observability" parent is gone; its views sit in their groups.
     expect(within(nav).queryByText("Observability")).toBeNull();
     expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Issues›Errors");
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
   });
 
   it("marks an environment whose deploy is queued", async () => {
@@ -648,8 +665,10 @@ describe("inside the one shell", () => {
     const frame = screen.getByTestId("forge-console-frame");
     expect(frame.className).toContain("forge-ui");
     const header = screen.getByTestId("forge-console-header");
-    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Issues›Errors");
-    expect(within(frame).getByRole("main")).toContainElement(page);
+    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Performance & issues›Errors");
+    // Inside the shell the frame (AppShellFrame) is the one main landmark: the console's body is a plain region.
+    expect(within(frame).queryByRole("main")).toBeNull();
+    expect(frame).toContainElement(page);
   });
 
   it("still defaults the scope and reflects it into the URL", async () => {

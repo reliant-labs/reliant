@@ -23,27 +23,19 @@ import {
   Plus,
   Trash2,
   Archive,
-  ChevronRight,
   Edit,
   Copy,
   RotateCcw,
   Mail,
   GitBranch,
-  Search,
-  Settings,
   SquarePen,
-  Workflow,
-  Boxes,
-  Gauge,
   Activity,
   FolderInput,
-  Server,
   Pin,
   PinOff,
   Eye,
   EyeOff,
   MoreHorizontal,
-  X,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -55,9 +47,8 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
-import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
-import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -68,7 +59,6 @@ import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjectDaemonInstalls, useProjects } from "../../hooks/project-queries";
 import { ChatListMenu } from "./ChatListMenu";
-import { projectFilterLabel } from "./ProjectFilterMenu";
 import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
 import { useDaemonList } from "../../hooks/useOnboardingQueries";
 import { useMachineOrgs } from "../../hooks/useMachineOrgs";
@@ -94,8 +84,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { inboxPath, newChatPath, projectsPath, settingsPath, usagePath, withSearch, workflowsPath } from "../../lib/paths";
-import { WORKFLOWS_TABS, isWorkflowsAreaPath, workflowsTabForPath } from "../../lib/workflowsArea";
+import { inboxPath, newChatPath, settingsPath, withSearch } from "../../lib/paths";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -107,23 +96,18 @@ import {
   ProjectGroupHeader,
   SIDEBAR_HEADING_HOVER_ACTION,
   SIDEBAR_ICON_BUTTON,
-  SidebarFooter,
-  SidebarHeading,
-  SidebarOrgLabel,
-  SidebarOrgRow,
-  SidebarPrimaryAction,
-  SidebarRow,
   SidebarSubRow,
-  SIDEBAR_ORG_TRIGGER,
-  WorkspaceSubheading,
+  ChatSectionHeading,
 } from "./sidebar/primitives";
-import { AppsNavSection } from "./sidebar/AppsNavSection";
+import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
+import { useShellProject } from "./sidebar/shellProject";
+import { FindBox } from "./sidebar/FindBox";
+import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
+import { ShellNavBody } from "./sidebar/ShellNavBody";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
-import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
-import { ForgeBrand } from "../ForgeShell/ForgeBrand";
-import { isForgeShell } from "../../lib/shell";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import { chatRowChip } from "./chatRowStatus";
 import {
@@ -141,8 +125,8 @@ interface SidebarProps {
   pathname?: string;
   /** The page's search, carried by the rows that keep a scope (`?project=`, `?env=`). */
   search?: Record<string, unknown>;
-  /** Opens a page: the shell's navigate (Layout/shell/AppShell.tsx). */
-  onNavigate?: (href: string) => void;
+  /** Opens a page: the shell's navigate (Layout/shell/AppShell.tsx); `drill` keeps a drawer open. */
+  onNavigate?: (href: string, options?: NavigateOptions) => void;
   /** Open the Runs tab with filters; the Workflows row's pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
@@ -566,6 +550,13 @@ interface WorktreeGroupComponentProps {
    * only one, whose chats then sit directly under the project.
    */
   hideHeader?: boolean;
+  /** Nested: the project the workspace is in, so its heading reads "project · branch" (U6d). */
+  projectName?: string;
+  /** Nested: what the heading keeps at rest (the project's pin, hide, needs-you marks). */
+  headingTrail?: ReactNode;
+  /** Nested: more hover actions on the heading (the project's own: New chat in it, its menu). */
+  extraActions?: ReactNode;
+  testId?: string;
 }
 
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
@@ -583,6 +574,10 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   emptyState,
   nested = false,
   hideHeader = false,
+  projectName,
+  headingTrail,
+  extraActions,
+  testId,
 }: WorktreeGroupComponentProps) {
   if (hideHeader) {
     return (
@@ -597,7 +592,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   // New chat and Archive show on hover or focus, and take no width until
   // then: the branch keeps the row.
   const actions =
-    onNewChat || onArchiveWorktree ? (
+    onNewChat || onArchiveWorktree || extraActions ? (
       <>
         {onNewChat && (
           <Tooltip content="New chat in this workspace" side="left" delay={300}>
@@ -629,18 +624,22 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             </button>
           </Tooltip>
         )}
+        {extraActions}
       </>
     ) : undefined;
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5" data-testid={testId}>
       {nested ? (
-        <WorkspaceSubheading
+        <ChatSectionHeading
+          project={projectName}
           branch={title}
           expanded={isExpanded}
           onToggle={onToggle}
+          trail={headingTrail}
           actions={actions}
           onContextMenu={onContextMenu}
+          testId={testId ? `${testId}-heading` : undefined}
         />
       ) : (
         <ProjectGroupHeader
@@ -671,7 +670,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             emptyState.onClick?.();
           }}
           className={cn(
-            "flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors",
+            "flex h-7 w-full items-center rounded-md pl-8 text-left text-meta text-muted-foreground transition-colors",
             emptyState.onClick ? "cursor-pointer hover:bg-foreground/5 hover:text-foreground" : "cursor-default",
           )}
         >
@@ -682,30 +681,61 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   );
 });
 
+/** How many of one project's chats the Chats accordion lists before "All chats". */
+const CHATS_CAP = 8;
+
+/** The first `cap` chats, and `keepId` (the open chat) wherever it is. */
+function capChats<T extends { id: string }>(chats: readonly T[], cap: number, keepId: string | null): T[] {
+  const out = chats.slice(0, cap);
+  const keep = keepId && !out.some((chat) => chat.id === keepId) ? chats.find((chat) => chat.id === keepId) : undefined;
+  return keep ? [...out, keep] : out;
+}
+
+/** The groups' first `cap` chats in list order (and the open one), groups left empty dropped. */
+function capChatGroups(groups: readonly ChatGroup[], cap: number, keepId: string | null): ChatGroup[] {
+  let left = cap;
+  const out: ChatGroup[] = [];
+  for (const group of groups) {
+    const kept = group.chats.filter((chat) => {
+      if (chat.id === keepId) return true;
+      if (left <= 0) return false;
+      left -= 1;
+      return true;
+    });
+    if (kept.length > 0) out.push({ ...group, chats: kept });
+  }
+  return out;
+}
+
 function SidebarComponent({
   pathname = "",
   search = NO_SEARCH,
   onNavigate,
   onOpenRuns,
-  onOpenChatSearch,
 }: SidebarProps) {
-  const go = useCallback((href: string) => onNavigate?.(href), [onNavigate]);
-  // The project filter (null: All projects) decides what the list shows; the
-  // context project (the open chat's) does not, so opening a chat elsewhere
-  // never re-scopes or unmounts the list.
-  const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
+  const go = useCallback(
+    (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
+    [onNavigate],
+  );
+  // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
+  // one project's chats, several projects' (the chat filter of several,
+  // hooks/useChatProjectFilter), or every project's — grouped by project
+  // unless it is one.
+  const shell = useShellProject(pathname, search);
+  // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
+  const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
+  const projectFilterId = shell.mode === "one" ? shell.projectId : null;
+  const severalProjects = shell.mode === "many" ? shell.ids : null;
+  // One app with no code here has no chats to list.
+  const noChatsHere = shell.mode === "one" && !shell.projectId && shell.key !== null;
   const { projects } = useProjects();
-  // Several projects (choose N of M, hooks/useChatProjectFilter); one is projectFilterId.
-  const chatFilter = useChatProjectFilter({ sync: { pathname, search } });
-  const severalProjects = chatFilter.mode === "many" ? chatFilter.ids : null;
   const {
     data: chatList,
     isPending: chatListPending,
     isError: chatListFailed,
     refetch: refetchChatList,
-  } = useChatListWithWorkspaces(severalProjects ?? projectFilterId);
+  } = useChatListWithWorkspaces(severalProjects ?? projectFilterId, { enabled: !noChatsHere });
   const newChatShortcut = useShortcutLabel("newChat");
-  const chatSearchShortcut = useShortcutLabel("chatSearch");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
   // one, so the sidebar groups from this response alone.
@@ -797,14 +827,11 @@ function SidebarComponent({
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
-  const newChatHref = newChatPath();
+  // New chat starts in the shell's one project; across several, wherever openNewChat would.
+  const newChatHref = withSearch(newChatPath(), { project: projectFilterId ?? undefined });
   const inboxHref = inboxPath();
-  const projectsHref = projectsPath();
-  const workflowsHref = workflowsPath();
-  const usageHref = usagePath();
-  const settingsHref = settingsPath();
-  const inWorkflows = isWorkflowsAreaPath(pathname);
-  const workflowsTab = workflowsTabForPath(pathname);
+  const [showAllChats, setShowAllChats] = useState(false);
+  useEffect(() => setShowAllChats(false), [shell.key, shell.mode]);
   // Focus target for the "focus the chat list" shortcut. The list has no
   // single natural control to focus, so the pane container takes it and
   // ordinary tab-order takes over from there.
@@ -953,9 +980,13 @@ function SidebarComponent({
     // Across projects, a hidden project's chats are left out with it, in the
     // flat view too (the navigation store filters the same way).
     const machineActiveChats = filterChatsByMachine(allActiveWorktreeChats, machineFilter, machineContext);
+    // The scope again on the client: a list read before the scope moved, or a
+    // server that ignores it, never shows another project's chats here.
     const activeWorktreeChats = projectFilterId
-      ? machineActiveChats
-      : machineActiveChats.filter((chat) => !isProjectHiddenFromSidebar(chat.projectId, listing));
+      ? machineActiveChats.filter((chat) => chat.projectId === projectFilterId)
+      : severalProjects
+        ? machineActiveChats.filter((chat) => severalProjects.includes(chat.projectId))
+        : machineActiveChats.filter((chat) => !isProjectHiddenFromSidebar(chat.projectId, listing));
     const machineArchivedChats = filterChatsByMachine(projectArchivedChats, machineFilter, machineContext);
 
     // Convert archived chats from store to ChatWithActivity format
@@ -1064,6 +1095,7 @@ function SidebarComponent({
     sortOrder,
     mainWorktrees,
     projectFilterId,
+    severalProjects,
     scopedProjects,
     projectCheckouts,
     projectNames,
@@ -1091,14 +1123,14 @@ function SidebarComponent({
   const setup = useChatSetup();
   const setupNeeded = chatSetupNeeded(setup);
 
-  // The global New chat: the filter's project, else the open chat's, else the
-  // last one used (openNewChat).
+  // New chat: in the shell's project, else the open chat's, else the last one
+  // used (openNewChat).
   const handleNewChat = () => {
     if (setupNeeded) {
       go(chatSetupPath(setup));
       return;
     }
-    void openNewChat();
+    void openNewChat(projectFilterId ? { projectId: projectFilterId } : undefined);
   };
 
   const handleSwitchToWorktreeNewChat = useCallback(
@@ -1466,7 +1498,10 @@ function SidebarComponent({
   // `layout`: a workspace inside a project section is nested under it, and
   // the project's only workspace, its main one, has no header of its own.
   const renderWorktreeGroup = useCallback(
-    (group: ChatGroup, layout: { nested?: boolean; hideHeader?: boolean } = {}) => {
+    (
+      group: ChatGroup,
+      layout: { nested?: boolean; hideHeader?: boolean; projectName?: string; headingTrail?: ReactNode; extraActions?: ReactNode; testId?: string } = {},
+    ) => {
       // Handle main branch (no worktree) special case
       const isNoWorktree = group.worktreeId.startsWith("no-worktree");
       const isExpanded = isNoWorktree
@@ -1518,6 +1553,10 @@ function SidebarComponent({
           icon={worktreeIcon}
           nested={layout.nested}
           hideHeader={layout.hideHeader}
+          projectName={layout.projectName}
+          headingTrail={layout.headingTrail}
+          extraActions={layout.extraActions}
+          testId={layout.testId}
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
@@ -1560,17 +1599,11 @@ function SidebarComponent({
     ]
   );
 
-  // A project section of the All projects view: the project's name, New
-  // chat in this project, its menu (pin, hide), and its workspace groups.
-  //
-  // The project is the strongest level of the list, so which project a chat
-  // is in reads at a glance: a project mark and the name, a header that stays
-  // pinned while its chats scroll under it, and its chats indented so their
-  // titles line up with its name. Its workspaces are quiet branch labels
-  // under it, and a project whose only workspace is main lists its chats
-  // directly: a "main" header under every project said nothing.
+  // A project's sections in the All projects view (U6d, owner): one small
+  // "project · branch" heading per workspace, every chat at the list's left
+  // edge. The project's own controls (New chat in it, pin, hide) and marks
+  // (pinned, hidden, needs you) sit on its first heading.
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
-    const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
     const isPinned = projectPrefs.pinned.has(group.projectId);
     // Listed while hidden: under show-all, or as the current project.
     const isHidden = projectPrefs.hidden.has(group.projectId);
@@ -1596,10 +1629,6 @@ function SidebarComponent({
         ],
       },
     ];
-    const toggle = () =>
-      setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
-    const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
-    const mainWorkspace = onlyMain ? group.workspaces[0] : undefined;
     // At rest, in this order: pinned, hidden, needs you (restyle §12a).
     const trail =
       isPinned || isHidden || needsYou ? (
@@ -1631,76 +1660,61 @@ function SidebarComponent({
           )}
         </>
       ) : undefined;
-    return (
-      <section
-        key={group.projectId}
-        aria-label={group.projectName}
-        data-testid={`sidebar-project-${group.projectId}`}
-        className="space-y-0.5"
-      >
-        <ProjectGroupHeader
-          name={group.projectName}
-          mark={<ProjectMark name={group.projectName} />}
-          expanded={isExpanded}
-          onToggle={toggle}
-          muted={isHidden}
-          trail={trail}
-          testId={`sidebar-project-header-${group.projectId}`}
-          // The main workspace's header is folded into the project's, so its
-          // actions are here.
-          onContextMenu={
-            mainWorkspace && !mainWorkspace.worktreeId.startsWith("no-worktree")
-              ? (e) => handleWorktreeContextMenu(e, mainWorkspace.worktreeId)
-              : undefined
-          }
-          actions={
-            <>
-              <Tooltip content="New chat in this project" side="left" delay={300}>
-                <button
-                  type="button"
-                  aria-label={`New chat in ${group.projectName}`}
-                  onClick={() => void openNewChat({ projectId: group.projectId })}
-                  className={SIDEBAR_ICON_BUTTON}
-                >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                </button>
-              </Tooltip>
-              <DropdownMenu
-                align="right"
-                density="compact"
-                label={`${group.projectName} actions`}
-                menuClassName="min-w-[170px]"
-                groups={projectActions}
-                trigger={(props) => (
-                  <button
-                    type="button"
-                    {...props}
-                    aria-label={`${group.projectName} actions`}
-                    data-testid={`sidebar-project-actions-${group.projectId}`}
-                    className={SIDEBAR_ICON_BUTTON}
-                  >
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                  </button>
-                )}
-              />
-            </>
-          }
+    const projectControls = (
+      <>
+        <Tooltip content="New chat in this project" side="left" delay={300}>
+          <button
+            type="button"
+            aria-label={`New chat in ${group.projectName}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void openNewChat({ projectId: group.projectId });
+            }}
+            className={SIDEBAR_ICON_BUTTON}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+        <DropdownMenu
+          align="right"
+          density="compact"
+          label={`${group.projectName} actions`}
+          menuClassName="min-w-[170px]"
+          groups={projectActions}
+          trigger={(props) => (
+            <button
+              type="button"
+              {...props}
+              aria-label={`${group.projectName} actions`}
+              data-testid={`sidebar-project-actions-${group.projectId}`}
+              className={SIDEBAR_ICON_BUTTON}
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </button>
+          )}
         />
-        {isExpanded && (
-          <div className="space-y-0.5">
-            {group.workspaces.map((workspace) =>
-              renderWorktreeGroup(workspace, { nested: true, hideHeader: onlyMain }),
-            )}
-            {group.chats.length === 0 && (
-              <button
-                type="button"
-                onClick={() => void openNewChat({ projectId: group.projectId })}
-                className="flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                No chats yet · start one
-              </button>
-            )}
-          </div>
+      </>
+    );
+    return (
+      <section key={group.projectId} aria-label={group.projectName} data-testid={`sidebar-project-${group.projectId}`} className="space-y-0.5">
+        {group.workspaces.map((workspace, i) =>
+          renderWorktreeGroup(workspace, {
+            nested: true,
+            projectName: group.projectName,
+            headingTrail: i === 0 ? trail : undefined,
+            // The main workspace's own New chat is the project's; the project's controls ride its first heading.
+            extraActions: i === 0 ? projectControls : undefined,
+            testId: i === 0 ? `sidebar-project-header-${group.projectId}` : undefined,
+          }),
+        )}
+        {group.chats.length === 0 && (
+          <button
+            type="button"
+            onClick={() => void openNewChat({ projectId: group.projectId })}
+            className="flex h-7 w-full items-center rounded-md pl-8 text-left text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            No chats yet · start one
+          </button>
         )}
       </section>
     );
@@ -1776,65 +1790,302 @@ function SidebarComponent({
   // "No active chats" is only true once the list has answered: while it loads
   // the rows are skeletons, and a failure says so with a Retry, rather than
   // telling someone with 200 chats that they have none.
-  const listLoading =
-    chatListTab === "active" ? chatListPending && !chatList : !!archivedQuery.isPending && !archivedQuery.data;
-  const listFailed =
-    chatListTab === "active" ? chatListFailed && !chatList : !!archivedQuery.isError && !archivedQuery.data;
-  const retryList = () => void (chatListTab === "active" ? refetchChatList() : archivedQuery.refetch());
-  const emptyTitle = chatListTab === "active" ? "No active chats" : "No archived chats";
-  const emptyDescription =
-    chatListTab === "active" ? "Create your first chat to get started" : "Archived chats will appear here";
+  const listLoading = chatListTab === "active" && chatListPending && !chatList && !noChatsHere;
+  const listFailed = chatListTab === "active" && chatListFailed && !chatList;
   // Chats the machine filter keeps out of the current tab.
   const hiddenByMachineCount = chatListTab === "active" ? hiddenByMachine.active : hiddenByMachine.archived;
   const machineFilterName = machineFilter ? machineFilterLabel(machineFilter, machines ?? []) : "";
   const hiddenByMachineText = `${hiddenByMachineCount} ${hiddenByMachineCount === 1 ? "chat" : "chats"} on other machines`;
-
-  // What the Chats heading says the list shows, besides the chats: one
-  // project (the filter), or every project (show-all), each with an X that
-  // undoes it. A list narrower or longer than usual always says why.
-  const projectFilterName = projectFilterId ? projectFilterLabel(projectFilterId, projects) : null;
   const showAllOffered =
-    !projectFilterId && (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0);
-  const headingScope =
-    chatListTab === "archived" ? null : severalProjects ? (
-      <ChatProjectFilterScope filter={chatFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
-    ) : projectFilterName ? (
-      <>
-        <span aria-hidden="true">·</span>
-        <span className="min-w-0 truncate text-foreground" data-testid="project-filter-label">
-          {projectFilterName}
+    !projectFilterId && !severalProjects && (projectPrefs.showAll || foldedProjectGroups.length > 0 || hiddenProjectCount > 0);
+
+  // One project's chats are capped (the open one always shows), then "All
+  // chats"; several projects' are grouped by project and scroll in the region.
+  const capped = !!projectFilterId && !showAllChats && activeChatCount > CHATS_CAP;
+  const shownGroups = capped ? capChatGroups(activeGroups, CHATS_CAP, activeChatId) : activeGroups;
+  const shownFlat = capped ? capChats(flatList, CHATS_CAP, activeChatId) : flatList;
+  const chatsNeedYou = [...needsYouByProject.values()].reduce((total, count) => total + count, 0);
+
+  // The chat list's controls: the machine filter and the list's menu (sort, view, archived, show all).
+  const chatListActions = !setupNeeded && !noChatsHere && (
+    <>
+      {showMachineFilter && (
+        // At rest only on hover, like the menu; filtered, it names what it shows and stays.
+        <span className={cn("flex min-w-0", !machineFilter && SIDEBAR_HEADING_HOVER_ACTION)}>
+          <MachineFilterMenu
+            filter={machineFilter}
+            machines={menuMachines}
+            onChange={handleMachineFilterChange}
+            includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
+            needsYouByMachine={needsYouByMachine}
+          />
         </span>
-        <Tooltip content="Show all projects" side="bottom" delay={300} type="label">
-          <button
-            type="button"
-            onClick={chatFilter.clear}
-            aria-label="Show all projects"
-            data-testid="project-filter-clear"
-            className={SIDEBAR_ICON_BUTTON}
+      )}
+      <span className={cn("flex", SIDEBAR_HEADING_HOVER_ACTION)}>
+        <ChatListMenu
+          filterId={projectFilterId}
+          projects={projects}
+          onAddProject={() => openAddProject()}
+          onManageProjects={() => go(settingsPath("projects"))}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
+          viewMode={viewMode}
+          onViewChange={setViewMode}
+          showAll={
+            showAllOffered
+              ? { on: projectPrefs.showAll, onChange: setShowAllProjects, disabled: !projectPrefsWritable }
+              : undefined
+          }
+          archived={chatListTab === "archived"}
+          onArchivedChange={(archived) => setChatListTab(archived ? "archived" : "active")}
+        />
+      </span>
+    </>
+  );
+
+  // What the nav config's slots are (Layout/sidebar/navConfig): the live pieces only the chat shell can draw.
+  const slots: NavSlots = {
+    "new-chat": ({ depth }) => (
+      // While chats cannot run, New chat sets them up first (handleNewChat).
+      <SidebarSubRow
+        label="New chat"
+        ariaLabel="New chat"
+        depth={depth}
+        icon={<SquarePen className="size-4" />}
+        href={setupNeeded ? chatSetupPath(setup) : newChatHref}
+        onClick={handleNewChat}
+        trail={!setupNeeded && newChatShortcut ? <kbd className="font-sans">{newChatShortcut}</kbd> : undefined}
+        testId="create-chat-button"
+      />
+    ),
+    "chat-list": ({ place, depth }) => (
+      <div
+        id="sidebar-chats"
+        data-testid="sidebar-chats"
+        data-place={place}
+        className={place === "fill" ? "flex min-h-0 flex-1 flex-col" : undefined}
+      >
+        {/* "Chats" over the list, its controls at the right on hover. */}
+        <div
+          className={cn("group/heading flex h-7 shrink-0 items-center gap-1 pr-1 text-meta font-medium text-muted-foreground", depth === 0 ? "mt-3 pl-2" : "mt-1 pl-8")}
+          data-onboarding="project-filter"
+          data-testid="sidebar-chats-heading"
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+            Chats
+            {/* "· 3 projects ×" while the list is a choice of several (#3027). */}
+            <ChatProjectFilterScope filter={chatProjectFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
+          </span>
+          {!setupNeeded && !noChatsHere && (
+            // The project filter, choose N of M (#3027); at rest only on hover unless it filters.
+            <span className={cn("flex", chatProjectFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}>
+              <ChatProjectFilterButton filter={chatProjectFilter} needsYouByProject={needsYouByProject} className={SIDEBAR_ICON_BUTTON} />
+            </span>
+          )}
+          {chatListActions}
+        </div>
+        {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}
+        {setupNeeded ? (
+          <ConnectSandboxCta variant="nav" />
+        ) : (
+          // The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion.
+          <div
+            className={cn("overflow-y-auto overscroll-contain", place === "fill" ? "min-h-0 flex-1" : "max-h-[45dvh]")}
+            data-testid="sidebar-scroller"
           >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </>
-    ) : projectPrefs.showAll ? (
-      <>
-        <span aria-hidden="true">·</span>
-        <span className="min-w-0 truncate text-foreground" data-testid="project-list-showing-all">
-          every project
-        </span>
-        <Tooltip content="Show active projects only" side="bottom" delay={300} type="label">
-          <button
-            type="button"
-            onClick={() => setShowAllProjects(false)}
-            disabled={!projectPrefsWritable}
-            aria-label="Show active projects only"
-            className={SIDEBAR_ICON_BUTTON}
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </>
-    ) : null;
+                  {chatListTab === "archived" && (
+                    <div className="flex h-7 items-center gap-2 pl-8 pr-2 text-meta text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate">Archived</span>
+                      <button
+                        type="button"
+                        onClick={() => setChatListTab("active")}
+                        data-testid="chat-list-back"
+                        className="shrink-0 rounded-md px-1 text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  )}
+                  <div
+                    ref={scrollContainerRef}
+                    className="pb-1 pt-0.5"
+                    onKeyDown={onChatListKeyDown}
+                    aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
+                    role="region"
+                  >
+                    {/* The pins and hides did not load: one quiet line. */}
+                    {chatListTab === "active" && !projectFilterId && projectPrefsLoadFailed && (
+                      <div className="mb-1 flex items-center justify-between gap-2 pl-8 pr-2 text-meta text-muted-foreground" data-testid="project-prefs-load-failed">
+                        <span className="min-w-0 truncate">Couldn't load pinned and hidden projects</span>
+                        <button
+                          type="button"
+                          onClick={retryProjectPrefs}
+                          className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                    {noChatsHere ? (
+                      <p className="py-1 pl-14 pr-2 text-meta text-muted-foreground" data-testid="sidebar-chats-app-only">
+                        This app has no code here, so no chats.
+                      </p>
+                    ) : chatListTab === "active" ? (
+                      viewMode === "grouped" ? (
+                        projectFilterId ? (
+                          shownGroups.length > 0 && (
+                            <div className="space-y-0.5">
+                              {shownGroups.map((group) => renderWorktreeGroup(group, { nested: true, projectName: projectNameOf(group.projectId) }))}
+                            </div>
+                          )
+                        ) : (
+                          (projectGroups.length > 0 || foldedProjectGroups.length > 0) && (
+                            <div className="space-y-2">
+                              {projectGroups.map((group) => renderProjectSection(group))}
+                              {/* Projects with no chats, unused for a while and unpinned. */}
+                              {foldedProjectGroups.length > 0 && (
+                                <div data-testid="sidebar-more-projects" className="space-y-2">
+                                  <SidebarSubRow
+                                    label={`More projects (${foldedProjectGroups.length})`}
+                                    depth={1}
+                                    onClick={() => setMoreProjectsOpen((open) => !open)}
+                                    expanded={moreProjectsOpen}
+                                    testId="sidebar-more-projects-toggle"
+                                  />
+                                  {moreProjectsOpen && (
+                                    <div className="space-y-2">{foldedProjectGroups.map((group) => renderProjectSection(group))}</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )
+                      ) : (
+                        shownFlat.length > 0 && (
+                          <div className="space-y-0.5">
+                            {shownFlat.map((chat) => {
+                              const worktree = getWorktreeForChat(chat);
+                              // Across projects, the row names its project first; the
+                              // branch only when it is not the project's main checkout.
+                              const projectName = projectFilterId ? undefined : projectNameOf(chat.projectId);
+                              const branch = projectFilterId || !worktree?.isMain ? worktree?.branch : undefined;
+                              return (
+                                <ChatItem
+                                  key={chat.id}
+                                  chat={chat}
+                                  inGroup
+                                  editingChatId={editingChatId}
+                                  editingTitle={editingTitle}
+                                  projectName={projectName}
+                                  workspaceBranch={branch || undefined}
+                                  activeChatId={activeChatId}
+                                  isTabStop={chat.id === tabStopChatId}
+                                  onChatClick={handleChatClick}
+                                  onContextMenu={handleChatContextMenu}
+                                  onEditingTitleChange={setEditingTitle}
+                                  onSaveRename={handleSaveRename}
+                                  onCancelRename={handleCancelRename}
+                                />
+                              );
+                            })}
+                          </div>
+                        )
+                      )
+                    ) : filteredArchivedChats.length > 0 ? (
+                      viewMode === "grouped" ? (
+                        <div className="space-y-2">{archivedGroups.map((group) => renderArchivedGroup(group))}</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {filteredArchivedChats.map((chat) => (
+                            <ArchivedChatItem
+                              key={chat.id}
+                              chat={chat}
+                              activeChatId={activeChatId}
+                              isTabStop={chat.id === tabStopChatId}
+                              inGroup
+                              projectName={projectFilterId ? undefined : projectNameOf(chat.projectId)}
+                            />
+                          ))}
+                        </div>
+                      )
+                    ) : null}
+
+                    {/* One project's chats past the cap: the rest in place. */}
+                    {chatListTab === "active" && projectFilterId && activeChatCount > CHATS_CAP && (
+                      <SidebarSubRow
+                        label={showAllChats ? "Show fewer" : `All chats (${activeChatCount})`}
+                        depth={2}
+                        onClick={() => setShowAllChats((all: boolean) => !all)}
+                        expanded={showAllChats}
+                        testId="sidebar-all-chats"
+                      />
+                    )}
+
+                    {/* Other members' shared chats, read-only; nothing when there are none. */}
+                    {chatListTab === "active" && !noChatsHere && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
+
+                    {listLoading && (
+                      <div role="status" aria-label="Loading chats" className="space-y-1.5 py-2 pl-8 pr-1" data-testid="chat-list-loading">
+                        {Array.from({ length: 4 }, (_, i) => (
+                          <div key={i} className="h-7 animate-pulse rounded-md bg-foreground/5 motion-reduce:animate-none" />
+                        ))}
+                      </div>
+                    )}
+
+                    {listFailed && (
+                      <div role="alert" className="my-2 ml-8 mr-1 rounded-md border border-border px-3 py-2.5 text-meta">
+                        <p className="text-ui font-medium text-destructive-ink">Couldn't load your chats</p>
+                        <p className="mt-0.5 text-muted-foreground">Your chats are safe; the list didn't arrive.</p>
+                        <Button className="mt-2" variant="outline" size="sm" onClick={() => void refetchChatList()}>
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* The machine filter hides some or all of them: say so, and undo it. */}
+                    {machineFilter && hiddenByMachineCount > 0 && (
+                      <div
+                        className="mt-1 flex items-center justify-between gap-2 pl-14 pr-2 text-meta text-muted-foreground"
+                        data-testid={hasAnyVisibleChats ? "machine-filter-hidden" : "machine-filter-empty"}
+                      >
+                        <span className="min-w-0 truncate">
+                          {hasAnyVisibleChats ? `${hiddenByMachineText} hidden` : `None on ${machineFilterName}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMachineFilterIds(null)}
+                          className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          Show all
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Empty: one quiet line under New chat. */}
+                    {!hasAnyVisibleChats && !listLoading && !listFailed && !noChatsHere && !(machineFilter && hiddenByMachineCount > 0) && (
+                      <p className="py-1 pl-14 pr-2 text-meta text-muted-foreground" data-testid="sidebar-chats-empty">
+                        {chatListTab === "active" ? (shell.mode === "one" && shell.name ? `No chats in ${shell.name} yet` : "No chats yet") : "No archived chats"}
+                      </p>
+                    )}
+                  </div>
+          </div>
+        )}
+      </div>
+    ),
+    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,
+    "chats-need-you": () =>
+      chatsNeedYou > 0 ? (
+        <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
+      ) : null,
+    inbox: () => (
+      <InboxNavItem
+        href={inboxHref}
+        onOpen={() => go(inboxHref)}
+        current={isAtOrBelow(pathname, inboxHref)}
+      />
+    ),
+    "update-button": () => <SidebarUpdateButton />,
+  };
 
   return (
     <div
@@ -1846,420 +2097,13 @@ function SidebarComponent({
       data-context="left-sidebar"
       tabIndex={-1}
     >
-      {/* The org the app acts in, and the way to change it (restyle §11.3).
-          With no org (no control plane) the row names the product. */}
-      <SidebarOrgRow>
-        <OrgSwitcher
-          variant="sidebar-top"
-          fallback={
-            <div className={cn(SIDEBAR_ORG_TRIGGER, "hover:bg-transparent")}>
-              {isForgeShell() ? <ForgeBrand /> : <SidebarOrgLabel name="Reliant" />}
-            </div>
-          }
-        />
-      </SidebarOrgRow>
+      {/* Find, at the very top (it opens the command palette); then the org and project switcher. */}
+      <FindBox />
+      {/* [Org ▾] / [Project ▾]: the org, and the project(s) every row below is about. */}
+      <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
 
-      {/* The one nav (U6, design §4.1): New chat, then the places, each lit
-          while its page is on screen. The open area's own sections nest under
-          its row (Workflows here, an app's under Apps below). */}
-      <nav className="flex shrink-0 flex-col" aria-label="Chat sidebar navigation">
-        <SidebarPrimaryAction
-          icon={<SquarePen className="size-4" />}
-          label="New chat"
-          // While chats cannot run yet, New chat sets them up (handleNewChat).
-          href={setupNeeded ? chatSetupPath(setup) : newChatHref}
-          onClick={handleNewChat}
-          testId="create-chat-button"
-          shortcut={newChatShortcut}
-        />
-        <div className="mt-3 space-y-0.5 px-2">
-          <InboxNavItem href={inboxHref} onOpen={() => go(inboxHref)} current={isAtOrBelow(pathname, inboxHref)} />
-          <SidebarRow
-            icon={<Boxes className="size-4" />}
-            label="Projects"
-            href={projectsHref}
-            onClick={() => go(projectsHref)}
-            current={isAtOrBelow(pathname, projectsHref)}
-            testId="sidebar-projects-button"
-          />
-          {/* One entry for the whole area. Live automations are its trail, with
-              their own link to Runs; its tabs nest under it while it is open. */}
-          <SidebarRow
-            icon={<Workflow className="size-4" />}
-            label="Workflows"
-            href={workflowsHref}
-            onClick={() => go(workflowsHref)}
-            current={inWorkflows && !workflowsTab}
-            expanded={inWorkflows || undefined}
-            onboardingId="workflow-button"
-            testId="sidebar-workflows-button"
-            action={<AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />}
-          />
-          {inWorkflows && (
-            <div role="group" aria-label="Workflows sections" data-testid="sidebar-workflows-sections" className="space-y-0.5">
-              {WORKFLOWS_TABS.map((tab) => {
-                // The area's scope rides along between its tabs.
-                const href = withSearch(tab.href(), { project: search.project, allProjects: search.allProjects });
-                return (
-                  <SidebarSubRow
-                    key={tab.key}
-                    label={tab.key === "workflows" ? "Library" : tab.label}
-                    href={href}
-                    onClick={() => go(href)}
-                    current={workflowsTab === tab.key}
-                    testId={`sidebar-workflows-${tab.key}`}
-                  />
-                );
-              })}
-            </div>
-          )}
-          <SidebarRow
-            icon={<Gauge className="size-4" />}
-            label="Usage"
-            href={usageHref}
-            onClick={() => go(usageHref)}
-            current={isAtOrBelow(pathname, usageHref)}
-            testId="sidebar-usage-button"
-          />
-          <SidebarRow
-            icon={<Search className="size-4" />}
-            label="Search"
-            onClick={onOpenChatSearch}
-            trail={chatSearchShortcut ? <kbd className="font-sans">{chatSearchShortcut}</kbd> : undefined}
-          />
-        </div>
-      </nav>
-
-      {/* Below the places, two regions that scroll on their own: the apps
-          (the open one's sections inline), then the chats. An expanded app
-          never pushes the chats off the window (owner preview 2026-11-19, a
-          900px window): the chats keep at least 40% of the room, and never
-          less than their heading and five rows, unless the window has less;
-          the apps take what they need of the rest and scroll past it. Pure
-          flex: the apps shrink (min-h-0) and the chats grow from nothing. */}
-      <div className="flex min-h-0 flex-1 flex-col" data-testid="sidebar-regions">
-      {/* Every app the org runs, one click from its console. */}
-      <div className="min-h-0 shrink overflow-y-auto overscroll-contain" data-testid="sidebar-apps-scroller">
-        <AppsNavSection pathname={pathname} search={search} onNavigate={go} />
-      </div>
-
-      <div
-        className="flex min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))] flex-1 flex-col"
-        data-testid="sidebar-chats"
-      >
-      {/* Chats cannot run yet (no machine): one card that sets them up, in
-          place of the list. */}
-      {setupNeeded ? (
-        <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
-      ) : (
-      <>
-      {/* The list's heading: its one menu (project, sort, view, every
-          project, archived) on hover, and the machine filter when there is
-          more than one machine. */}
-      <SidebarHeading
-        onboardingId="project-filter"
-        testId="chat-list-heading"
-        actions={
-          <>
-            {showMachineFilter && (
-              // At rest it shows only on hover, like the menu; filtered, it
-              // names what it shows and stays.
-              <span className={cn("flex min-w-0", !machineFilter && "opacity-0 group-hover/heading:opacity-100 group-focus-within/heading:opacity-100 has-[[aria-expanded=true]]:opacity-100")}>
-                <MachineFilterMenu
-                  filter={machineFilter}
-                  machines={menuMachines}
-                  onChange={handleMachineFilterChange}
-                  includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
-                  needsYouByMachine={needsYouByMachine}
-                />
-              </span>
-            )}
-            {/* The project filter, choose N of M (Projects/ChatProjectFilter):
-                at rest on hover, like the menu; filtered, it stays. */}
-            <ChatProjectFilterButton
-              filter={chatFilter}
-              needsYouByProject={needsYouByProject}
-              className={cn(SIDEBAR_ICON_BUTTON, chatFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}
-            />
-            <ChatListMenu
-              filterId={projectFilterId}
-              projects={projects}
-              onAddProject={() => openAddProject()}
-              onManageProjects={() => go(settingsPath("projects"))}
-              sortOrder={sortOrder}
-              onSortChange={setSortOrder}
-              viewMode={viewMode}
-              onViewChange={setViewMode}
-              showAll={
-                showAllOffered
-                  ? { on: projectPrefs.showAll, onChange: setShowAllProjects, disabled: !projectPrefsWritable }
-                  : undefined
-              }
-              archived={chatListTab === "archived"}
-              onArchivedChange={(archived) => setChatListTab(archived ? "archived" : "active")}
-            />
-          </>
-        }
-      >
-        {chatListTab === "archived" ? (
-          <>
-            <span className="truncate">Archived</span>
-            <button
-              type="button"
-              onClick={() => setChatListTab("active")}
-              data-testid="chat-list-back"
-              className="ml-auto shrink-0 rounded-md px-1 text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Back
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="shrink-0">Chats</span>
-            {headingScope}
-          </>
-        )}
-      </SidebarHeading>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 px-2 pb-3 pt-0.5"
-          onKeyDown={onChatListKeyDown}
-          aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
-          role="region"
-        >
-          {/* The pins and hides did not load: every project shows by the
-              defaults, and changing them waits for a read. One quiet line. */}
-          {chatListTab === "active" && !projectFilterId && projectPrefsLoadFailed && (
-            <div
-              className="mb-1 flex items-center justify-between gap-2 px-2 text-meta text-muted-foreground"
-              data-testid="project-prefs-load-failed"
-            >
-              <span className="min-w-0 truncate">Couldn't load pinned and hidden projects</span>
-              <button
-                type="button"
-                onClick={retryProjectPrefs}
-                className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {chatListTab === "active" ? (
-            viewMode === "grouped" ? (
-              projectFilterId ? (
-                activeGroups.length > 0 && (
-                  <div className="space-y-2">
-                    {activeGroups.map((group) => renderWorktreeGroup(group))}
-                  </div>
-                )
-              ) : (
-                (projectGroups.length > 0 || foldedProjectGroups.length > 0) && (
-                  <div className="space-y-2">
-                    {projectGroups.map((group) => renderProjectSection(group))}
-                    {/* Projects with no chats, unused for a while and unpinned. */}
-                    {foldedProjectGroups.length > 0 && (
-                      <div data-testid="sidebar-more-projects" className="space-y-2">
-                        <SidebarRow
-                          icon={
-                            <ChevronRight
-                              className={cn("size-3.5 transition-transform", moreProjectsOpen && "rotate-90")}
-                            />
-                          }
-                          label={`More projects (${foldedProjectGroups.length})`}
-                          onClick={() => setMoreProjectsOpen((open) => !open)}
-                          expanded={moreProjectsOpen}
-                          testId="sidebar-more-projects-toggle"
-                        />
-                        {moreProjectsOpen && (
-                          <div className="space-y-2">
-                            {foldedProjectGroups.map((group) => renderProjectSection(group))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              )
-            ) : (
-              flatList.length > 0 && (
-                <div className="space-y-0.5">
-                  {flatList.map((chat) => {
-                    const worktree = getWorktreeForChat(chat);
-                    // Across projects, the row names its project first; the
-                    // branch only when it is not the project's main checkout.
-                    const projectName = projectFilterId ? undefined : projectNameOf(chat.projectId);
-                    const branch = projectFilterId || !worktree?.isMain ? worktree?.branch : undefined;
-                    return (
-                      <ChatItem
-                        key={chat.id}
-                        chat={chat}
-                        inGroup={false}
-                        editingChatId={editingChatId}
-                        editingTitle={editingTitle}
-                        projectName={projectName}
-                        workspaceBranch={branch || undefined}
-                        activeChatId={activeChatId}
-                        isTabStop={chat.id === tabStopChatId}
-                        onChatClick={handleChatClick}
-                        onContextMenu={handleChatContextMenu}
-                        onEditingTitleChange={setEditingTitle}
-                        onSaveRename={handleSaveRename}
-                        onCancelRename={handleCancelRename}
-                      />
-                    );
-                  })}
-                </div>
-              )
-            )
-          ) : filteredArchivedChats.length > 0 ? (
-            viewMode === "grouped" ? (
-              <div className="space-y-2">
-                {archivedGroups.map((group) => renderArchivedGroup(group))}
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                {filteredArchivedChats.map((chat) => (
-                  <ArchivedChatItem
-                    key={chat.id}
-                    chat={chat}
-                    activeChatId={activeChatId}
-                    isTabStop={chat.id === tabStopChatId}
-                    projectName={projectFilterId ? undefined : projectNameOf(chat.projectId)}
-                  />
-                ))}
-              </div>
-            )
-          ) : null}
-
-          {/* Older archived chats load on request: a heavy account has thousands. */}
-          {chatListTab === "archived" && archivedQuery.hasNextPage && (
-            <div className="mt-2 flex justify-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={archivedQuery.isFetchingNextPage}
-                onClick={() => void archivedQuery.fetchNextPage()}
-                data-testid="archived-load-more"
-              >
-                {archivedQuery.isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
-
-          {/* Other members' shared chats, read-only; nothing when there are none. */}
-          {chatListTab === "active" && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
-
-          {listLoading && (
-            <div role="status" aria-label="Loading chats" className="space-y-1.5 px-1 py-2" data-testid="chat-list-loading">
-              {Array.from({ length: 6 }, (_, i) => (
-                <div key={i} className="h-7 animate-pulse rounded-md bg-foreground/5 motion-reduce:animate-none" />
-              ))}
-            </div>
-          )}
-
-          {listFailed && (
-            <div role="alert" className="mx-1 my-3 rounded-md border border-border px-3 py-2.5 text-meta">
-              <p className="text-ui font-medium text-destructive-ink">Couldn't load your chats</p>
-              <p className="mt-0.5 text-muted-foreground">Your chats are safe; the list didn't arrive.</p>
-              <Button className="mt-2" variant="outline" size="sm" onClick={retryList}>
-                Retry
-              </Button>
-            </div>
-          )}
-
-          {/* The machine filter hides everything here: say so, and undo it. */}
-          {!hasAnyVisibleChats && !listLoading && !listFailed && machineFilter && hiddenByMachineCount > 0 && (
-            <div className="px-2 py-8 text-center text-muted-foreground" data-testid="machine-filter-empty">
-              <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full border border-border">
-                <Server className="h-4 w-4" />
-              </div>
-              <p className="mb-1 text-ui font-medium text-foreground/75">
-                No {chatListTab === "active" ? "active" : "archived"} chats on {machineFilterName}
-              </p>
-              <p className="text-meta text-muted-foreground">
-                {hiddenByMachineText} {hiddenByMachineCount === 1 ? "is" : "are"} hidden by the machine filter.
-              </p>
-              <Button className="mt-3" onClick={() => setMachineFilterIds(null)} variant="ghost" size="sm">
-                Show all machines
-              </Button>
-            </div>
-          )}
-
-          {/* Some chats are on other machines: one line says so, with the way back. */}
-          {hasAnyVisibleChats && machineFilter && hiddenByMachineCount > 0 && (
-            <div
-              className="mt-2 flex items-center justify-between gap-2 px-2 text-meta text-muted-foreground"
-              data-testid="machine-filter-hidden"
-            >
-              <span className="min-w-0 truncate">{hiddenByMachineText} hidden</span>
-              <button
-                type="button"
-                onClick={() => setMachineFilterIds(null)}
-                className="shrink-0 rounded font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Show all
-              </button>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {!hasAnyVisibleChats && !listLoading && !listFailed && !(machineFilter && hiddenByMachineCount > 0) && (
-            <div className="px-2 py-8 text-center text-muted-foreground">
-              <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full border border-border">
-                {chatListTab === "active" ? <Plus className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-              </div>
-              <p className="mb-1 text-ui font-medium text-foreground/75">{emptyTitle}</p>
-              <p className="text-meta text-muted-foreground">{emptyDescription}</p>
-              {chatListTab === "active" && (
-                <div className="mt-3 flex flex-col items-center gap-2">
-                  <Button
-                    onClick={handleNewChat}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    New chat
-                  </Button>
-                  {viewMode === "flat" && activeGroups.length > 0 && (
-                    <Button
-                      onClick={() => {
-                        const mainGroup = activeGroups.find((g) => g.isMain);
-                        if (mainGroup) {
-                          void handleSwitchToWorktreeNewChat(mainGroup.worktreeId, mainGroup.projectId);
-                        }
-                      }}
-                      variant="ghost"
-                      size="sm"
-                    >
-                      Go to main workspace
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      </>
-      )}
-      </div>
-      </div>
-
-      {/* Settings only: the org switcher is the top row, and live
-          automations are the Workflows row's trail. */}
-      <SidebarFooter>
-        <SidebarRow
-          icon={<Settings className="size-4" />}
-          label="Settings"
-          href={settingsHref}
-          onClick={() => go(settingsHref)}
-          current={isAtOrBelow(pathname, settingsHref)}
-          testId="sidebar-settings-button"
-          // Renders nothing unless the desktop app has an update waiting.
-          action={<SidebarUpdateButton />}
-        />
-      </SidebarFooter>
+      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}
+      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} />
 
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (

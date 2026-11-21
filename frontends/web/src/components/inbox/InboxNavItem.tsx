@@ -20,6 +20,7 @@
  * Self-contained so the Sidebar hunk that mounts it stays one line.
  */
 
+import type { ReactNode } from "react";
 import { Inbox } from "lucide-react";
 
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
@@ -34,6 +35,8 @@ interface InboxNavItemProps {
   href?: string;
   /** The Inbox is the page on screen. */
   current?: boolean;
+  /** The row's mark; the inbox tray by default (the shell's footer draws a bell). */
+  icon?: ReactNode;
 }
 
 /** What the Inbox badge shows: the blocking count, the failures dot, and whether the read failed. */
@@ -74,7 +77,7 @@ export function useInboxBadge(): InboxBadgeState {
   return { count, informational, degraded, announcement };
 }
 
-export function InboxNavItem({ onOpen, href, current }: InboxNavItemProps) {
+export function InboxNavItem({ onOpen, href, current, icon }: InboxNavItemProps) {
   const { count, informational, degraded, announcement } = useInboxBadge();
 
   // The badge is the row's trail (restyle §11.3): the count in meta, a dot
@@ -102,7 +105,7 @@ export function InboxNavItem({ onOpen, href, current }: InboxNavItemProps) {
 
   return (
     <SidebarRow
-      icon={<Inbox className="size-4" />}
+      icon={icon ?? <Inbox className="size-4" />}
       label="Inbox"
       onClick={onOpen}
       href={href}

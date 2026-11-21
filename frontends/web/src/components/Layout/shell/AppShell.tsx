@@ -45,6 +45,8 @@ import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { ResizableSidebar } from "../ResizableSidebar";
+import type { NavigateOptions } from "../sidebar/NavRenderer";
+import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
 
 // The nav and its chat list load with the first shell page, not with the
@@ -72,8 +74,16 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
   const overlay = useSidebarOverlay({ isSidebarExpanded: !inShell || docked || narrow });
   const shown = docked || (narrow ? drawerOpen : overlay.isSidebarHovered);
 
-  // A drawer closes when a row in it opens a page, and when the window widens.
-  useEffect(() => setDrawerOpen(false), [pathname, narrow, setDrawerOpen]);
+  // A drawer closes when a row in it opens a page (unless the row drilled into
+  // Agents or Observability: navDrawerHold), and when the window widens.
+  // A drill that crossed from the phone's own screens (Mobile/MobileNavDrawer)
+  // onto a shell page opens this drawer on the area's rows instead.
+  useEffect(() => {
+    setDrawerOpen(navDrawerHeld() && narrow);
+    // `narrow` is read, not watched: widening closes the drawer below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, setDrawerOpen]);
+  useEffect(() => setDrawerOpen(false), [narrow, setDrawerOpen]);
   useEffect(() => {
     if (!narrow || !drawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -128,7 +138,10 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
             </ResizableSidebar>
           </div>
         )}
-        <div className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"}>{children}</div>
+        {/* The shell's ONE main landmark: pages inside it render their body as a plain region (PageMain). */}
+        <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
+          {children}
+        </div>
       </div>
     </ShellFrameContext.Provider>
   );
@@ -143,7 +156,19 @@ function ShellNav() {
   const { navDocked } = useShellFrame();
   const toggleShortcut = useShortcutLabel("toggleSidebar");
 
-  const onNavigate = useCallback((href: string) => void navigate({ href }), [navigate]);
+  // A destination closes the narrow window's drawer, even one that is the page
+  // already on screen; a drill-in keeps it open to show the area's rows.
+  const onNavigate = useCallback(
+    (href: string, options?: NavigateOptions) => {
+      if (options?.drill) holdNavDrawerOpen();
+      else {
+        releaseNavDrawerHold();
+        useNavDrawer.getState().setOpen(false);
+      }
+      void navigate({ href });
+    },
+    [navigate],
+  );
   const onOpenChatSearch = useCallback(() => void shortcutHost?.run("onChatSearch"), [shortcutHost]);
 
   return (

@@ -47,10 +47,13 @@ import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { PrimeMetricCatalog } from "../Observability/Metrics/PrimeMetricCatalog";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
+import { useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+
+import { AppSectionEmptyState } from "./AppSectionEmptyState";
 import { ConsoleFrame } from "./ConsoleFrame";
 import { ConsoleShell } from "./ConsoleShell";
 import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
-import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
+import { ForgeConsoleContext, rosterReadFailed, type ForgeConsole } from "./consoleContext";
 import { useConsoleUser } from "./consoleHost";
 import { useConsoleNavModel } from "./useConsoleNavModel";
 import { useObsNavOpen } from "./obsNavOpen";
@@ -70,6 +73,8 @@ export function switchTarget(app: string, page: ConsolePage): string {
       ? { kind: "environments" }
       : page.kind === "workload"
         ? { kind: "overview" }
+        : page.kind === "service"
+          ? { kind: "services" }
         : page.kind === "release"
           ? { kind: "releases" }
           : page.kind === "dashboard"
@@ -173,6 +178,13 @@ export function ConsoleLayout() {
     [trafficLightPadding, dragRegionStyle, forgeShell, onClose, forgeProject, navigate, page]
   );
   const brandCollapsed = useMemo(() => <ProjectMonogram name={forgeProject} />, [forgeProject]);
+  // Nothing deployed yet (the roster answered with no environment): inside
+  // the shell every page of the app says what it will show and how to deploy
+  // it (U6b; every project has the same nav). The shell's project names the
+  // code to deploy when no project declares the app yet.
+  const shellFocus = useShellLastPick((state) => state.focus);
+  const undeployed = inShell && model.settled && roster.envs.length === 0 && !rosterReadFailed(roster);
+  const deployProjectId = projectId ?? (shellFocus && !shellFocus.startsWith("app:") ? shellFocus : null);
   const body = useMemo(
     () =>
       listed ? (
@@ -180,7 +192,8 @@ export function ConsoleLayout() {
           <div className="empty:hidden [&:not(:empty)]:mb-4">
             <ObsQuotaBanner />
           </div>
-          <Outlet />
+          {/* The Overview is the landing: with nothing deployed it shows the chats and the way to deploy (WorkloadPages OverviewPage). */}
+          {undeployed && page.kind !== "overview" ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
@@ -188,7 +201,7 @@ export function ConsoleLayout() {
           <SkeletonLoader variant="table-row" count={4} />
         </div>
       ),
-    [listed, value]
+    [listed, value, undeployed, page, deployProjectId]
   );
 
   const primeMetrics = page.kind === "obs-view" && page.view === "metrics" && (

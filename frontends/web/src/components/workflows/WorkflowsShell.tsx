@@ -57,6 +57,7 @@ import {
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
 import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
+import { LearnLink } from "@/lib/learnLinks";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import { ProjectSelector } from "../Projects/ProjectSelector";
@@ -64,6 +65,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 import { homePath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
+import { PageMain } from "@/components/Layout/shell/shellFrame";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -135,9 +137,12 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         <ShellPageHeader
           testId="workflows-header"
           actions={
-            <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
-              <ProjectSwitcher />
-            </div>
+            <>
+              <LearnLink section="workflows" />
+              <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
+                <ProjectSwitcher />
+              </div>
+            </>
           }
         >
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-ui text-muted-foreground">
@@ -151,9 +156,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         {fill ? (
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         ) : (
-          <main className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
+          <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
             <div className="mx-auto w-full max-w-6xl">{children}</div>
-          </main>
+          </PageMain>
         )}
       </div>
     );

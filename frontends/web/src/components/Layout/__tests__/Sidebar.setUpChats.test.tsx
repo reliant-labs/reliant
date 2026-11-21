@@ -1,6 +1,6 @@
 /**
  * The nav's Chats section for a person who cannot run a chat yet (U6, the
- * daemonless home): one "Set up chats" card in place of the list, linking to
+ * daemonless home): the connect-a-sandbox call to action in place of the list (U6d), linking to
  * the step that fixes it, and New chat going there too. A person who can run
  * chats — or whose setup is still being checked, or failed to load — keeps
  * the list: no card on a guess.
@@ -66,12 +66,17 @@ vi.mock("../../../hooks/run-queries", async (importOriginal) => ({
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 function renderSidebar() {
   const onNavigate = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <Sidebar pathname="/projects" onNavigate={onNavigate} />
+      <Sidebar pathname="/" onNavigate={onNavigate} />
     </QueryClientProvider>,
   );
   return onNavigate;
@@ -87,22 +92,19 @@ describe("the nav's Chats section with no usable machine", () => {
   it.each([
     ["onboard", "/onboarding"],
     ["connect-machine", "/settings/machines"],
-  ] as const)("is the Set up chats card for %s, linking to %s", (setup: ChatSetup, href) => {
+  ] as const)("is the connect-a-sandbox call to action for %s; New chat goes to %s", (setup: ChatSetup, href) => {
     state.setup = setup;
     const onNavigate = renderSidebar();
 
-    const card = screen.getByTestId("set-up-chats-card");
-    expect(card).toHaveTextContent("Set up chats");
-    expect(card).toHaveTextContent("Chats run your agents on a machine");
-    // A real link: refresh, a new tab and a shared link all work.
-    const link = within(card).getByRole("link", { name: "Set up" });
-    expect(link).toHaveAttribute("href", href);
-    // The list and its heading are gone, chats and all.
-    expect(screen.queryByTestId("chat-list-heading")).toBeNull();
+    const card = screen.getByTestId("connect-sandbox-cta");
+    expect(card).toHaveTextContent("Connect an agent sandbox to start chats");
+    expect(card).toHaveAttribute("data-variant", "nav");
+    // Both ways open the one Add sandbox sheet, in place (Machines/AddMachineSheet).
+    expect(within(card).getByTestId("connect-sandbox-own")).toHaveTextContent("Use your own machine");
+    expect(within(card).getByTestId("connect-sandbox-cloud")).toHaveTextContent("Provision a Reliant sandbox");
+    // The list is gone, chats and all.
+    expect(screen.queryByTestId("sidebar-scroller")).toBeNull();
     expect(screen.queryByText("Fix the build")).toBeNull();
-
-    fireEvent.click(link);
-    expect(onNavigate).toHaveBeenLastCalledWith(href);
 
     // New chat stays, and goes where the card does instead of opening a chat:
     // its link says so too.
@@ -113,30 +115,12 @@ describe("the nav's Chats section with no usable machine", () => {
     expect(state.openNewChat).not.toHaveBeenCalled();
   });
 
-  it("leaves a modified click on Set up to the browser", () => {
-    state.setup = "onboard";
-    const onNavigate = renderSidebar();
-    // After the app's handler had its say: jsdom cannot open a new tab.
-    let leftToBrowser = false;
-    document.addEventListener(
-      "click",
-      (event) => {
-        leftToBrowser = !event.defaultPrevented;
-        event.preventDefault();
-      },
-      { once: true },
-    );
-    fireEvent.click(screen.getByRole("link", { name: "Set up" }), { metaKey: true });
-    expect(leftToBrowser).toBe(true);
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
-
   it.each(["ready", "checking", "unknown"] as const)("is the chat list for %s, and New chat opens a chat", (setup) => {
     state.setup = setup;
     const onNavigate = renderSidebar();
 
-    expect(screen.queryByTestId("set-up-chats-card")).toBeNull();
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
+    expect(screen.queryByTestId("connect-sandbox-cta")).toBeNull();
+    expect(screen.getByTestId("sidebar-scroller")).toBeInTheDocument();
     const newChat = screen.getByRole("link", { name: "New chat" });
     // A link to U5's new-chat view; a plain click runs openNewChat.
     expect(newChat).toHaveAttribute("href", "/new");

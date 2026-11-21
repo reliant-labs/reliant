@@ -187,7 +187,7 @@ describe("settings navigation chrome", () => {
 
   // Inside the one shell (U6): the shell's nav is the way out and holds the
   // org switcher, so Settings keeps only its section list beside the section.
-  it("inside the one shell, drops its exit, org switcher and drag spacer but keeps its sections", async () => {
+  it("inside the one shell, drops its exit, org switcher and its own section column (the shell's nav drills into them)", async () => {
     state.isElectron = true;
     state.isMac = true;
     render(
@@ -199,9 +199,8 @@ describe("settings navigation chrome", () => {
     expect(screen.queryByRole("button", { name: "Close Settings" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Back to app" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Switch organization" })).toBeNull();
-    const sections = screen.getByRole("complementary", { name: "Settings" });
-    expect(sections.querySelector("[aria-hidden='true'].h-10")).toBeNull();
-    expect(within(sections).getByRole("button", { name: "Account" })).toHaveAttribute("aria-current", "page");
+    // No second column: the sections are the shell's Settings drill-in (U6c).
+    expect(screen.queryByRole("complementary", { name: "Settings" })).toBeNull();
     expect(screen.getByTestId("settings-header")).toHaveTextContent("Settings");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });

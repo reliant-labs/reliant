@@ -65,6 +65,8 @@ const ROWS: LegacyRow[] = [
   { url: "/forge/p/shop", lands: "/forge/p/shop", leaf: /\/forge\/p\/\$project\/$/ },
   { url: "/forge/p/shop/releases", lands: "/forge/p/shop/releases", leaf: /\/releases$/ },
   { url: "/forge/p/shop/observability/logs", lands: "/forge/p/shop/observability/logs", leaf: /\/observability\/\$view$/ },
+  // Observability's own Overview (U6e): a page now, no longer a redirect to the project Overview.
+  { url: "/forge/p/shop/observability", lands: "/forge/p/shop/observability", leaf: /\/observability$/ },
   { url: "/forge/observability", lands: "/forge/observability" },
   { url: "/forge/observability/logs", lands: "/forge/observability/logs" },
   { url: "/forge/env/prod?forgeProject=x", lands: "/forge/env/prod?forgeProject=x", leaf: /\/forge\/env\/\$env$/ },
@@ -74,7 +76,6 @@ const ROWS: LegacyRow[] = [
   { url: "/forge/environments", lands: "/forge/environments" },
   { url: "/forge/status", lands: "/forge/status" },
   { url: "/forge/secrets", lands: "/forge/secrets" },
-  { url: "/forge/p/shop/observability", lands: "/forge/p/shop" },
   { url: "/forge/p/shop/monitoring", lands: "/forge/p/shop/observability/alerts" },
   { url: "/forge/p/shop/settings", lands: "/settings/billing" },
   { url: "/forge/observability/not-a-view", lands: "/forge/observability" },
