@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 )
@@ -60,9 +61,13 @@ func TestExecRun_CredentialsNone_TypoFailsClosed(t *testing.T) {
 	}
 }
 
-func TestExecBGStart_CredentialsNone_ChildEnvironmentHasNoCredentials(t *testing.T) {
+func TestExecBGStart_CredentialsNone_CompleteEnvironmentHasNoCredentials(t *testing.T) {
 	credentialedEnv(t)
-	payload, _ := json.Marshal(daemon.RunCommandRequest{Command: "env", WorkingDir: t.TempDir(), Credentials: "none"})
+	// UUID characters are safe inside single-quoted shell arguments, and the
+	// sentinel cannot be confused with an environment variable assignment.
+	marker := "RELIANT_ENV_END_" + uuid.NewString()
+	command := "env && printf '%s\\n' '" + marker + "'"
+	payload, _ := json.Marshal(daemon.RunCommandRequest{Command: command, WorkingDir: t.TempDir(), Credentials: "none"})
 	raw, err := handleExecBGStart(context.Background(), payload)
 	if err != nil {
 		t.Fatal(err)
@@ -73,35 +78,38 @@ func TestExecBGStart_CredentialsNone_ChildEnvironmentHasNoCredentials(t *testing
 	if err := json.Unmarshal(raw, &started); err != nil {
 		t.Fatal(err)
 	}
-	// Read the output once the process has finished, not as soon as some of
-	// it is there: a partial `env` listing can lack the very lines asserted.
+
+	// Only a complete stdout sentinel line proves env succeeded and its entire
+	// listing arrived. Process teardown is independent of this security check.
 	mgr := shell.GetBackgroundManager()
-	deadline := time.Now().Add(20 * time.Second)
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	var afterSeq int64
+	var output strings.Builder
 	for {
-		status, complete, _, err := mgr.GetProcessStatus(started.ProcessID)
+		lines, latest, err := mgr.GetCombinedOutputWithSeq(started.ProcessID, afterSeq)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if complete {
-			if status != "completed" {
-				t.Fatalf("env finished with status %q", status)
+		afterSeq = latest
+		for _, line := range lines {
+			if line.Type != "stdout" {
+				continue
 			}
-			break
+			if line.Text == marker {
+				assertNoCredentials(t, output.String())
+				return
+			}
+			output.WriteString(line.Text + "\n")
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("env still %q after 20s", status)
+		select {
+		case <-ticker.C:
+		case <-timer.C:
+			t.Fatal("env did not emit its complete stdout sentinel within 20s")
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
-	lines, err := mgr.GetCombinedOutput(started.ProcessID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sb strings.Builder
-	for _, l := range lines {
-		sb.WriteString(l.Text + "\n")
-	}
-	assertNoCredentials(t, sb.String())
 }
 
 func assertNoCredentials(t *testing.T, envOutput string) {

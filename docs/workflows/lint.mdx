@@ -61,7 +61,7 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 
 ### agent-turn-budget-default
 
-**Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50").
+**Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input with a non-zero default, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50"). A child whose `max_turns` defaults to 0 (no limit, as `builtin://agent` and `builtin://structured-agent` do) never runs out of turns, so it is not reported here; in a workflow with `concurrency.max_running`, [slot-unbounded-wait](#slot-unbounded-wait) asks for its bound.
 
 ### loop-unbounded
 
@@ -74,6 +74,8 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 ### slot-unbounded-wait
 
 **Error.** A workflow with `concurrency.max_running` (or `max_running_per_key`) holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` node with no `timeout:`, a loop with no bound. (An `approval` or `ask_question` is not one: `max_running` bounds only trigger-launched runs, which are unattended, and an unattended run's human gates resolve at once.) One stuck run then queues every later firing behind it. A `workflow` or `loop` node's child holds the slot too, so lint reads the child (and every ref it reaches) and applies the same check to its steps; a `timeout:` on the node itself does not help ([timeout-ignored](#timeout-ignored)). Give every such step a timeout (or a bound).
+
+An agent is bounded by its `max_turns`: `builtin://agent` and `builtin://structured-agent` have no limit unless the node that runs them sets `args.max_turns` (a template, or a `passthrough:` of `max_turns`, counts as set). Left unset or `0`, the finding names the arg to set and is a **warning**: lint did not read this input before, and a stricter verdict warns before it gates.
 
 ### shared-checkout-fetch
 

@@ -276,8 +276,14 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 	if started >= 30 {
 		t.Fatalf("the forker started %d children under pids.max 30", started)
 	}
-	if note := tree.LimitNote(); !strings.Contains(note, "This command reached its thread limit (30 threads") || strings.Contains(note, "shared") {
-		t.Fatalf("LimitNote after the command's own limit refused it: %q", note)
+	// Before Linux 6.13 there is no pids.events.local, so refusals cannot tell the
+	// command's own limit from the shared one, and LimitNote names both (refused.either).
+	if _, err := os.Stat(filepath.Join(tree.Cgroup(), "pids.events.local")); err == nil {
+		if note := tree.LimitNote(); !strings.Contains(note, "This command reached its thread limit (30 threads") || strings.Contains(note, "shared") {
+			t.Fatalf("LimitNote after the command's own limit refused it: %q", note)
+		}
+	} else if note := tree.LimitNote(); !strings.Contains(note, "The kernel refused this command") || !strings.Contains(note, "its own (30 threads at once") {
+		t.Fatalf("LimitNote after a thread limit refused it, on a kernel without pids.events.local: %q", note)
 	}
 	tree.Release()
 	if _, err := os.Stat(tree.Cgroup()); !os.IsNotExist(err) {

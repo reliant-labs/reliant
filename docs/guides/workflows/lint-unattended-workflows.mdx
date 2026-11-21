@@ -113,7 +113,7 @@ Lint is separate from validation. Validation asks whether a workflow can run. Li
 
     - **Commands:** give each `run` node a `timeout:`, the longest the command may take. Without one, it runs for the 30-day default.
     - **The loop:** add `&& iter.iteration < 3` to `while`, so a fix that never works ends after three rounds.
-    - **The agent:** `builtin://agent` takes no turn limit, so lint cannot see a bound on it. Use `builtin://structured-agent` with `max_turns: 60`, the agent used for structured results in [Write your first multi-agent workflow](/guides/workflows/first-multi-agent-workflow).
+    - **The agent:** give it a turn limit. In v1.21.3 `builtin://agent` takes none, so the fixed version below uses `builtin://structured-agent` with `max_turns: 60`, the agent used for structured results in [Write your first multi-agent workflow](/guides/workflows/first-multi-agent-workflow). Later releases accept `max_turns` on `builtin://agent` too: set it there and keep the agent. Left at `0` (no limit), lint names the arg to set, as a warning.
 
     Then delete `timeout: 45m` from `fix`. A workflow node dispatches no activity of its own, so its `timeout:` bounds nothing ([timeout-ignored](/workflows/lint#timeout-ignored)).
   </Step>
@@ -259,7 +259,7 @@ Lint is separate from validation. Validation asks whether a workflow can run. Li
 
 <AccordionGroup>
   <Accordion title="[slot-unbounded-wait] … the child's loop builtin://agent → agent_loop has no iteration bound">
-    The fix text suggests editing the loop's `while`, but that loop is inside the built-in agent, and `builtin://agent` takes no `max_turns`. Use `builtin://structured-agent` with `max_turns`. Or, if you have judged that the agent's run is bounded enough, allow the finding on the node with `# lint:allow slot-unbounded-wait — <why>`.
+    Reliant releases before `builtin://agent` took `max_turns` report the agent this way, as an error whose fix text (editing the loop's `while`) you cannot follow, because the loop is inside the built-in agent. On those, use `builtin://structured-agent` with `max_turns`. On a release whose finding reads "is bounded only by its max_turns input", set `args.max_turns` on the node. Or, if you have judged that the agent's run is bounded enough, allow the finding on the node with `# lint:allow slot-unbounded-wait — <why>`.
   </Accordion>
   <Accordion title="[lint-allow-invalid] lint:allow … gives no reason">
     Write the reason after the rule ID: `# lint:allow <rule> — <why it is fine here>`. The rule ID must be one that `reliant workflow lint --rules` lists.
