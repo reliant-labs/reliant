@@ -61,7 +61,8 @@
 # integration and e2e. dev-docs/merge-and-release-gates.md lists the split.
 #
 # Steps, in order (every step runs even after a failure; one table at the end):
-#   npm          pnpm install --frozen-lockfile wherever node_modules is
+#   npm          pnpm install --frozen-lockfile (npm ci for a pre-pnpm
+#                checkout's package-lock.json) wherever node_modules is
 #                stale (frontends/web, electron, tools/protoc-gen-es)
 #   generate     task generate:check  (pinned forge generate is a no-op, + conventions)
 #   docs         task generate:docs:check
@@ -541,20 +542,36 @@ run_step() {
     npm)
       local d scripts
       for d in frontends/web electron tools/protoc-gen-es; do
-        # Current when node_modules/.modules.yaml is newer than the lockfile
-        # (the touch dates it after a no-op install, which pnpm 12 leaves
-        # alone) and, for electron, its postinstall also fetched the binary
-        # its tests load (node_modules/electron/path.txt). As
-        # scripts/merge-gate.sh does: without it every electron test fails
-        # "Electron failed to install correctly" (release gate a2783da3, 10 of
-        # 315).
-        if [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] \
-          && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
-          continue
-        fi
+        # The install follows the checkout's own lockfile, not this runner's:
+        # a hotfix gates a production commit that may predate the move to
+        # pnpm (#3019), whose frontends carry package-lock.json and no
+        # pnpm-lock.yaml. A frontend the checkout does not have is skipped;
+        # one with a package.json but no lockfile cannot install frozen.
+        [ -f "$d/package.json" ] || continue
         scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
-        pnpm install --dir "$d" --frozen-lockfile $scripts --config.confirmModulesPurge=false --reporter=silent || return 1
-        touch "$d/node_modules/.modules.yaml"
+        # Current when the install's own stamp is newer than the lockfile
+        # (pnpm: node_modules/.modules.yaml, touched after a no-op install,
+        # which pnpm 12 leaves alone; npm: its node_modules/.package-lock.json
+        # copy) and, for electron, its postinstall also fetched the binary its
+        # tests load (node_modules/electron/path.txt). As scripts/merge-gate.sh
+        # does: without it every electron test fails "Electron failed to
+        # install correctly" (release gate a2783da3, 10 of 315).
+        if [ -f "$d/pnpm-lock.yaml" ]; then
+          if [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] \
+            && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
+            continue
+          fi
+          pnpm install --dir "$d" --frozen-lockfile $scripts --config.confirmModulesPurge=false --reporter=silent || return 1
+          touch "$d/node_modules/.modules.yaml"
+        elif [ -f "$d/package-lock.json" ]; then
+          if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+            && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
+            continue
+          fi
+          npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error || return 1
+        else
+          echo "npm: $d has a package.json but neither pnpm-lock.yaml nor package-lock.json"; return 1
+        fi
       done ;;
     generate) task generate:check ;;
     docs) task generate:docs:check ;;

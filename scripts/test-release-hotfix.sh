@@ -28,13 +28,25 @@ cat >"$T/bin/task" <<'EOF'
 #!/usr/bin/env bash
 echo "task $*" >>"$RG_TEST_LOG"; exit "${RG_TEST_TASK_RC:-0}"
 EOF
-# `pnpm install --dir <d> ...` (the npm step, for each frontend with no current
-# node_modules): makes the node_modules the step then dates, nothing else.
+# The npm step's installers, as strict as the real ones about lockfiles:
+# `pnpm install --dir <d> --frozen-lockfile ...` refuses a <d> without
+# pnpm-lock.yaml, and `npm ci --prefix <d> ...` one without package-lock.json.
+# Each logs `<installer> <d> <its other args>` and makes the node_modules the
+# step then dates.
 cat >"$T/bin/pnpm" <<'EOF'
 #!/usr/bin/env bash
-while [ $# -gt 0 ]; do [ "$1" = --dir ] && mkdir -p "$2/node_modules"; shift; done
+d=""; args=(); while [ $# -gt 0 ]; do if [ "$1" = --dir ]; then d="$2"; shift; else args+=("$1"); fi; shift; done
+[ -f "$d/pnpm-lock.yaml" ] || { echo "ERR_PNPM_NO_LOCKFILE: no pnpm-lock.yaml in $d" >&2; exit 1; }
+mkdir -p "$d/node_modules"; echo "pnpm $d ${args[*]}" >>"$RG_TEST_LOG"
 EOF
-chmod +x "$T/bin/go" "$T/bin/task" "$T/bin/pnpm"
+cat >"$T/bin/npm" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = ci ] || exit 2; shift
+d=""; args=(); while [ $# -gt 0 ]; do if [ "$1" = --prefix ]; then d="$2"; shift; else args+=("$1"); fi; shift; done
+[ -f "$d/package-lock.json" ] || { echo "npm ci: no package-lock.json in $d" >&2; exit 1; }
+mkdir -p "$d/node_modules"; touch "$d/node_modules/.package-lock.json"; echo "npm $d ${args[*]}" >>"$RG_TEST_LOG"
+EOF
+chmod +x "$T/bin/go" "$T/bin/task" "$T/bin/pnpm" "$T/bin/npm"
 export PATH="$T/bin:$PATH" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 RELEASE_GATE_PUBLISH=0
 # The hotfix gate's runner: its private checkout under $T, the pinned forge stubbed, and
@@ -49,6 +61,12 @@ cp "$SRC/release-gate.sh" "$SRC/release-tag.sh" "$SRC/release-lock.sh" "$SRC/rc-
 # The merge gate the hotfix gate's merge step runs: logs how it was asked.
 printf '#!/usr/bin/env bash\necho "merge-gate MG_REACH=$MG_REACH $*" >>"$RG_TEST_LOG"\n' >"$R/scripts/merge-gate.sh"
 pkg() { printf '{\n  "name": "fixture",\n  "version": "%s"\n}\n' "$1" >"$R/electron/package.json"; }
+# Prod's release predates part of the pnpm move: electron still installs from
+# package-lock.json (npm ci, with its lifecycle scripts), frontends/web from
+# pnpm-lock.yaml, and tools/protoc-gen-es does not exist yet.
+mkdir -p "$R/frontends/web"
+printf '{\n  "name": "web"\n}\n' >"$R/frontends/web/package.json"; echo "lockfileVersion: '9.0'" >"$R/frontends/web/pnpm-lock.yaml"
+printf '{\n  "name": "fixture",\n  "version": "1.24.0",\n  "lockfileVersion": 3,\n  "packages": {\n    "": {\n      "version": "1.24.0"\n    }\n  }\n}\n' >"$R/electron/package-lock.json"
 pkg 1.24.0; echo changelog >"$R/docs/changelog.mdx"
 printf 'version: "v1.24.0"\n' >"$R/docs/data/releases/v1.24.0.yaml"
 git -C "$R" add -A; git -C "$R" commit -q -m "chore: release v1.24.0"
@@ -66,7 +84,7 @@ echo "-- hotfix-bump.sh"
 (cd "$R" && bash scripts/hotfix-bump.sh v1.24.0) >/dev/null 2>&1; check "a version not above the release HEAD contains is refused" "$?" 1
 echo dirty >"$R/dirty"; (cd "$R" && bash scripts/hotfix-bump.sh v1.24.1) >/dev/null 2>&1; check "a dirty checkout is refused" "$?" 1; rm "$R/dirty"
 changed="$(cd "$R" && bash scripts/hotfix-bump.sh v1.24.1 2>/dev/null | sort | paste -sd, -)"
-check "the bump writes the version, the notes and the changelog, nothing else" "$changed" "docs/changelog.mdx,docs/data/releases/v1.24.1.yaml,electron/package.json"
+check "the bump writes the version, the notes and the changelog, nothing else" "$changed" "docs/changelog.mdx,docs/data/releases/v1.24.1.yaml,electron/package-lock.json,electron/package.json"
 check "the version is the hotfix's" "$(node -p "require('$R/electron/package.json').version")" 1.24.1
 git -C "$R" add -A; git -C "$R" commit -q -m "chore(release): hotfix v1.24.1" -m "RC-Set: v1.24.1-rc.1"
 H="$(git -C "$R" rev-parse HEAD)"
@@ -124,6 +142,9 @@ unrecord "$H"; : >"$RG_TEST_LOG"
 check "on a green base: 0" "$(gate hotfix --base "$M0" "$H")" 0
 check "recorded as a hotfix gate on its base, every hotfix step passing" \
   "$(show "$H" '[.result, .kind, .base, (.steps | map(.name + ":" + .result) | join(","))] | join(" ")')" "PASS hotfix $M0 npm:PASS,merge:PASS,test-go:PASS"
+check "each frontend installed from its own lockfile: npm ci for electron, scripts run" "$(grep -c '^npm electron --no-audit' "$RG_TEST_LOG")" 1
+check "pnpm for frontends/web, scripts skipped" "$(grep -c '^pnpm frontends/web install --frozen-lockfile --ignore-scripts' "$RG_TEST_LOG")" 1
+check "and nothing for a frontend the release does not have" "$(grep -c 'protoc-gen-es' "$RG_TEST_LOG")" 0
 check "the merge gate ran against the base, every dependent included" "$(grep -c "^merge-gate MG_REACH=all --base $M0\$" "$RG_TEST_LOG")" 1
 check "the Go tests ran the packages the picks changed, and no other" "$(grep '^task test -- ' "$RG_TEST_LOG" | tr ' ' '\n' | grep -c -e '^./pkg/fix$' -e next)" 1
 check "and it is green" "$(gate check "$H")" 0
