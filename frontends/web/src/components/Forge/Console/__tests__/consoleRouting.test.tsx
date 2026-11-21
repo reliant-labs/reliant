@@ -235,6 +235,9 @@ function renderAt(
     storage: probe("storage"),
     data: probe("data"),
     auth: probe("auth"),
+    vulnerabilities: probe("vulnerabilities"),
+    vulnerability: probe("vulnerability"),
+    sboms: probe("sboms"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -246,6 +249,8 @@ function renderAt(
     events: probe("events"),
     analytics: probe("analytics"),
     speedInsights: probe("speed-insights"),
+    experiments: probe("experiments"),
+    experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -254,7 +259,7 @@ function renderAt(
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
-  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/projects", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
     routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
@@ -293,12 +298,12 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+  it("names no project, so lands on the apps (Projects) rather than guessing one", async () => {
     // The persisted last project used to be opened here; the list of every
     // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/apps");
+    await landsOn(router, "/projects", { show: "apps" });
     expect(await screen.findByTestId("apps")).toBeInTheDocument();
     expect(restoreLastProject).not.toHaveBeenCalled();
   });
@@ -542,6 +547,27 @@ describe("the environment scope", () => {
 
     const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
+  it("routes Security › Vulnerabilities with its filters in the URL", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities?env=e2e&severity=high&fixable=yes&kev=1&exempt=1&release=v1.4.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerabilities");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities", { env: "e2e", severity: "high", fixable: "yes", kev: "1", exempt: "1", release: "v1.4.0" });
+  });
+
+  it("routes one advisory, and lands /security on Vulnerabilities", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities/CVE-2026-4101?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerability");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities/CVE-2026-4101", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/security?env=e2e");
+    await landsOn(redirected, "/forge/p/alpha/security/vulnerabilities", { env: "e2e" });
+  });
+
+  it("routes Security › SBOMs", async () => {
+    const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
+    await landsOn(router, "/forge/p/alpha/security/sboms", { env: "e2e", release: "v1.5.0" });
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {

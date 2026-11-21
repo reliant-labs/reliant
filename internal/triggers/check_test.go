@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -80,6 +82,129 @@ func TestEventFireOpensTheWorkflowsCheckBeforeLaunching(t *testing.T) {
 	assert.Equal(t, "t-ci:d1", f.Event.DedupeKey, "the check belongs to the recorded firing")
 	assert.NotEmpty(t, f.Event.ID)
 	assert.Equal(t, trig.ID, f.Trigger.ID)
+}
+
+// checkedInputWorkflow declares a check and an input the trigger maps from the
+// event's PR number, which the test's event does not carry.
+const checkedInputWorkflow = `name: ci
+check: {name: reliant/ci}
+inputs:
+  pr_number:
+    type: integer
+triggers:
+  - name: pr
+    integration:
+      integration: github
+      events: [pull_request.synchronize]
+    inputs:
+      pr_number: "{{ trigger.payload.data.pull_request.number }}"
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`
+
+// A checked workflow whose firing is refused before launch (its daemon was
+// deleted, or the event does not fit a declared input) still opens its check,
+// and the syncer concludes that check failure from the refused firing: a
+// required check never stays missing on GitHub because the run could not
+// start.
+func TestEventFireRefusedBeforeLaunchConcludesItsCheckFailed(t *testing.T) {
+	const headSHA = "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+	for _, tc := range []struct {
+		name, yaml, daemon, detail string
+	}{
+		{name: "missing daemon", yaml: checkedWorkflow, daemon: "daemon-deleted", detail: "trigger's daemon no longer exists"},
+		{name: "invalid declared input", yaml: checkedInputWorkflow, daemon: testDaemonID, detail: "inputs could not be read from this event"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newFakeRepo()
+			name := "pr"
+			trig := &core.Trigger{
+				ID: "t-ci", UserID: "user-1", ProjectID: "project-1", Name: "ci",
+				Kind: core.TriggerKindIntegration, Enabled: true, Workflow: "ci", WorkflowTrigger: &name,
+				DaemonID: tc.daemon, ActingIdentity: core.ActingIdentityApp,
+				Config: json.RawMessage(`{"integration":"github","events":["pull_request.synchronize"]}`),
+			}
+			repo.triggers[trig.ID] = trig
+			workflows := fakeWorkflows{yaml: map[string]string{"ci": tc.yaml}}
+			res, err := NewIntake(repo, &recordingStarter{}, "q").WithWorkflows(workflows).Accept(ctx, trig, InboundEvent{
+				Kind: core.TriggerEventKindIntegration, DedupeKey: "t-ci:d1", Sender: octocat,
+				Payload: map[string]any{"attributes": map[string]any{"repository": "reliant-labs/reliant"},
+					"data": map[string]any{"pull_request": map[string]any{"head": map[string]any{"sha": headSHA}}}},
+			}, AcceptOptions{})
+			require.NoError(t, err)
+			require.Equal(t, core.TriggerEventPending, res.Outcome, res.Detail)
+
+			// The real check service over an in-memory row, writing to a
+			// recorded GitHub.
+			var rows []*core.WorkflowCheckRun
+			store := &workflowcheck.MockStore{
+				CreateWorkflowCheckRunFunc: func(_ context.Context, row *core.WorkflowCheckRun) (bool, error) {
+					rows = append(rows, row)
+					return true, nil
+				},
+				ClaimWorkflowCheckRunsFunc: func(context.Context, string, time.Time, time.Time, int) ([]*core.WorkflowCheckRun, error) {
+					return rows, nil
+				},
+				RenewWorkflowCheckRunLeasesFunc: func(_ context.Context, _ string, leases []core.WorkflowCheckLease, _ time.Time) ([]string, error) {
+					ids := make([]string, 0, len(leases))
+					for _, l := range leases {
+						ids = append(ids, l.ID)
+					}
+					return ids, nil
+				},
+				ObserveWorkflowCheckRunFunc: func(_ context.Context, eventID string) (*core.WorkflowCheckObservation, error) {
+					for _, ev := range repo.eventsFor(trig.ID) {
+						if ev.ID == eventID {
+							return &core.WorkflowCheckObservation{EventOutcome: ev.Outcome, EventDetail: ev.OutcomeDetail}, nil
+						}
+					}
+					return nil, core.ErrWorkflowCheckRunNotFound
+				},
+				SaveWorkflowCheckRunSyncFunc: func(context.Context, *core.WorkflowCheckRun) error { return nil },
+			}
+			runs := &workflowcheck.MockCheckRuns{
+				FindFunc:   func(context.Context, string, string, string) (int64, error) { return 0, nil },
+				CreateFunc: func(context.Context, workflowcheck.Write) (int64, error) { return 7, nil },
+			}
+			checks := workflowcheck.New(workflowcheck.Deps{Store: store, GitHub: &workflowcheck.MockGitHub{
+				CheckRunsFunc: func(context.Context, workflowcheck.Identity, string, string) (workflowcheck.CheckRuns, error) {
+					return runs, nil
+				},
+			}})
+
+			launcher := &fakeLauncher{}
+			_, err = NewEventFirer(repo, launcher).WithWorkflows(workflows).WithChecks(checks).Fire(ctx, EventFireInput{
+				TriggerID: trig.ID, Kind: core.TriggerEventKindIntegration, DedupeKey: "t-ci:d1",
+			})
+			var appErr *temporal.ApplicationError
+			require.ErrorAs(t, err, &appErr, "the refusal ends the fire")
+			require.True(t, appErr.NonRetryable())
+			require.Empty(t, launcher.snapshot(), "a refused firing launches nothing")
+			events := repo.eventsFor(trig.ID)
+			require.Len(t, events, 1)
+			require.Equal(t, core.TriggerEventFailed, events[0].Outcome)
+			require.Contains(t, events[0].OutcomeDetail, tc.detail)
+
+			require.Len(t, rows, 1, "the refused firing opened its check")
+			assert.Equal(t, events[0].ID, rows[0].TriggerEventID)
+			assert.Equal(t, "reliant/ci", rows[0].Name)
+			assert.Equal(t, headSHA, rows[0].HeadSHA)
+
+			synced, err := checks.SyncOnce(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 1, synced)
+			creates := runs.Calls("Create")
+			require.Len(t, creates, 1)
+			w, _ := creates[0].Args[1].(workflowcheck.Write)
+			assert.Equal(t, core.CheckStatusCompleted, w.Status)
+			assert.Equal(t, workflowcheck.ConclusionFailure, w.Conclusion, "the check says the run could not start")
+			assert.NotNil(t, rows[0].FinishedAt, "a concluded check is finished")
+		})
+	}
 }
 
 func TestOpenCheckOpensOnlyAWorkflowsCheck(t *testing.T) {

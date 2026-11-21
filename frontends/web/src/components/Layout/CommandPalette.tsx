@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, CalendarClock, Activity, Inbox, Compass, ArrowLeftRight, CreditCard
+  Code, CalendarClock, Activity, Inbox, Compass, ArrowLeftRight, Server, CreditCard
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -27,7 +27,7 @@ import type { SettingsSection } from "../../routeSchemas";
 import { showDeveloperSettings } from "../Settings/SettingsNavigation";
 import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
-import { inboxPath, runsPath, settingsPath, usageBillingPath, workflowsPath } from "@/lib/paths";
+import { inboxPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, workflowsPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 import { openProjectSwitcher } from "@/lib/projectSwitcher";
 
@@ -189,6 +189,16 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         keywords: ["run", "history", "execution", "agent", "started"],
         available: !isAt("/workflows/runs"),
         action: () => navigate({ to: runsPath() }),
+      },
+      {
+        id: "sandboxes",
+        title: "Agent sandboxes",
+        description: "Where your agents run: cloud sandboxes and computers you connect",
+        icon: <Server className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["sandbox", "machine", "machines", "daemon", "computer", "compute"],
+        available: !isAt(sandboxesPath()),
+        action: () => navigate({ to: sandboxesPath() }),
       },
       {
         id: "usage-billing",

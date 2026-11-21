@@ -55,7 +55,9 @@ type MachinePoolMemberRow struct {
 	WorkflowsJSON   *string
 	PresetsJSON     *string
 	CatalogPushedAt *time.Time
-	// LiveRuns is how many of the pool's placed chats on this machine have a
-	// live root run.
+	// LiveRuns is how many chats the pool placed on this machine have a live
+	// run: a trigger-placed chat whose root run is live, or a live run
+	// placement (RunMachinePlacement), counted once per chat. Read for a
+	// labels placement (no pool), it is every pool's live runs there.
 	LiveRuns int
 }

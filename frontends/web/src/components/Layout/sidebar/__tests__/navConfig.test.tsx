@@ -137,10 +137,10 @@ describe("the hybrid nav's shape", () => {
     expect(hrefOf(observability, ctx)).toBe(`${obsOverviewPath("shopfront")}`);
   });
 
-  it("gives Agents its rows and Analytics its tabs", () => {
+  it("gives Agents a Connectors row and Analytics its tabs", () => {
     const ctx = ctxAt(inboxPath());
     const ids = flattenIds(hybridNav.items, ctx);
-    expect(ids).toEqual(expect.arrayContaining(["sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
+    expect(ids).toEqual(expect.arrayContaining(["connectors", "sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
     // AI providers lives in Settings only (U6e).
     expect(ids).not.toContain("ai-providers");
     const analytics = hybridNav.items.find((item) => item.id === "analytics")!;

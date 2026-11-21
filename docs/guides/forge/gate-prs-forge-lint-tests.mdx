@@ -183,7 +183,7 @@ By the end of this guide, every pull request runs the same gate you run locally:
 
 <AccordionGroup>
   <Accordion title="deployability: Payload Limits … request and response payloads are unbounded">
-    On forge v1.6.1 and on forge's current main, `reliant forge doctor --signal deploy` reports this for a freshly scaffolded service, which turns the `deployability` row red. The scaffolded server does cap payloads: `cmd/<name>/cmd/serve.go` calls `skCfg.Normalize()`, which sets 4 MiB limits. The check looks only for `connect.WithReadMaxBytes` calls under `cmd/`. It is a known defect and has been reported to forge. Run `reliant forge doctor --signal deploy` to see the check on its own.
+    On forge v1.6.1 and on forge's current main, `reliant forge project doctor --signal deploy` reports this for a freshly scaffolded service, which turns the `deployability` row red. The scaffolded server does cap payloads: `cmd/<name>/cmd/serve.go` calls `skCfg.Normalize()`, which sets 4 MiB limits. The check looks only for `connect.WithReadMaxBytes` calls under `cmd/`. It is a known defect and has been reported to forge. Run `reliant forge project doctor --signal deploy` to see the check on its own.
   </Accordion>
   <Accordion title='exec: "forge": executable file not found in $PATH'>
     An extra check named `forge` as its command, but only `reliant forge` is installed. Use `command: [task, lint]`, which runs the forge your project pins.

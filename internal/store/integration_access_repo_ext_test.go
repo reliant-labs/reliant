@@ -149,7 +149,7 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 	assert.False(t, claimed, "another replica holds the lease")
 
 	require.NoError(t, store.FinishIntegrationAccessRefresh(ctx, env.ORM, "alice", "github", now, false, "boom"))
-	got, err := env.Repo.GetIntegrationAccessRefresh(ctx, "alice", "github")
+	got, err := store.GetIntegrationAccessRefresh(ctx, env.Repo.ORM(), "alice", "github")
 	require.NoError(t, err)
 	assert.Nil(t, got.RefreshedAt, "a failure does not move refreshed_at")
 	assert.Equal(t, "boom", got.LastError)

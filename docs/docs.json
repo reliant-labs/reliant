@@ -385,6 +385,7 @@
               {
                 "group": "Start a project",
                 "pages": [
+                  "guides/forge/deploy-with-a-coding-agent",
                   "guides/forge/build-go-react-app-connect-rpc",
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
@@ -449,6 +450,7 @@
                   "guides/hosting/manage-production-secrets",
                   "guides/hosting/deploy-to-your-own-kubernetes",
                   "guides/hosting/keep-helm-fly-cloud-run",
+                  "guides/hosting/call-hosted-api-from-frontend-elsewhere",
                   "guides/hosting/stop-hosted-environment"
                 ]
               },

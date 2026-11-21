@@ -2,9 +2,10 @@
 
 The forge shell is the same `reliant-web` bundle as `app.reliantlabs.io`,
 picked by hostname (`frontends/web/src/lib/shell.ts`, runtime config
-`FORGE_APP_HOST`, default `forge.reliantlabs.io`). Shipping the bundle changes
-nothing for `app.reliantlabs.io` except one link: **"Open Forge console"** on
-`/apps` (web only), which points at `https://<FORGE_APP_HOST>`.
+`FORGE_APP_HOST`, default `forge.reliantlabs.io`). Since the one shell (U6)
+both hosts mount the same routes and pages; the host decides only the brand.
+Nothing in `app.reliantlabs.io` links to the forge host (the public demo's
+sign-up and "Try AI workflows" links do).
 
 The host itself works only once four things outside this repo are configured.
 This page is the order to do them in, how to prove each one live, and how to
@@ -69,9 +70,8 @@ Run them in order; stop at the first failure and roll back.
    it, and confirm it lands in the claimed app's forge console.
 5. **Billing return.** From Settings › Billing on the forge host, open the
    Stripe portal and return: the browser comes back to `forge.reliantlabs.io`.
-6. **Reliant unchanged.** On `app.reliantlabs.io`, sign-in and `/apps` work as
-   before, and "Open Forge console" opens the forge host signed in after one
-   sign-in.
+6. **Reliant unchanged.** On `app.reliantlabs.io`, sign-in and Projects
+   (`/projects`; the retired `/apps` redirects there) work as before.
 
 ## Rollback
 
@@ -80,8 +80,8 @@ Each step undoes independently; do them in this order.
 1. **Hide the host from Reliant users first.** Re-promote prod's previous
    `reliant-web` release (releases are promoted by digest, so the previous one
    is still in the registry) or revert this change on main and let the next
-   release ship it. That removes the "Open Forge console" link; nothing else
-   in Reliant depends on the forge host.
+   release ship it. Nothing in Reliant links to the forge host, so nothing
+   else depends on it.
 2. **Unbind the host.** Remove the `forge.reliantlabs.io` custom-domain binding
    (and its DNS record) from prod's `reliant-web` site, so the name stops
    serving a half-configured shell.
@@ -150,8 +150,8 @@ credential):
 reliant forge env build demo --target forge-demo --release <v>
 reliant forge env deploy demo <v>
 reliant forge obs check demo --wait --json   # 0 good · 1 regressed · 2 not proven good · 8 not enough data yet
-reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
-reliant forge domain show demo.reliantlabs.io --env demo
+reliant forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo
+reliant forge cloud domain show demo.reliantlabs.io --env demo
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
@@ -172,8 +172,8 @@ build `prod/reliant-web` runs, which still mounts the demo shell on this host
 
 ```bash
 cd ../control-plane
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # serving: reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain bind demo.reliantlabs.io --env prod --target reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain show demo.reliantlabs.io --env prod   # serving: reliant-web
 ```
 
 Then, from this checkout, `node frontends/web/scripts/demo/smoke-demo-site.mjs

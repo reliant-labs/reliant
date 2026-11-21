@@ -13,6 +13,7 @@
  *   Sessions
  *   Product analytics ▸     Insights (the Users · Product · Acquisition hub, when the project has it) ·
  *                           Events & metrics · registered rows (Experiments: consoleNavRegistry.ts `group`)
+ *   Experiments             Forge Changes, behind the web config's CHANGES_UI until the control plane serves them
  *   Releases
  *   Data · Users
  *   More tools        ▸     Logs · Metrics · Profiles · Service graph
@@ -25,12 +26,12 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Boxes, CircleAlert, Database, FlaskConical, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, CONSOLE_NAV_ANCHORS, type ConsoleNavAnchor, type ConsoleNavEntry } from "./consoleNavRegistry";
-import { configureNavRows, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
+import { configureNavRows, experimentsListed, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
 import { consolePath, OBS_NAV_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
 const icon = (Icon: typeof Activity) => <Icon className="h-4 w-4" aria-hidden="true" />;
@@ -56,6 +57,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   analytics: "Who your users are, what they do, and where they come from",
   "speed-insights": "How fast each page loads and responds for real visitors",
   storage: "Your app's object storage buckets: files, uploads and assets",
+  experiments: "Turn things on for some people, and compare versions",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
@@ -104,7 +106,7 @@ const GROUP_OF: Partial<Record<ObsNavView, string>> = {
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
 
 export function buildGroupedConsoleNav(input: GroupedNavInput): { items: SidebarNavItem[]; footer: SidebarNavItem[] } {
-  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false, customDashboards = [] } = input;
+  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, experiments = false, linkTo, productAnalytics, hostPageActive = false, customDashboards = [] } = input;
   const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   // On a host page, every console row is a way out, none the current one.
   const lit = (active: boolean) => !hostPageActive && active;
@@ -172,9 +174,12 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
         { label: "Events & metrics", href: href({ kind: "events" }), active: lit(page.kind === "events") },
       ],
     },
+    ...(experimentsListed(page, experiments)
+      ? [row("Experiments", { kind: "experiments" }, icon(FlaskConical), page.kind === "experiments" || page.kind === "experiment")]
+      : []),
     row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
     row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
-    row("Users", { kind: "users" }, icon(Users), page.kind === "users"),
+    row("Auth", { kind: "auth" }, icon(Users), page.kind === "auth" || page.kind === "users"),
     {
       // No page of its own: the row opens and closes the group, which opens by itself on one of its pages.
       label: "More tools",

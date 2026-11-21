@@ -115,7 +115,7 @@ export function DaemonWaitState({
             className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Plus className="h-3 w-3" aria-hidden="true" />
-            Add machine
+            Add sandbox
           </button>
           {adding && <AddMachineSheet open onClose={() => setAdding(false)} onReady={() => onRetry?.()} />}
         </>
@@ -137,7 +137,7 @@ export function DaemonWaitState({
           className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <Server className="h-3 w-3" aria-hidden="true" />
-          Manage machines
+          Manage sandboxes
         </button>
       )}
     </div>

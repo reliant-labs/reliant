@@ -1,8 +1,7 @@
 /**
- * The forge console's pages, as the forge demo (demoShellRoutes.tsx) mounts
- * them: the same lazy chunks for every route createForgeConsoleRoutes
- * declares. The app's tree (routes.tsx, on both hosts) wraps its own in
- * ForgeGate, so it keeps its own map until the gate goes (U6).
+ * The forge console's pages: the lazy chunk for every route
+ * createForgeConsoleRoutes declares, as both trees mount them — the app's
+ * (routes.tsx, on both hosts) and the public demo's (demoShellRoutes.tsx).
  */
 
 import type { ForgeConsoleComponents } from './forgeConsoleRoutes'
@@ -25,6 +24,8 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   secrets: lazyRoute(() => import('./components/Forge/Console/SecretsPage'), 'SecretsPage'),
   domains: lazyRoute(() => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage'),
   activity: lazyRoute(() => import('./components/Forge/Console/ActivityPage'), 'ActivityPage'),
+  experiments: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentsPage'),
+  experiment: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentPage'),
   data: lazyRoute(() => import('./components/Forge/Data/DataPage'), 'DataPage'),
   auth: lazyRoute(() => import('./components/Forge/Users/AuthPage'), 'AuthPage'),
   services: lazyRoute(() => import('./components/Forge/Services/ServicesPages'), 'ServicesPage'),
@@ -33,6 +34,9 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   events: lazyRoute(() => import('./components/Forge/Analytics/EventsMetricsPage'), 'EventsMetricsPage'),
   analytics: lazyRoute(() => import('./components/Forge/Analytics/AnalyticsPage'), 'AnalyticsPage'),
   speedInsights: lazyRoute(() => import('./components/Forge/Analytics/SpeedInsightsPage'), 'SpeedInsightsPage'),
+  vulnerabilities: lazyRoute(() => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage'),
+  vulnerability: lazyRoute(() => import('./components/Forge/Security/VulnerabilityPage'), 'VulnerabilityPage'),
+  sboms: lazyRoute(() => import('./components/Forge/Security/SbomsPage'), 'SbomsPage'),
   orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
   orgObservability: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute'),
   landing: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute'),

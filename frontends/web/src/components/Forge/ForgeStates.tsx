@@ -184,7 +184,7 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
  * bump that cannot help.
  *
  * `reason` and `detail` are forge's OWN words, forwarded from its doctor
- * report, so this panel and `forge doctor` never tell different stories.
+ * report, so this panel and `forge project doctor` never tell different stories.
  */
 export function ForgeCannotRender({
   forgeVersion,

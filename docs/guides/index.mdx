@@ -197,6 +197,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
 
 {/* guides: forge */}
 <CardGroup cols={2}>
+  <Card title="Deploy your app with a coding agent (Claude Code, Codex, Cursor)" icon="hammer" href="/guides/forge/deploy-with-a-coding-agent">
+    Install the Forge MCP server in Claude Code, Codex or Cursor and ask the agent to deploy your app with no account: it returns a live URL and a 72-hour claim link.
+  </Card>
   <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
     Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
   </Card>
@@ -321,6 +324,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Keep Helm, Fly.io or Cloud Run and still get releases and gates" icon="cloud" href="/guides/hosting/keep-helm-fly-cloud-run">
     Bind a workload to forge.OnExternal so forge builds, releases and checks it while your own Helm chart, Fly.io app or Cloud Run service keeps deploying it.
+  </Card>
+  <Card title="Call a hosted Forge API from a frontend on Vercel, Netlify or your own host" icon="cloud" href="/guides/hosting/call-hosted-api-from-frontend-elsewhere">
+    Keep your frontend where it is and call a Forge API on Reliant hosting, with sign-in that works: a same-site API hostname, credentialed CORS, and the frontend declared as the sign-in origin.
   </Card>
   <Card title="Stop a hosted environment when you're not using it" icon="cloud" href="/guides/hosting/stop-hosted-environment">
     Suspend a hosted environment's workloads and database with forge env stop, keep its release and data, and bring it back with forge env start.

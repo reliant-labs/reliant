@@ -61,7 +61,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
 
   return (
     <div
-      className="space-y-1.5 rounded-lg border border-border/60 bg-surface-sunken px-4 py-3"
+      className="space-y-2"
       data-testid="live-state"
       data-observed={env.observed.state}
       data-drift={env.drift.state}
@@ -69,7 +69,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
       {/* INTENT. Absent only when nothing has ever been promoted, which the
           header already explains in better words than this line could. */}
       {intent !== "" && (
-        <p data-testid="live-state-intent" className="text-sm text-ink">
+        <p data-testid="live-state-intent" className="text-copy text-ink [overflow-wrap:anywhere]">
           {intent}
         </p>
       )}
@@ -78,7 +78,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
           about the decision above is not itself a decision. */}
       <p
         data-testid="live-state-observed"
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-ink-muted"
       >
         <span className={failed ? "text-danger-ink" : undefined}>{observed}</span>
         {env.observed.observedAt && <span>{formatTimestamp(env.observed.observedAt)}</span>}
@@ -90,7 +90,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
           paraphrase would be worse. Suppressed otherwise: for the states that
           mean "fine" or "nothing yet" it only restates the line above it. */}
       {failed && env.driftDetail !== "" && (
-        <p data-testid="live-state-detail" className="font-mono text-2xs text-ink-muted">
+        <p data-testid="live-state-detail" className="font-mono text-meta text-ink-muted">
           {env.driftDetail}
         </p>
       )}

@@ -170,18 +170,26 @@ func TestReleaseJobsWithAndWithoutPrebuild(t *testing.T) {
 	}
 }
 
-// checkPlatformSteps: a platform job either builds (electron-builder) or downloads
-// the prebuild run's artifacts and publishes them through the script, never both.
+// checkPlatformSteps: a platform job either builds (electron/scripts/pack-desktop.js,
+// the one electron-builder call it shares with forge's reliant-desktop build) or
+// downloads the prebuild run's artifacts and publishes them through the script,
+// never both.
 func checkPlatformSteps(t *testing.T, id string, j *releaseJob, ctx map[string]any, prebuilt bool) {
 	t.Helper()
 	plat := releasePlatformJobs[id]
 	var built, downloaded, published bool
 	for _, s := range j.Steps {
+		for _, line := range strings.Split(s.Run, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, "electron-builder") && !strings.HasPrefix(line, "#") && !strings.Contains(line, "pack-desktop.js") {
+				t.Errorf("%s step %q runs electron-builder directly (%q); package through electron/scripts/pack-desktop.js", id, s.Name, line)
+			}
+		}
 		if !evalStepIf(t, s.If, ctx) {
 			continue
 		}
 		switch {
-		case strings.Contains(s.Run, "electron-builder"):
+		case strings.Contains(s.Run, "node scripts/pack-desktop.js "+plat+" "):
 			built = true
 		case strings.Contains(s.Run, "scripts/release-prebuild.sh publish "+plat+" "):
 			published = true

@@ -11,7 +11,7 @@ import (
 
 // ListSecrets returns declared/present/inert secrets for an environment.
 //
-// SECRET-SAFETY IS THE POINT OF THIS METHOD'S SHAPE. `forge secret list --json`
+// SECRET-SAFETY IS THE POINT OF THIS METHOD'S SHAPE. `forge env secret list --json`
 // cannot emit a secret value (its report type graph holds only names, booleans
 // and coordinates, pinned by a reflection test), and the daemon withholds
 // forge's stderr entirely on this path so a diagnostic line cannot become the

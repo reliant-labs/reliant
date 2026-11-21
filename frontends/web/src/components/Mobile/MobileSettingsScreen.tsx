@@ -289,7 +289,7 @@ export function MobileSettingsScreen() {
         <div className="flex gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Machines are in the main menu. MCP servers, prompts, keyboard
+            Agent sandboxes are in the main menu. MCP servers, prompts, keyboard
             shortcuts, developer tools, app access, and port access rules
             aren&apos;t available here. Manage those on desktop.
           </p>

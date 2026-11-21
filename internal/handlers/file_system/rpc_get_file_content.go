@@ -42,7 +42,7 @@ func (s *Service) GetFileContent(
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 

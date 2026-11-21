@@ -73,7 +73,7 @@ function UrlLine({ url, host, testId }: { url: string; host: string; testId: str
         rel="noreferrer"
         title={`Open ${url}`}
         data-testid={testId}
-        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="no-color inline-flex min-w-0 items-center gap-1 text-ui font-medium text-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="truncate">{host}</span>
         <ExternalLink className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
@@ -93,14 +93,16 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
   const { domains } = frontend;
   return (
     <li
-      className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border/60 px-4 py-2.5 last:border-0"
+      className="flex min-h-[52px] flex-wrap items-center gap-x-6 gap-y-1.5 border-b border-border-subtle px-3 py-3 last:border-0"
       data-testid={`frontend-${frontend.env}-${frontend.name}`}
       data-verdict={frontend.verdict}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-sm font-medium text-ink">{frontend.name}</span>
-        <Tag title="Built once, uploaded to Reliant's static hosting and served from a CDN. No compute.">Static site</Tag>
-        {showEnv && <span className="text-xs text-ink-muted">{frontend.env}</span>}
+        <span className="truncate text-ui font-medium text-ink">{frontend.name}</span>
+        <span className="text-meta text-ink-muted" title="Built once, uploaded to Reliant's static hosting and served from a CDN. No compute.">
+          Static site
+        </span>
+        {showEnv && <span className="text-meta text-ink-muted">{frontend.env}</span>}
         {frontend.stopped ? (
           <Tag tone="warning" title="Stopped, so it is not serving. Start it from the workload's page.">
             Stopped
@@ -115,14 +117,14 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
           <>
             <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
             {frontend.platformUrl && frontend.platformUrl !== frontend.url && (
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-muted" data-testid="frontend-platform-url">
+              <span className="flex min-w-0 items-center gap-1.5 text-meta text-ink-muted" data-testid="frontend-platform-url">
                 also at
                 <a
                   href={frontend.platformUrl}
                   target="_blank"
                   rel="noreferrer"
                   title={`Open ${frontend.platformUrl}`}
-                  className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="no-color truncate text-ink-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {frontend.platformHost}
                 </a>
@@ -130,19 +132,19 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
             )}
           </>
         ) : (
-          <p className="text-xs text-ink-muted" data-testid="frontend-url-pending">
+          <p className="text-meta text-ink-muted" data-testid="frontend-url-pending">
             No address yet. The platform allocates one on this site&apos;s first deploy, and it appears here.
           </p>
         )}
         {domains !== null && (
-          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="frontend-domains">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta" data-testid="frontend-domains">
             {/* The domain the headline opens is not repeated here. */}
             {domains.filter((domain) => domain.hostname !== frontend.host).map((domain) => (
               <span key={domain.hostname} className="flex min-w-0 items-center gap-1.5" data-testid={`frontend-domain-${domain.hostname}`}>
                 {domain.url ? (
                   <UrlLine url={domain.url} host={domain.hostname} testId="frontend-domain-url" />
                 ) : (
-                  <span className="truncate font-mono text-sm text-ink-muted">{domain.hostname}</span>
+                  <span className="truncate text-ui text-ink-muted">{domain.hostname}</span>
                 )}
                 <DomainStateBadge state={domain.state} />
               </span>
@@ -158,7 +160,7 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {frontend.release && (
-          <span className="text-xs tabular-nums text-ink-muted" title={frontend.release} data-testid="frontend-release">
+          <span className="text-meta tabular-nums text-ink-muted" title={frontend.release} data-testid="frontend-release">
             {shortVersion(frontend.release)}
           </span>
         )}
@@ -219,7 +221,7 @@ export function FrontendsEmpty({ env }: { env?: string }) {
 /** The status read has not answered yet. */
 export function FrontendsLoading() {
   return (
-    <div className="space-y-2 px-4 py-3" aria-busy="true" data-testid="frontends-loading">
+    <div className="space-y-2 py-3" aria-busy="true" data-testid="frontends-loading">
       <span className="sr-only">Loading frontends…</span>
       <div aria-hidden="true" className="h-4 w-40 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
       <div aria-hidden="true" className="h-4 w-64 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />

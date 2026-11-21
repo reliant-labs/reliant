@@ -145,7 +145,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
     <div className="fixed inset-0 z-[9999] flex">
       <div
         className={cn(
-          "absolute inset-0 bg-black/50 transition-opacity duration-200",
+          "absolute inset-0 bg-scrim transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0",
         )}
         onClick={onClose}
@@ -178,29 +178,39 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
           </button>
         </div>
 
-        {/* The org this tab acts in, and the project it contains, where the
-            desktop nav has its switcher. */}
-        <div className="shrink-0 space-y-2 px-3 pb-2">
-          <MobileOrgSwitcher onSwitched={onClose} />
-          <Link
-            to={mobileProjectsPath()}
-            className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
-              <FolderOpen className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs text-muted-foreground">Project</div>
-              <div className="truncate text-sm font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
-            </div>
-          </Link>
-        </div>
-
         {/* The one nav model, drill-ins and all; it scrolls inside itself
             (`overscroll-contain`, so a scroll that reaches its end never
             chains to the page behind the drawer). */}
         <div className="flex min-h-0 flex-1 flex-col overscroll-contain">
-          <MobileHybridNav pathname={pathname} search={search} onNavigate={onNavigate} />
+          <MobileHybridNav
+            pathname={pathname}
+            search={search}
+            onNavigate={onNavigate}
+            // The desktop header's order (U6, owner): the org, then Find (MobileHybridNav), then the project.
+            org={
+              // Nothing with no org to name: no empty gap above Find.
+              <div className="shrink-0 px-3 pb-2 empty:hidden">
+                <MobileOrgSwitcher onSwitched={onClose} />
+              </div>
+            }
+            project={
+              <div className="shrink-0 px-3 pb-2">
+                <Link
+                  to={mobileProjectsPath()}
+                  data-testid="mobile-nav-project"
+                  className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
+                    <FolderOpen className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-muted-foreground">Project</div>
+                    <div className="truncate text-sm font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
+                  </div>
+                </Link>
+              </div>
+            }
+          />
         </div>
 
         <div className="shrink-0 px-3 pb-2">

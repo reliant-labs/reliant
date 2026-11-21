@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=dabc81ebfa5e1c5e15a023d174561b72c47ae004d9aba30a8ec7d18b68537588
+// forge:hash=f405d7082950c34e7e0d46c4e1fff476b41522686eb5b41d12ad123344022c48
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -30,8 +30,9 @@ import (
 // "MockOrgResolver.<Method>Func not set" error.
 type MockOrgResolver struct {
 	contractkit.Recorder
-	ActingOrgFunc func(context.Context, string, string) (string, error)
-	ListScopeFunc func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
+	ActingOrgFunc  func(context.Context, string, string) (string, error)
+	ListScopeFunc  func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
+	DefaultOrgFunc func(context.Context, string) (string, error)
 }
 
 // ActingOrg records the call and delegates to ActingOrgFunc when set.
@@ -52,11 +53,20 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 	return nil, contractkit.MockNotSet("MockOrgResolver", "ListScope")
 }
 
+// DefaultOrg records the call and delegates to DefaultOrgFunc when set.
+func (m *MockOrgResolver) DefaultOrg(ctx context.Context, userID string) (string, error) {
+	m.Recorder.Record("DefaultOrg", ctx, userID)
+	if m.DefaultOrgFunc != nil {
+		return m.DefaultOrgFunc(ctx, userID)
+	}
+	return "", contractkit.MockNotSet("MockOrgResolver", "DefaultOrg")
+}
+
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=b8c22a06a40c0448cf7a73ce083791e2b4304c42089429edc10f9c93928be910
+// forge:hash=cf40795387ec4da97152278864ec5f8b91b1c8a3e227f3a7b96ae0216fc096c1
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -103,6 +113,10 @@ type MockRepository struct {
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
+	ListReposByProjectsFunc                   func(context.Context, []string) ([]*core.Repo, error)
+	ListRepoForgeAppsByProjectsFunc           func(context.Context, []string) ([]core.RepoForgeApp, error)
+	ListProjectDaemonsForProjectsFunc         func(context.Context, []string) ([]*core.ProjectDaemon, error)
+	ListSharedProjectsFunc                    func(context.Context, core.SharedProjectFilters) ([]*core.Project, error)
 	SetRepoForgeAppsFunc                      func(context.Context, string, []core.RepoForgeApp, bool) error
 	CreateWorktreeFunc                        func(context.Context, *db.Worktree) error
 	ListWorktreesFunc                         func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
@@ -448,6 +462,42 @@ func (m *MockRepository) ListReposByProject(ctx context.Context, projectID strin
 	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
 }
 
+// ListReposByProjects records the call and delegates to ListReposByProjectsFunc when set.
+func (m *MockRepository) ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProjects", ctx, projectIDs)
+	if m.ListReposByProjectsFunc != nil {
+		return m.ListReposByProjectsFunc(ctx, projectIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProjects")
+}
+
+// ListRepoForgeAppsByProjects records the call and delegates to ListRepoForgeAppsByProjectsFunc when set.
+func (m *MockRepository) ListRepoForgeAppsByProjects(ctx context.Context, projectIDs []string) ([]core.RepoForgeApp, error) {
+	m.Recorder.Record("ListRepoForgeAppsByProjects", ctx, projectIDs)
+	if m.ListRepoForgeAppsByProjectsFunc != nil {
+		return m.ListRepoForgeAppsByProjectsFunc(ctx, projectIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListRepoForgeAppsByProjects")
+}
+
+// ListProjectDaemonsForProjects records the call and delegates to ListProjectDaemonsForProjectsFunc when set.
+func (m *MockRepository) ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProjects", ctx, projectIDs)
+	if m.ListProjectDaemonsForProjectsFunc != nil {
+		return m.ListProjectDaemonsForProjectsFunc(ctx, projectIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProjects")
+}
+
+// ListSharedProjects records the call and delegates to ListSharedProjectsFunc when set.
+func (m *MockRepository) ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error) {
+	m.Recorder.Record("ListSharedProjects", ctx, f)
+	if m.ListSharedProjectsFunc != nil {
+		return m.ListSharedProjectsFunc(ctx, f)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListSharedProjects")
+}
+
 // SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
 func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
 	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
@@ -714,6 +764,32 @@ func (m *MockCloneDispatcher) CloneRepoOntoDaemon(ctx context.Context, jwt strin
 
 // Compile-time check.
 var _ CloneDispatcher = (*MockCloneDispatcher)(nil)
+
+// forge:section MockHostedApps
+// forge:hash=9b5f2b5515cfbf312aa2c2c215362422fc38e6b06d446af495f2505cc24c3092
+
+// MockHostedApps is a test mock for the HostedApps interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockHostedApps.<Method>Func not set" error.
+type MockHostedApps struct {
+	contractkit.Recorder
+	ListHostedAppsFunc func(context.Context, string, string) ([]controlplane.HostedApp, error)
+}
+
+// ListHostedApps records the call and delegates to ListHostedAppsFunc when set.
+func (m *MockHostedApps) ListHostedApps(ctx context.Context, jwt string, orgID string) ([]controlplane.HostedApp, error) {
+	m.Recorder.Record("ListHostedApps", ctx, jwt, orgID)
+	if m.ListHostedAppsFunc != nil {
+		return m.ListHostedAppsFunc(ctx, jwt, orgID)
+	}
+	return nil, contractkit.MockNotSet("MockHostedApps", "ListHostedApps")
+}
+
+// Compile-time check.
+var _ HostedApps = (*MockHostedApps)(nil)
 
 // forge:section MockMoveStarter
 // forge:hash=41a46046c6c08fe0f59812d318b556fae4e4faa39712486d68faf6b4bf937203

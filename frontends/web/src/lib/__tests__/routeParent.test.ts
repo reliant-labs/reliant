@@ -99,6 +99,13 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
+  // A project's page and its tabs step back to the Projects list; the list exits to the app.
+  it("a project's page steps back to Projects", () => {
+    expect(getParentRouteNavigateOptions("/projects/p-1")).toEqual({ to: "/projects" });
+    expect(getParentRouteNavigateOptions("/projects/p-1/workspaces")).toEqual({ to: "/projects" });
+    expect(getParentRouteNavigateOptions("/projects")).toEqual({ to: "/", search: {} });
+  });
+
   it("returns / as parent of a bare /forge", () => {
     expect(getParentRouteNavigateOptions("/forge")).toEqual({
       to: "/",

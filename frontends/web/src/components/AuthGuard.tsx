@@ -8,7 +8,8 @@ import { loadConfig } from '@/lib/config_gen'
 import { signInRedirectFor } from '@/lib/returnTo'
 import { authPath, homePath, verifyEmailPath } from '@/lib/paths'
 import { isForgeShell } from '@/lib/shell'
-import { landingJourneyHoldsSignIn } from './ForgeShell/landingJourney'
+import { GUARDED_ROUTE_IDS, landingJourneyHoldsSignIn } from './ForgeShell/landingJourney'
+import { orgFreeRouteId } from '@/lib/paths/org'
 
 const allowAnonymousAutoSignIn = (): boolean => loadConfig().AUTO_ANON_SIGN_IN === 'true'
 
@@ -18,7 +19,7 @@ interface AuthGuardProps {
   requireEmailVerification?: boolean
   /**
    * Send a signed-out visitor to sign in with `?redirect=<this page>`, so a
-   * deep link ("Open in Reliant" from the forge console, a link in an email)
+   * deep link (a shared console link, a link in an email)
    * lands where it was going instead of on `/`. The sign-in screen honours a
    * same-origin `redirect` through email, OAuth and magic links alike.
    */
@@ -37,6 +38,7 @@ export function AuthGuard({
   const search = useSearch({ strict: false }) as { redirect?: string } | undefined
   const anonSignInAttempted = useRef(false)
   const here = useRouterState({ select: (s) => s.location.href })
+  const journeyLayout = useRouterState({ select: (s) => s.matches.some((m) => GUARDED_ROUTE_IDS.includes(orgFreeRouteId(m.routeId))) })
   const signInRedirect = returnHere ? signInRedirectFor(here) : undefined
   // On the forge brand (lib/shell.ts), a signed-out visitor the landing page
   // sent for the forge journey is taken to the public demo instead
@@ -44,7 +46,7 @@ export function AuthGuard({
   // navigation. Decided once: while the journey's navigation is under way the
   // location already carries its `?tour=` and the held choice is spent, and
   // re-deciding then would send the visitor to sign in after all.
-  const [journeyHoldsSignIn] = useState(() => requireAuth && isForgeShell() && landingJourneyHoldsSignIn(here))
+  const [journeyHoldsSignIn] = useState(() => journeyLayout && requireAuth && isForgeShell() && landingJourneyHoldsSignIn(here))
 
   useEffect(() => {
     if (!initialized) {

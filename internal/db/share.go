@@ -43,11 +43,6 @@ func (r *Repo) ListSharedProjects(ctx context.Context, f core.SharedProjectFilte
 	return store.ListSharedProjects(ctx, r.ORM(), f)
 }
 
-// ListShareEvents is one resource's share history, newest first.
-func (r *Repo) ListShareEvents(ctx context.Context, kind core.ShareKind, resourceID string) ([]*core.ShareEvent, error) {
-	return store.ListShareEvents(ctx, r.ORM(), kind, resourceID)
-}
-
 // LatestOrgUpdateSequence is the newest sequence of an org's feed.
 func (r *Repo) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
 	return store.LatestOrgUpdateSequence(ctx, r.ORM(), orgID)

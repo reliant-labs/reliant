@@ -5,6 +5,7 @@ package servergateway
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 
@@ -15,6 +16,20 @@ func newTestConnector() *DaemonConnector {
 	return &DaemonConnector{
 		activeConns: make(map[string]context.CancelFunc),
 	}
+}
+
+// connectWithRetry waits 1s, 2s, 4s, 8s, then 15s for every later reconnect.
+func TestReconnectBackoff_Ladder(t *testing.T) {
+	t.Parallel()
+	s := reconnectBackoff.Schedule()
+	var got []time.Duration
+	for range 7 {
+		got = append(got, s.Next())
+	}
+	assert.Equal(t, []time.Duration{
+		time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second,
+		15 * time.Second, 15 * time.Second, 15 * time.Second,
+	}, got)
 }
 
 func TestStartConnection_AddsToActiveConns(t *testing.T) {

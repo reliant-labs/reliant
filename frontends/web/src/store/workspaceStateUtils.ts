@@ -312,83 +312,6 @@ export async function validateFileViewers(
 }
 
 // ============================================================================
-// Migration Helpers
-// ============================================================================
-
-/**
- * Migrate workspace state from one version to another
- * Add migration logic here as the schema evolves
- */
-export function migrateWorkspaceState(
-  state: unknown,
-  fromVersion: number,
-  toVersion: number
-): unknown {
-  let current = state;
-  let version = fromVersion;
-
-  while (version < toVersion) {
-    logger.info("[WorkspaceUtils] Migrating workspace state", {
-      from: version,
-      to: version + 1,
-    });
-
-    switch (version) {
-      case 0:
-        // Migration from v0 to v1
-        // v1 is the initial version, so this handles pre-existing state
-        current = migrateV0ToV1(current);
-        break;
-
-      // Add future migrations here:
-      // case 1:
-      //   current = migrateV1ToV2(current);
-      //   break;
-
-      default:
-        logger.warn("[WorkspaceUtils] Unknown migration version", { version });
-        break;
-    }
-
-    version++;
-  }
-
-  return current;
-}
-
-/**
- * Migration from v0 (no version / legacy) to v1
- */
-function migrateV0ToV1(state: unknown): unknown {
-  // If state is null/undefined, return fresh state
-  if (!state) {
-    return {
-      version: 1,
-      lastProjectId: null,
-      projects: {},
-    };
-  }
-
-  // If state is already v1 format, return as-is
-  if (
-    typeof state === "object" &&
-    state !== null &&
-    "version" in state &&
-    (state as { version: number }).version === 1
-  ) {
-    return state;
-  }
-
-  // Otherwise, assume it's legacy/corrupted and return fresh state
-  logger.warn("[WorkspaceUtils] Resetting corrupted workspace state");
-  return {
-    version: 1,
-    lastProjectId: null,
-    projects: {},
-  };
-}
-
-// ============================================================================
 // Restoration Helpers
 // ============================================================================
 
@@ -431,7 +354,7 @@ export function createDefaultRestorationPlan(): RestorationPlan {
     activeViewerIndex: null,
     chatId: null,
     panels: {
-      fileBrowser: true,
+      fileBrowser: false,
       terminalOpen: false,
     },
     leftSidebarExpanded: true,

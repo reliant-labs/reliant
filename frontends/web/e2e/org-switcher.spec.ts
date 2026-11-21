@@ -29,8 +29,10 @@ test.afterEach(({ page }) => {
 const ACME = { id: 'org_acme', name: 'Acme', slug: 'acme', role: 'owner', isOwner: true, isDefault: true };
 const SIDE = { id: 'org_side', name: 'Side Project', slug: 'side', role: 'member', isOwner: false, isDefault: false };
 
+// A fixed instant, not one read from the clock: nothing here asserts on the
+// environment's age, so the fixture need not follow the wall clock.
 const SIDE_ENVS = [
-  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: '2026-11-18T13:00:00.000Z' },
 ];
 
 function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void) {
@@ -50,7 +52,7 @@ test.describe('org switcher (desktop)', () => {
   test('lists my orgs with the default marked, and switching changes the org every call names', async ({ page }) => {
     const seen: Array<[string, string | undefined]> = [];
     await mockAppsBackend(page, twoOrgs((rpc, org) => seen.push([rpc, org])));
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
 
     // Starts in the default org: its apps, and never another org on the wire.
     // A tab with nothing saved may read before the membership list answers,
@@ -91,7 +93,7 @@ test.describe('org switcher (desktop)', () => {
 
   test('the choice survives a reload', async ({ page }) => {
     await mockAppsBackend(page, twoOrgs());
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
     await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
@@ -103,7 +105,7 @@ test.describe('org switcher (desktop)', () => {
 
   test('a person in one org sees their org and a way to create another', async ({ page }) => {
     await mockAppsBackend(page, { person: true });
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await page.getByTestId('org-switcher').first().click();
     await expect(page.getByTestId('org-create')).toBeVisible();
@@ -120,7 +122,7 @@ test.describe('org switcher (desktop)', () => {
         body: JSON.stringify({ organizations: membership, defaultOrgId: 'org_acme' }),
       }),
     );
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
     await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);

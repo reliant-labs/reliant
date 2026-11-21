@@ -51,15 +51,19 @@ export interface ListTotal {
  * Every point priced at list across the response: the range's estimated
  * spend. Settled charges are another basis and are left out. Undefined when
  * no point carried a list price (unknown or unpriced, not zero).
+ *
+ * A point with usage and no amount at all (storage the plan has no rate for)
+ * is still part of the estimate: its unpriced dimensions make the total a
+ * lower bound, as in organizationUsageModel's sumAmounts.
  */
 export function listEstimateTotal(usage: OrganizationUsage): ListTotal | undefined {
   let nanos: bigint | undefined;
   const unpriced = new Set<string>();
   for (const point of usage.points) {
     const amount = pointAmount(point);
-    if (amount?.basis !== "list_equivalent") continue;
-    nanos = (nanos ?? 0n) + amount.nanos;
-    amount.unpricedDimensions.forEach((d) => unpriced.add(d));
+    if (amount?.basis === "actual") continue;
+    if (amount) nanos = (nanos ?? 0n) + amount.nanos;
+    point.unpricedDimensions.forEach((d) => unpriced.add(d));
   }
   return nanos === undefined ? undefined : { nanos, unpricedDimensions: [...unpriced].sort() };
 }

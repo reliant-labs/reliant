@@ -38,7 +38,6 @@ function plan(
     name: id,
     tier: 0,
     stripePriceId: "price_test",
-    limits: "",
     priceCents,
     displayOrder,
     structuredLimits: {

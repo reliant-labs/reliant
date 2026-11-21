@@ -24,22 +24,28 @@ import (
 // required check) fails unless that job passed. A job the ruleset does not
 // require stops nothing, so these tests pin the wiring, not only the job.
 //
-// Since reliant #3095 `CI result` is a native aggregate: it `needs:` the two
+// Since reliant #3095 `CI result` is a native aggregate: it `needs:` the
 // workers and reads their results from `needs`, never from the Actions API
-// (an anonymous poll that answered 403 turned green groups red).
+// (an anonymous poll that answered 403 turned green groups red). The third
+// worker, `vitest` (the affected vitest files in four shards), is pinned by
+// TestMergeQueueVitestShards.
 
 const golangciJobName = "golangci (changed)"
 
 type mqWorkflow struct {
 	On   map[string]any `yaml:"on"`
 	Jobs map[string]*struct {
-		Name           string            `yaml:"name"`
-		Needs          any               `yaml:"needs"`
-		If             string            `yaml:"if"`
-		TimeoutMinutes int               `yaml:"timeout-minutes"`
-		Permissions    any               `yaml:"permissions"`
-		Env            map[string]string `yaml:"env"`
-		Steps          []mqStep          `yaml:"steps"`
+		Name           string `yaml:"name"`
+		Needs          any    `yaml:"needs"`
+		If             string `yaml:"if"`
+		TimeoutMinutes int    `yaml:"timeout-minutes"`
+		Permissions    any    `yaml:"permissions"`
+		Strategy       struct {
+			FailFast *bool          `yaml:"fail-fast"`
+			Matrix   map[string]any `yaml:"matrix"`
+		} `yaml:"strategy"`
+		Env   map[string]string `yaml:"env"`
+		Steps []mqStep          `yaml:"steps"`
 	} `yaml:"jobs"`
 }
 
@@ -73,10 +79,14 @@ func mqNeeds(v any) []string {
 	return nil
 }
 
-// TestMergeQueueGolangciGates: the two workers (the merge gate and the lint)
-// run in parallel, neither needing the other; the lint lints from the group's
-// base; and `CI result` needs exactly both, runs always, and passes only when
-// both succeeded.
+// mqWorkers are the merge queue's workers: the jobs `CI result` needs, each
+// of which must succeed. Every one runs from the start of the group.
+var mqWorkers = []string{"golangci", "merge-gate", "vitest"}
+
+// TestMergeQueueGolangciGates: the workers (the merge gate, the lint and the
+// vitest shards) run in parallel, none needing another; the lint lints from
+// the group's base; and `CI result` needs exactly the workers, runs always,
+// and passes only when every one succeeded.
 func TestMergeQueueGolangciGates(t *testing.T) {
 	requireShellTools(t)
 	wf := loadMergeQueue(t)
@@ -95,8 +105,15 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 			t.Errorf("job %s is also named \"CI result\": the required check would have two producers", id)
 		}
 	}
-	if gl.Needs != nil || gate.Needs != nil {
-		t.Errorf("golangci needs %v, merge-gate needs %v: a needs would serialize them (one more runner queue in front of the gate)", gl.Needs, gate.Needs)
+	for _, id := range mqWorkers {
+		j := wf.Jobs[id]
+		if j == nil {
+			t.Errorf("merge-queue.yml has no worker job %s", id)
+			continue
+		}
+		if j.Needs != nil {
+			t.Errorf("%s needs %v: a needs between workers would serialize them (one more runner queue in front of the gate)", id, j.Needs)
+		}
 	}
 	if gl.If != "" {
 		t.Errorf("golangci if=%q: a skipped lint job is not a success, so a no-change group must skip its steps, not the job", gl.If)
@@ -117,12 +134,17 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		t.Error("the golangci job never runs `task ci:golangci -- --base \"${BASE}\"`")
 	}
 
-	// The aggregate: exactly the two workers, always run, and nothing but
+	// The aggregate: exactly the workers, always run, and nothing but
 	// their results — no checkout, no action, no token, no API.
 	needs := mqNeeds(result.Needs)
 	slices.Sort(needs)
-	if strings.Join(needs, ",") != "golangci,merge-gate" {
-		t.Errorf("ci-result needs %v, want exactly [merge-gate golangci]", result.Needs)
+	if !slices.Equal(needs, mqWorkers) {
+		t.Errorf("ci-result needs %v, want exactly %v", result.Needs, mqWorkers)
+	}
+	for id := range wf.Jobs {
+		if id != "ci-result" && !slices.Contains(mqWorkers, id) {
+			t.Errorf("job %s is neither a worker CI result needs nor CI result: a job the required check does not read stops nothing", id)
+		}
 	}
 	if result.If != "always()" {
 		t.Errorf("ci-result if=%q, want always(): a failed or cancelled worker must fail the required check, not skip it", result.If)
@@ -148,30 +170,52 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 
 	// The acceptance matrix, against the real script. "missing" omits the
 	// job from `needs` altogether.
-	run := func(t *testing.T, gateResult, lintResult string) (bool, string) {
+	run := func(t *testing.T, results map[string]string) (bool, string) {
 		t.Helper()
 		r := map[string]string{}
-		if gateResult != "missing" {
-			r["merge-gate"] = gateResult
-		}
-		if lintResult != "missing" {
-			r["golangci"] = lintResult
+		for job, res := range results {
+			if res != "missing" {
+				r[job] = res
+			}
 		}
 		return ciShell(t, agg.Run, map[string]string{"RESULTS": needsJSON(r), "GH_TOKEN": "", "GITHUB_TOKEN": ""})
 	}
-	if ok, out := run(t, "success", "success"); !ok {
-		t.Fatalf("harness: CI result fails with both workers green, so the cases below prove nothing:\n%s", out)
+	green := func() map[string]string {
+		r := map[string]string{}
+		for _, w := range mqWorkers {
+			r[w] = "success"
+		}
+		return r
+	}
+	if ok, out := run(t, green()); !ok {
+		t.Fatalf("harness: CI result fails with every worker green, so the cases below prove nothing:\n%s", out)
 	}
 	bad := []string{"failure", "cancelled", "skipped", "missing"}
 	for _, b := range bad {
-		for _, c := range []struct{ gate, lint string }{{"success", b}, {b, "success"}, {b, b}} {
-			t.Run("gate="+c.gate+"/lint="+c.lint, func(t *testing.T) {
+		// Each worker alone not green, and all of them at once.
+		cases := []map[string]string{}
+		for _, w := range mqWorkers {
+			c := green()
+			c[w] = b
+			cases = append(cases, c)
+		}
+		all := green()
+		for w := range all {
+			all[w] = b
+		}
+		cases = append(cases, all)
+		for _, c := range cases {
+			name := ""
+			for _, w := range mqWorkers {
+				name += w + "=" + c[w] + "/"
+			}
+			t.Run(strings.TrimSuffix(name, "/"), func(t *testing.T) {
 				t.Parallel()
-				ok, out := run(t, c.gate, c.lint)
+				ok, out := run(t, c)
 				if ok {
-					t.Fatalf("CI result passes with merge-gate=%s golangci=%s:\n%s", c.gate, c.lint, out)
+					t.Fatalf("CI result passes with %v:\n%s", c, out)
 				}
-				for job, res := range map[string]string{"merge-gate": c.gate, "golangci": c.lint} {
+				for job, res := range c {
 					if res != "success" && !strings.Contains(out, job+": "+res) {
 						t.Errorf("the failure does not name %s: %s:\n%s", job, res, out)
 					}

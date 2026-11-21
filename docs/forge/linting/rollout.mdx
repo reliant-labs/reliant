@@ -48,7 +48,7 @@ The verdict counts these findings and names them, so a green run never hides tha
 }
 ```
 
-`fix` names the `forge fix` codemod or the `--fix` flag when one clears the finding. It is omitted when you have to make the change by hand.
+`fix` names the `forge lint fix` codemod or the `--fix` flag when one clears the finding. It is omitted when you have to make the change by hand.
 
 <Note>
 The two lint captures above ran the forge v1.0.14 binary against a project whose pin was set to `v1.0.0` with `--allow-version-skew`, so the rule's `introduced_in` and `gates_from` shown are the ones the rollout table declares for that rule. They illustrate the mechanism for any rule in its grace period.
@@ -76,7 +76,7 @@ A key that names no gradable rule is an error, so a typo cannot quietly disable 
 
 ## Bumping the pin
 
-When you move `forge_version` forward, run lint before you commit the bump. Anything that was in its grace period at the old pin and reaches `gates_from` at the new one will start to fail. The warnings you saw before the bump are the exact list. Clear them first (most have a mechanical fix: `forge lint --fix`, `forge fix connect-errors`, `forge fix narrow-deps <package-dir>`), or pin them to `warn` in `lint.rules` with a note that says when you will turn them back on.
+When you move `forge_version` forward, run lint before you commit the bump. Anything that was in its grace period at the old pin and reaches `gates_from` at the new one will start to fail. The warnings you saw before the bump are the exact list. Clear them first (most have a mechanical fix: `forge lint --fix`, `forge lint fix connect-errors`, `forge lint fix narrow-deps <package-dir>`), or pin them to `warn` in `lint.rules` with a note that says when you will turn them back on.
 
 `forge project upgrade list` shows the one-time migration playbooks that apply to a pin bump. The rollout is a complement to them, not a replacement: the playbooks cover changes to files, the rollout covers new checks.
 

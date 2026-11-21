@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/retry"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -47,6 +48,10 @@ const (
 	// being retried before the syncer gives up on it.
 	giveUpAfter = time.Hour
 )
+
+// failureBackoff is the wait after the nth failed write (Attempts counted
+// after the failure): 10s, doubling, at most maxBackoff.
+var failureBackoff = retry.Backoff{Initial: 10 * time.Second, Max: maxBackoff}
 
 type service struct {
 	store  Store
@@ -293,11 +298,7 @@ func (s *service) leaseEnded(ctx context.Context, l *rowLease, row *core.Workflo
 func (s *service) failed(ctx context.Context, row *core.WorkflowCheckRun, now time.Time, cause error) error {
 	row.Attempts++
 	row.LastError = truncate(cause.Error(), 2048)
-	wait := time.Duration(1<<min(row.Attempts, 10)) * 5 * time.Second
-	if wait > maxBackoff {
-		wait = maxBackoff
-	}
-	row.NextSyncAt = now.Add(wait)
+	row.NextSyncAt = now.Add(failureBackoff.Delay(row.Attempts))
 	refused := errors.Is(cause, ErrNotAuthorized) || errors.Is(cause, ErrRejected)
 	switch {
 	case errors.Is(cause, ErrNotAuthorized):

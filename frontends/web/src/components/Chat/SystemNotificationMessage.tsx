@@ -1,6 +1,7 @@
 import { cn } from '../../lib/utils';
 import { Info, AlertTriangle, ArrowLeftRight, CheckCircle, Undo2 } from 'lucide-react';
 import type { Message } from '../../api/client';
+import { QUIET_ROW_ICON_SLOT_CLASS } from './QuietRow';
 import { ContentBlockType, DisplayStyle } from '../../gen/reliant/v1/chat_pb';
 import { boldSegments, localizeNoticeTimes, providerNoticeKind } from '../../lib/providerNotice';
 
@@ -40,69 +41,50 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
   // Account-switch notices mark the account and model names in **bold**.
   const noticeKind = displayStyle === DisplayStyle.WARNING ? providerNoticeKind(content) : undefined;
 
-  // Get icon based on displayStyle
+  // A notice is a quiet row, like a tool call: its icon carries the tone,
+  // the words stay in muted ink. No tinted box.
   const getIcon = () => {
     if (noticeKind === 'return') {
-      return <Undo2 className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
+      return <Undo2 className="size-4 text-warning-ink" />;
     }
     if (noticeKind) {
-      return <ArrowLeftRight className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
+      return <ArrowLeftRight className="size-4 text-warning-ink" />;
     }
     switch (displayStyle) {
       case DisplayStyle.WARNING:
-        return <AlertTriangle className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
+        return <AlertTriangle className="size-4 text-warning-ink" />;
       case DisplayStyle.SUCCESS:
-        return <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0" />;
+        return <CheckCircle className="size-4 text-success-ink" />;
       case DisplayStyle.INFO:
       default:
-        return <Info className="w-3.5 h-3.5 text-primary-ink flex-shrink-0" />;
-    }
-  };
-
-  // Get border/background color based on displayStyle
-  const getColorClasses = () => {
-    switch (displayStyle) {
-      case DisplayStyle.WARNING:
-        return 'border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.08)]';
-      case DisplayStyle.SUCCESS:
-        return 'border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.08)]';
-      case DisplayStyle.INFO:
-      default:
-        return 'border-primary/30 bg-primary/10';
+        return <Info className="size-4" />;
     }
   };
 
   return (
     <div
       data-notice-kind={noticeKind}
-      className={cn(
-        "rounded-md border overflow-hidden my-0.5 px-2 py-1",
-        getColorClasses()
-      )}
+      data-testid="system-notice"
+      data-tone={displayStyle === DisplayStyle.WARNING ? 'warning' : displayStyle === DisplayStyle.SUCCESS ? 'success' : 'info'}
+      className="group/notice flex min-h-7 min-w-0 items-start gap-2 py-1 text-ui text-muted-foreground"
     >
-      <div className="flex items-center gap-1.5">
-        {getIcon()}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            {/* min-w-0 break-words: a flex item never shrinks below its
-                longest word by default, so an unbroken path or URL in a
-                notice was cut off at the card edge instead of wrapping. */}
-            <div className="min-w-0 break-words text-xs leading-tight text-foreground">
-              {noticeKind
-                ? boldSegments(localizeNoticeTimes(content)).map((seg, i) =>
-                    seg.bold ? (
-                      <strong key={i} className="font-semibold">{seg.text}</strong>
-                    ) : (
-                      <span key={i}>{seg.text}</span>
-                    ),
-                  )
-                : content}
-            </div>
-            <div className="text-2xs leading-tight text-muted-foreground flex-shrink-0">
-              {formatTimestamp(message.createdAt || '')}
-            </div>
-          </div>
-        </div>
+      <span className={cn(QUIET_ROW_ICON_SLOT_CLASS, 'mt-0.5')} aria-hidden="true">{getIcon()}</span>
+      {/* min-w-0 break-words: a flex item never shrinks below its longest
+          word by default, so an unbroken path or URL in a notice was cut off
+          at the edge instead of wrapping. */}
+      <div className="min-w-0 flex-1 break-words">
+        {noticeKind
+          ? boldSegments(localizeNoticeTimes(content)).map((seg, i) =>
+              seg.bold ? (
+                <strong key={i} className="font-medium text-foreground">{seg.text}</strong>
+              ) : (
+                <span key={i}>{seg.text}</span>
+              ),
+            )
+          : content}
+      </div>
+      <div className="shrink-0 pt-0.5 text-meta tabular-nums opacity-0 transition-opacity group-hover/notice:opacity-100 touch:opacity-100">
+        {formatTimestamp(message.createdAt || '')}
       </div>
     </div>
   );

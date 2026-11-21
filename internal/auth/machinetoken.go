@@ -77,6 +77,8 @@ func WithMachineToken(ctx context.Context, p *fat.Principal) context.Context {
 // MachineTokenFromContext returns the access-token principal authenticating
 // ctx, or (nil, false) for an interactive session. Surfaces that must refuse a
 // machine credential (minting tokens) check this.
+//
+//forge:resolves-caller
 func MachineTokenFromContext(ctx context.Context) (*fat.Principal, bool) {
 	p, ok := ctx.Value(machineTokenKey{}).(*fat.Principal)
 	return p, ok && p != nil

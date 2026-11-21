@@ -152,6 +152,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ConnectorService/RevokeClientAuthorization"?: (req: import("@/gen/reliant/v1/connector_pb").RevokeClientAuthorizationRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/connector_pb").RevokeClientAuthorizationResponseSchema>>;
   }
 
+  // forge:section reliant.v1.CoverageSourceService
+  // forge:hash=47ce5d5e28efb8fba7f5e7168f4d891757fe860dee0842f4008c30388296a029
+  & {
+    "reliant.v1.CoverageSourceService/GetCoverageSource"?: (req: import("@/gen/reliant/v1/coverage_source_pb").GetCoverageSourceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/coverage_source_pb").GetCoverageSourceResponseSchema>>;
+  }
+
   // forge:section reliant.v1.DaemonService
   // forge:hash=6d40ba5d85af62e41f2a57ecd61038a5f458069facc01d1554b08e54e4f82328
   & {
@@ -373,6 +379,13 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProviderAccountService/GetChatProviderAccount"?: (req: import("@/gen/reliant/v1/provider_account_pb").GetChatProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").GetChatProviderAccountResponseSchema>>;
     "reliant.v1.ProviderAccountService/GetPersonalFundingQuestion"?: (req: import("@/gen/reliant/v1/provider_account_pb").GetPersonalFundingQuestionRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").GetPersonalFundingQuestionResponseSchema>>;
     "reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice"?: (req: import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceResponseSchema>>;
+  }
+
+  // forge:section reliant.v1.PullRequestRecordService
+  // forge:hash=6bd9315370c0d4daa99adb73a182a624c5519d421cd8713db68fc6eac8fc66d2
+  & {
+    "reliant.v1.PullRequestRecordService/GetPullRequestRecord"?: (req: import("@/gen/reliant/v1/pull_request_record_pb").GetPullRequestRecordRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pull_request_record_pb").GetPullRequestRecordResponseSchema>>;
+    "reliant.v1.PullRequestRecordService/ListPullRequestRecords"?: (req: import("@/gen/reliant/v1/pull_request_record_pb").ListPullRequestRecordsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pull_request_record_pb").ListPullRequestRecordsResponseSchema>>;
   }
 
   // forge:section reliant.v1.QuestionService

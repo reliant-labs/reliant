@@ -120,6 +120,41 @@ func RequirePerson(ctx context.Context, action string) error {
 	}
 }
 
+type approvedCardKey struct{}
+
+// WithApprovedCard records on ctx that a person approved, on an approval card,
+// exactly the change ctx is about to make: toolCallID is the agent's call the
+// card was raised for. The card was decided through RequireApprovalDecider,
+// and the tool that sets this has checked that the approved hash covers this
+// very change, so the decision is a person's even though the write itself
+// runs in the worker, with no request credential at all.
+//
+// No edge sets it, so no request can carry it: only in-process code that has
+// verified an approved card does. RequirePersonOrApprovedCard reads it.
+func WithApprovedCard(ctx context.Context, toolCallID string) context.Context {
+	return context.WithValue(ctx, approvedCardKey{}, toolCallID)
+}
+
+// ApprovedCardFromContext is the tool call id of the approved card ctx acts
+// on (WithApprovedCard), and whether there is one.
+func ApprovedCardFromContext(ctx context.Context) (string, bool) {
+	id, _ := ctx.Value(approvedCardKey{}).(string)
+	return id, id != ""
+}
+
+// RequirePersonOrApprovedCard is RequirePerson for a change an agent may also
+// make once a person approves its card: it admits what RequirePerson admits,
+// and a ctx carrying an approved card (WithApprovedCard). Everything else is
+// refused as RequirePerson refuses it — a CLI login, an API token, a daemon's
+// credential, an OAuth client, and an unclassified context, which is what a
+// worker call with no approved card is.
+func RequirePersonOrApprovedCard(ctx context.Context, action string) error {
+	if _, ok := ApprovedCardFromContext(ctx); ok {
+		return nil
+	}
+	return RequirePerson(ctx, action)
+}
+
 func article(c Credential) string {
 	switch c {
 	case CredentialOAuthClient, CredentialAccessToken, CredentialUnknown:

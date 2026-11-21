@@ -17,7 +17,7 @@ import (
 )
 
 // Tests for the accounts lane (P5b L6): provider_accounts, provider_account_limits,
-// thread_provider_accounts and legacy_credential_copy. Each ported statement is checked against
+// and thread_provider_accounts. Each ported statement is checked against
 // the Repository on the same rows (internal/db/SCHEMA.md rule 6): writes through one layer,
 // reads through the other. The Repository's AccountStore seals with storetest's throwaway
 // vault, so an account written through it carries real ciphertext.
@@ -200,9 +200,6 @@ func TestProviderAccountReads(t *testing.T) {
 	if next, err := store.NextProviderAccountPriority(ctx, env.ORM, "u1", "gemini"); err != nil || next != 0 {
 		t.Fatalf("NextProviderAccountPriority(none) = %d, %v; want 0", next, err)
 	}
-	if src, err := store.ProviderAccountLegacySource(ctx, env.ORM, a.ID); err != nil || src != nil {
-		t.Fatalf("ProviderAccountLegacySource(native) = %v, %v; want nil", src, err)
-	}
 	if user, err := store.UserProviderAccountProvider(ctx, env.ORM, "u1", key.ID); err != nil || user != "openai" {
 		t.Fatalf("UserProviderAccountProvider = %q, %v; want openai", user, err)
 	}
@@ -218,7 +215,6 @@ func TestProviderAccountLocks(t *testing.T) {
 	ctx := context.Background()
 	a := l6Account(t, env, l6Upsert("u1", "alice", "s1", "r1"))
 	b := l6Account(t, env, l6Upsert("u1", "bob", "s2", "r2"))
-	mustExec(t, env, `UPDATE provider_accounts SET legacy_source = 'claude_auth_tokens' WHERE id IN ($1, $2)`, a.ID, b.ID)
 	twin, err := env.Repo.ListProviderAccounts(ctx, "u1")
 	if err != nil {
 		t.Fatalf("Repo.ListProviderAccounts: %v", err)
@@ -250,16 +246,6 @@ func TestProviderAccountLocks(t *testing.T) {
 		if _, err := store.LockOwnerProviderAccount(ctx, env.ORM, core.UserAccountOwner("u2"), b.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 			t.Errorf("LockUserProviderAccount(another user) err = %v, want ErrProviderAccountNotFound", err)
 		}
-		mirror, err := store.LockLegacyMirror(ctx, env.ORM, "u1", "claude", "claude_auth_tokens")
-		if err != nil {
-			return err
-		}
-		if mirror == nil || mirror.ID != a.ID {
-			t.Errorf("LockLegacyMirror = %v, want the first mirror by priority (%s)", mirror, a.ID)
-		}
-		if none, err := store.LockLegacyMirror(ctx, env.ORM, "u1", "claude", "api_keys"); err != nil || none != nil {
-			t.Errorf("LockLegacyMirror(other source) = %v, %v; want nil, nil", none, err)
-		}
 		ids, err := store.LockProviderAccountIDs(ctx, env.ORM, "u1", "claude")
 		if err != nil {
 			return err
@@ -273,9 +259,6 @@ func TestProviderAccountLocks(t *testing.T) {
 		}
 		return nil
 	})
-	if src, err := store.ProviderAccountLegacySource(ctx, env.ORM, a.ID); err != nil || src == nil || *src != "claude_auth_tokens" {
-		t.Fatalf("ProviderAccountLegacySource = %v, %v; want claude_auth_tokens", src, err)
-	}
 }
 
 // TestProviderAccountCredentialWrites ports the insert and the two credential rewrites.
@@ -286,7 +269,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 
 	inserted, err := store.InsertProviderAccount(ctx, env.ORM, "acct-1", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
 		AuthKind: core.AuthKindAPIKey, IdentityKey: "k1", KeyHint: "wxyz", Secret: []byte("ciphertext-1"),
-		LegacySource: "api_keys", UpdatedAt: at.Add(time.Minute),
+		UpdatedAt: at.Add(time.Minute),
 	}, at)
 	if err != nil {
 		t.Fatalf("InsertProviderAccount: %v", err)
@@ -298,9 +281,6 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	requireSame(t, "InsertProviderAccount", inserted, twin[0])
 	if inserted.Email != "" || !inserted.ExpiresAt.IsZero() || !inserted.CreatedAt.Equal(at) || !inserted.UpdatedAt.Equal(at.Add(time.Minute)) {
 		t.Fatalf("inserted = %+v, want NULL email/expiry and the caller's timestamps", inserted)
-	}
-	if src, _ := store.ProviderAccountLegacySource(ctx, env.ORM, "acct-1"); src == nil || *src != "api_keys" {
-		t.Fatalf("legacy_source = %v, want api_keys", src)
 	}
 	if _, err := store.InsertProviderAccount(ctx, env.ORM, "acct-2", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 1, store.ProviderAccountCredential{
 		AuthKind: core.AuthKindAPIKey, IdentityKey: "k1", Secret: []byte("x"), UpdatedAt: at}, at); err == nil {
@@ -748,72 +728,5 @@ func TestThreadAssignmentQueries(t *testing.T) {
 	}
 	if id != b.ID || twinID != id {
 		t.Fatalf("serving account = %q (Repository %q), want %q: the newest message naming one", id, twinID, b.ID)
-	}
-}
-
-// TestLegacyCredentialCopyQueries ports the copy's marker, its lock and its per-row savepoint.
-func TestLegacyCredentialCopyQueries(t *testing.T) {
-	env := storetest.New(t)
-	ctx := context.Background()
-	if done, err := store.LegacyCredentialCopyDone(ctx, env.ORM); err != nil || done {
-		t.Fatalf("LegacyCredentialCopyDone(fresh) = %v, %v", done, err)
-	}
-
-	errRow := errors.New("row failed")
-	l6InTx(t, env, func(ctx context.Context) error {
-		if err := store.LockLegacyCredentialCopy(ctx, env.ORM); err != nil {
-			return err
-		}
-		if l6TryInOtherSession(t, env, `SELECT pg_try_advisory_xact_lock(hashtext('provider_accounts_legacy_copy'))`) {
-			t.Error("the copy's advisory lock is not the previous release's key")
-		}
-		rowErr, err := store.InLegacyImportSavepoint(ctx, env.ORM, func() error {
-			if _, err := store.InsertProviderAccount(ctx, env.ORM, "rolled-back", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
-				AuthKind: core.AuthKindAPIKey, IdentityKey: "k", Secret: []byte("x"), UpdatedAt: time.Now()}, time.Now()); err != nil {
-				return err
-			}
-			return errRow
-		})
-		if err != nil || !errors.Is(rowErr, errRow) {
-			t.Errorf("InLegacyImportSavepoint(failing row) = %v, %v", rowErr, err)
-		}
-		// The failed row's write is gone, and a failed statement does not poison the rest.
-		rowErr, err = store.InLegacyImportSavepoint(ctx, env.ORM, func() error {
-			_, err := env.ORM.Exec(ctx, `SELECT 1/0`)
-			return err
-		})
-		if err != nil || rowErr == nil {
-			t.Errorf("InLegacyImportSavepoint(failing statement) = %v, %v", rowErr, err)
-		}
-		rowErr, err = store.InLegacyImportSavepoint(ctx, env.ORM, func() error {
-			_, err := store.InsertProviderAccount(ctx, env.ORM, "kept", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
-				AuthKind: core.AuthKindAPIKey, IdentityKey: "k", Secret: []byte("x"), UpdatedAt: time.Now()}, time.Now())
-			return err
-		})
-		if err != nil || rowErr != nil {
-			t.Errorf("InLegacyImportSavepoint(row) = %v, %v", rowErr, err)
-		}
-		return store.RecordLegacyCredentialCopy(ctx, env.ORM, time.Now(), 1, 0, 2)
-	})
-	meta, err := env.Repo.ListProviderAccounts(ctx, "u1")
-	if err != nil || len(meta) != 1 || meta[0].ID != "kept" {
-		t.Fatalf("after the copy the Repository reads %v, %v; want only the kept row", meta, err)
-	}
-	if done, err := store.LegacyCredentialCopyDone(ctx, env.ORM); err != nil || !done {
-		t.Fatalf("LegacyCredentialCopyDone = %v, %v", done, err)
-	}
-	var created, skipped, failed int
-	if err := env.SQL.QueryRow(`SELECT created, skipped, failed FROM legacy_credential_copy WHERE id = 1`).Scan(&created, &skipped, &failed); err != nil {
-		t.Fatalf("read marker: %v", err)
-	}
-	if created != 1 || skipped != 0 || failed != 2 {
-		t.Fatalf("marker = %d/%d/%d", created, skipped, failed)
-	}
-	// The Repository's copy sees the store's marker and does nothing.
-	if _, ran, err := env.Repo.MigrateLegacyCredentials(ctx); err != nil || ran {
-		t.Fatalf("Repo.MigrateLegacyCredentials after the marker = ran %v, %v", ran, err)
-	}
-	if err := store.RecordLegacyCredentialCopy(ctx, env.ORM, time.Now(), 0, 0, 0); err == nil {
-		t.Fatal("a second marker was written")
 	}
 }

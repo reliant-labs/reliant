@@ -12,9 +12,13 @@
  * the desktop page; on a phone the router hands a page with a phone twin to
  * that twin (lib/mobileRedirect), and the rest (an app's console, Projects)
  * are one responsive page, so there is one nav and no legacy one to fall back to.
+ *
+ * Its header is the desktop's, in the desktop's order (U6, owner): the org,
+ * then Find, then the project, then the rows. The drawer hands it the org and
+ * project controls (`org`, `project`), so the order lives here once.
  */
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { MessagesSquare, Search, SquarePen } from "lucide-react";
 
 import {
@@ -24,6 +28,7 @@ import {
   inboxPath,
   mobileChatPath,
   mobileChatsPath,
+  mobileChatWorkflowPath,
   mobileHomePath,
   mobileInboxPath,
   mobileMachinesPath,
@@ -31,10 +36,14 @@ import {
   mobileRunsPath,
   mobileSearchPath,
   mobileSettingsPath,
+  mobileWorkflowPath,
   mobileWorkflowsPath,
   newChatPath,
+  runPath,
   runsPath,
+  sandboxesPath,
   settingsPath,
+  workflowDetailPath,
   workflowLibraryPath,
 } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
@@ -54,14 +63,23 @@ export function desktopPathOfMobile(pathname: string): string {
   const chatPrefix = mobileChatPath("");
   if (path.startsWith(chatPrefix)) {
     const id = path.slice(chatPrefix.length).split("/")[0];
-    return id ? chatPath(encodedSegment(id)) : homePath();
+    if (!id) return homePath();
+    // A workflow chat's run (`/m/chats/<id>/workflow`) is the phone's run page: the desktop's run of that chat.
+    if (path === mobileChatWorkflowPath(encodedSegment(id))) return runPath(encodedSegment(id));
+    return chatPath(encodedSegment(id));
   }
   if (path === mobileHomePath() || path === mobileChatsPath()) return homePath();
   if (path === mobileNewChatPath()) return newChatPath();
   if (atOrBelow(path, mobileInboxPath())) return inboxPath();
   if (atOrBelow(path, mobileRunsPath())) return runsPath();
+  // One workflow's screen is that workflow's page in the Library; the catalog is the Library.
+  const workflowPrefix = mobileWorkflowPath("");
+  if (path.startsWith(workflowPrefix)) {
+    const name = path.slice(workflowPrefix.length).split("/")[0];
+    if (name) return workflowDetailPath(encodedSegment(name));
+  }
   if (atOrBelow(path, mobileWorkflowsPath())) return workflowLibraryPath();
-  if (atOrBelow(path, mobileMachinesPath())) return settingsPath("machines");
+  if (atOrBelow(path, mobileMachinesPath())) return sandboxesPath();
   if (atOrBelow(path, mobileSettingsPath())) return settingsPath();
   return pathname;
 }
@@ -70,7 +88,13 @@ export function MobileHybridNav({
   pathname: phonePathname,
   search,
   onNavigate,
+  org,
+  project,
 }: {
+  /** The org control, above Find. */
+  org?: ReactNode;
+  /** The project control, under Find. */
+  project?: ReactNode;
   /** The page on screen (a phone screen or a desktop page). */
   pathname: string;
   search: Record<string, unknown>;
@@ -109,7 +133,8 @@ export function MobileHybridNav({
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-hybrid-nav">
-      {/* The phone's Search screen in the desktop's Find place. */}
+      {org}
+      {/* The phone's Search screen in the desktop's Find place: under the org, above the project. */}
       <div className="shrink-0 px-2 pb-1">
         <SidebarRow
           icon={<Search className="size-4" />}
@@ -119,6 +144,7 @@ export function MobileHybridNav({
           testId="mobile-nav-find"
         />
       </div>
+      {project}
       <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={onNavigate} />
     </div>
   );

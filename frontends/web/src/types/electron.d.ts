@@ -8,8 +8,16 @@ export interface BackendStatus {
 }
 
 export interface UpdateStatus {
-  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error';
+  /**
+   * 'forced': the server requires a newer version and the forced update has
+   * started but not found one yet (electron/src/update-check.js).
+   */
+  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error' | 'forced';
   version?: string;
+  /** The update is required, not optional: the dialog cannot be dismissed. */
+  forced?: boolean;
+  /** With `forced`: the oldest version the server serves. */
+  minVersion?: string;
   progress?: {
     percent: number;
     transferred: number;
@@ -96,6 +104,14 @@ export interface ElectronAPI {
   }>;
   downloadUpdate: () => Promise<{ success?: boolean; error?: string }>;
   installUpdate: () => Promise<{ success?: boolean; error?: string }>;
+  /**
+   * The server requires a newer version: check, download and install without
+   * waiting for the user. Absent in a desktop build from before it existed.
+   */
+  forceUpdate?: (minVersion: string) => Promise<{
+    outcome: 'installing' | 'up-to-date' | 'inactive' | 'error';
+    error?: string;
+  }>;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   /** The updater's current state, null before any check has answered. */
   getUpdateStatus?: () => Promise<UpdateStatus | null>;
@@ -135,10 +151,13 @@ export interface ElectronAPI {
   // decides to open consent in the system browser instead of navigating this
   // window — Google refuses OAuth in an embedded webview.
   //
-  // Still OPTIONAL, deliberately: builds shipped before this existed do not
-  // provide it, and the renderer falls back to the hosted /auth/callback
-  // rather than throwing. Rejects (never resolves falsy) when the listener
-  // cannot start, so the fallback stays on one code path.
+  // Rejects (never resolves falsy) when the listener cannot start; the
+  // renderer then falls back to the hosted /auth/callback, on one code path.
+  //
+  // Optional, like every bridge the web bundle needs from the preload: the
+  // desktop app loads this bundle from the server, so it can be newer than the
+  // preload. A missing bridge means the desktop build is too old, and callers
+  // throw DesktopUpdateRequiredError (lib/desktopUpdate.ts) instead of crashing.
   //
   // The code comes back by NAVIGATING this window to /auth/callback, so there
   // is no callback-event bridge to declare. The previous `onOAuthCallback`
@@ -156,9 +175,6 @@ export interface ElectronAPI {
   // listener, so the browser's redirect hit a closed port. `start` binds the
   // port and returns at once; `wait` spans human time over IPC, which nothing
   // in between can time out.
-  //
-  // Optional like every bridge here: builds predating it fall back to the
-  // daemon RPC rather than throwing (see web/src/lib/oauth-desktop.ts).
   startProviderOAuth?: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>;
@@ -174,8 +190,8 @@ export interface ElectronAPI {
   startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>;
 
   // Stripe checkout in a controlled window, so the desktop app can observe the
-  // return instead of losing the purchase to the system browser. Optional: a
-  // build without it falls back to the plain redirect (see lib/stripeCheckout).
+  // return instead of losing the purchase to the system browser. Optional (see
+  // startOAuthRedirect): lib/stripeCheckout feature-detects it.
   openStripeCheckout?: (args: {
     checkoutUrl: string;
     returnUrl: string;
@@ -279,5 +295,14 @@ declare global {
     RELIANT_CONFIG?: ReliantConfig;
     /** Only on the desktop find bar's own page (electron/src/find-bar-preload.js). */
     findBarAPI?: FindBarAPI;
+    /**
+     * The desktop app's versions (electron/src/preload.js desktopVersions),
+     * each present only when it looks like a version.
+     */
+    forgeDesktop?: {
+      readonly appVersion?: string;
+      readonly electronVersion?: string;
+      readonly chromiumVersion?: string;
+    };
   }
 }

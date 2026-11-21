@@ -174,6 +174,81 @@ func TestWorktreeReap_SweepReplacesForgesReaperOnlyInModeOn(t *testing.T) {
 	}
 }
 
+// With the storage reaper off (a person's own machine, by default), mode on
+// still runs the sweep on the worktree reap's cadence and single-flight, and
+// nothing else: no forge reap. Dry-run (the default), off and no mode run
+// nothing, as before, so no default machine starts a pass it did not run.
+func TestWorktreeReap_ModeOnRunsWithoutTheStorageReaper(t *testing.T) {
+	for _, tc := range []struct {
+		mode   string
+		sweeps int
+	}{
+		{"on", 1},
+		{"dry-run", 0},
+		{"off", 0},
+		{"", 0},
+	} {
+		t.Run("mode="+tc.mode, func(t *testing.T) {
+			home := t.TempDir()
+			root := filepath.Join(home, ".reliant", "worktrees")
+			fakeLinkedWorktree(t, filepath.Join(home, "projects", "a"), filepath.Join(root, "proj", "ws-1", "a"))
+			fs := &fakeFS{
+				mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
+				exists: map[string]bool{home: true},
+			}
+			env := Environment{Getenv: func(string) string { return "" }, Home: home, GOOS: "test"}
+			now := time.Now()
+			w := watcherOn(t, fs, env, &now)
+			forge := 0
+			w.worktreeReap.run = func(context.Context, string) (reaperRun, error) { forge++; return reaperRun{}, nil }
+			cacheRuns := 0
+			w.reaper.run = func(context.Context, string) (reaperRun, error) { cacheRuns++; return reaperRun{}, nil }
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var sweeps []string
+			w.ConfigureWorktreeSweep(WorktreeSweep{Mode: tc.mode, Run: func(_ context.Context, trigger string, _, approvedOnly bool) {
+				sweeps = append(sweeps, trigger)
+				if approvedOnly {
+					t.Error("a scheduled pass ran approved-only")
+				}
+				cancel() // one pass is the test; RunReaper returns
+			}})
+			w.ConfigureReaper(ReaperConfig{Enabled: false, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+
+			done := make(chan struct{})
+			go func() { w.RunReaper(ctx); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("RunReaper did not return")
+			}
+			if len(sweeps) != tc.sweeps || forge != 0 || cacheRuns != 0 {
+				t.Fatalf("sweeps %v, forge reaps %d, cache passes %d; want %d sweeps and no reaper work", sweeps, forge, cacheRuns, tc.sweeps)
+			}
+			if tc.mode != "on" {
+				return
+			}
+			// Its own cadence: not again before WorktreeReapInterval, again
+			// after it, and never while another pass holds the single-flight.
+			ctx2 := context.Background()
+			if w.worktreeTick(ctx2, false) || len(sweeps) != 1 {
+				t.Fatalf("swept again before WorktreeReapInterval: %v", sweeps)
+			}
+			now = now.Add(WorktreeReapInterval)
+			if !w.tryAcquireReaper() {
+				t.Fatal("single-flight held after the pass")
+			}
+			if w.worktreeTick(ctx2, false) || len(sweeps) != 1 {
+				t.Fatalf("swept while another pass held the single-flight: %v", sweeps)
+			}
+			w.releaseReaper()
+			if !w.worktreeTick(ctx2, false) || len(sweeps) != 2 || forge != 0 {
+				t.Fatalf("sweeps %v, forge reaps %d after WorktreeReapInterval; want a second sweep alone", sweeps, forge)
+			}
+		})
+	}
+}
+
 // A person's approval is acted on within a minute, by an approved-only
 // sweep between scheduled passes, and only once per new approval.
 func TestWorktreeReap_ApprovalRunsAnApprovedOnlySweepBetweenPasses(t *testing.T) {
@@ -259,7 +334,7 @@ func TestReclaimProposalsChangeTheReportSignature(t *testing.T) {
 
 func TestWorktreeReap_RunsForgesReaperWithRemovalOverTheRootsCheckouts(t *testing.T) {
 	got := worktreeReapCommandArgs("/r")
-	want := []string{"forge", "storage", "worktrees", "--repo", "/r", "--apply", "--reliant-managed"}
+	want := []string{"forge", "machine", "storage", "worktrees", "--repo", "/r", "--apply", "--reliant-managed"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %v, want %v", got, want)
 	}

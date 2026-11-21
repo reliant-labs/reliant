@@ -10,10 +10,10 @@ import type { Fixtures } from '../rpc'
 import { DAY, FIXED_NOW, HOUR, MIN, USER, iso } from './base'
 
 const ENVIRONMENTS = [
-  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PREVIEW', createdAt: iso(5 * HOUR) },
-  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(9 * DAY) },
+  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(5 * HOUR) },
+  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(9 * DAY) },
 ]
 
 const deployment = (name: string, tier: string, verdict: string, url = '', extra: Record<string, unknown> = {}) => ({
@@ -83,7 +83,7 @@ const SERVICE_OVERVIEW = SERVICES.map((s, i) => {
   const requests = Math.round(s.rps * 86400)
   return {
     service: s.service, requestCount: String(requests), ratePerSecond: s.rps,
-    errorCount: String(Math.round(requests * s.errors)), errorRate: s.errors, errorLogCount: String(Math.round(requests * s.errors * 0.6)),
+    errorCount: String(Math.round(requests * s.errors)), errorRate: s.errors, p50Ms: 38 + i * 12, p95Ms: 180 + i * 140, p99Ms: 640 + i * 380, errorLogCount: String(Math.round(requests * s.errors * 0.6)),
     requestTrend: trend(s.rps, i * 5), errorTrend: trend(s.rps * s.errors, i * 5 + 2), source: 'otel', operatorData: false, group: {},
   }
 })
@@ -207,6 +207,22 @@ const customDashboard = (source: 'DASHBOARD_SOURCE_REPO' | 'DASHBOARD_SOURCE_WOR
   starred: false, panelCount: 4, previewPanels: [], tags: [], group: '',
 })
 
+/** The Overview's Vulnerabilities card: shopfront's prod and staging, scanned 2h ago against a current database. */
+const vulnEnv = (id: string, name: string, version: string, counts: Record<string, number>, kev: number, fixable: number) => ({
+  environmentId: id, environmentName: name, releaseId: `rel-${version}`, releaseVersion: version,
+  counts: { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0, ...counts },
+  kevCount: kev, fixableCount: fixable, blockingCount: kev, exemptCount: 0,
+  coverage: { artifacts: 3, withSbom: 3, scanned: 3 },
+  lastScannedAt: iso(2 * HOUR), scanState: 'VULNERABILITY_SCAN_STATE_SCANNED',
+})
+const VULN_SUMMARY = {
+  environments: [
+    vulnEnv('env-shop-prod', 'prod', '20261118.121200-a1b2c3d4e5f6', { critical: 1, high: 2, medium: 3, low: 1 }, 1, 4),
+    vulnEnv('env-shop-staging', 'staging', '20261118.144000-f6e5d4c3b2a1', { high: 1, medium: 2 }, 0, 2),
+  ],
+  database: { scanner: 'grype', scannerVersion: 'v0.122.1', schema: 'v6.1.10', builtAt: iso(12 * HOUR), stale: false },
+}
+
 export const consoleFixtures: Fixtures = {
   'controlplane.v1.DashboardService/ListDashboards': (req) =>
     req.projectId === 'shopfront'
@@ -224,6 +240,7 @@ export const consoleFixtures: Fixtures = {
         }
       : { dashboards: [], canWrite: true },
   'controlplane.v1.ObservabilityService/QueryPanel': queryPanel,
+  'controlplane.v1.VulnerabilityService/GetVulnerabilitySummary': (req) => (req.project === 'shopfront' ? VULN_SUMMARY : { environments: [] }),
   'controlplane.v1.IssuesService/ListIssues': (req) => {
     const statuses = (req.statuses as string[] | undefined) ?? []
     return { issues: statuses.length ? ISSUES.filter((i) => statuses.includes(i.status)) : ISSUES, nextPageToken: '' }

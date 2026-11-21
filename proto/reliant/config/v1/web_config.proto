@@ -86,7 +86,7 @@ message ReliantWebConfig {
   string forge_app_host = 23 [(forge.v1.config) = {
     env_var: "FORGE_APP_HOST"
     default_value: "forge.reliantlabs.io"
-    description: "Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points."
+    description: "Hostname that serves the Forge by Reliant brand of this same bundle. Every host mounts the one shell (the same routes and pages); a document loaded on this host shows it with forge branding, every other host with Reliant's. Also the origin the public demo's links into the app open."
   }];
 
   // ── The public forge demo (the forge-demo bundle, demo.html) ───────────
@@ -226,6 +226,12 @@ message ReliantWebConfig {
     env_var: "DOWNLOAD_BASE_URL"
     default_value: "https://downloads.reliantlabs.io"
     description: "Where the desktop and CLI downloads the UI links to are published."
+  }];
+
+  // 32: 30 and 31 are identity_data_links and org_routes.
+  string changes_ui = 32 [(forge.v1.config) = {
+    env_var: "CHANGES_UI"
+    description: "\"true\": show the Experiments row in the forge console's nav (Forge Changes: remote config, gradual rollouts and A/B tests, components/Forge/Experiments). Unset: hidden, though /forge/p/<app>/experiments still opens. Set it once the control plane serves ChangesService."
   }];
 
   string cli_defaults_baked = 22 [(forge.v1.config) = {

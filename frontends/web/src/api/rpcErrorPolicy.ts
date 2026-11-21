@@ -42,6 +42,11 @@
  *    "HTTP 404". That is an app older than the server (desktop 1.7.16 calling
  *    the retired ChatService/CreateChat) — the fix is an update prompt.
  *
+ *  - UPGRADE REQUIRED. The server compared this build's `Reliant-Client`
+ *    header with its minimum and refused it: FailedPrecondition with the
+ *    reason `upgrade_required`. Not a defect either; the fix is the forced
+ *    reload or update (api/versionSkew.ts noteUpgradeRequired).
+ *
  *  - NETWORK (reliant-web "TypeError: Failed to fetch", 2026-11-02..06, 64
  *    events across three issues). fetch itself rejected — the device went
  *    offline or to sleep, DNS failed, the connection dropped — so no server
@@ -77,6 +82,8 @@ export type RpcFailureKind =
   | "deadline"
   /** This app calls an RPC the server does not route: the app is out of date. */
   | "version-skew"
+  /** The server refused this build as older than its minimum (`upgrade_required`). */
+  | "upgrade-required"
   /** fetch rejected before any server answered: the user's network. */
   | "network"
   /** Anything else: worth a report. */
@@ -175,6 +182,11 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   // modal), and must not depend on the server's choice of status code.
   if (hasErrorReason(error, ACCOUNT_REQUIRED_REASON)) {
     return "account-required";
+  }
+  // By reason too, and before the expected codes: the refusal is a
+  // FailedPrecondition, which on its own would read as the caller's state.
+  if (hasErrorReason(error, "upgrade_required")) {
+    return "upgrade-required";
   }
   if (
     error.code === Code.NotFound &&

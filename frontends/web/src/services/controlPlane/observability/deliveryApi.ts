@@ -163,7 +163,8 @@ const FINDING_CODE_OF: Record<WireFindingCode, ReleaseFindingCode | null> = {
   [WireFindingCode.REGRESSED_ISSUE]: "regressed_issue",
   [WireFindingCode.ALERT_FIRING]: "alert_firing",
   [WireFindingCode.WORKLOAD_RESTARTS]: "workload_restarts",
-  // Browser findings are newer than this client's views: read as unknown codes until one renders them.
+  // A frontend-only environment's browser findings: not in this console's vocabulary yet, so shown as
+  // a newer server's code is (labelled "Finding", with the server's message), as before the re-vendor.
   [WireFindingCode.BROWSER_ERRORS]: null,
   [WireFindingCode.BROWSER_FAILED_REQUESTS]: null,
   [WireFindingCode.BROWSER_PAGE_LOAD]: null,

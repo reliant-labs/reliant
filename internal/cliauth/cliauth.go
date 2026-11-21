@@ -158,7 +158,7 @@ func New(deps Deps) Service {
 	return &adapter{deps: deps}
 }
 
-// DepsFromEnv locates the shared credentials file the way `forge login` does:
+// DepsFromEnv locates the shared credentials file the way `forge cloud login` does:
 // $FORGE_HOME, then $XDG_CONFIG_HOME, then the home directory
 // (credentials.DirsFromEnv, forge's one reader of those variables).
 func DepsFromEnv() Deps {
@@ -225,7 +225,7 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 // construct New(Deps{...}) directly.
 
 // CredentialsPath is where the shared credentials file lives: the same file
-// `forge login` writes.
+// `forge cloud login` writes.
 func CredentialsPath() (string, error) { return New(DepsFromEnv()).CredentialsPath() }
 
 // Store saves c — with the account it signed in as — as the reliant CLI's

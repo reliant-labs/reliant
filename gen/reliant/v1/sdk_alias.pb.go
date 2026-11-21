@@ -259,6 +259,7 @@ type (
 	LocalModelRefresh                        = sdk.LocalModelRefresh
 	MachineHealth                            = sdk.MachineHealth
 	MachineHealthState                       = sdk.MachineHealthState
+	MachineStats                             = sdk.MachineStats
 	MarkUnreadChatRequest                    = sdk.MarkUnreadChatRequest
 	MarkUnreadChatResponse                   = sdk.MarkUnreadChatResponse
 	Message                                  = sdk.Message

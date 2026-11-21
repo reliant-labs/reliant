@@ -23,6 +23,9 @@ func (s *Service) PutMachinePool(
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
+	if err := s.requirePoolWriter(ctx, "define a machine pool"); err != nil {
+		return nil, err
+	}
 	spec := req.Msg.GetPool()
 	if spec == nil {
 		return nil, svcerr.InvalidArgument("pool is required")

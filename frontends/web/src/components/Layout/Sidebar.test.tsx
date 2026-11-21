@@ -277,9 +277,15 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    // Find first, then the switcher, then the nav (U6c).
-    expect(screen.getByTestId("nav-find")).toBeInTheDocument();
+    // The header (U6, owner): the org row (the brand with no org), then Find,
+    // then the project switcher on a row of its own, then the nav.
     const nav = screen.getByTestId("nav-top");
+    const header = [screen.getByTestId("org-header-brand"), screen.getByTestId("nav-find"), screen.getByTestId("shell-project-switcher"), nav];
+    for (let i = 1; i < header.length; i++) {
+      expect(header[i - 1].compareDocumentPosition(header[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // Not beside the org: the project row is its own row.
+    expect(screen.getByTestId("org-header-brand").parentElement!.contains(screen.getByTestId("shell-project-switcher"))).toBe(false);
     expect(screen.getByTestId("sidebar-home-button")).toHaveTextContent("Overview");
     expect(within(nav).getByTestId("nav-agents")).toHaveTextContent("Agents");
     // No chat list off an Agents route: it lives in the Agents drill-in.
@@ -293,7 +299,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
   });
 
-  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, then the chats full height", () => {
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {
     sessionStorage.clear();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onNavigate = vi.fn();

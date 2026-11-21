@@ -15,12 +15,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// GetChatActivity returns the computed activity the chats_with_activity view
-// derives for a chat: 0 (IDLE) if it has none.
-func (r *Repo) GetChatActivity(ctx context.Context, chatID string) (int, error) {
-	return store.GetChatActivity(ctx, r.ORM(), chatID)
-}
-
 // postCommitEmitBudget bounds the chat_activity_changed write that runs after
 // a transaction committed. The caller's context may be ending by then (a
 // request answered, an activity finishing); the event is still owed, so the

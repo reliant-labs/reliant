@@ -22,12 +22,12 @@ export const billingFixtures: Fixtures = {
     runningCostWeightSum: '258481117/167327404',
     exhaustsAt: isoAhead(98 * HOUR),
     bySize: [{
-      size: 'm', multiplier: '1', runningSeconds: String(62 * 3600), exactRunningSeconds: String(62 * 3600),
-      costWeight: '258481117/167327404', includedWeightedSeconds: '14423246328600/41831851', overageSeconds: '0',
+      size: 'm', exactRunningSeconds: String(62 * 3600),
+      costWeight: '258481117/167327404', includedWeightedSeconds: '14423246328600/41831851',
       exactOverageSeconds: '0', overageCostCents: '0', pricingVersion: 'machine-pooled-v1',
     }],
     storage: {
-      provisionedGib: '50', includedGib: '50', extraGib: '0', extraGibSeconds: '0', exactExtraGibSeconds: '0',
+      provisionedGib: '50', includedGib: '50', extraGib: '0', exactExtraGibSeconds: '0',
       costCents: '0', projectedCostCents: '0', centsPerGibMonth: '25',
     },
     projectedPeriodTotalCents: '3900', planPriceCents: '3900', estimatedOverageCostCents: 0,

@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The provider-backoff marker is the only durable evidence a rate-limited thread
@@ -124,7 +126,7 @@ func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
 	}
 	activity := func() int {
 		t.Helper()
-		a, err := repo.GetChatActivity(ctx, chatID)
+		a, err := store.GetChatActivity(ctx, repo.ORM(), chatID)
 		if err != nil {
 			t.Fatalf("GetChatActivity: %v", err)
 		}
@@ -217,14 +219,14 @@ func TestUsageLimitWait_SubAgentDoesNotParkTheChatAndStopReleasesAll(t *testing.
 	if err := repo.RecordUsageLimitWait(ctx, chatID, childThread, "OpenAI", false, now.Add(time.Hour), now); err != nil {
 		t.Fatalf("RecordUsageLimitWait: %v", err)
 	}
-	if a, _ := repo.GetChatActivity(ctx, chatID); a != 1 {
+	if a, _ := store.GetChatActivity(ctx, repo.ORM(), chatID); a != 1 {
 		t.Errorf("a sub-agent's wait must not park the chat: activity = %d, want RUNNING (1)", a)
 	}
 
 	if err := repo.RecordUsageLimitWait(ctx, chatID, chatID, "OpenAI", false, now.Add(time.Hour), now); err != nil {
 		t.Fatalf("RecordUsageLimitWait root: %v", err)
 	}
-	if a, _ := repo.GetChatActivity(ctx, chatID); a != 7 {
+	if a, _ := store.GetChatActivity(ctx, repo.ORM(), chatID); a != 7 {
 		t.Fatalf("activity = %d, want 7", a)
 	}
 	// A driver's own retry ladder on the same chat is not a usage-limit wait and
@@ -243,7 +245,7 @@ func TestUsageLimitWait_SubAgentDoesNotParkTheChatAndStopReleasesAll(t *testing.
 	if !got["other-thread"].Waiting() {
 		t.Error("releasing usage-limit waits must not touch a driver's retry-ladder marker")
 	}
-	if a, _ := repo.GetChatActivity(ctx, chatID); a != 1 {
+	if a, _ := store.GetChatActivity(ctx, repo.ORM(), chatID); a != 1 {
 		t.Errorf("activity after release = %d, want RUNNING (1)", a)
 	}
 }
@@ -269,7 +271,7 @@ func TestUsageLimitWait_DeadRunDoesNotLeaveChatWaiting(t *testing.T) {
 	if err := repo.RecordUsageLimitWait(ctx, chatID, chatID, "Anthropic", false, now.Add(time.Hour), now); err != nil {
 		t.Fatalf("RecordUsageLimitWait: %v", err)
 	}
-	if a, _ := repo.GetChatActivity(ctx, chatID); a == 7 {
+	if a, _ := store.GetChatActivity(ctx, repo.ORM(), chatID); a == 7 {
 		t.Error("a stopped run must not read as waiting on a usage limit")
 	}
 }

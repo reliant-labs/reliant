@@ -38,7 +38,7 @@ describe("buildGroupedConsoleNav", () => {
       ["Product analytics", "Insights,Events & metrics"],
       ["Releases", ""],
       ["Data", ""],
-      ["Users", ""],
+      ["Auth", ""],
       ["More tools", "Logs,Metrics,Profiles,Service graph"],
       ["Environments", "prod"],
       ["Secrets", ""],

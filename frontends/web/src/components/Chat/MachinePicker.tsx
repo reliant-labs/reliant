@@ -59,7 +59,7 @@ interface MachinePickerProps {
   disabled?: boolean;
 }
 
-const SECTION_LABEL = "px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground";
+const SECTION_LABEL = "px-3 pb-1 pt-2 text-2xs font-medium text-muted-foreground";
 
 function placementLabel(state: PlacementState): string {
   switch (state) {
@@ -112,10 +112,10 @@ export function MachinePicker({
   const userDefaultId = daemons.find((d) => d.isDefault)?.daemonId;
   const noMachine = value === NO_MACHINE;
   const selectedLabel = noMachine
-    ? "No machine"
+    ? "No sandbox"
     : value === DEFAULT_MACHINE
-      ? (defaultDaemon ? machineDisplayName(defaultDaemon) : options[0]?.label) || "Your machine"
-      : options.find((o) => o.value === value)?.label || "Your machine";
+      ? (defaultDaemon ? machineDisplayName(defaultDaemon) : options[0]?.label) || "Your sandbox"
+      : options.find((o) => o.value === value)?.label || "Your sandbox";
   const placement = project?.placement.known ? project.placement : undefined;
   const sections = placement
     ? sectionMachines(options, (o) => o.value, placement)
@@ -200,7 +200,7 @@ export function MachinePicker({
           <button
             type="button"
             onClick={() => onMakeDefault(option.value)}
-            aria-label={`Make ${option.label} your default machine`}
+            aria-label={`Make ${option.label} your default sandbox`}
             className="mr-2 flex-shrink-0 rounded px-1.5 py-0.5 text-2xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
           >
             Make default
@@ -265,8 +265,8 @@ export function MachinePicker({
       <Tooltip
         content={
           noMachine
-            ? "No machine: can't read or change files in this project. The chat can use the web and your integrations."
-            : "The machine this chat runs on: its files, shell and tools."
+            ? "No sandbox: can't read or change files in this project. The chat can use the web and your integrations."
+            : "The sandbox this chat runs on: its files, shell and tools."
         }
         side="top"
       >
@@ -329,7 +329,7 @@ export function MachinePicker({
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-medium">No machine</div>
+                  <div className="font-medium">No sandbox</div>
                   <div className="text-xs text-muted-foreground">Web &amp; integrations · can&apos;t read or change files</div>
                 </div>
                 {noMachine && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}

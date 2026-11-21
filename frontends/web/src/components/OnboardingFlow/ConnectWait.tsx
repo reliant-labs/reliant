@@ -28,12 +28,12 @@ export function connectionFacts(input: {
       : "Reliant's servers: reachable.",
   );
   if (input.machines.length === 0) {
-    lines.push("Machines on your account: none yet.");
+    lines.push("Agent sandboxes on your account: none yet.");
   } else {
     const states = input.machines
       .map((m) => STATUS_LABEL[m.status] ?? "unknown")
       .join(", ");
-    lines.push(`Machines on your account: ${input.machines.length} (${states}).`);
+    lines.push(`Agent sandboxes on your account: ${input.machines.length} (${states}).`);
   }
   if (input.desktop) {
     lines.push(

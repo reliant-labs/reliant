@@ -84,8 +84,9 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   // has no `/m/*` twin on purpose: its chrome collapses to an off-canvas nav
   // below `md` (forge-ui/sidebar_layout.tsx), so the one console serves both,
   // and redirecting it would make Apps and Observability unreachable from a
-  // phone — which is what this list used to do. /apps, the list of apps the
-  // console opens from, is one responsive page for the same reason.
+  // phone — which is what this list used to do. /projects, the list of apps
+  // the console opens from (the drawer's Apps), is one responsive page for the
+  // same reason, and so were the retired /apps and /sites it replaced.
   const PRESERVED = [
     "/auth",
     "/oauth",
@@ -102,11 +103,13 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/accept-invite",
     "/design-sandbox",
     "/forge",
+    "/projects",
     "/apps",
     "/sites",
-    // A row of the one nav (U6e) with no phone twin: the org's Usage &
-    // billing is a page of the shell, which fits a phone, so the nav's drawer
-    // opens it rather than the chat list.
+    // Rows of the one nav (U6e) with no phone twin: Connectors and the org's
+    // Usage & billing are pages of the shell, which fits a phone, so the nav's
+    // drawer opens them rather than the chat list.
+    "/connectors",
     "/usage",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

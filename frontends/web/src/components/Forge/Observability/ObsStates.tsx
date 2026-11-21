@@ -468,7 +468,7 @@ export function ObsError({
       }
     >
       <p>{copy.body}</p>
-      {detail && <p className="break-words font-mono text-2xs">{detail}</p>}
+      {detail && <p className="break-words font-mono text-meta">{detail}</p>}
     </StateFrame>
   );
 }
@@ -482,7 +482,7 @@ export function OperatorBadge({ provenance }: { provenance: Provenance }) {
   const label = provenance.source || "operator";
   return (
     <span
-      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-ink-muted"
+      className="shrink-0 rounded border border-border px-1 py-px font-sans text-meta text-ink-muted"
       title="Reliant operator data: platform telemetry, not this app's"
       data-testid="obs-operator-badge"
     >
@@ -537,7 +537,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
       role="status"
       data-testid="obs-as-of"
       title="The hourly query allowance is used up, so this is the last result that loaded. It updates by itself once the allowance refills."
-      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-ink-muted ${className ?? ""}`}
+      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-meta text-ink-muted ${className ?? ""}`}
     >
       <PauseCircle className="h-3 w-3" aria-hidden="true" />
       Paused{updatedAt ? ` · as of ${formatClock(updatedAt)}` : ""} · query budget resets at {formatClock(state.resetsAtMs)}

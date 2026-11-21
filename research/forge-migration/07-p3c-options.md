@@ -1,7 +1,7 @@
 # P3c — composing reliant's handlers through forge: options
 
 Status: research, 2026-10-15. Pinned forge `fed5bd9f`. Paths relative to the reliant root.
-Forge facts come from `forge skill load services|architecture` and
+Forge facts come from `forge agent skill load services|architecture` and
 `forge project libraries serverkit mountkit`. None come from forge's source.
 
 ## TL;DR

@@ -21,7 +21,7 @@
  * over time, which another workstream fills (UserActivitySlot below).
  */
 
-import { useCallback, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Layers, Users } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -75,10 +75,6 @@ export function UsersPage() {
  */
 export function ScopedIdentity({ layout }: { layout: IdentityLayout }) {
   const { env, roster, setEnv, href } = useForgeConsole();
-  const envNameById = useCallback(
-    (id: string) => roster.envs.find((candidate) => candidate.live?.id === id)?.name,
-    [roster.envs]
-  );
 
   if (roster.isLoading || roster.resolvingName) {
     return (
@@ -148,7 +144,6 @@ export function ScopedIdentity({ layout }: { layout: IdentityLayout }) {
         lifecycle={scoped.lifecycle}
         live={scoped.live}
         liveLoading={roster.live.isLoading}
-        envNameById={envNameById}
         layout={layout}
       />
     </>

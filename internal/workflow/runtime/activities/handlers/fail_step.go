@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -29,6 +30,11 @@ type FailStepInput struct {
 	LoopNodeID    string `json:"loop_node_id,omitempty" reliant:"-"`
 	LoopIteration int    `json:"loop_iteration,omitempty" reliant:"-"`
 	NodePath      string `json:"node_path,omitempty" reliant:"-"`
+	// Telemetry names the run the failing node belongs to; the wrapper
+	// records its root run id on the step row (step_executions.run_id), so
+	// the failure is this run's and never the next run's on the reused
+	// workflow id.
+	Telemetry *types.RunTelemetry `json:"telemetry,omitempty" reliant:"-"`
 }
 
 // FailStepOutput is the output from FailStep activity (always fails)
