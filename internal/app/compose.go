@@ -684,6 +684,7 @@ func (g *Graph) newUserChain() (*grpcserver.UserChain, error) {
 		Auth:                g.UserAuth(),
 		AllowedEmailDomains: g.ApiServerConfig.GetAllowedEmailDomains(),
 		Logger:              g.Log,
+		ClientVersions:      g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -715,7 +716,8 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		// Every request's context carries membership (authz).
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
-		Policies: g.OrgPolicyResolver(),
+		Policies:       g.OrgPolicyResolver(),
+		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 

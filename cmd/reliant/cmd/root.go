@@ -103,8 +103,8 @@ Reliant server components.`,
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
 	machineCmd, githubCmd, providersCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newChatCmd(), newIntegrationsCmd()
-	mcpCmd, modelsCmd := newMCPCmd(), newModelsCmd()
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd)
+	mcpCmd, modelsCmd, worktreeCmd := newMCPCmd(), newModelsCmd(), newWorktreeCmd(deps)
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd)
 	for _, c := range rootCommands(deps) {
 		root.AddCommand(c)
 	}
@@ -123,6 +123,7 @@ Reliant server components.`,
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
 	root.AddCommand(chatCmd)
+	root.AddCommand(worktreeCmd)
 
 	// Commands whose files register themselves (registerCommand): `db`.
 	for _, f := range registeredCommands {
@@ -192,8 +193,8 @@ func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.Reap
 }
 
 // worktreeReclaimConfig is the root config's machine-wide worktree reclaim
-// (internal/worktreereclaim/sweep.go), which rides the storage reaper's
-// schedule. A value it cannot use is named in a warning and replaced by its
+// (internal/worktreereclaim/sweep.go), which runs on the storage reaper's
+// schedule (in mode on, also where the reaper is off). A value it cannot use is named in a warning and replaced by its
 // default; it never stops the daemon.
 func worktreeReclaimConfig(cfg *config.ReliantConfig) worktreereclaim.SweepConfig {
 	wr := cfg.GetWorktreeReclaim()

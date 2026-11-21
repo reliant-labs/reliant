@@ -248,6 +248,12 @@ var corsAllowedHeaders = []string{
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
 	"X-Daemon-Last-Seen",
+	// Which client is calling and its version, `<kind>/<version>`
+	// (internal/clientversion). Every first-party client sends it on every
+	// reliant.v1 call; the server judges it against its minimums
+	// (ClientVersionPolicy). Missing here, a client that sends it fails CORS
+	// on every RPC.
+	"Reliant-Client",
 }
 
 // corsExposedHeaders are the response headers cross-origin JavaScript may

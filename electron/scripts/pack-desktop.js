@@ -16,7 +16,7 @@
 // ## What it owns, and what it does not
 //
 // It owns the electron-builder invocation and nothing around it. Checkout,
-// artifact downloads, `npm ci`, the release config, secrets, caches and the
+// artifact downloads, `pnpm install`, the release config, secrets, caches and the
 // prebuild publish stay with the caller, because they differ per caller: CI
 // downloads the backend and renderer other jobs built, a local build makes
 // them (see "Prerequisites"). Every environment variable electron-builder
@@ -29,7 +29,7 @@
 //               steps ran.
 //   win         `.\node_modules\.bin\electron-builder.cmd ...` through
 //               cmd.exe, exactly what the PowerShell step ran: PowerShell
-//               starts a .cmd through cmd.exe too, and npm's .cmd shim is
+//               starts a .cmd through cmd.exe too, and the package manager's .cmd shim is
 //               what picks node and adjusts PATHEXT for electron-builder. It
 //               is not launched through npx (the step avoided npx on Windows)
 //               or through a POSIX shell: Trusted Signing runs inside
@@ -50,23 +50,23 @@
 // disk; electron-builder only warns about a missing extraResources source and
 // ships an app without it:
 //
-//   node_modules/.bin/electron-builder   `npm ci` in electron/
+//   node_modules/.bin/electron-builder   `pnpm install` in electron/
 //   resources/server/<plat>-<arch>/      both arches of the backend
 //     reliant-backend[.exe]              (release.yml's build-backend, or
 //                                        ../scripts/build-electron.sh <plat>)
 //   ../frontends/web/dist/index.html     the renderer (release.yml's web-dist
 //                                        artifact, or `pnpm install` and
-//                                        `npm run build` in frontends/web)
+//                                        `pnpm run build` in frontends/web)
 //   src/build-config.js,                 generate-build-config.mjs (the
 //   src/release-renderer-config.js       generate-build-config action, or
 //                                        `node scripts/with-release-config.mjs
-//                                        npm run build:config`)
+//                                        pnpm run build:config`)
 //
 // release.yml's earlier steps produce each of these, so in CI the check never
 // fires; it is what turns a forge build on a fresh checkout into a clear
 // refusal instead of an installer without a backend.
 //
-// Self-test: test/pack-desktop.test.js (part of `npm test`).
+// Self-test: test/pack-desktop.test.js (part of `pnpm test`).
 
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
