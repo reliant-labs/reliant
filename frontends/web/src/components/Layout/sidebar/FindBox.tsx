@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The nav's Find box, at its very top (U6c, owner item 7: Vercel's "Find  F").
+ * The nav's Find box, under the org row (U6c, owner item 7: Vercel's "Find  F").
  * It opens the existing command palette (the keyboard host's, so it searches
  * the same commands and settings everywhere). F opens it from anywhere you are
  * not typing; the palette's own chord still works.
@@ -37,7 +37,7 @@ export function FindBox() {
   }, [host]);
 
   return (
-    <div className="shrink-0 px-2 pb-1 pt-2">
+    <div className="shrink-0 px-2 py-1">
       <button
         type="button"
         onClick={open}
