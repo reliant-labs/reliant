@@ -31,9 +31,7 @@ service ForgeService {
 
   // VerifyEnv reconciles one environment against its live cluster.
   rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS"}
-    };
+    option (forge.v1.method) = {activity: {none: "reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS"}};
   }
 
   // ListSecrets returns declared/present/inert secrets for an environment.
@@ -131,9 +129,7 @@ service ForgeService {
   // What comes back is the plan plus its digest. Show the plan, let a human
   // approve THAT, and send the digest to StartDeploy.
   rpc StartDeployPlan(StartForgeDeployPlanRequest) returns (StartForgeDeployResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "builds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event"}
-    };
+    option (forge.v1.method) = {activity: {none: "builds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event"}};
   }
 
   // StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,

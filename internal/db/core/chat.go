@@ -341,6 +341,21 @@ type ArchivedChatInfo struct {
 	WorktreeDeletedAt *time.Time `json:"worktree_deleted_at,omitempty"`
 }
 
+// ArchivedChatCursor is a position in the archived chat list: the last listed
+// chat's updated time and id, the list's sort key.
+type ArchivedChatCursor struct {
+	UpdatedAt time.Time
+	ChatID    string
+}
+
+// ArchivedChatPage pages the archived chat list. Limit 0 lists every archived
+// chat, the unpaged read clients made before paging; After continues past a
+// previous page's last chat.
+type ArchivedChatPage struct {
+	Limit int
+	After *ArchivedChatCursor
+}
+
 // ChatFilters contains options for filtering chats.
 type ChatFilters struct {
 	UserID    string

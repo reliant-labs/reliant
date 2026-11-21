@@ -198,6 +198,19 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 // ?1 narrows it to one org ("" lists every org), and ?2 also lists the chats
 // with no org yet, as core.OrgScope decides: one statement text either way.
 //
+// Paged by keyset on (updated_at, id): ?3/?4 are the previous page's last
+// chat (NULL for the first page) and ?5 the row limit (NULL lists every
+// archived chat, the unpaged read). A user can own tens of thousands of
+// archived chats, almost all automation runs, so the rows come from
+// idx_chats_user_archived, which leaves those runs out, and the view's
+// per-chat columns are computed for the page alone. That index is partial on
+// base columns, and the view's origin is not one (it falls back to the launch
+// event's kind), so the read is over chats k, joined to the view by id: k's
+// origin/adopted_at clause is the base-column half of list_in_sidebar, which
+// the planner needs to prove the predicate. It never drops a chat
+// list_in_sidebar keeps: a recorded origin other than USER lists only once
+// adopted.
+//
 // The view's columns are named, never c.*: migrations re-create this view
 // with new columns, and a star prepared before one fails after it
 // (columns.go).
@@ -206,30 +219,51 @@ SELECT
     ` + columnsOf[ChatsWithActivity]("c") + `,
     COALESCE(w.name, c.archived_worktree_name, p.name) AS worktree_name,
     w.deleted_at AS worktree_deleted_at
-FROM chats_with_activity c
+FROM chats k
+JOIN chats_with_activity c ON c.id = k.id
 LEFT JOIN worktrees w ON c.worktree_id = w.id
 LEFT JOIN projects p ON c.project_id = p.id
-WHERE c.state = 3
-  AND c.user_id = ?0
+WHERE k.state = 3
+  AND k.user_id = ?0
+  AND (k.origin IS NULL OR k.origin = 1 OR k.adopted_at IS NOT NULL)
   AND c.list_in_sidebar
   AND (?1 = '' OR c.org_id = ?1 OR (?2 AND c.org_id IS NULL))
   AND (p.id IS NULL OR p.delete_after IS NULL)
-ORDER BY c.updated_at DESC`
+  AND (?3::timestamptz IS NULL OR (k.updated_at, k.id) < (?3::timestamptz, ?4::text))
+ORDER BY k.updated_at DESC, k.id DESC
+LIMIT ?5`
 
 // ListArchivedChats lists the user's archived chats, most recently updated
-// first: those of org's organization, or every one when org is nil.
-func ListArchivedChats(ctx context.Context, db orm.Context, userID string, org *core.OrgScope) ([]*core.ArchivedChatInfo, error) {
+// first: those of org's organization, or every one when org is nil. With
+// page.Limit set it returns at most that many, after page.After, and whether
+// more follow; with no limit it returns every one and false.
+func ListArchivedChats(ctx context.Context, db orm.Context, userID string, org *core.OrgScope, page core.ArchivedChatPage) ([]*core.ArchivedChatInfo, bool, error) {
 	orgID, unassigned := "", false
 	if org != nil {
 		orgID, unassigned = org.OrgID, org.IncludeUnassigned
+	}
+	var afterAt *time.Time
+	var afterID *string
+	if page.After != nil {
+		afterAt, afterID = &page.After.UpdatedAt, &page.After.ChatID
+	}
+	// One row past the page says whether another follows.
+	var limit *int
+	if page.Limit > 0 {
+		n := page.Limit + 1
+		limit = &n
 	}
 	var rows []struct {
 		ChatsWithActivity
 		WorktreeName      *string    `bun:"worktree_name"`
 		WorktreeDeletedAt *time.Time `bun:"worktree_deleted_at"`
 	}
-	if err := db.Bun().NewRaw(listArchivedChatsSQL, userID, orgID, unassigned).Scan(ctx, &rows); err != nil {
-		return nil, fmt.Errorf("failed to list archived chats: %w", err)
+	if err := db.Bun().NewRaw(listArchivedChatsSQL, userID, orgID, unassigned, afterAt, afterID, limit).Scan(ctx, &rows); err != nil {
+		return nil, false, fmt.Errorf("failed to list archived chats: %w", err)
+	}
+	more := page.Limit > 0 && len(rows) > page.Limit
+	if more {
+		rows = rows[:page.Limit]
 	}
 	items := make([]*core.ArchivedChatInfo, len(rows))
 	for i := range rows {
@@ -240,7 +274,7 @@ func ListArchivedChats(ctx context.Context, db orm.Context, userID string, org *
 			WorktreeDeletedAt: rows[i].WorktreeDeletedAt,
 		}
 	}
-	return items, nil
+	return items, more, nil
 }
 
 // GetChatActivity returns the chat's computed activity (0, IDLE, when the view

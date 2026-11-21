@@ -2,14 +2,7 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
-
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -21,51 +14,6 @@ import (
 // router: this server has no way to reach a daemon.
 func errNoRouter() error {
 	return svcerr.Unavailable("no daemon router: this server cannot reach a daemon")
-}
-
-// StartOAuthFlow proxies the OAuth flow to the daemon which starts a localhost
-// callback server and opens the browser.
-func (s *Service) StartOAuthFlow(
-	ctx context.Context,
-	req *connect.Request[reliantv1.StartOAuthFlowRequest],
-) (*connect.Response[reliantv1.StartOAuthFlowResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.Unauthenticated("user ID not found in context")
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"authorize_url_template": req.Msg.AuthorizeUrlTemplate,
-	})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-
-	if s.deps.Router == nil {
-		return nil, errNoRouter()
-	}
-	// Use a generous NATS-level timeout (1 hour). OAuth flows have no
-	// application-level timeout — the frontend AbortController handles
-	// cancellation, which propagates via ctx.
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, 3_600_000)
-	if err != nil {
-		return nil, oauthDaemonError("OAuth flow failed", err)
-	}
-
-	var resp struct {
-		Code        string `json:"code"`
-		State       string `json:"state"`
-		RedirectURI string `json:"redirect_uri"`
-	}
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
-	}
-
-	return connect.NewResponse(&reliantv1.StartOAuthFlowResponse{
-		Code:        resp.Code,
-		State:       resp.State,
-		RedirectUri: resp.RedirectURI,
-	}), nil
 }
 
 // oauthDaemonError maps a failed OAuth daemon command onto the svcerr kind
@@ -101,73 +49,3 @@ func oauthDaemonError(doing string, err error) error {
 // the listener is bound or closed — no human is in the loop — so the generous
 // hour StartOAuthFlow needs would only delay reporting a dead daemon.
 const openHelperTimeoutMs = 10_000
-
-// OpenOAuthHelper asks the user's daemon to open its localhost OAuth helper
-// port for one linking session.
-func (s *Service) OpenOAuthHelper(
-	ctx context.Context,
-	req *connect.Request[reliantv1.OpenOAuthHelperRequest],
-) (*connect.Response[reliantv1.OpenOAuthHelperResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.Unauthenticated("user ID not found in context")
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"web_origin": req.Msg.WebOrigin,
-	})
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
-	}
-
-	if s.deps.Router == nil {
-		return nil, errNoRouter()
-	}
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.open_oauth_helper", payload, openHelperTimeoutMs)
-	if err != nil {
-		return nil, oauthDaemonError("open OAuth helper", err)
-	}
-
-	var resp struct {
-		Port           int32  `json:"port"`
-		Addr           string `json:"addr"`
-		AlreadyRunning bool   `json:"already_running"`
-	}
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
-	}
-
-	return connect.NewResponse(&reliantv1.OpenOAuthHelperResponse{
-		Port:           resp.Port,
-		Addr:           resp.Addr,
-		AlreadyRunning: resp.AlreadyRunning,
-	}), nil
-}
-
-// CloseOAuthHelper closes the helper port when the linking session ends.
-func (s *Service) CloseOAuthHelper(
-	ctx context.Context,
-	_ *connect.Request[reliantv1.CloseOAuthHelperRequest],
-) (*connect.Response[reliantv1.CloseOAuthHelperResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return nil, svcerr.Unauthenticated("user ID not found in context")
-	}
-
-	if s.deps.Router == nil {
-		return nil, errNoRouter()
-	}
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "auth.close_oauth_helper", []byte("{}"), openHelperTimeoutMs)
-	if err != nil {
-		return nil, oauthDaemonError("close OAuth helper", err)
-	}
-
-	var resp struct {
-		Closed bool `json:"closed"`
-	}
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
-	}
-
-	return connect.NewResponse(&reliantv1.CloseOAuthHelperResponse{Closed: resp.Closed}), nil
-}

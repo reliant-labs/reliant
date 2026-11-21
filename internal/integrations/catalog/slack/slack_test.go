@@ -409,6 +409,77 @@ func TestConversationsHistoryDefaultsAndOmissions(t *testing.T) {
 	assert.Equal(t, url.Values{"channel": {"C0GENERAL"}, "limit": {"100"}}, f.only().Query, "no oldest/latest unless given")
 }
 
+// The thread a bot was mentioned in: parent first, then the replies, across
+// cursor pages.
+func TestConversationsRepliesReadsTheThread(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/conversations.replies", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") == "bmV4dA" {
+			slackReply(`{"ok": true, "messages": [
+			  {"type": "message", "user": "U0ADA", "text": "<@U0BOT> can you look?", "ts": "1700000002.000300", "thread_ts": "1700000000.000100", "parent_user_id": "U0BOB"}],
+			  "has_more": false, "response_metadata": {"next_cursor": ""}}`)(w, r)
+			return
+		}
+		slackReply(`{"ok": true, "messages": [
+		  {"type": "message", "user": "U0BOB", "text": "deploy failed", "ts": "1700000000.000100", "thread_ts": "1700000000.000100", "reply_count": 2},
+		  {"type": "message", "subtype": "bot_message", "bot_id": "B0CI", "text": "build 12 red", "ts": "1700000001.000200", "thread_ts": "1700000000.000100"}],
+		  "has_more": true, "response_metadata": {"next_cursor": "bmV4dA"}}`)(w, r)
+	})
+	out := data(t, f.run("conversations.replies", map[string]any{"channel": "C0GENERAL", "ts": "1700000000.000100", "limit": 2}))
+
+	reqs := f.requests()
+	require.Len(t, reqs, 2)
+	assert.Equal(t, "GET", reqs[0].Method)
+	assert.Equal(t, url.Values{"channel": {"C0GENERAL"}, "ts": {"1700000000.000100"}, "limit": {"2"}}, reqs[0].Query)
+	assert.Equal(t, "bmV4dA", reqs[1].Query.Get("cursor"))
+	assert.Equal(t, "1700000000.000100", reqs[1].Query.Get("ts"), "every page names the thread")
+
+	items, _ := out["items"].([]any)
+	require.Len(t, items, 3)
+	assert.Equal(t, map[string]any{
+		"ts": "1700000000.000100", "user": "U0BOB", "bot_id": nil, "subtype": nil, "text": "deploy failed",
+		"thread_ts": "1700000000.000100", "reply_count": 2.0,
+	}, items[0])
+	assert.Equal(t, map[string]any{
+		"ts": "1700000001.000200", "user": nil, "bot_id": "B0CI", "subtype": "bot_message", "text": "build 12 red",
+		"thread_ts": "1700000000.000100", "reply_count": 0.0,
+	}, items[1])
+	assert.Equal(t, "<@U0BOT> can you look?", items[2].(map[string]any)["text"])
+}
+
+func TestConversationsRepliesWindowAndRefusals(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/conversations.replies", slackReply(`{"ok": true, "messages": [], "response_metadata": {"next_cursor": ""}}`))
+	f.run("conversations.replies", map[string]any{"channel": "C0GENERAL", "ts": "1700000000.000100", "oldest": "1700000001"})
+	assert.Equal(t, url.Values{"channel": {"C0GENERAL"}, "ts": {"1700000000.000100"}, "limit": {"100"}, "oldest": {"1700000001"}},
+		f.only().Query, "limit defaults to 100; latest is absent unless given")
+
+	for name, p := range map[string]map[string]any{
+		"no ts":         {"channel": "C0GENERAL"},
+		"ts not a ts":   {"channel": "C0GENERAL", "ts": "yesterday"},
+		"channel name":  {"channel": "#general", "ts": "1700000000.000100"},
+		"limit too big": {"channel": "C0GENERAL", "ts": "1700000000.000100", "limit": 201},
+	} {
+		_, err := f.try("conversations.replies", p)
+		assert.Error(t, err, name)
+	}
+	assert.Len(t, f.requests(), 1, "nothing is sent for a refused call")
+}
+
+// Reading a thread is a read: an agent tool that changes nothing.
+func TestConversationsRepliesIsAReadTool(t *testing.T) {
+	resolved, err := catalog.MustBuiltin().Resolve("slack/conversations.replies@1")
+	require.NoError(t, err)
+	for _, a := range resolved.Manifest.GetActions() {
+		if a.GetId() == "conversations.replies" {
+			assert.False(t, a.GetMutates())
+			assert.True(t, a.GetTool().GetExpose())
+			return
+		}
+	}
+	t.Fatal("conversations.replies is not in the slack manifest")
+}
+
 // A later page that fails stops the walk as an error, not a short list.
 func TestPaginationStopsOnAFailedPage(t *testing.T) {
 	f := newFake(t)
@@ -438,6 +509,7 @@ var minimal = map[string]map[string]any{
 	"user.lookup_by_email":  {"email": "ada@acme.example"},
 	"conversations.list":    {},
 	"conversations.history": {"channel": "C0GENERAL"},
+	"conversations.replies": {"channel": "C0GENERAL", "ts": "1700000000.000100"},
 }
 
 // Adding an action without extending `minimal` (and so the error tests)

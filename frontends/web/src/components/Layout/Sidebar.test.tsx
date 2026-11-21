@@ -62,6 +62,14 @@ const mockChatListData = [
 ];
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
+// The archived read's paging state, and the chat detail useChat answers.
+const mockArchivedPaging = { hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() };
+const mockUseArchivedChats = vi.fn((_options?: { enabled?: boolean }) => ({
+  data: mockArchivedChatData,
+  isFetched: true,
+  ...mockArchivedPaging,
+}));
+let mockOpenedChat: Record<string, unknown> | undefined;
 
 // Stable, as a query result is: a new array each render would re-run the
 // sidebar's effects on every render.
@@ -72,12 +80,12 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
-  useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
+  useArchivedChats: (options?: { enabled?: boolean }) => mockUseArchivedChats(options),
   usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
-  useChat: () => ({ data: undefined }),
+  useChat: () => ({ data: mockOpenedChat }),
 }));
 
 // The Inbox nav item reads its own counts; the Sidebar test only checks it is
@@ -107,6 +115,8 @@ describe("Sidebar selected chat scroll", () => {
     vi.clearAllMocks();
     scrollIntoViewMock.mockReset();
     mockArchivedChatData.length = 0;
+    mockArchivedPaging.hasNextPage = false;
+    mockOpenedChat = undefined;
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -231,6 +241,52 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.getByText("Archived chat")).toBeInTheDocument();
     expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
     useWorkspaceStateStore.setState({ projectFilterId: null });
+  });
+
+  it("reads the archived list only while the Archived tab is open, and pages it on request", () => {
+    mockArchivedChatData.push({
+      id: "chat-archived",
+      title: "Archived chat",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+      unread: false,
+      state: ChatState.ARCHIVED,
+      projectId: "project-1",
+    });
+    mockArchivedPaging.hasNextPage = true;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // Closed: every render asked for it disabled.
+    expect(mockUseArchivedChats.mock.calls.length).toBeGreaterThan(0);
+    for (const [options] of mockUseArchivedChats.mock.calls) expect(options).toEqual({ enabled: false });
+    expect(screen.queryByTestId("archived-load-more")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
+    fireEvent.click(screen.getByText("Archived chats"));
+    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
+
+    fireEvent.click(screen.getByTestId("archived-load-more"));
+    expect(mockArchivedPaging.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the Archived tab for an archived chat opened from elsewhere", () => {
+    // Opened from the Inbox: in no loaded list, archived by its own detail.
+    useChatStore.setState({ activeChatId: "chat-old" });
+    mockOpenedChat = { id: "chat-old", title: "Old work", state: ChatState.ARCHIVED, projectId: "project-1" };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
+    expect(screen.getByRole("region", { name: "Archived chats" })).toBeInTheDocument();
   });
 
   it("closes the list menu after choosing an option, and on Escape", () => {

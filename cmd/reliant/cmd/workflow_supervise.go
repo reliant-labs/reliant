@@ -53,6 +53,9 @@ func (c *superviseClients) rpcError(err error, what string) error {
 		return nil
 	}
 	err = sdkCause(err)
+	if upgrade, ok := asUpgradeRequired(err); ok {
+		return upgrade
+	}
 	switch connect.CodeOf(err) {
 	case connect.CodeNotFound:
 		return fmt.Errorf("%s: not found on %s — check the execution id, or %s may not have access",
