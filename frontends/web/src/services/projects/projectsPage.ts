@@ -53,8 +53,21 @@ export function appSourceRemote(app: AppChipModel): string | null {
   return app.hosted?.sources.find((source) => source.remote !== "")?.remote ?? null;
 }
 
-/** The clone URL of a canonical `host/owner/repo` remote. */
-export function cloneUrlOf(remote: string): string {
+// A canonical remote: a hostname (letters, digits, dots, hyphens; an
+// optional port), then two or more path segments (owner/repo, or a group's
+// subgroups) of letters, digits, dots, underscores and hyphens, never `.` or
+// `..`. No scheme, credentials, query, fragment, `@` or backslash.
+const CANONICAL_REMOTE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?(?:\/[A-Za-z0-9._-]+){2,}$/i;
+
+/**
+ * The clone URL of a canonical `host/owner/repo` remote, or null when the
+ * server's string is not one. The remote comes from recorded release
+ * metadata, so it is checked before it pre-fills the clone flow: anything
+ * else (a scheme, credentials, `..`, a query) is not offered.
+ */
+export function cloneUrlOf(remote: string): string | null {
+  if (!CANONICAL_REMOTE.test(remote)) return null;
+  if (remote.split("/").some((segment) => segment === "." || segment === "..")) return null;
   return `https://${remote}`;
 }
 

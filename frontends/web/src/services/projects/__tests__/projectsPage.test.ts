@@ -77,6 +77,29 @@ describe("Get the code", () => {
     expect(cloneUrlOf("github.com/acme/ci")).toBe("https://github.com/acme/ci");
   });
 
+  it.each([
+    "gitlab.example.com/group/sub/repo",
+    "git.example.com:8443/acme/repo.git",
+  ])("clones a canonical remote (%s)", (remote) => {
+    expect(cloneUrlOf(remote)).toBe(`https://${remote}`);
+  });
+
+  it.each([
+    "https://github.com/acme/ci",
+    "user:token@github.com/acme/ci",
+    "github.com@evil.example/acme/ci",
+    "evil.example/../github.com/acme",
+    "github.com/acme/ci?ref=x",
+    "github.com/acme/ci#x",
+    "github.com/acme",
+    "localhost/acme/ci",
+    "github.com\\acme\\ci",
+    "javascript:alert(1)//x/y",
+    "",
+  ])("offers no clone URL for a remote that is not canonical (%s)", (remote) => {
+    expect(cloneUrlOf(remote)).toBeNull();
+  });
+
   it("has no remote for an app with no recorded source", () => {
     const shop = CATALOG.rows.find((r) => r.key === "app:shop");
     if (shop?.kind !== "app") throw new Error("fixture");

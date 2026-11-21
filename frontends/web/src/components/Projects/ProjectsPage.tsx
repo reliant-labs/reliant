@@ -87,7 +87,9 @@ export function useGetTheCode(): (app: AppChipModel) => void {
   const canClone = daemons.some((daemon) => isCloudDaemon(daemon.daemonType));
   return (app) => {
     const remote = appSourceRemote(app);
-    openAddProject(remote && canClone ? "clone" : undefined, remote ? { repoUrl: cloneUrlOf(remote) } : undefined);
+    // A remote that is not a canonical host/owner/repo pre-fills nothing.
+    const repoUrl = remote ? cloneUrlOf(remote) : null;
+    openAddProject(repoUrl && canClone ? "clone" : undefined, repoUrl ? { repoUrl } : undefined);
   };
 }
 
