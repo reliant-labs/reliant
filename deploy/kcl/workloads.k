@@ -113,7 +113,8 @@ _pod = {
 # this repo and of control-plane binds `api_server` below, so the check runs on
 # the env each binding finally gives it. The tier is the one the process will
 # read (RELIANT_ENV, else NODE_ENV), parsed as internal/runenv.Parse does:
-# unset or unrecognised is prod.
+# unset or unrecognised is prod. The web half, the VITE_DEV_SIGN_IN build flag
+# on a frontend, is refused outside dev by dev_sign_in.k's only_in_dev.
 DEV_SIGNER_ENV = "AUTH_DEV_JWT_SECRET"
 _DEV_TIER_NAMES = ["dev", "development", "local", "e2e"]
 
