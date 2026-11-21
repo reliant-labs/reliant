@@ -508,6 +508,12 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant mcp list`](#reliant-mcp-list) | List the project's MCP servers and their status |
 | [`reliant mcp restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
 | [`reliant mcp tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+| [`reliant models`](#reliant-models) | List the models your chats and workflows can use, and your machines' local model servers |
+| [`reliant models endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`reliant models endpoint add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+| [`reliant models list`](#reliant-models-list) | List the models you can use |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -1082,6 +1088,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--attach `<dir>` links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .
+
 ```
 reliant daemon start [flags]
 ```
@@ -1091,6 +1105,7 @@ reliant daemon start [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--attach` | `string` | - | Once connected, link this folder (a checkout) as a project on this machine |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
 | `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=`<name>` joins that machine pool |
@@ -21805,6 +21820,162 @@ reliant mcp tools <server> [flags]
 
 ---
 
+## reliant models
+
+List the models your chats and workflows can use, and your machines' local model servers
+
+Lists the models your chats and workflow steps can run on, and manages the
+local model servers (Ollama, LM Studio, llama.cpp, vLLM, any OpenAI-compatible
+server) your machines look for.
+
+A local model's id is its name on the server plus @local, e.g.
+"qwen3:latest@local": use it as a workflow step's model id. Reliant's servers
+reach it through the machine whose daemon found it, so that machine must be
+online when the step runs. 'models list --local' shows each local model with the
+machine serving it.
+
+A machine looks for servers on localhost's well-known ports (Ollama 11434,
+LM Studio 1234, llama.cpp 8080, vLLM 8000) by itself. 'models endpoint add'
+adds one it would not find. Endpoints with an API key, or served from the
+internet, are added in the app: Settings -> AI providers -> Local & custom -> Add custom endpoint.
+
+```
+reliant models
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`endpoint`](#reliant-models-endpoint) | List, add and remove the local model servers your machines look for |
+| [`list`](#reliant-models-list) | List the models you can use |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant models endpoint
+
+List, add and remove the local model servers your machines look for
+
+A machine looks for local model servers on localhost's well-known ports by
+itself. An endpoint is a server it would not find (another port, or another host
+the machine reaches, e.g. http://gpu-box.lan:8000/v1). It is kept in that
+machine's ~/.reliant/config.yaml (models.providers.local) and probed with the
+detected ones.
+
+```
+reliant models endpoint
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`add`](#reliant-models-endpoint-add) | Add a local model server a machine should look for |
+| [`list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
+| [`remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
+
+---
+
+#### reliant models endpoint add
+
+Add a local model server a machine should look for
+
+Adds the OpenAI-compatible base URL of a model server, as the machine sees it
+(e.g. http://localhost:9000/v1 or http://gpu-box.lan:8000/v1), to the servers the
+machine probes. The machine probes it at once; its chat models are then listed
+by 'reliant models list --local' as `<name>`@local.
+
+--machine names the machine by id or name; with one machine it may be left out.
+The machine must be online: its current servers are read from it before the
+list is changed, so nothing added elsewhere is lost.
+
+```
+reliant models endpoint add <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+#### reliant models endpoint list
+
+List each machine's local model servers, and your custom endpoints
+
+Lists each machine's local model servers: the ones it detected and the ones
+added to it, with the chat models each serves or why the machine could not reach
+it. Your custom endpoints (added in the app) are listed after them.
+
+```
+reliant models endpoint list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--machine` | `string` | - | Only this machine, by id or name |
+
+---
+
+#### reliant models endpoint remove
+
+Stop a machine looking for a local model server you added
+
+Removes a base URL added with 'models endpoint add' (or Add endpoint in the
+app) from the machine's servers. A detected server cannot be removed: it is found
+again on its well-known port. A server a custom endpoint reaches through this
+machine is removed by deleting that endpoint in the app.
+
+```
+reliant models endpoint remove <base-url> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--machine` | `string` | - | The machine, by id or name (default: your only machine) |
+
+---
+
+### reliant models list
+
+List the models you can use
+
+Lists the models your chats and workflow steps can run on: those of every
+provider you connected, and the local models your machines serve.
+
+--local lists only the local models, with the machine (or configured endpoint)
+serving each, whether it is online, and the provider pin that keeps a workflow
+step on it. A model whose machine is offline is listed and cannot run until the
+machine is back.
+
+```
+reliant models list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+| `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
+| `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
+
+---
+
 ## reliant preview-url
 
 Print the shareable preview URL for a local port
@@ -22864,11 +23035,14 @@ that server. Either way it is an rlat_ access token.
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —
 reused if one already exists there, or created on the fly — so no manual
-project setup is needed. --project-id takes precedence when both are given.
+project setup is needed. A project new to the server has no workflows until
+its machine syncs them, so the run waits for that, up to --sync-wait.
+--project-id takes precedence when both are given.
 
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached
 or created on that machine, which is the one that holds it. With --project-id
 the project must already be checked out on that machine; otherwise the run
 is refused before it starts.
@@ -22901,6 +23075,7 @@ reliant workflow run <workflow-name> [flags]
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |
 | `--project-id` | `string` | - | Project ID (takes precedence over --project-path) |
 | `--project-path` | `string` | - | Project directory path; resolves (find-or-create) to a project ID when --project-id is absent |
+| `--sync-wait` | `duration` | `2m0s` | With --project-path, how long to wait for a machine to sync a new project's workflows before giving up (0: don't wait) |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
 | `--title` | `string` | - | Title for the run (default: "`<workflow>` · \<first line of the message>") |
@@ -22974,15 +23149,17 @@ CLI and the app see the same scenarios. A sub-workflow ref (project://`<name>`)
 resolves by name: too, never by file name. Scenarios in the retired layouts
 (scenarios/`<file>`/, `<file>`_scenarios.yaml) are an error naming where they go.
 
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed `<workflow>`/`<scenario>` label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.
@@ -22997,7 +23174,7 @@ reliant workflow scenario run [workflow-path] [flags]
 |------|------|---------|-------------|
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first scenario failure |
-| `--filter` | `string` | - | Only run scenarios whose name contains this string |
+| `--filter` | `string` | - | Only run scenarios whose name, or `<workflow>`/`<scenario>` label, contains this string |
 | `--include-builtins` | `bool` | - | Also run builtin workflow scenarios |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each scenario |

@@ -12,7 +12,7 @@ The checks are Forge's own: `generate`, `lint`, `build` and `task test`. Forge d
 ## Before you begin
 
 - Reliant v1.21.3 or later, signed in ([Sign in and tokens](/cli/sign-in)), with a connected machine ([Run a machine from the terminal](/cli/run-a-machine)).
-- Go, Node.js and Docker on that machine. `reliant forge doctor` checks them.
+- Go, Node.js and Docker on that machine. `reliant forge project doctor` checks them.
 - A `forge` command on your `PATH`, if you will run the stack yourself afterwards; see [Troubleshooting](#troubleshooting).
 - An empty folder for the project. The workflow creates the project in place.
 - Model credit: a run takes tens of minutes on a flagship model, with up to six sub-agents at once. In an organization, a run asks before it moves to your own AI account (`reliant workflow funding`).
@@ -147,7 +147,7 @@ The checks are Forge's own: `generate`, `lint`, `build` and `task test`. Forge d
     The loop used all 7 iterations without a pass. The project stays in the folder, and the reviewer's last feedback names what is missing.
   </Accordion>
   <Accordion title="Stopped — External Issue">
-    The blocker was tooling or the environment, such as an app that would not start. Run `reliant forge doctor` and `reliant forge env up dev` in the project to see it.
+    The blocker was tooling or the environment, such as an app that would not start. Run `reliant forge project doctor` and `reliant forge env up dev` in the project to see it.
   </Accordion>
   <Accordion title="forge: not found in .forge/logs/dev/api.log">
     The API's hot-reload config calls `forge` by name. If you only have `reliant forge`, put a two-line script named `forge` on your `PATH` that runs `exec reliant forge "$@"`, then start the stack again.

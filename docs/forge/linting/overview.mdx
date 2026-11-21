@@ -96,13 +96,13 @@ A lane that gates fails the run when it reports an error. An advisory lane repor
 | `--quiet`, `-q` | Prints each failing lane, its error findings, and the verdict. A clean run is one line. |
 | `--scope PATH` | Reports only findings under `PATH` (repeatable) and lints only its Go packages. Whole-project lanes are skipped and named in the verdict. |
 | `--json` | Findings as JSON, with the same exit code as text mode. |
-| `--gate-json FILE` | Also writes the run as a gate document, for `forge gate record` or `forge env deploy --gate`. The human output and the exit code do not change. |
+| `--gate-json FILE` | Also writes the run as a gate document, for `forge release gate record` or `forge env deploy --gate`. The human output and the exit code do not change. |
 | `--strict` | Escalates advisory findings to errors, including a lane that could not run. |
 | `--skip-frontends` | Skips the whole frontend lane, for a backend-only gate that needs no Node toolchain. |
 | `--allow-skip LANE=REASON` | Accepts, by name and with a reason, that a gating lane may not run here. `lint.allow_skip` in `forge.yaml` is the project-level form. |
 | `--show-suppressed` | Lists every suppression in the project, with its reason. Runs no linter. |
 
-`forge tools install golangci-lint buf` installs missing tools; a gating lane that could not run fails the run.
+`forge machine tools install golangci-lint buf` installs missing tools; a gating lane that could not run fails the run.
 
 <Note>
 `forge lint` runs under the forge version your `forge.yaml` pins in `forge_version`. When the forge you invoke is a different version, both `forge` and `reliant forge` build the pinned forge once and hand the command to it. `--allow-version-skew` (or `FORGE_ALLOW_VERSION_SKEW=1`) runs the forge you invoked instead.
@@ -243,7 +243,7 @@ Some rules have their own escape hatch, named in their fix text and in the [refe
 
 ## Why this matters more when an agent writes the code
 
-An agent does not carry the memory of last session's bad query, and it has no instinct that a `string` filter field is wrong or that `slog.Info` loses the trace. What it has is a loop: edit, run a command, read the result, edit again. Every forge finding is written for that loop. It names the rule, the file and line, and the exact change, and many name a command that makes it (`forge lint --tracing --fix`, `forge fix connect-errors`, `forge fix narrow-deps`). Many rules also cover failures that give no signal at all: a misspelled `forge:` marker compiles and does nothing, and a migration numbered below the merged head applies nowhere. A model reading its own diff will not find these, and tests rarely do.
+An agent does not carry the memory of last session's bad query, and it has no instinct that a `string` filter field is wrong or that `slog.Info` loses the trace. What it has is a loop: edit, run a command, read the result, edit again. Every forge finding is written for that loop. It names the rule, the file and line, and the exact change, and many name a command that makes it (`forge lint --tracing --fix`, `forge lint fix connect-errors`, `forge lint fix narrow-deps`). Many rules also cover failures that give no signal at all: a misspelled `forge:` marker compiles and does nothing, and a migration numbered below the merged head applies nowhere. A model reading its own diff will not find these, and tests rarely do.
 
 ## Design decisions and trade-offs
 

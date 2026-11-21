@@ -128,7 +128,7 @@ func TestForgeEnvShapePassesForgeDocumentThrough(t *testing.T) {
 // commit with no further edit. Asserting against a forge that does not have
 // the command yet would fail for the one reason that is not a defect, and
 // deleting the test instead would mean the pin bump lands unguarded — which is
-// exactly how `forge secret list <env> --json` survived forge moving the env
+// exactly how `forge env secret list <env> --json` survived forge moving the env
 // to a required flag.
 func TestForgeEnvShapeArgvParsesAgainstEmbeddedForge(t *testing.T) {
 	args := forgeEnvShapeArgs{ProjectPath: "/p", Env: "prod"}.shapeArgs()
