@@ -24,8 +24,9 @@ Never add a workload or frontend here.
 """
 
 import forge
+import ..dev_sign_in as dsi
 
-output = forge.render(forge.Bundle {
+output = forge.render(dsi.only_in_dev("desktop", forge.Bundle {
     project = "reliant"
     env = "desktop"
     # Reliant cloud. The credential is a registry-only org token carrying only
@@ -34,4 +35,4 @@ output = forge.render(forge.Bundle {
     control_plane = forge.ControlPlane {}
     # Hosted: the maps go to the platform registry, not .forge/sourcemaps/.
     observability = forge.Observability {}
-})
+}))

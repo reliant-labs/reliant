@@ -200,7 +200,7 @@ export function MobileCreateWorkspaceSheet({
         aria-label="Dismiss"
         onClick={isCreating ? undefined : onClose}
         disabled={isCreating}
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-scrim"
       />
       <div
         role="dialog"
@@ -252,7 +252,7 @@ export function MobileCreateWorkspaceSheet({
             <div>
               <label
                 htmlFor="mobile-workspace-name"
-                className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="mb-1 block text-xs font-semibold text-muted-foreground"
               >
                 Name
               </label>

@@ -144,6 +144,13 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 		default:
 			return nil, auth.ErrInvalidPublicKey
 		}
+		validator, err := auth.WithDevSigner(validator, settings)
+		if err != nil {
+			return nil, err
+		}
+		if settings.DevJWTSecret != "" {
+			logging.Warn("[gRPC Auth] dev signer enabled: HS256 tokens signed with AUTH_DEV_JWT_SECRET are accepted (dev tier only)")
+		}
 		logging.Info("[gRPC Auth] Supabase JWT auth mode enabled")
 		return &AuthInterceptor{
 			validator:        validator,

@@ -282,7 +282,7 @@ const SEVERITY_TONE: Record<string, string> = {
 export function SeverityChip({ severity }: { severity: string }) {
   if (!severity) return null;
   return (
-    <span className={cn("rounded px-1.5 py-px text-2xs font-medium uppercase tracking-wide ring-1 ring-inset", SEVERITY_TONE[severity] ?? SEVERITY_TONE.info)}>
+    <span className={cn("rounded px-1.5 py-px text-2xs font-medium ring-1 ring-inset", SEVERITY_TONE[severity] ?? SEVERITY_TONE.info)}>
       {severity}
     </span>
   );
@@ -699,7 +699,7 @@ function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[]
           )}
         </div>
         <div>
-          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>
+          <h4 className="mb-1 text-xs font-medium text-ink-muted">Query</h4>
           {platform ? (
             <p className="text-xs text-ink-muted" data-testid="obs-rule-platform">
               {platform.off ? "Disabled in this environment. " : ""}Reliant raises this alert from its own records (

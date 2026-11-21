@@ -168,7 +168,7 @@ function SiteSummary({ heading, site, testId }: { heading: string; site: StaticS
   const name = label(site);
   return (
     <div className="min-w-0 rounded-lg border border-border/60 bg-background p-3" data-testid={testId}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{heading}</dt>
+      <dt className="text-xs font-medium text-muted-foreground">{heading}</dt>
       <dd className="mt-1 min-w-0 text-sm text-foreground">
         <span className="break-all">{name}</span>
       </dd>
