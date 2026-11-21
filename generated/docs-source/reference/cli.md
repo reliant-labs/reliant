@@ -491,6 +491,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
+| [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
+| [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
 | [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
@@ -502,6 +504,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
 | [`reliant machine stop`](#reliant-machine-stop) | Stop (suspend) a running machine |
+| [`reliant mcp`](#reliant-mcp) | Show a project's MCP servers and their tools, and restart one |
+| [`reliant mcp list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`reliant mcp restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`reliant mcp tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -21460,6 +21466,62 @@ reliant github token [flags]
 
 ---
 
+## reliant integrations
+
+Show the integration connections your steps and automations act through
+
+Shows your integration connections: the accounts at GitHub, Slack, Gmail and
+the rest that integration steps and integration triggers act through.
+
+Connecting or removing an account is done in the Reliant app (web or desktop):
+Settings → Integrations. An automation names the connection it listens
+through with `reliant trigger activate --connection <integration>=<id>`, and
+`reliant trigger get` shows the one it uses.
+
+```
+reliant integrations
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-integrations-list) | List your integration connections |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant integrations list
+
+List your integration connections
+
+Lists your integration connections: the integration, the account each acts as,
+its status, whether it is that integration's default, and its id.
+
+The default connection is the one an integration trigger listens through when
+its activation names none. With --org it also lists that organization's own
+connections (its Slack bot, its API keys), which its members may use by id.
+
+```
+reliant integrations list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--integration` | `string` | - | Only this integration's connections (e.g. github) |
+| `--json` | `bool` | - | Print JSON |
+| `--org` | `string` | - | Also list this organization's own connections |
+
+---
+
 ## reliant machine
 
 List, start, stop, resize, rename and label your machines, and manage machine pools
@@ -21683,6 +21745,95 @@ Stop (suspend) a running machine
 ```
 reliant machine stop <name|id>
 ```
+
+---
+
+## reliant mcp
+
+Show a project's MCP servers and their tools, and restart one
+
+Shows the MCP servers a project's agents can use, as the machine holding the
+project runs them: each server's status, where it is configured, and the tools
+it offers. 'restart' restarts one.
+
+Servers are configured in mcp.json: ~/.reliant/mcp.json (every project),
+<project>/.reliant/mcp.json (the project, checked in) and
+<project>/.reliant.local/mcp.json (yours, not checked in). An edit is applied
+when an agent's next turn loads the project's servers, so a restart is needed
+only to recover a server that stopped working. Settings -> MCP servers in the app
+manages the same servers.
+
+--project names the project by id, name or path; the default is the current
+directory.
+
+```
+reliant mcp
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-mcp-list) | List the project's MCP servers and their status |
+| [`restart`](#reliant-mcp-restart) | Restart an MCP server from its current config |
+| [`tools`](#reliant-mcp-tools) | List the tools an MCP server offers the project's agents |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--project` | `string` | `.` | The project, by id, name or path |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant mcp list
+
+List the project's MCP servers and their status
+
+```
+reliant mcp list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
+
+---
+
+### reliant mcp restart
+
+Restart an MCP server from its current config
+
+Restarts one MCP server on the machine holding the project, from the config
+that machine's mcp.json files declare now. Every chat in the project that uses
+the server gets the new process.
+
+```
+reliant mcp restart <server>
+```
+
+---
+
+### reliant mcp tools
+
+List the tools an MCP server offers the project's agents
+
+Lists the tools one MCP server offers the project's agents. An agent sees each
+as mcp__<server>__<tool>.
+
+```
+reliant mcp tools <server> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print JSON |
 
 ---
 
@@ -22776,7 +22927,7 @@ reliant workflow run <workflow-name> [flags]
 | `--exit-on-gate` | `bool` | - | Stop and exit 3 as soon as a question/approval gate opens (for scripted supervision) |
 | `--follow`, `-f` | `bool` | - | Follow the execution and stream NDJSON lifecycle events |
 | `--hook` | `stringArray` | `[]` | Exec hook 'on=<event> cmd=<shell>' (repeatable); event is one of node_started|node_completed|node_failed|workflow_completed|workflow_failed|question|approval|any |
-| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable) |
+| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable; read as the type the workflow declares for it) |
 | `--input-file` | `string` | - | JSON file containing workflow inputs |
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |
@@ -23169,11 +23320,19 @@ commits only its reflog reached) into a local ref of the repository,
 refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
 immediately before deleting them.
 
-A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
-One with work only it holds is never reclaimed: after about five days idle
-it is proposed in the report, for a person to free by hand.
+By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
+every worktree and records what it would reclaim, but captures and deletes
+nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
+after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
+holds is never reclaimed: after about five days idle it is proposed in the
+report, for a person to free by hand.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
+default) or on. Every mode rides the storage reaper's schedule, which runs on
+managed machines, and on your own computer only with
+RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
+older worktree reap, which removes unlocked, clean, pushed worktrees idle for
+a day without capturing them first.
 
 ```
 reliant worktree
