@@ -5,8 +5,8 @@ import { ToolExecution } from "../ToolExecution";
 import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 
-// The sub-agent card replaced the spawn's tool row. It must keep every
-// control that row offered: a running sub-agent can be stopped (the row's
+// A sub-agent is one dense row. It must keep every control the old tool
+// row offered: a running sub-agent can be stopped (the row's
 // Cancel), and a denied one still says why.
 
 let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
@@ -44,15 +44,15 @@ const spawnCall = (id: string, childWorkflowId?: string) => ({
   ...(childWorkflowId ? { childWorkflowId } : {}),
 });
 
-describe("ToolExecution sub-agent card", () => {
+describe("ToolExecution sub-agent row", () => {
   it("offers Cancel on a running sub-agent, and clicking it cancels that call", () => {
     mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
     const onCancel = vi.fn();
 
     render(<ToolExecution toolCall={spawnCall("toolu_spawn_run", "wf-child-1")} chatId="chat-1" onCancel={onCancel} />);
 
-    const card = screen.getByTestId("sub-agent-card");
-    const cancel = within(card).getByRole("button", { name: "Cancel tool execution" });
+    const row = screen.getByTestId("sub-agent-row");
+    const cancel = within(row).getByRole("button", { name: "Cancel tool execution" });
     expect(cancel).toBeEnabled();
 
     fireEvent.click(cancel);
@@ -65,14 +65,14 @@ describe("ToolExecution sub-agent card", () => {
 
     render(<ToolExecution toolCall={spawnCall("toolu_spawn_cancelling")} status="cancelling" chatId="chat-1" onCancel={onCancel} />);
 
-    const card = screen.getByTestId("sub-agent-card");
-    const cancel = within(card).getByRole("button", { name: "Cancel tool execution" });
+    const row = screen.getByTestId("sub-agent-row");
+    const cancel = within(row).getByRole("button", { name: "Cancel tool execution" });
     expect(cancel).toBeDisabled();
     fireEvent.click(cancel);
     expect(onCancel).not.toHaveBeenCalled();
-    // The card names the state instead of reading as still working.
-    expect(within(card).getByText("Stopping…")).toBeInTheDocument();
-    expect(within(card).queryByText("Working")).not.toBeInTheDocument();
+    // The row names the state instead of reading as still working.
+    expect(within(row).getByText("Stopping…")).toBeInTheDocument();
+    expect(within(row).queryByText("Working")).not.toBeInTheDocument();
   });
 
   it("offers no Cancel once the sub-agent has finished", () => {
@@ -80,8 +80,8 @@ describe("ToolExecution sub-agent card", () => {
 
     render(<ToolExecution toolCall={spawnCall("toolu_spawn_done", "wf-child-2")} chatId="chat-1" onCancel={vi.fn()} />);
 
-    const card = screen.getByTestId("sub-agent-card");
-    expect(within(card).queryByRole("button", { name: "Cancel tool execution" })).not.toBeInTheDocument();
+    const row = screen.getByTestId("sub-agent-row");
+    expect(within(row).queryByRole("button", { name: "Cancel tool execution" })).not.toBeInTheDocument();
   });
 
   it("offers no Cancel when the caller cannot cancel", () => {
@@ -105,10 +105,10 @@ describe("ToolExecution sub-agent card", () => {
 
     render(<ToolExecution toolCall={spawnCall("toolu_spawn_denied")} approval={denied} chatId="chat-1" onCancel={vi.fn()} />);
 
-    const card = screen.getByTestId("sub-agent-card");
-    expect(within(card).getByText("Denied")).toBeInTheDocument();
-    expect(within(card).queryByText("Working")).not.toBeInTheDocument();
-    expect(within(card).getByText("Denied: Not now")).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "Cancel tool execution" })).not.toBeInTheDocument();
+    const row = screen.getByTestId("sub-agent-row");
+    expect(within(row).getByText("Denied")).toBeInTheDocument();
+    expect(within(row).queryByText("Working")).not.toBeInTheDocument();
+    expect(within(row).getByText("Denied: Not now")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Cancel tool execution" })).not.toBeInTheDocument();
   });
 });
