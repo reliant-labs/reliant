@@ -117,26 +117,13 @@ func TestRegisteredManaged(t *testing.T) {
 	}
 }
 
-// receiveFor collects what the gateway sends on stream for d.
-func receiveFor(stream interface {
-	Receive() (*reliantv1.ServerMessage, error)
-}, d time.Duration) []*reliantv1.ServerMessage {
-	out := make(chan *reliantv1.ServerMessage, 64)
-	go func() {
-		defer close(out)
-		for {
-			msg, err := stream.Receive()
-			if err != nil {
-				return
-			}
-			out <- msg
-		}
-	}()
+// drainFor collects what arrives on msgs for d, or until it closes.
+func drainFor(msgs <-chan *reliantv1.ServerMessage, d time.Duration) []*reliantv1.ServerMessage {
 	var got []*reliantv1.ServerMessage
 	timeout := time.After(d)
 	for {
 		select {
-		case msg, ok := <-out:
+		case msg, ok := <-msgs:
 			if !ok {
 				return got
 			}
@@ -181,11 +168,39 @@ func TestConnectDaemonAsksABelowFloorDaemonToRestartOnce(t *testing.T) {
 				CommitTimeUnix: tc.commitTime, DrainsOnRestartRequest: true,
 			})
 
-			got := restartRequests(receiveFor(stream, 300*time.Millisecond))
-			require.Len(t, got, tc.want)
+			msgs := make(chan *reliantv1.ServerMessage, 64)
+			go func() {
+				defer close(msgs)
+				for {
+					msg, err := stream.Receive()
+					if err != nil {
+						return
+					}
+					msgs <- msg
+				}
+			}()
 			if tc.want == 0 {
+				// Absence: a window that ends early can only miss a request
+				// the gateway wrongly sent, never fail a correct gateway.
+				require.Empty(t, restartRequests(drainFor(msgs, 300*time.Millisecond)))
 				return
 			}
+			// The request is waited for, not timed: the deadline is only a
+			// hang guard, so a loaded runner that delivers it late passes.
+			var got []*reliantv1.RestartRequested
+			guard := time.After(30 * time.Second)
+			for len(got) == 0 {
+				select {
+				case msg, ok := <-msgs:
+					require.True(t, ok, "the stream ended before a RestartRequested arrived")
+					got = restartRequests([]*reliantv1.ServerMessage{msg})
+				case <-guard:
+					t.Fatal("no RestartRequested arrived")
+				}
+			}
+			// One request per registration (sendFloorRestart runs once in
+			// ConnectDaemon); a second within the window fails the test.
+			require.Empty(t, restartRequests(drainFor(msgs, 300*time.Millisecond)), "the daemon is asked once")
 			req := got[0]
 			assert.Equal(t, floorRestartReason, req.GetReason())
 			assert.Equal(t, floorVersion, req.GetTargetVersion())
