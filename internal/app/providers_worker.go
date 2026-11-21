@@ -833,6 +833,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		SecretResolver:         secretResolver,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
+		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
 		TriggerCredentials:     triggerCredentials(creds),
 		AllowPrivateEgress:     AllowPrivateEgress(d.Network),
 		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
@@ -857,6 +858,42 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
+}
+
+type TriggerDeliveryRelayDeps struct {
+	DB           *db.Repo
+	Temporal     *TemporalClient
+	Integrations *IntegrationSettings
+	Membership   *orgs.Resolver
+	Policies     *orgpolicy.Resolver
+}
+
+// TriggerDeliveryRelay gives the inbox live membership and policy context.
+type TriggerDeliveryRelay struct {
+	relay      *webhook.Relay
+	membership authz.Membership
+	policies   *orgpolicy.Resolver
+}
+
+// NewTriggerDeliveryRelay routes authenticated receipts on the worker.
+//
+//forge:root-only worker
+func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay, error) {
+	repo := d.DB
+	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+		WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug))
+	var membership authz.Membership
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, repo.Connections(), triggers.NewAutoPause(repo, nil)),
+		membership: membership, policies: d.Policies}, nil
+}
+
+func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
+	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
 }
 
 // WorkflowCheckSyncerDeps is where workflows' checks are recorded, the

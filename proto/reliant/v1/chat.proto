@@ -738,6 +738,11 @@ message Message {
   // a message keeps role USER (every provider accepts it) but must not be
   // presented as the user's own words. Unset means the human (or the model).
   MessageSender sender = 20;
+  // thinking_level is the effective thinking (reasoning-effort) level the
+  // assistant turn ran at, after the model's capabilities reconciled the
+  // requested one. Unset for a message no model wrote, a model that takes no
+  // level, and a message saved before this was recorded.
+  optional string thinking_level = 21;
 }
 
 // MessageSender attributes a message to the agent thread that sent it.
@@ -1001,11 +1006,13 @@ message RunNowResponse {
   string run_id = 3;
 }
 
-// ListChatsRequest lists the caller's chats: in one project, or in all of them.
+// ListChatsRequest lists the caller's chats: in one project, in several, or in
+// all of them.
 message ListChatsRequest {
-  // The project to list. Empty lists every project the caller owns: the
-  // sidebar's "All projects" view. Chats are scoped by the caller either way,
-  // so a project id that is not the caller's lists nothing.
+  // The project to list. Empty (and no project_ids) lists every project the
+  // caller owns: the sidebar's "All projects" view. Chats are scoped by the
+  // caller either way, so a project id that is not the caller's lists
+  // nothing. Set with project_ids, it is one more project of that set.
   string project_id = 1;
   optional int32 limit = 2;
   // ListChats is the chat list: it returns only chats the sidebar lists
@@ -1026,6 +1033,18 @@ message ListChatsRequest {
   // app's name is its identity only within one org. A malformed name lists
   // nothing; an empty one is the same as unset.
   optional string app_name = 5;
+  // List the chats of several projects at once: the sidebar's multi-project
+  // filter. The projects listed are the union of project_id and project_ids,
+  // so a client may set either or both; with both empty every project is
+  // listed, as before this field existed. One query answers it, ordered and
+  // limited exactly like a single project's list. Chats are still scoped by
+  // the caller, so an id that is not the caller's contributes nothing. At
+  // most 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+  // main_worktrees then holds the main workspace of each listed project.
+  repeated string project_ids = 6 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {string: {min_len: 1}}
+  }];
 }
 
 // ListChatsResponse returns the list of chats
@@ -1130,12 +1149,25 @@ message ListArchivedChatsRequest {
   // orgs list under the caller's default org. Unset lists every archived chat
   // the caller owns, in any org, as before this field existed.
   optional string org_id = 1;
+  // Page size: at most this many chats, clamped to 200. Unset (or 0) with no
+  // page_token lists every archived chat in one response, as before paging
+  // existed; a page_token without a page size gets pages of 50. New clients
+  // always set it: a heavy account archives tens of thousands of chats.
+  optional int32 page_size = 2;
+  // Continues a previous response's next_page_token. Opaque. Pages are
+  // ordered most recently updated first, keyset on (updated time, id), so a
+  // chat archived mid-pagination can neither repeat nor be skipped.
+  optional string page_token = 3;
 }
 
 // ListArchivedChatsResponse returns archived chats with worktree info
 message ListArchivedChatsResponse {
   repeated ArchivedChat chats = 1;
+  // Number of chats in this response (this page, when paged).
   int32 total = 2;
+  // Set when more archived chats follow; pass it as page_token. Empty on the
+  // last page, and always empty for an unpaged request.
+  string next_page_token = 3;
 }
 
 // SendMessageRequest sends messages to a chat

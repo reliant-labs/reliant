@@ -38,7 +38,7 @@ ModernApp (`/`, `/project/$projectId`), MobileShell (`/m/*`), and
 `leaveOnboarding` lands every exit to the app there instead of `/`.
 
 The forge shell (forge.reliantlabs.io, `forgeShellRoutes.tsx`) has NO
-onboarding at all, by design: `forge login`, claim links and every console link
+onboarding at all, by design: `forge cloud login`, claim links and every console link
 forge prints land there, and its guard (`ForgeAuthGuard`) asks for sign-in only.
 Chat/agent onboarding runs when a user first opens the agent side
 (app.reliantlabs.io, "Open in Reliant"); the per-user flag is untouched on the

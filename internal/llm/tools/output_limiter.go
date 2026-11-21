@@ -38,7 +38,7 @@ const (
 	MaxSkillBodySize = MaxOutputSize
 
 	// ForgeStartHereSkillPath is the catalog path of forge's start-here skill:
-	// the body `reliant forge skill load forge` prints. Not "forge" — in a
+	// the body `reliant forge agent skill load forge` prints. Not "forge" — in a
 	// forge project's catalog that path is the synthesized map of forge's
 	// sub-skills.
 	ForgeStartHereSkillPath = "forge/forge"

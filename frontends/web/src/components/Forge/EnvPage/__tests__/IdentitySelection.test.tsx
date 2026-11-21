@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
 import { IdentitySelection } from "../IdentitySelection";
 
 const state = vi.hoisted(() => ({ search: {} as Record<string, unknown>, user: {} as Record<string, unknown>, matches: {} as Record<string, unknown>, get: vi.fn(), list: vi.fn() }));
@@ -9,7 +10,15 @@ vi.mock("@/hooks/identity-queries", () => ({ useIdentityUser: (...args: unknown[
 beforeEach(() => { state.search = {}; state.user = {}; state.matches = {}; vi.clearAllMocks(); });
 afterEach(() => vi.unstubAllEnvs());
 describe("identity URL lookup", () => {
- it("does no optional lookup or email search when the build is contained", () => {
+ it("does no optional lookup or email search when the environment is contained", () => {
+  setRuntimeConfig({ IDENTITY_DATA_LINKS: "disabled" });
+  state.search = { user: "subject-42" };
+  render(<IdentitySelection orgId="o" envId="e" serving />);
+  expect(state.get).not.toHaveBeenCalled();
+  expect(state.list).not.toHaveBeenCalled();
+  expect(screen.queryByLabelText("Selected identity")).not.toBeInTheDocument();
+ });
+ it("still honours the deprecated build-time containment when config.js is silent", () => {
   vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "disabled");
   state.search = { user: "subject-42" };
   render(<IdentitySelection orgId="o" envId="e" serving />);

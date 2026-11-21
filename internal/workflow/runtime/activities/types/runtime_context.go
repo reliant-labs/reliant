@@ -122,8 +122,11 @@ type RuntimeContext struct {
 	// on another provider until the original one is back. The workflow sets
 	// it from its lease and clears it at the lease's end, which is
 	// deterministic because the comparison is made in the workflow. Set on
-	// call_llm nodes only.
+	// call_llm and compact nodes.
 	FallbackModel string `json:"fallback_model,omitempty"`
+	// ManualFallback marks an active banner lease. Compaction uses its exact
+	// model directly instead of first resolving the old summarization selector.
+	ManualFallback bool `json:"manual_fallback,omitempty"`
 
 	// FallbackReturn is set on the first call_llm after a fallback lease
 	// ended, so the transcript can say the chat is back on its own model.
@@ -171,6 +174,17 @@ type RuntimeContext struct {
 	// by id, so an assistant tail that is a finished answer still yields.
 	// Set on call_llm nodes only, for one dispatch (reliant #2759).
 	CutOffMessageID string `json:"cut_off_message_id,omitempty"`
+
+	// InterruptedTurn is set on an execute_tools step dispatched to settle a
+	// batch a same-thread interrupt cancelled ("Interrupt & send now"). The
+	// activity runs nothing: a call a previous dispatch already finished
+	// keeps its recorded result, and every other call is recorded Cancelled
+	// and answered as stopped by the user. So every tool call of the turn
+	// gets a tool_result, its save_message keeps the history valid, and the
+	// loop reaches the call_llm that delivers the thread's mailbox, instead
+	// of running the batch (and its approval previews) again. Set on
+	// execute_tools nodes only, for one dispatch.
+	InterruptedTurn bool `json:"interrupted_turn,omitempty"`
 
 	// CatalogPin is the workflow catalog the run started with
 	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool

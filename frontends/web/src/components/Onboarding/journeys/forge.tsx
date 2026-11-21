@@ -136,7 +136,7 @@ function TryOnYourApp({ cli }: { cli: string }) {
     return (
       <>
         <p>
-          That&apos;s the tour. Sign up to get this console for your own app, or install Forge and run <code>forge start</code>. The rest of
+          That&apos;s the tour. Sign up to get this console for your own app, or install Forge and run <code>forge project start</code>. The rest of
           the console is yours to explore.
         </p>
         <div className="mt-3">
@@ -163,7 +163,7 @@ function TryOnYourApp({ cli }: { cli: string }) {
 }
 
 const agentCommands = (cli: string) => [`${cli} obs status prod`, `${cli} obs trace ${DEMO_TRACE_ID} prod`, `${cli} obs traces prod --errors --json`];
-const agentSetup = (cli: string) => [`${cli} skill load observability/query`, `claude mcp add forge -- ${cli} mcp`];
+const agentSetup = (cli: string) => [`${cli} agent skill load observability/query`, `claude mcp add forge -- ${cli} agent mcp`];
 
 function WhatYourAgentReads({ cli }: { cli: string }) {
   return (

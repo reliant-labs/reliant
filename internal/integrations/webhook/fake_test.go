@@ -64,14 +64,21 @@ type fakeIntake struct {
 	mu       sync.Mutex
 	accepted []acceptedEvent
 	seen     map[string]bool
+	// stall is a trigger whose Accept waits until its context ends, as a
+	// recording stuck on a saturated database does.
+	stall string
 }
 
 type acceptedEvent struct {
 	TriggerID string
 	Event     triggers.InboundEvent
+	Batch     *triggers.Batch
 }
 
-func (f *fakeIntake) Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, _ triggers.AcceptOptions) (*triggers.AcceptResult, error) {
+func (f *fakeIntake) Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, opts triggers.AcceptOptions) (*triggers.AcceptResult, error) {
+	if trigger.ID == f.stall {
+		<-ctx.Done()
+	}
 	// Like the real intake's database calls, a cancelled context records
 	// nothing.
 	if err := ctx.Err(); err != nil {
@@ -87,7 +94,7 @@ func (f *fakeIntake) Accept(ctx context.Context, trigger *core.Trigger, ev trigg
 		return &triggers.AcceptResult{EventID: key, Outcome: core.TriggerEventPending, Duplicate: true}, nil
 	}
 	f.seen[key] = true
-	f.accepted = append(f.accepted, acceptedEvent{TriggerID: trigger.ID, Event: ev})
+	f.accepted = append(f.accepted, acceptedEvent{TriggerID: trigger.ID, Event: ev, Batch: opts.Batch})
 	return &triggers.AcceptResult{EventID: key, Outcome: core.TriggerEventPending}, nil
 }
 

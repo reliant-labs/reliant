@@ -65,6 +65,7 @@
  */
 
 import { settingsPath, withOrg, withSearch, type PathContext } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
@@ -113,9 +114,9 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView };
 
 /**
- * The path of an org page. U3 moves it to `/o/<org>/observability[/<view>]`
- * (design §3.1): the org form is not this path behind a prefix, so it is
- * rewritten here.
+ * The path of an org page. Its org form (flag `web.org_routes` on) is
+ * `/o/<org>/observability[/<view>]` (design §3.1): withOrg rewrites it
+ * (lib/paths/org.ts, orgFormOf).
  */
 export function orgPath(page: OrgPage, ctx?: PathContext): string {
   switch (page.kind) {
@@ -128,7 +129,7 @@ export function orgPath(page: OrgPage, ctx?: PathContext): string {
 
 /** Which org page `pathname` is, or null for any other path. The inverse of orgPath. */
 export function orgPageOf(pathname: string): OrgPage | null {
-  const parts = pathname.split("/").filter(Boolean);
+  const parts = orgFreePath(pathname).split("/").filter(Boolean);
   if (parts[0] !== "forge" || parts[1] !== "observability") return null;
   if (parts.length === 2) return { kind: "observability" };
   return parts.length === 3 && isObsNavView(parts[2]) ? { kind: "obs-view", view: parts[2] } : null;
@@ -161,8 +162,9 @@ export type ConsolePage =
   | { kind: "experiment"; changeId: string };
 
 /**
- * One app's console. U3 moves it to `/o/<org>/apps/<app>` (design §3.1): the
- * org form is not this path behind a prefix, so it is rewritten here.
+ * One app's console. Its org form (flag `web.org_routes` on) is
+ * `/o/<org>/apps/<app>` (design §3.1): withOrg rewrites it (lib/paths/org.ts,
+ * orgFormOf).
  */
 export function consoleBase(project: string, ctx?: PathContext): string {
   return withOrg(`${FORGE_ROOT}/p/${encodeURIComponent(project)}`, ctx);
@@ -221,7 +223,7 @@ function safeDecode(segment: string): string {
  * and the breadcrumb.
  */
 export function consolePageOf(pathname: string): { project: string; page: ConsolePage } | null {
-  const parts = pathname.split("/").filter(Boolean);
+  const parts = orgFreePath(pathname).split("/").filter(Boolean);
   if (parts[0] !== "forge" || parts[1] !== "p" || !parts[2]) return null;
   const project = safeDecode(parts[2]);
   const [section, sub, dashKind, dashKey, ...rest] = parts.slice(3);

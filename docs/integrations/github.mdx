@@ -45,6 +45,7 @@ On a self-hosted deployment there is no control plane to mint tokens, so Reliant
 | `pr.reviews.list` | The reviews on a pull request, with verdicts | no |
 | `pr.review_comments.list` | The inline comments on a pull request's diff, with an optional `since` time | no |
 | `pr.review_comment.reply` | Reply in an inline review thread | yes |
+| `pr.merge` | Arm or disarm auto-merge, leave the merge queue, or merge at an exact reviewed head. Workflow steps only, never an agent tool | yes |
 | `repo.list_for_user` | Repositories the connection can see | no |
 | `app.installations.list` | The accounts the Reliant GitHub App is installed on that you can access | no |
 | `app.installation_repositories.list` | Repositories the App is installed on **and** you can see, across your installations, each with its `installation_id` and `can_push` | no |
@@ -58,6 +59,11 @@ On a self-hosted deployment there is no control plane to mint tokens, so Reliant
 | `check_run.create` | Report a check (queued, running or finished) on one commit, which a ruleset can require. **Workflow steps only**; acts as the Reliant App | yes |
 | `check_run.update` | Move a check run on, or set its conclusion and details. **Workflow steps only**; acts as the Reliant App | yes |
 | `check_run.list` | The check runs on one commit, by name and App; follows pagination | no |
+| `branch.rules` | The rules active rulesets apply to a branch (required checks, reviews, merge queue), with their settings; follows pagination | no |
+| `compare` | Whether `head` is ahead of or behind `base`, and the commits between them (sha, author, message's first line), one page of up to 100 | no |
+| `commit.statuses` | A ref's combined commit status and each context's latest status. Needs the **Commit statuses** permission (see below) | no |
+| `release.create` | Publish a release, or save a draft, for a tag (created from `target_commitish` when it does not exist). **Workflow steps only** | yes |
+| `release.update` | Edit a release's notes, title or tag, or publish a draft. **Workflow steps only** | yes |
 
 The four `app.*`, `users.search` and `user.get_by_id` actions are what the value types below list their options from. The two `app.*` actions need a GitHub App user token (the hosted connection, or an oauth2 connection to a GitHub App), not a personal access token.
 
@@ -137,9 +143,11 @@ The event is routed only when its `repository` is one of the input's values, so 
 
 GitHub's API opens a pull request with no labels. After `pr.create`, add them with `issue.labels.add` and the returned `number`.
 
-### Merging is deliberately not an action
+### Merging is a workflow step, never an agent tool
 
-There is no merge action, and `pr.update` cannot merge, whatever it is given. A person merges. Approving stays available through `pr.review.create` with the `APPROVE` verdict, so whether a workflow may approve is something you decide in the workflow.
+`pr.merge` merges only from an action node in a workflow you write; no agent can call it, and `pr.update` cannot merge, whatever it is given. Its `action` is `enable_auto` (arm auto-merge), `disable_auto`, `dequeue` (leave the merge queue) or `merge` (merge now, or join the merge queue when the base branch requires one). `enable_auto` and `merge` need `match_head_commit`, the full sha of the head that was reviewed: if the pull request's head is anything else, nothing changes and the step fails, so a push after the review is never merged. `method` is `squash` (the default), `merge` or `rebase`.
+
+The [Autopilot](/guides/autopilot) built-ins never call it: whether anything merges without a person is a decision you make by composing it into your own workflow. Approving stays available through `pr.review.create` with the `APPROVE` verdict.
 
 ### Check runs come from the App
 
@@ -148,6 +156,16 @@ GitHub lets only an App write a check run, so `check_run.create` and `check_run.
 A check is tied to one exact commit (`head_sha` is the full 40-character SHA), so a push leaves the new head with no passing run. A branch ruleset can require a check by name **from the Reliant App**. In a repository with a merge queue, the required check must also be reported on each merge group's commit: trigger on `check_suite.requested` with `branch` starting `gh-readonly-queue/`, and report there.
 
 GitHub's **Re-run** button re-runs nothing for an App's check: it sends the App that created the check `check_run.rerequested` (one check) or `check_suite.rerequested` (**Re-run all checks**), and the App runs it again. Trigger on them, match `name` (or `app`), and report a new check run on the event's `head_sha`; the old run keeps its result. `check_run.external_id` is the id the run was created with, and `conclusion` is how the re-run run ended. The event's time is when it arrived, since the payload carries only the old run's timestamps.
+
+### Shipping: rules, comparisons, statuses and releases
+
+`branch.rules` lists what GitHub will enforce on a branch before a push or merge lands there: each rule's `type` (`required_status_checks`, `pull_request`, `merge_queue`, ...) and its `parameters`, such as the required check contexts or the approving review count. Rulesets in evaluate or disabled mode are not listed, and neither is classic branch protection; `branch.get`'s `protected` covers both.
+
+`compare` answers "is there anything to release since the last tag": `status`, `ahead_by`, `behind_by` and `total_commits`, plus one page of the commits `head` has that `base` lacks, oldest first. Each commit is its `sha`, its author's login and the first line of its message, capped at 300 characters; changed files are not returned (`pr.list_files` reads a diff). `has_more` says a later `page` holds more.
+
+`commit.statuses` reads the older Status API that external CI posts to: the combined `state` and each context's latest status. Check runs (GitHub Actions, Apps) are `check_run.list`; a required check may be either. It needs the App's **Commit statuses: Read** permission, which Reliant's hosted App does not request yet, so on the hosted deployment GitHub refuses it with 403 ("Resource not accessible by integration") for now. A personal access token or a self-hosted App with that permission can use it today.
+
+`release.create` and `release.update` publish what was shipped. They are workflow steps, never agent tools, like `pr.merge`. Acting as the Reliant bot, their token carries the `contents` permission alone.
 
 ### Unattended runs
 
@@ -251,7 +269,7 @@ These are the App's settings, made once by whoever owns it. On Reliant's hosted 
 | Repository permission: Contents | Read and write |
 | Subscribe to events | Issues, Issue comment, Pull request, Pull request review, Pull request review comment, Push, Workflow run, Check run, Check suite |
 
-The `labeled`, `unlabeled`, `reopened` and `review_requested` actions arrive under the **Pull request** and **Issues** events, so they need no separate subscription. Without the Pull request review comment, Check run and Check suite subscriptions, those three triggers never fire; without Contents write, the bot cannot open a pull request. After changing permissions, every installation has to accept the update before it takes effect.
+The `labeled`, `unlabeled`, `reopened` and `review_requested` actions arrive under the **Pull request** and **Issues** events, so they need no separate subscription. Without the Pull request review comment, Check run and Check suite subscriptions, those three triggers never fire; without Contents write, the bot cannot open a pull request or publish a release. `commit.statuses` additionally needs **Commit statuses: Read**; without it that one action is refused. After changing permissions, every installation has to accept the update before it takes effect.
 
 ## Example: review each new pull request
 
