@@ -2,12 +2,16 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // electronCache is one cached download: the step that reads its key, the
@@ -33,29 +37,49 @@ var (
 )
 
 // electronLockVersions reads the versions the cache keys must follow from the
-// checked-out lockfile. Reading it here also keeps the test cache-sound: the
-// version step's script (run by a child bash) reads the same file.
+// checked-out lockfile: what electron/pnpm-lock.yaml resolves for the app's
+// direct dependency (importers ".", without the "(peer@x)" suffix pnpm adds).
+// Reading it here also keeps the test cache-sound: the version step's script
+// (run by a child bash) reads the same file.
 func electronLockVersions(t *testing.T) map[string]string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(repoRoot, "electron", "package-lock.json"))
+	b, err := os.ReadFile(filepath.Join(repoRoot, "electron", "pnpm-lock.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var lock struct {
-		Packages map[string]struct {
-			Version string `json:"version"`
-		} `json:"packages"`
+	type dep struct {
+		Version string `yaml:"version"`
 	}
-	if err := json.Unmarshal(b, &lock); err != nil {
-		t.Fatalf("parse electron/package-lock.json: %v", err)
+	type lockDoc struct {
+		Importers map[string]struct {
+			Dependencies    map[string]dep `yaml:"dependencies"`
+			DevDependencies map[string]dep `yaml:"devDependencies"`
+		} `yaml:"importers"`
 	}
 	out := map[string]string{}
-	for _, pkg := range []string{"electron", "electron-builder"} {
-		v := lock.Packages["node_modules/"+pkg].Version
-		if v == "" {
-			t.Fatalf("electron/package-lock.json pins no version of %s", pkg)
+	// pnpm 12 writes the pinned pnpm as a leading document of its own.
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var d lockDoc
+		err := dec.Decode(&d)
+		if errors.Is(err, io.EOF) {
+			break
 		}
-		out[pkg] = v
+		if err != nil {
+			t.Fatalf("parse electron/pnpm-lock.yaml: %v", err)
+		}
+		app := d.Importers["."]
+		for _, deps := range []map[string]dep{app.Dependencies, app.DevDependencies} {
+			for pkg, dp := range deps {
+				v, _, _ := strings.Cut(dp.Version, "(")
+				out[pkg] = v
+			}
+		}
+	}
+	for _, pkg := range []string{"electron", "electron-builder"} {
+		if out[pkg] == "" {
+			t.Fatalf("electron/pnpm-lock.yaml resolves no version of %s", pkg)
+		}
 	}
 	return out
 }
@@ -102,7 +126,7 @@ func checkElectronCaches(t *testing.T, jobID, versionStep, installStep, partIf s
 	if v.ID == "" {
 		t.Fatalf("%s: step %q has no id, so no step can read its outputs", jobID, versionStep)
 	}
-	// Every part reads and restores: each one's npm phase installs electron.
+	// Every part reads and restores: each one's install phase installs electron.
 	if v.If != "" {
 		t.Errorf("%s: step %q if=%q, want it in every part", jobID, versionStep, v.If)
 	}
@@ -168,7 +192,7 @@ func TestElectronPackageCachesElectronDownloads(t *testing.T) {
 }
 
 // TestReleaseGateCachesElectronZip pins the release gate to the same Electron
-// zip entry: every part's npm phase installs electron, whose postinstall
+// zip entry: every part's install phase installs electron, whose postinstall
 // downloads that zip (static and go 2/3 failed on it as well as web, at
 // 1f81a402e). Every part restores it; only the web part saves it (partIf).
 func TestReleaseGateCachesElectronZip(t *testing.T) {

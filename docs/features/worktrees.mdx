@@ -46,6 +46,10 @@ Workspaces take disk space, so archive a workspace when you are done with it and
 
 When a machine's disk runs low, the **Inbox** shows a storage item for it, and its **Clean up** action removes the archived workspaces you confirm.
 
+From a terminal, `reliant worktree list` lists a project's workspaces (`--archived` the archived ones, `--json` for scripts), and `reliant worktree archive <name|id>` archives one, as **Archive** does. Both take `--project <id|name|path>`; without it they use the project whose folder holds the current directory. That includes the workspaces a workflow's Create Worktree node made. An agent's shell is refused `archive`: an agent archives a workspace with its worktree tool.
+
+Reliant locks each workspace's checkout with `git worktree lock`, so a plain `git worktree remove` refuses it with `cannot remove a locked working tree, lock reason: reliant: worktree <id>`. Archive the workspace instead. To remove a checkout by hand anyway, run `git worktree unlock <path>` and then `git worktree remove <path>`, or `git worktree remove --force --force <path>`, which also discards uncommitted changes. The workspace stays listed until you archive it.
+
 ## Workspaces in workflows
 
 A workflow can create workspaces itself with the [Create Worktree](/reference/nodes#create-worktree) node. It takes a name, an optional base branch and files to copy, and stores the new workspace's path and branch for later steps. Workspaces a workflow creates appear in the Workspaces panel next to yours.
