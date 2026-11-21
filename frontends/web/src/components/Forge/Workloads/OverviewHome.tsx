@@ -96,6 +96,7 @@ import {
 } from "./workloadModel";
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { OverviewAnalyticsBox } from "./landing/OverviewAnalyticsBox";
 import { OverviewServicesStrip } from "./landing/OverviewServicesStrip";
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
@@ -177,6 +178,9 @@ export interface OverviewSummaryLinks {
   service: (name: string, env: string) => string;
   /** The database's home (Data), scoped to its environment. */
   data?: (env: string) => string;
+  /** Analytics, and its Events & metrics tab: the Analytics box's links (U6e). */
+  analytics?: string;
+  events?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -412,10 +416,15 @@ export function OverviewHome({
             </LandingCard>
             {chats && <LandingCard testId="overview-card-chats">{chats}</LandingCard>}
           </div>
-          <aside className="min-w-0 space-y-6" aria-label="Releases" data-testid="overview-rail">
+          <aside className="min-w-0 space-y-6" aria-label="Releases and analytics" data-testid="overview-rail">
             <LandingCard testId="overview-card-releases">
               <RecentReleases project={project} envs={envs} hrefs={hrefs} />
             </LandingCard>
+            {summary.analytics && (
+              <LandingCard testId="overview-card-analytics">
+                <OverviewAnalyticsBox scope={kpiScope} analyticsHref={summary.analytics} eventsHref={summary.events ?? summary.analytics} />
+              </LandingCard>
+            )}
           </aside>
         </div>
       </div>

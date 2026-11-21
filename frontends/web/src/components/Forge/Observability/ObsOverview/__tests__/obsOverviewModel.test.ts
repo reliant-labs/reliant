@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge, GraphNode, RPCCatalog, RPCMethod, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
 
+import { dailyValues, rowNumber, topEvent } from "../../../Workloads/landing/OverviewAnalyticsBox";
 import { graphThumbnail, slowestEndpoints, THUMB_H, THUMB_W } from "../obsOverviewModel";
 
 const BOUNDS = [0.01, 0.1, 1];
@@ -70,5 +71,25 @@ describe("graphThumbnail", () => {
 
   it("is empty with no graph", () => {
     expect(graphThumbnail(undefined)).toEqual({ nodes: [], links: [] });
+  });
+});
+
+describe("the Analytics box's reads", () => {
+  const result = (over: object) => ({ kind: "sql", unit: "", series: [], columns: [], rows: [], stepSeconds: 0, truncated: false, funnelSteps: [], issues: [], sessions: [], seriesMeta: [], seriesTotal: 0, warnings: [], ...over }) as never;
+
+  it("reads a one-row answer by column", () => {
+    expect(rowNumber(result({ columns: ["users", "events"], rows: [{ group: {}, values: [42, 900] }] }), "events")).toBe(900);
+    expect(rowNumber(undefined, "users")).toBeNull();
+  });
+
+  it("takes the per-day values from a series, else from the rows", () => {
+    expect(dailyValues(result({ series: [{ label: "users", group: {}, timestamps: [1, 2], values: [3, 4], value: null }] }))).toEqual([3, 4]);
+    expect(dailyValues(result({ columns: ["users"], rows: [{ group: {}, values: [5] }, { group: {}, values: [6] }] }))).toEqual([5, 6]);
+  });
+
+  it("names the most-sent custom event, skipping forge's own", () => {
+    const events = result({ columns: ["events", "users", "last_seen"], rows: [{ group: { event: "page_view" }, values: [500, 1, 0] }, { group: { event: "product.add_to_cart" }, values: [120, 1, 0] }] });
+    expect(topEvent(events)).toEqual({ name: "add_to_cart", events: 120 });
+    expect(topEvent(result({ rows: [] }))).toBeNull();
   });
 });

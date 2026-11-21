@@ -32,6 +32,9 @@
  *                                             (`view=charts`: each workload's charts, U6e)
  *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
  *                                             database's name redirects to Data (U6e)
+ *   /forge/p/:project/events                  Product analytics › Events & metrics
+ *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
+ *                                             tabs (overview · users · product · acquisition) + events
  *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
@@ -74,6 +77,7 @@ import { orgFreePath } from "@/lib/paths/org";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
+import { consoleNavEntryForSegment } from "./consoleNavRegistry";
 
 /** The console's first segment, for reading a pathname back (consolePageOf, orgPageOf). */
 export const FORGE_ROOT = "/forge";
@@ -167,8 +171,34 @@ export type ConsolePage =
   | { kind: "services" }
   /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
   | { kind: "service"; name: string }
+  /** Product analytics › Events & metrics: the app's custom product events and OTel metrics. */
+  | { kind: "events" }
+  /**
+   * Analytics (U6c): the built-in Product analytics dashboards as tabs, plus
+   * Events & metrics (Analytics/AnalyticsPage.tsx). The tab is a path
+   * segment; omitted, the first (Product overview).
+   */
+  | { kind: "analytics"; tab?: AnalyticsTab }
   /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
-  | { kind: "speed-insights" };
+  | { kind: "speed-insights" }
+  /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
+  | { kind: "extension"; id: string; segment: string };
+
+/** The Analytics page's tabs, in order: forge's four built-in Product analytics dashboards, then Events & metrics. */
+export const ANALYTICS_TABS = ["overview", "users", "product", "acquisition", "events"] as const;
+export type AnalyticsTab = (typeof ANALYTICS_TABS)[number];
+
+export const ANALYTICS_TAB_LABELS: Record<AnalyticsTab, string> = {
+  overview: "Product overview",
+  users: "Users",
+  product: "Product",
+  acquisition: "Acquisition",
+  events: "Events & metrics",
+};
+
+export function isAnalyticsTab(value: string | undefined): value is AnalyticsTab {
+  return (ANALYTICS_TABS as readonly string[]).includes(value ?? "");
+}
 
 
 /**
@@ -240,8 +270,14 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/services`;
     case "service":
       return `${base}/services/${encodeURIComponent(page.name)}`;
+    case "events":
+      return `${base}/events`;
+    case "analytics":
+      return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
     case "speed-insights":
       return `${base}/speed-insights`;
+    case "extension":
+      return `${base}/${encodeURIComponent(page.segment)}`;
   }
 }
 
@@ -256,6 +292,7 @@ export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app,
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext) => consolePath(app, { kind: "analytics", tab }, ctx);
 /** Data: the database's home (U6e): its status, backups and metrics as reported, then its tables. */
 export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
 /** Services' charts view (U6e): every workload's charts. */
@@ -301,16 +338,23 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "services":
         if (!sub) return { kind: "services" };
         return dashKind ? null : { kind: "service", name: safeDecode(sub) };
+      case "analytics":
+        if (!sub) return { kind: "analytics" };
+        return isAnalyticsTab(sub) && !dashKind ? { kind: "analytics", tab: sub } : null;
       case "storage":
       case "data":
       case "users":
       case "secrets":
       case "domains":
       case "activity":
+      case "events":
       case "speed-insights":
         return sub ? null : { kind: section };
-      default:
-        return null;
+      default: {
+        // A page registered in the nav, while it is registered.
+        const entry = sub ? undefined : consoleNavEntryForSegment(section);
+        return entry ? { kind: "extension", id: entry.id, segment: entry.segment } : null;
+      }
     }
   })();
   return page ? { project, page } : null;

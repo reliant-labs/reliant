@@ -11,7 +11,8 @@
  *   Issues            ▾     Errors · Alerts
  *   Performance       ▾     Traces · RPC explorer
  *   Sessions
- *   Product analytics       the Users · Product · Acquisition hub, when the project has it
+ *   Product analytics ▸     Insights (the Users · Product · Acquisition hub, when the project has it) ·
+ *                           Events & metrics · registered rows (Experiments: consoleNavRegistry.ts `group`)
  *   Releases
  *   Data · Users
  *   More tools        ▸     Logs · Metrics · Profiles · Service graph
@@ -28,6 +29,7 @@ import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDas
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
+import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, CONSOLE_NAV_ANCHORS, type ConsoleNavAnchor, type ConsoleNavEntry } from "./consoleNavRegistry";
 import { configureNavRows, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
 import { consolePath, OBS_NAV_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
@@ -49,6 +51,8 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
   services: "Everything your app runs, live: status, instances, CPU, memory and requests",
+  events: "The product events and metrics your app sends",
+  analytics: "Who your users are, what they do, and where they come from",
   "speed-insights": "How fast each page loads and responds for real visitors",
   storage: "Your app's object storage buckets: files, uploads and assets",
 };
@@ -60,12 +64,14 @@ export interface ProductAnalyticsHub {
 }
 
 export interface GroupedNavInput extends ConsoleNavInput {
-  /** Omitted, the project has no Product analytics hub and the row is left out. */
+  /** Omitted, the project has no Product analytics hub: the group has no Insights row. */
   productAnalytics?: ProductAnalyticsHub;
   /** A host page (one that is not a console page) is open: no console row is the current one. */
   hostPageActive?: boolean;
   /** The app's own dashboards (its repo's, the org's saved ones): listed under Dashboards. */
   customDashboards?: readonly ConsoleNavDashboard[];
+  /** Rows other modules registered (consoleNavRegistry.ts); omitted, the registry's. */
+  extensions?: readonly ConsoleNavEntry[];
   /**
    * Live counts other parts of the console hand the nav for its badges,
    * keyed by the source's id (e.g. `tests`). Each is read from data a page
@@ -155,7 +161,16 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     },
     { label: "Performance", icon: icon(Timer), defaultExpanded: true, children: [obs("traces"), obs("rpc")] },
     row("Sessions", { kind: "obs-view", view: "sessions" }, icon(PlayCircle), isObs("sessions")),
-    ...(productAnalytics ? [row("Product analytics", productAnalytics.open, icon(BarChart3), onHub)] : []),
+    {
+      // Insights opens the built-in hub; the group opens by itself on one of its pages.
+      label: "Product analytics",
+      href: href(productAnalytics?.open ?? { kind: "events" }),
+      icon: icon(BarChart3),
+      children: [
+        ...(productAnalytics ? [{ label: "Insights", href: href(productAnalytics.open), active: lit(onHub) }] : []),
+        { label: "Events & metrics", href: href({ kind: "events" }), active: lit(page.kind === "events") },
+      ],
+    },
     row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
     row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
     row("Users", { kind: "users" }, icon(Users), page.kind === "users"),
@@ -167,7 +182,64 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
   ];
-  return { items, footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
+  return { items: withExtensions(items, input, href, lit), footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
+}
+
+/** The anchor each built-in row is, by its label. */
+const ANCHOR_OF_LABEL: Readonly<Record<string, ConsoleNavAnchor>> = {
+  Overview: "overview",
+  Services: "services",
+  Dashboards: "dashboards",
+  Issues: "issues",
+  Performance: "performance",
+  Sessions: "sessions",
+  "Product analytics": "product-analytics",
+  Releases: "releases",
+  Data: "data",
+  Users: "users",
+  "More tools": "more-tools",
+};
+
+/**
+ * The registered rows (consoleNavRegistry.ts) merged in: each one the app
+ * has (`available`) — inside its `group` when it names one the nav draws
+ * (as the group's last child), else after its anchor, or, when this app's
+ * nav does not draw that anchor, after the nearest one before it that it does.
+ */
+function withExtensions(
+  items: SidebarNavItem[],
+  input: GroupedNavInput,
+  href: (target: ConsolePage) => string,
+  lit: (active: boolean) => boolean,
+): SidebarNavItem[] {
+  const extensions = (input.extensions ?? consoleNavEntries()).filter((entry) => entry.available?.(input) ?? true);
+  if (extensions.length === 0) return items;
+  const out = [...items];
+  for (const entry of extensions) {
+    const rowItem: SidebarNavItem = {
+      label: entry.label,
+      href: href(consoleNavEntryTarget(entry)),
+      icon: entry.icon,
+      active: lit(consoleNavEntryLights(entry, input.page)),
+    };
+    const group = entry.group ? out.findIndex((item) => ANCHOR_OF_LABEL[item.label] === entry.group && !item.section && item.children) : -1;
+    if (group >= 0) {
+      const parent = out[group]!;
+      out[group] = { ...parent, children: [...(parent.children ?? []), { label: rowItem.label, href: rowItem.href, active: rowItem.active }] };
+      continue;
+    }
+    // The last row at or before the anchor, by the anchors' order; the top of the list with none.
+    const rank = CONSOLE_NAV_ANCHORS.indexOf(entry.after);
+    let at = -1;
+    out.forEach((item, i) => {
+      const anchor = ANCHOR_OF_LABEL[item.label];
+      if (anchor && !item.section && CONSOLE_NAV_ANCHORS.indexOf(anchor) <= rank) at = i;
+    });
+    // After rows registered to the same anchor before it.
+    while (at + 1 < out.length && extensions.some((other) => other.label === out[at + 1].label && other.after === entry.after)) at += 1;
+    out.splice(at + 1, 0, rowItem);
+  }
+  return out;
 }
 
 type Crumb = { label: string; href?: string };

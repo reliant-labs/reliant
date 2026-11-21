@@ -242,6 +242,8 @@ function renderAt(
     activity: probe("activity"),
     services: probe("services"),
     service: probe("service"),
+    events: probe("events"),
+    analytics: probe("analytics"),
     speedInsights: probe("speed-insights"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,

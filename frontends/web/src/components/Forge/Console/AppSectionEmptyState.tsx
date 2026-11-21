@@ -15,6 +15,7 @@ import { homePath, projectChatsPath, withSearch } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 
 import { START_APP, START_REPO } from "../../Apps/appStart";
+import { consoleNavEntries } from "./consoleNavRegistry";
 import { PAGE_SUBTITLES } from "./groupedNav";
 import { OBS_NAV_LABELS, type ConsolePage } from "./paths";
 
@@ -51,8 +52,16 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "services":
     case "service":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
+    case "events":
+      return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
+    case "analytics":
+      return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
+    case "extension": {
+      const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
+      return { title: label, shows: `${label} for your app` };
+    }
     default:
       // A page kind this list does not name yet (main may add one before this
       // list learns it): a generic description, so a new kind still compiles.
