@@ -1,7 +1,7 @@
 -- forge:backward-compatible — only COMMENT ON CONSTRAINT: no table, column, constraint or index changes, so every statement of the previous release means what it did.
 
 -- Migration: seed_ref_declarations
--- Created: 2026-11-19T21:57:34Z
+-- Created: 2026-11-21T10:23:23Z
 --
 -- Where a row reaches one parent by two foreign-key paths, say which path is
 -- the truth. `forge db seed apply` refuses to seed until it knows (it will not

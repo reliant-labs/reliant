@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The `forge:ref` declarations of migration 20261119215734_seed_ref_declarations
+// The `forge:ref` declarations of migration 20261121102323_seed_ref_declarations
 // say, where a row reaches one parent by two foreign-key paths, which path is
 // the truth. These tests apply the real migrations and seed the tables they
 // cover with the pinned forge's seeder (forge/pkg/seedplan) and reliant's
