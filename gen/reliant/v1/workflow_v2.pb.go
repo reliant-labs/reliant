@@ -766,8 +766,15 @@ func (x *ModelSelector) GetCompactionThreshold() int32 {
 }
 
 // DaemonSelectorProto specifies criteria for selecting which daemon executes tools.
-// Supports direct ID, name matching, type filtering, and label matching.
-// In YAML, a plain string like "local" is shorthand for {type: "local"}.
+// Supports direct ID, name matching, type filtering, label matching and a
+// machine pool. In YAML, a plain string like "local" is shorthand for
+// {type: "local"}, and any other string is a machine id or name.
+//
+// {pool: <name>} places the run (a workflow-level selector) or the node (a
+// node-level one) ONCE on one machine, chosen like a
+// pool-bound trigger's run: the least-loaded member that can take work, under
+// the pool's max_runs_per_member, on the pool's agreed workflow catalog. Every
+// later step of that run or node runs on the chosen machine.
 type DaemonSelectorProto struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Exact daemon ID (UUID).
@@ -776,8 +783,13 @@ type DaemonSelectorProto struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Daemon type: "local", "cloud", or "any".
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	// Match by labels (all must match).
-	Labels        map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Match by labels (all must match): the labels a machine advertises when
+	// it connects, on each call. Never placed.
+	Labels map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Place on one member of the owner's machine pool of this name. Exclusive
+	// with id, name, type and labels. A pool the owner does not have is a
+	// validation error.
+	Pool          string `protobuf:"bytes,5,opt,name=pool,proto3" json:"pool,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -838,6 +850,13 @@ func (x *DaemonSelectorProto) GetLabels() map[string]string {
 		return x.Labels
 	}
 	return nil
+}
+
+func (x *DaemonSelectorProto) GetPool() string {
+	if x != nil {
+		return x.Pool
+	}
+	return ""
 }
 
 // CelDaemonSelector wraps a DaemonSelectorProto that may be a literal or a CEL {{expr}} expression.
@@ -9141,12 +9160,13 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vtemperature\x18\x05 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x126\n" +
 	"\x14compaction_threshold\x18\x06 \x01(\x05H\x01R\x13compactionThreshold\x88\x01\x01B\x0e\n" +
 	"\f_temperatureB\x17\n" +
-	"\x15_compaction_threshold\"\xcd\x01\n" +
+	"\x15_compaction_threshold\"\xe1\x01\n" +
 	"\x13DaemonSelectorProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12C\n" +
-	"\x06labels\x18\x04 \x03(\v2+.reliant.v1.DaemonSelectorProto.LabelsEntryR\x06labels\x1a9\n" +
+	"\x06labels\x18\x04 \x03(\v2+.reliant.v1.DaemonSelectorProto.LabelsEntryR\x06labels\x12\x12\n" +
+	"\x04pool\x18\x05 \x01(\tR\x04pool\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"o\n" +

@@ -151,6 +151,56 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 	return false
 }
 
+// onlyPoolsNeedAMachine reports whether every node of wf that needs a machine
+// gets it from a `daemon: {pool:}` of its own or of an enclosing loop or
+// `workflow:` node, and at least one does. Such a run never routes to the
+// machine it inherits (the workflow-level one, else the chat's), so its
+// startup preflight must not wait on — or fail for — that machine: each
+// pool places, and wakes, its own member when its node first runs.
+//
+// Only a literal pool counts: an expression could resolve to anything, so a
+// node whose selector is one is treated as needing the inherited machine, as
+// is any other node RequiresDaemon would count. A pool is new in the same
+// release as this check, so no history recorded before it answers true here.
+func onlyPoolsNeedAMachine(wf *reliantv1.Workflow, cfg *PreflightConfig) bool {
+	pooled, inherited := poolCoverage(wf.GetNodes(), cfg)
+	return pooled && !inherited
+}
+
+// poolCoverage walks nodes: pooled is whether any of them places itself on a
+// pool, inherited whether any needs a machine it does not place.
+func poolCoverage(nodes []*reliantv1.Node, cfg *PreflightConfig) (pooled, inherited bool) {
+	for _, node := range nodes {
+		if node == nil {
+			continue
+		}
+		if lit := node.GetDaemon().GetLiteral(); lit != nil && lit.GetPool() != "" {
+			pooled = true
+			continue
+		}
+		var body *reliantv1.Workflow
+		switch node.GetType() {
+		case model.NodeTypeLoop:
+			body = node.GetLoop().GetInline()
+		case model.NodeTypeWorkflow:
+			body = node.GetWorkflow().GetInline()
+		}
+		if body != nil && node.GetDaemon() == nil {
+			if body.GetDaemon() != nil {
+				inherited = true
+			}
+			p, i := poolCoverage(body.GetNodes(), cfg)
+			pooled = pooled || p
+			inherited = inherited || i
+			continue
+		}
+		if requiresDaemonNode(node, cfg) {
+			inherited = true
+		}
+	}
+	return pooled, inherited
+}
+
 func actionRequiresDaemon(args *reliantv1.ActionArgs) bool {
 	if args == nil || model.CelStringIsExpr(args.GetUses()) {
 		return true

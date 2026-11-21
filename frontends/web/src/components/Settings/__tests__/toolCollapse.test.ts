@@ -19,10 +19,10 @@ describe("tool collapse defaults", () => {
     expect(shouldToolBeCollapsed("mcp__reliant__spawn")).toBe(true);
   });
 
-  it("keeps file edits expanded — the diff is the point of the call", () => {
+  it("collapses file edits: the row says +4 −1, the diff opens on a click", () => {
     expect(getToolCategory("edit")).toBe("fileWrite");
-    expect(shouldToolBeCollapsed("edit")).toBe(false);
-    expect(shouldToolBeCollapsed("write")).toBe(false);
+    expect(shouldToolBeCollapsed("edit")).toBe(true);
+    expect(shouldToolBeCollapsed("write")).toBe(true);
   });
 
   it("collapses reads and searches", () => {
@@ -35,19 +35,17 @@ describe("tool collapse defaults", () => {
     expect(shouldToolBeCollapsed("some_new_tool")).toBe(true);
   });
 
-  it("only file edits are expanded by default", () => {
+  it("expands no category by default", () => {
     const expanded = Object.entries(DEFAULT_TOOL_COLLAPSE_SETTINGS)
       .filter(([, collapsed]) => !collapsed)
       .map(([k]) => k);
-    expect(expanded).toEqual(["fileWrite"]);
+    expect(expanded).toEqual([]);
   });
 
   describe("narrow surfaces", () => {
     it("collapses file edits on mobile", () => {
-      // The desktop rationale for expanding edits ("the diff is the point")
-      // assumes a pane wide enough to read a diff in. On a phone one expanded
-      // edit pushes the rest of the conversation off-screen.
-      expect(shouldToolBeCollapsed("edit", "desktop")).toBe(false);
+      // On a phone one expanded edit pushes the rest of the conversation
+      // off-screen, whatever the desktop setting says.
       expect(shouldToolBeCollapsed("edit", "mobile")).toBe(true);
       expect(shouldToolBeCollapsed("write", "mobile")).toBe(true);
       expect(shouldToolBeCollapsed("patch", "mobile")).toBe(true);
@@ -63,7 +61,7 @@ describe("tool collapse defaults", () => {
     it("collapses every category on mobile regardless of settings", () => {
       const toolsByCategory = [
         "view", // fileView
-        "edit", // fileWrite — the only desktop-expanded category
+        "edit", // fileWrite
         "grep", // searchRead
         "shell", // execution
         "create_plan", // planning

@@ -200,6 +200,15 @@ export const ERROR_REASONS = [
   "policy_invalid",
   /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
   "policy_version_conflict",
+  // ── control-plane: free static hosting (OrganizationService.MoveFreeHostingDesignation) ──
+  /** PermissionDenied: the caller is not a member of the target org. */
+  "not_org_member",
+  /** PermissionDenied: only the accountable founder may move their free allowance. */
+  "free_hosting_founder_only",
+  /** FailedPrecondition: the target org already pays for hosting and needs no free allowance. */
+  "free_hosting_target_billed",
+  /** FailedPrecondition: a real move inside the 30-day cooldown; the message carries the RFC3339 date it ends. */
+  "free_hosting_move_cooldown",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

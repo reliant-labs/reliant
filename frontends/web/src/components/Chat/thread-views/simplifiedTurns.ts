@@ -9,6 +9,13 @@
  * prose / fold / prose, and a turn of many LLM calls reads as its narration
  * with a fold wherever the agent went quiet and worked.
  *
+ * The model's thinking (a `thinking` segment) is a quiet "Thought" row, and
+ * goes with what it led to. Thinking that leads into tool calls (the next
+ * thing the message says is a tool call), or that trails an open run of them,
+ * is part of the work: a row inside the fold, so a turn that thinks between
+ * every call still reads as one fold. Thinking that leads into prose stays
+ * on screen, just above that prose.
+ *
  * A tool call the user must see — a question, an approval, a generated image,
  * a deploy — is a boundary just like prose: [tool, ask_user, tool] renders as
  * fold / card / fold. Nothing that stays on screen is ever collected under a
@@ -53,6 +60,12 @@ export interface MessageSlice {
    * Absent: every call of every listed segment.
    */
   callIds?: readonly string[];
+  /**
+   * `work` only: this slice is its fold's only row and holds no read-only
+   * call, so its calls render as rows of their own, never wrapped in one
+   * group row: the fold is already that group.
+   */
+  ungrouped?: boolean;
 }
 
 /**
@@ -198,13 +211,31 @@ function isBlankText(segment: MessageSegment): boolean {
   return segment.kind === "text" && segment.text.trim() === "";
 }
 
+function isThinking(segment: MessageSegment): boolean {
+  return segment.kind === "thinking";
+}
+
+/**
+ * What the thinking at `s` leads into: the kind of the next segment that is
+ * neither thinking nor blank text, or null when the message ends first.
+ */
+function nextSaid(segments: readonly MessageSegment[], s: number): "tools" | "text" | null {
+  for (let t = s + 1; t < segments.length; t++) {
+    const segment = segments[t];
+    if (isThinking(segment) || isBlankText(segment)) continue;
+    return segment.kind === "tools" ? "tools" : "text";
+  }
+  return null;
+}
+
 /**
  * Rewrites `items` for the simplified thread in one linear pass. Rows the pass
  * does not change (non-message items, text-only messages, boundaries) are
  * returned as the same objects.
  *
  * A work run is a maximal sequence, on one thread, of tool calls, blank
- * text, and foldable activity messages. Non-blank assistant text, a surfaced
+ * text, the thinking that leads into or trails those calls, and foldable
+ * activity messages. Non-blank assistant text, a surfaced
  * tool call, a human message, errors, info, run outputs, thread changes,
  * warnings and anything else closes it. A run becomes a fold when it ran a tool or holds at least
  * two activity messages; a lone message with no tool work stays its own row.
@@ -378,8 +409,15 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     if (!segments.some((segment) => segment.kind === "tools")) {
       // A blank assistant message (an LLM call that has not said anything
       // yet) joins the open run, so a live fold stays the last row between
+      // calls; so does one that has only thought so far, after a run of tool
       // calls. Anything else here is prose: the whole message, as detailed.
-      if (run && run.thread === thread && !hasAttachments && segments.every(isBlankText)) {
+      const joins =
+        run !== null &&
+        run.thread === thread &&
+        !hasAttachments &&
+        segments.every((segment) => isBlankText(segment) || isThinking(segment)) &&
+        (run.tools > 0 || segments.every(isBlankText));
+      if (joins) {
         segments.forEach((_, s) => addWork(message, segments, s));
         continue;
       }
@@ -393,8 +431,35 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     type ProseSlice = { segmentIndexes: number[]; role: "prose"; chrome?: boolean };
     let prose = null as ProseSlice | null;
     let lastProse = null as ProseSlice | null;
+    const pushProse = (slice: ProseSlice, s: number) => {
+      // The message's first row keeps its plain key, so a text-only
+      // message that starts calling tools mid-stream keeps its row.
+      out.push(lastProse
+        ? { ...item, slice, key: `${message.id}:${s}` }
+        : { ...item, slice });
+      lastProse = slice;
+    };
+    // Thinking that leads into tool calls, waiting for the run they open.
+    let thinking: number[] = [];
+    // Leading into a surfaced call (or nothing), it is not work after all:
+    // it stays on screen, where it was.
+    const thinkingStays = () => {
+      if (thinking.length === 0) return;
+      pushProse({ segmentIndexes: thinking, role: "prose" }, thinking[0]);
+      thinking = [];
+    };
     for (let s = 0; s < segments.length; s++) {
       const segment = segments[s];
+      if (isThinking(segment)) {
+        const next = nextSaid(segments, s);
+        const openRun = run !== null && run.thread === thread ? run : null;
+        if (next === "tools" || (next === null && openRun !== null && openRun.tools > 0)) {
+          prose = null;
+          if (openRun) addWork(message, segments, s);
+          else thinking.push(s);
+          continue;
+        }
+      }
       if (segment.kind === "tools") {
         prose = null;
         segment.executions.forEach((execution, e) => {
@@ -402,6 +467,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
           if (isSurfaced(execution)) {
             // A boundary, like prose: the run before it folds on its own.
             close();
+            thinkingStays();
             if (surfaced && surfaced.message === message && surfaced.s === s && out[out.length - 1] === surfaced.row) {
               surfaced.callIds.push(callId);
               return;
@@ -420,6 +486,8 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
           // A run opening mid-segment (after a surfaced call) names the call,
           // so the folds either side of that call keep distinct keys.
           if (!run) open(e === 0 ? `work-${message.id}-${s}` : `work-${message.id}-${s}:${callId}`, thread, messageItem);
+          for (const t of thinking) addWork(message, segments, t);
+          thinking = [];
           addWork(message, segments, s, callId);
         });
       } else if (isBlankText(segment)) {
@@ -431,14 +499,10 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
       } else {
         close();
         prose = { segmentIndexes: [s], role: "prose" };
-        // The message's first row keeps its plain key, so a text-only
-        // message that starts calling tools mid-stream keeps its row.
-        out.push(lastProse
-          ? { ...item, slice: prose, key: `${message.id}:${s}` }
-          : { ...item, slice: prose });
-        lastProse = prose;
+        pushProse(prose, s);
       }
     }
+    thinkingStays();
     if (lastProse) {
       lastProse.chrome = true;
     } else if (hasAttachments) {

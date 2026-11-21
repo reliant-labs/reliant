@@ -480,13 +480,13 @@ describe("priority+ row", () => {
       renderWithQuery(<ChatInput onSend={vi.fn()} />);
       const items = Array.from(screen.getByTestId("composer-tools").querySelectorAll("[data-fold-item]"));
       const keys = items.map((el) => [el.getAttribute("data-fold-item"), el.getAttribute("data-folded")]);
-      // workflow and model fit; the toolbar param, account and settings fold.
+      // workflow and model fit; the mode param and the account fold. Settings
+      // are never in the row: they live in ⊕.
       expect(keys).toEqual([
         ["workflow", null],
         ["model", null],
         ["param:mode", "true"],
         ["account", "true"],
-        ["settings", "true"],
       ]);
       fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
       expect(screen.getByTestId("options-settings-row")).toBeInTheDocument();

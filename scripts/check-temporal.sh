@@ -22,7 +22,7 @@ if nc -z localhost 8233 2>/dev/null; then
     echo "      Open: http://localhost:8233"
 else
     echo "   ❌ Temporal UI is NOT running"
-    echo "      Start with: npm run temporal:ui"
+    echo "      Start with: pnpm run temporal:ui"
 fi
 
 echo ""
@@ -63,7 +63,7 @@ if nc -z localhost 7235 2>/dev/null && nc -z localhost 8233 2>/dev/null; then
     echo "✅ Everything is running! Open http://localhost:8233"
 elif nc -z localhost 7235 2>/dev/null; then
     echo "⚠️  Temporal server is running, but UI is not"
-    echo "   Run: npm run temporal:ui"
+    echo "   Run: pnpm run temporal:ui"
 else
     echo "❌ Temporal server is not running"
     echo "   Run: npm run dev:electron:v2"

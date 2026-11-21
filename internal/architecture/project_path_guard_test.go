@@ -71,9 +71,9 @@ var projectPathAllowed = map[string]struct {
 	reason projectPathReason
 }{
 	"internal/db/repository_impl.go:CreateProject":                                     {1, reasonProjectRow},
-	"internal/handlers/project/project.go:GetProjectMetadata":                          {1, reasonProjectRow},
+	"internal/handlers/project/rpc_get_project_metadata.go:GetProjectMetadata":         {1, reasonProjectRow},
 	"internal/handlers/project/rpc_create_project.go:CreateProject":                    {3, reasonCreate},
-	"internal/handlers/project/rpc_project_daemons.go:ensureProjectDirsOnDaemon":       {7, reasonHeal},
+	"internal/handlers/project/project_daemons_helpers.go:ensureProjectDirsOnDaemon":   {7, reasonHeal},
 	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:reconcileProjectDaemons": {6, reasonProbe},
 	"internal/projectcheckout/machine.go:Rebase":                                       {1, reasonRebaseRoot},
 	"internal/projectproto/projectproto.go:Project":                                    {1, reasonProjectRow},

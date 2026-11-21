@@ -7,7 +7,7 @@ reliant#2890 makes `DeleteProject` schedule the delete instead of deleting
 |--------|-------|
 | `projects.delete_after`, `deleted_by`, `purge_started_at`, and the partial index `idx_projects_delete_after` | `db/migrations/20261118040600_project_delete_after.up.sql`, `…040626_projects_delete_after_index.up.sql` |
 | The `project_delete_admission` triggers: a new chat, worktree, run or live trigger in a deleted project is refused under a lock the delete serializes with | `db/migrations/20261118103211_project_delete_write_admission.up.sql` |
-| Delete pauses the project's enabled triggers (`paused_reason = 'project_deleted'`) and their Temporal schedules; restore resumes exactly those | `internal/store/project_schedule.go`, `internal/handlers/project/project_delete.go` |
+| Delete pauses the project's enabled triggers (`paused_reason = 'project_deleted'`) and their Temporal schedules; restore resumes exactly those | `internal/store/project_schedule.go`, `internal/handlers/project/rpc_delete_project.go` |
 | The worker's `project_purge` loop purges projects whose window has ended, every 15 minutes | `internal/app/providers_worker.go` (`ProjectPurge`) |
 
 The tests prove each piece against a real Postgres. Whether the worker runs

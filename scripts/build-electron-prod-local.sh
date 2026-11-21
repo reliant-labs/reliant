@@ -11,9 +11,9 @@
 # Gatekeeper will reject it anywhere but the machine that built it. Releases
 # still go through .github/workflows/release.yml.
 #
-# ── Invoke it through npm, not directly ────────────────────────────────
+# ── Invoke it through the package target, not directly ─────────────────
 #
-#   cd electron && npm run dist:mac:prod-local
+#   cd electron && pnpm run dist:mac:prod-local
 #
 # That target wraps this script in electron/scripts/with-release-config.mjs,
 # which expands electron/release.config.json into the environment — the same
@@ -70,15 +70,15 @@ for var in RELIANT_API_URL RELIANT_GATEWAY_URL RELIANT_CONTROL_PLANE_URL; do
   case "${!var:-}" in
     ""|*localhost*|*127.0.0.1*)
       echo "$var is '${!var:-}' — refusing to build a 'prod' app against a local endpoint." >&2
-      echo "Run this through the npm target, which supplies the KCL-derived config:" >&2
-      echo "    cd electron && npm run dist:mac:prod-local" >&2
+      echo "Run this through the package target, which supplies the KCL-derived config:" >&2
+      echo "    cd electron && pnpm run dist:mac:prod-local" >&2
       exit 1
       ;;
   esac
 done
 
 echo "==> Building with prod config"
-[[ -n "${RELIANT_RENDERER_CONFIG:-}" ]] || { echo "RELIANT_RENDERER_CONFIG is unset — run this through the npm target (cd electron && npm run dist:mac:prod-local)" >&2; exit 1; }
+[[ -n "${RELIANT_RENDERER_CONFIG:-}" ]] || { echo "RELIANT_RENDERER_CONFIG is unset — run this through the package target (cd electron && pnpm run dist:mac:prod-local)" >&2; exit 1; }
 echo "    RELIANT_API_URL            = $RELIANT_API_URL"
 echo "    RELIANT_GATEWAY_URL        = $RELIANT_GATEWAY_URL"
 
@@ -119,7 +119,7 @@ echo "==> Building the Go backend binaries (mac)"
 ./scripts/build-electron.sh mac
 
 echo "==> Packaging with $BUILDER_CONFIG"
-( cd electron && npx electron-builder --mac --config electron-builder.local.js )
+( cd electron && pnpm exec electron-builder --mac --config electron-builder.local.js )
 
 APP="$PROJECT_ROOT/electron/dist/mac-arm64/Reliant Local.app"
 [[ -d "$APP" ]] || APP="$(find "$PROJECT_ROOT/electron/dist" -maxdepth 2 -name 'Reliant Local.app' -print -quit)"
