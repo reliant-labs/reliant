@@ -43,6 +43,7 @@ import {
 
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
 import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
+import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS } from "./fixtureReleases";
 import { fixtureReleaseTestsWire } from "./releaseTestsFixtures";
 
 /**
@@ -58,8 +59,9 @@ const MINUTE = 60_000;
 const DAY = 86_400_000;
 
 export const FIXTURE_PROJECT = "shopfront";
-export const FIXTURE_COMMIT = "9f3c2a17be0d4c55a1f0e9d8c7b6a5f4e3d2c1b0";
-export const FIXTURE_RELEASES = ["20261105.093000-77e0c1d2a3b4", "20261118.121200-a1b2c3d4e5f6"] as const;
+/** main's newest commit: the one staging's release was cut from (fixtureReleases.ts). */
+export const FIXTURE_COMMIT = FIXTURE_RELEASE_COMMITS.staging;
+export const FIXTURE_RELEASES = [FIXTURE_RELEASE_VERSIONS.first, FIXTURE_RELEASE_VERSIONS.prod] as const;
 
 const ts = (ms: number) => timestampFromMs(ms);
 
@@ -118,6 +120,9 @@ export const FIXTURE_LAST_RUN: WireRunSummary = {
   createdAt: ts(FIXTURE_NOW - 12 * MINUTE),
 };
 
+/** The trend commits the releases were cut from (by index): the first release on day 16, prod's on day 2. */
+const TREND_RELEASE_COMMITS: Record<number, string> = { 13: FIXTURE_RELEASE_COMMITS.first, 27: FIXTURE_RELEASE_COMMITS.prod };
+
 /** 30 commits over 30 days: a dip after the first release, recovered by the second. */
 function trend(): WireCoveragePoint[] {
   return Array.from({ length: 30 }, (_, i) => {
@@ -127,7 +132,7 @@ function trend(): WireCoveragePoint[] {
     const at = FIXTURE_NOW - day * DAY - (i === 29 ? 12 * MINUTE : 3 * 60 * MINUTE);
     const lane = (base: number, swing: number) => Math.round((base - (29 - i) * 0.05 + dip * swing) * 10) / 10;
     return {
-      gitCommit: i === 29 ? FIXTURE_COMMIT : `${(0xa000 + i * 97).toString(16)}e0c1d2a3b4c5d6e7f8091a2b3c4d5e6f708192`.slice(0, 40),
+      gitCommit: TREND_RELEASE_COMMITS[i] ?? (i === 29 ? FIXTURE_COMMIT : `${(0xa000 + i * 97).toString(16)}e0c1d2a3b4c5d6e7f8091a2b3c4d5e6f708192`.slice(0, 40)),
       at: ts(at),
       combinedPercent: i === 29 ? 74.2 : combined,
       lanesPercent: i === 29 ? { ...LANES } : { unit: lane(LANES.unit, 0.8), integration: lane(LANES.integration, 0.4), e2e: lane(LANES.e2e, 0.6) },

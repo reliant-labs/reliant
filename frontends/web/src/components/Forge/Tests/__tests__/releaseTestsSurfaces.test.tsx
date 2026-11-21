@@ -24,8 +24,8 @@ import { ReleaseDetail, type ReleaseDetailSearch } from "../../Releases/ReleaseD
 import { ReleasesList, type ReleasesSearch } from "../../Releases/ReleasesList";
 import { RELEASE_ENVS, RELEASE_PROJECT, RELEASES, createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { fixtureObsApi } from "../../Releases/__tests__/releasesTestUtils";
-import { FIXTURE_NOW, FIXTURE_PROJECT, FIXTURE_RELEASES, fixtureSummaryResponse, fixtureTestApi, type TestsScenario } from "../fixtures";
-import { FIXTURE_RELEASE_VERSIONS } from "../releaseTestsFixtures";
+import { FIXTURE_COMMIT, FIXTURE_NOW, FIXTURE_PROJECT, FIXTURE_RELEASES, fixtureSummaryResponse, fixtureTestApi, type TestsScenario } from "../fixtures";
+import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS, fixtureReleaseCommit } from "../fixtureReleases";
 import { releaseTestsColumnShown, useReleaseTestsColumn } from "../surfaces/ReleaseTestsColumn";
 import { ReleaseTestsTab, releaseTestsHrefs } from "../surfaces/ReleaseTestsTab";
 import { renderWithApi } from "./testsTestUtils";
@@ -51,10 +51,21 @@ function tab(version: string, scenario: TestsScenario = "report") {
 }
 
 describe("the fixture", () => {
-  it("names the trend's releases by the versions fixtures.ts marks", () => {
-    // releaseTestsFixtures.ts cannot import them (an import cycle), so it repeats them.
-    expect(V.prod).toBe(FIXTURE_RELEASES[1]);
-    expect(V.first).toBe(FIXTURE_RELEASES[0]);
+  it("puts the trend's release markers on the commits the releases were cut from", () => {
+    const markers = fixtureSummaryResponse().releaseMarkers;
+    expect(markers.map((m) => m.releaseVersion)).toEqual([...FIXTURE_RELEASES]);
+    expect(markers.map((m) => m.gitCommit)).toEqual([FIXTURE_RELEASE_COMMITS.first, FIXTURE_RELEASE_COMMITS.prod]);
+    // A version ends in its commit's short sha, but staging's (it runs main's newest commit).
+    for (const key of ["prod", "partial", "untested", "first"] as const) expect(FIXTURE_RELEASE_COMMITS[key].startsWith(V[key].split("-").pop()!)).toBe(true);
+    expect(FIXTURE_RELEASE_COMMITS.staging).toBe(FIXTURE_COMMIT);
+  });
+
+  it("answers each release's Tests with the commit its record names", async () => {
+    const api = fixtureTestApi("report");
+    for (const key of Object.keys(V) as (keyof typeof V)[]) {
+      const tests = await api.getReleaseTests({ orgId: null, project: FIXTURE_PROJECT, version: V[key] });
+      expect(tests.gitCommit, key).toBe(fixtureReleaseCommit(V[key]));
+    }
   });
 });
 
@@ -76,7 +87,7 @@ describe("a release's Tests tab", () => {
     expect(within(since).getByText("TestSyncJob")).toBeInTheDocument();
     expect(within(since).getByText("TestCartMerge")).toBeInTheDocument();
     // Runs and Coverage, pinned to the commit the release was cut from.
-    const commit = fixtureSummaryResponse().releaseMarkers[1]!.gitCommit;
+    const commit = FIXTURE_RELEASE_COMMITS.prod;
     expect(screen.getByTestId("release-tests-runs-link")).toHaveAttribute("href", `/forge/p/${FIXTURE_PROJECT}/tests/runs?commit=${commit}`);
     expect(screen.getByTestId("release-tests-coverage-link")).toHaveAttribute("href", `/forge/p/${FIXTURE_PROJECT}/tests/coverage?commit=${commit}`);
   });
