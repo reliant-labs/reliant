@@ -42,7 +42,7 @@ import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { ProjectsOverview } from "../Console/ProjectsOverview";
 import { rowForRef, useShellSeveral } from "../../Layout/sidebar/shellProject";
 import { ProjectChats } from "../../Projects/ProjectChats";
-import { NoAppLanding } from "../../Projects/ProjectHomePage";
+import { NoAppLanding } from "../../Projects/NoAppLanding";
 import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
