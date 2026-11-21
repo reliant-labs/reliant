@@ -227,22 +227,20 @@ export const useBrowserStore = create(
     }),
     {
       name: "browser-storage",
-      version: 2, // Bumped for worktreeId migration
+      version: 2,
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
       }),
       migrate: (persistedState: any, version: number) => {
-        // Migration from version 1: Clear tabs without worktreeId
-        // Since worktreeId is now required, old tabs without it must be removed
-        if (version < 2 && persistedState?.tabs) {
-          logger.info("[BrowserStore] Migrating to v2: clearing tabs without worktreeId");
-          persistedState.tabs = persistedState.tabs.filter((tab: any) => tab.worktreeId);
-          persistedState.activeTabId = persistedState.tabs.length > 0 
-            ? persistedState.tabs[persistedState.tabs.length - 1].id 
-            : null;
+        // A v1 blob holds tabs without the worktreeId every tab now needs:
+        // start it with no tabs. (Without this migrate, persist would reset
+        // the whole store on any version mismatch.)
+        if (version < 2) {
+          const empty: PersistedBrowserState = { tabs: [], activeTabId: null };
+          return empty;
         }
-        
+
         // Clean up Google URLs with zx parameters that cause infinite reload
         if (persistedState?.tabs) {
           persistedState.tabs = persistedState.tabs.map((tab: BrowserTab) => {

@@ -75,7 +75,7 @@ describe("triggerFromProto", () => {
     });
   });
 
-  it("an older server with no health reads as unknown", () => {
+  it("a trigger with no health reads as unknown", () => {
     expect(triggerFromProto(proto()).health.status).toBe("unknown");
   });
 
