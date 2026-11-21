@@ -37,7 +37,6 @@ vi.mock("../../../services/settingsSync", () => ({
     CHAT_FONT: "appearance.chatFont",
     EDITOR_FONT: "appearance.editorFont",
     FONT_SIZE: "appearance.fontSize",
-    CHAT_TIMELINE_VARIANT: "appearance.chatTimelineVariant",
     WORKFLOW_VIEWER_DEFAULT_MODE: "appearance.workflowViewerDefaultMode",
     SPAWN_DISPLAY_MODE: "appearance.spawnDisplayMode",
     SHOW_HIDDEN_FILES: "appearance.showHiddenFiles",
@@ -100,6 +99,15 @@ describe("MobileAppearancePanel", () => {
     // useUIStore is the real store (not mocked); flipping the switch should
     // not throw and should re-render with the new checked state.
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "false"));
+  });
+
+  it("offers the chat thread switch and not the retired chat density", async () => {
+    render(<MobileAppearancePanel />);
+    await screen.findByText(/^theme$/i);
+    expect(screen.getByText("Chat thread")).toBeInTheDocument();
+    expect(screen.queryByText(/chat timeline density/i)).not.toBeInTheDocument();
+    expect(mocks.setSetting).not.toHaveBeenCalledWith("appearance.chatTimelineVariant", expect.anything());
+    expect(mocks.setSettingIfChanged).not.toHaveBeenCalledWith("appearance.chatTimelineVariant", expect.anything());
   });
 
   it("does not eagerly render Monaco editor settings (omitted on mobile)", async () => {

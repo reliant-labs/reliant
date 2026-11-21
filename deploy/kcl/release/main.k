@@ -2,9 +2,16 @@
 reliant's `release` environment: what reliant BUILDS and ships but never runs,
 declared through forge's generic build primitives. It deploys nothing.
 
-    forge env render release                                  # 0 objects: build-only
-    forge env build release --plan                            # preflight every artifact
-    forge env build release --target reliant-image --docker   # the server image, locally
+    forge env render release                                         # 0 objects: build-only
+    forge env build release --target reliant-image --docker --plan   # preflight the image build
+    forge env build release --target reliant-image --docker          # the server image, locally
+
+Name the target. An untargeted `forge env build release` also builds
+frontends/web (`npm run build`), though this env declares no frontend: at the
+forge this repo pins, `env build` starts from the project's frontend inventory
+and drops only the frontends an env binds to a host or hosted runtime, so an
+env that names none keeps them all. That is a forge defect (reported), not
+part of this env.
 
 WHAT IS HERE. Each artifact is a `kind = "tool"` workload on `forge.BuildOnly`,
 declared in deploy/kcl/workloads.k:
@@ -25,13 +32,24 @@ own image already goes.
 
 THE VERSION STAMP. A release build stamps internal/version from
 scripts/release-identity.sh, which KCL cannot run, so the values are render
-options. Unset, each takes the Dockerfile's own ARG default, so a plain
-`forge env build release` builds exactly what a plain `docker build .` does:
+options: each becomes one of the Dockerfile's build args, exactly as
+build-images.yml passes them. Unset, each takes the Dockerfile's own ARG
+default, the value a plain `docker build .` stamps:
 
     forge env build release --target reliant-image --docker \\
       -D stamp_version="$(bash scripts/release-identity.sh --commit HEAD)" \\
       -D stamp_commit="$(git rev-parse HEAD)" \\
+      -D stamp_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \\
+      -D stamp_branch="$(git rev-parse --abbrev-ref HEAD)" \\
       -D stamp_commit_time="$(bash scripts/release-identity.sh --commit-time --commit HEAD)"
+
+Given the same five values, the binary is byte for byte the one a plain
+`docker build --build-arg ...` of the same tree compiles, and on a shared
+layer cache so is every layer. The image config differs only in its
+timestamps: forge stamps them with SOURCE_DATE_EPOCH (the last commit touching
+the build's inputs) and passes --provenance=false. A cold rebuild still moves
+the digest, because the apt layer is not reproducible (ldconfig's cache and
+apt's logs differ per run), whoever runs the build.
 """
 
 import forge

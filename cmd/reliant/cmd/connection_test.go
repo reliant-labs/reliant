@@ -16,6 +16,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // hostedServerURL is CLIConfig's proto default for --server: the hosted API.
@@ -355,10 +356,12 @@ func TestResolveConnectionCredential(t *testing.T) {
 type fakeProjectService struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	sawBearer string
+	sawClient string
 }
 
 func (f *fakeProjectService) ListProjects(_ context.Context, req *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
 	f.sawBearer = req.Header().Get("Authorization")
+	f.sawClient = req.Header().Get(reliantClientHeader)
 	return connect.NewResponse(&reliantv1.ListProjectsResponse{
 		Projects: []*reliantv1.Project{{Id: "p-1", Name: "demo", Path: "/work/demo"}},
 	}), nil
@@ -391,6 +394,10 @@ func TestProjectListUsesTheServersLogin(t *testing.T) {
 	}
 	if fake.sawBearer != "Bearer "+token {
 		t.Errorf("server saw Authorization %q, want the stored token", fake.sawBearer)
+	}
+	// The CLI names itself, so a server can refuse a version below its floor.
+	if want := "cli/" + strings.TrimPrefix(version.Get().Version, "v"); fake.sawClient != want {
+		t.Errorf("server saw %s %q, want %q", reliantClientHeader, fake.sawClient, want)
 	}
 }
 

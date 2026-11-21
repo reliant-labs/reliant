@@ -12,7 +12,7 @@ import config_gen
 api_server_config: config_gen.ApiServerConfig = {
 }
 
-# Every process at or below `reliant auth`, `reliant daemon`, `reliant github`, `reliant machine`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`.
+# Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`.
 cli_config: config_gen.CLIConfig = {
 }
 

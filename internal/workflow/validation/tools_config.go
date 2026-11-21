@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools/toolcatalog"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // validateToolsConfigBindings checks every tools_config.tools entry against the
@@ -236,4 +238,38 @@ func didYouMeanTool(toolName string) string {
 		return ""
 	}
 	return "did you mean: " + strings.Join(near, ", ")
+}
+
+// validateCredentialValues checks every literal `credentials:` a workflow
+// sets — on a run node, and bound on the shell tool in tools_config.tools —
+// against the values the daemon accepts (daemonpolicy.ParseCredentials). The
+// daemon refuses anything else rather than guess, so a typo ("nope") fails
+// the run node every time it runs, and every shell call the agent makes,
+// while passing every check before the run. An expression is left to the
+// run: its value does not exist yet.
+func validateCredentialValues(wf *reliantv1.Workflow, result *Result) {
+	check := func(path []string, value string) {
+		if containsTemplate(value) {
+			return
+		}
+		if _, err := daemonpolicy.ParseCredentials(value); err != nil {
+			result.AddErrorWithSuggestion(CategoryCredentials, path, "credentials",
+				err.Error()+": the daemon refuses any other value, so this step can never run",
+				`use credentials: none to withhold credentials, or leave it out to keep them`)
+		}
+	}
+	walkWorkflowNodes(wf, nil, func(node *reliantv1.Node, nodePath []string) {
+		if run := node.GetRun(); run != nil && run.GetCredentials() != "" {
+			check(joinPath(nodePath, "args"), run.GetCredentials())
+		}
+		shell := node.GetCallLlm().GetToolsConfig().GetTools()["shell"]
+		if v, ok := shell.GetFields()["credentials"]; ok {
+			if s, isString := v.GetKind().(*structpb.Value_StringValue); isString {
+				check(joinPath(nodePath, "tools_config", "tools", "shell"), s.StringValue)
+			} else {
+				result.AddError(CategoryCredentials, joinPath(nodePath, "tools_config", "tools", "shell"), "credentials",
+					`credentials must be "none" or "inherit"`)
+			}
+		}
+	})
 }

@@ -9,7 +9,10 @@
 # symbol stripping) and launched under `dlv exec --headless` so a debugger can
 # attach over the network.
 #
-#   Build:
+#   Build (declared as the opt-in `reliant-debug-image` workload in
+#   deploy/kcl/workloads.k; the dev env binds it only when asked):
+#     forge env build dev -D debug_image=true --docker --target reliant-debug-image
+#   or by hand:
 #     docker build -f Dockerfile.debug -t reliant:debug .
 #
 #   Run a role under Delve (gateway shown; api/worker identical):
@@ -28,9 +31,14 @@
 # so the pod becomes Ready without a debugger attached first.
 
 # ── Build (debug symbols preserved) ──────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+# The same builder as Dockerfile — golang:1.27.4-bookworm by digest — for the
+# same two reasons its header gives: the toolchain go.mod requires, and a glibc
+# builder so the binary's interpreter matches the debian runtime on every arch.
+# (This file had stayed on an alpine go1.26 builder, whose GOTOOLCHAIN=local
+# refused go.mod at `go mod download`.)
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS builder
 ARG TARGETARCH
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # Workspace mode off: the sibling ../forge checkout go.work points at is absent
 # from the build context, so forge resolves at the version pinned in go.mod.
@@ -42,8 +50,11 @@ COPY go.mod go.sum ./
 # must be in place before the module graph is read.
 COPY sdk/go/go.mod sdk/go/go.sum ./sdk/go/
 RUN go mod download
-# Pin a Delve version compatible with the toolchain; installed into GOBIN.
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
+# Delve, pinned, for the TARGET arch. A cross-arch `go install` writes to
+# /go/bin/linux_<arch>/, so it is moved to where the runtime stage copies it.
+ARG DELVE_VERSION=v1.27.2
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go install github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION} && \
+    if [ ! -f /go/bin/dlv ]; then mv /go/bin/linux_${TARGETARCH}/dlv /go/bin/dlv; fi
 COPY . .
 # -gcflags=all=-N -l: disable optimizations + inlining so Delve can map every
 # line and inspect every variable. No -ldflags=-s -w (keep the symbol table).
