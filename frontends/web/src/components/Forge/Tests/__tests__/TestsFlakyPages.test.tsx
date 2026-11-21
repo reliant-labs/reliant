@@ -5,7 +5,8 @@
  *
  * The list: ranked by flake rate shown as "x% (n runs)", never a verdict;
  * suspected is the state to act on, with the quarantine command to copy and
- * the agent's slot shown disabled; quarantine path and "overdue"; the issue;
+ * the agent that fixes it (Ask Reliant, seeded from the test's own record,
+ * and disabled with its reason where no agent can start); quarantine path and "overdue"; the issue;
  * host health apart, and no row for a test that only failed on the host.
  * The state filter is held in the URL. A test's page: its record, the
  * outcome strip, its events with verdict and signal (host and correlated
@@ -17,7 +18,12 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
+import { useProject } from "@/hooks/project-queries";
 import { forgeConsoleTestsFlakySearchSchema } from "@/routeSchemas";
+
+import { AskAgentModeProvider } from "../../Observability/AskReliant/askAgentMode";
+import type { AskFlakyTestSubject } from "../../Observability/AskReliant/askReliantPrompt";
+import { AGENT_REASON } from "../testsAgent";
 
 import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi, type FixtureTestApi, type TestsScenario } from "../fixtures";
 import { FIXTURE_RUN_IDS } from "../runFlakeFixtures";
@@ -32,6 +38,14 @@ vi.mock("@/components/forge-ui/link", () => ({
     </a>
   ),
 }));
+
+// The agent start is Ask Reliant's (its own tests); here, what it is handed.
+const ask = vi.fn(async () => true);
+vi.mock("../../Observability/AskReliant/AskReliant", () => ({
+  useAskReliant: () => ({ ask, busy: false, starting: null, dialog: null, mode: "chat" }),
+}));
+
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/hooks/project-queries")>()), useProject: vi.fn() }));
 
 vi.mock("../../Console/consoleContext", () => ({
   useForgeConsole: () => ({
@@ -103,7 +117,7 @@ describe("Tests › Flaky tests: the full list", () => {
     expect(current).not.toHaveTextContent("overdue");
   });
 
-  it("suggests the quarantine command for a test to act on, with the agent's slot disabled", async () => {
+  it("suggests the quarantine command for a test to act on, beside the agent that fixes it", async () => {
     renderFlaky("report");
     const suspected = await screen.findByTestId("tests-flake-actions-TestCheckoutTimeout");
     expect(within(suspected).getByTestId("getting-started-command")).toHaveTextContent(
@@ -111,9 +125,8 @@ describe("Tests › Flaky tests: the full list", () => {
     );
     expect(within(suspected).getByRole("button", { name: /Copy reliant forge test quarantine add/ })).toBeInTheDocument();
     const fix = within(suspected).getByTestId("tests-fix-with-agent");
-    expect(fix).toBeDisabled();
+    expect(fix).toBeEnabled();
     expect(fix).toHaveTextContent("Fix this flaky test");
-    expect(fix).toHaveAccessibleDescription("Coming soon");
 
     expect(within(screen.getByTestId("tests-flake-actions-TestWebhookSign/rotated key")).getByTestId("getting-started-command")).toHaveTextContent(
       `reliant forge test quarantine add '${idOf("internal/webhooks", "TestWebhookSign/rotated key")}'`
@@ -121,8 +134,23 @@ describe("Tests › Flaky tests: the full list", () => {
     // Quarantined already: no command, still the fix slot. Fixed: nothing to do.
     const quarantined = screen.getByTestId("tests-flake-actions-TestInventoryReserve");
     expect(within(quarantined).queryByTestId("getting-started-command")).not.toBeInTheDocument();
-    expect(within(quarantined).getByTestId("tests-fix-with-agent")).toBeDisabled();
+    expect(within(quarantined).getByTestId("tests-fix-with-agent")).toBeEnabled();
     expect(screen.queryByTestId("tests-flake-actions-TestEmailDigest")).not.toBeInTheDocument();
+  });
+
+  it("Fix this flaky test hands Ask Reliant the test's record and its failure signatures, to send at once", async () => {
+    ask.mockClear();
+    const { api } = renderFlaky("report");
+    const sync = await screen.findByTestId("tests-flake-actions-TestSyncJob");
+    fireEvent.click(within(sync).getByTestId("tests-fix-with-agent"));
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    const [subject, , intent] = ask.mock.calls[0] as unknown as [AskFlakyTestSubject, unknown, string];
+    expect(intent).toBe("fix");
+    expect(subject).toMatchObject({ kind: "flaky-test", testId: idOf("internal/jobs", "TestSyncJob"), state: "flaky", runs: 412, defaultBranch: "main", issueUrl: "https://github.com/acme/shopfront/issues/212" });
+    // The signatures come from the test's own read: the list has none.
+    expect(api.calls.some((call) => call.method === "getTest")).toBe(true);
+    expect(subject.signatures.length).toBeGreaterThan(0);
+    expect(subject.signatures[0].sampleOutput).toContain("TestSyncJob");
   });
 
   it("keeps host health apart, and lists no test that only failed on the host", async () => {
@@ -194,12 +222,17 @@ describe("Tests › Flaky tests: nothing to show", () => {
 
 const runHref = (runId: string) => `/forge/p/shopfront/tests/runs/${runId}`;
 
-function renderTest(scenario: TestsScenario, testId: string) {
-  return renderWithApi(fixtureTestApi(scenario), <TestsFlakyTestView project={FIXTURE_PROJECT} testId={testId} runHref={runHref} now={FIXTURE_NOW} />);
+function renderTest(scenario: TestsScenario, testId: string, { projectId = "proj-shopfront", mode = "chat" }: { projectId?: string | null; mode?: "chat" | "handoff" } = {}) {
+  return renderWithApi(
+    fixtureTestApi(scenario),
+    <AskAgentModeProvider mode={mode}>
+      <TestsFlakyTestView project={FIXTURE_PROJECT} projectId={projectId} testId={testId} runHref={runHref} now={FIXTURE_NOW} />
+    </AskAgentModeProvider>
+  );
 }
 
 describe("a test's page", () => {
-  it("shows its record: state, the flake rate with its n, its issue, the command and the agent's slot", async () => {
+  it("shows its record: state, the flake rate with its n, its issue, the command and the agent", async () => {
     renderTest("report", idOf("internal/jobs", "TestSyncJob"));
     const record = await screen.findByTestId("tests-test-record");
     expect(record).toHaveTextContent("TestSyncJob");
@@ -208,7 +241,30 @@ describe("a test's page", () => {
     expect(within(record).getByTestId("tests-test-rate")).toHaveTextContent("1.1% (412 runs)");
     expect(within(record).getByRole("link", { name: /#212/ })).toHaveAttribute("href", "https://github.com/acme/shopfront/issues/212");
     expect(within(record).getByTestId("tests-test-quarantine-command")).toHaveTextContent(`reliant forge test quarantine add ${idOf("internal/jobs", "TestSyncJob")}`);
-    expect(within(record).getByTestId("tests-fix-with-agent")).toBeDisabled();
+    expect(within(record).getByTestId("tests-fix-with-agent")).toBeEnabled();
+  });
+
+  it("disables Fix this flaky test, saying why, where no agent can start", async () => {
+    const id = idOf("internal/jobs", "TestSyncJob");
+    const reasonOf = async () => {
+      const fix = await screen.findByTestId("tests-fix-with-agent");
+      expect(fix).toBeDisabled();
+      return screen.getByTestId("tests-fix-with-agent-reason").textContent;
+    };
+
+    const noRepo = renderTest("report", id, { projectId: null });
+    expect(await reasonOf()).toBe(AGENT_REASON.noProject);
+    noRepo.unmount();
+
+    const handoff = renderTest("report", id, { mode: "handoff" });
+    expect(await reasonOf()).toBe(AGENT_REASON.handoff);
+    handoff.unmount();
+
+    vi.mocked(useProject).mockReturnValue({ is_git_repo: false } as ReturnType<typeof useProject>);
+    renderTest("report", id);
+    expect(await reasonOf()).toBe(AGENT_REASON.notGit);
+    expect(screen.getByTestId("tests-fix-with-agent")).toHaveAccessibleDescription(AGENT_REASON.notGit);
+    vi.mocked(useProject).mockReturnValue(undefined);
   });
 
   it("draws its last 50 runs, oldest first, each a link to the run", async () => {
