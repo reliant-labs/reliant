@@ -12,12 +12,25 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { createRouterTransport } from "@connectrpc/connect";
+
+import { CoverageSourceService, CoverageSourceUnavailable } from "@/gen/reliant/v1/coverage_source_pb";
+import { setTransport } from "@/lib/connect";
 import { forgeConsoleTestsCoverageSearchSchema } from "@/routeSchemas";
 import { CoverageSourceProvider } from "@/services/coverageSource/CoverageSourceContext";
 import { fetchCoverageSource, type FetchCoverageSource } from "@/services/coverageSource/coverageSource";
 import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
 
-import { FIXTURE_BASE, FIXTURE_INVOICE_PATH, FIXTURE_REFUND_BLOB, FIXTURE_REFUND_PATH, FIXTURE_TAX_PATH, fixtureCoverageSource, type CoverageSourceScenario } from "../coverageFixtures";
+import {
+  FIXTURE_BASE,
+  FIXTURE_INVOICE_PATH,
+  FIXTURE_REFUND_BLOB,
+  FIXTURE_REFUND_PATH,
+  FIXTURE_REFUND_SOURCE,
+  FIXTURE_TAX_PATH,
+  fixtureCoverageSource,
+  type CoverageSourceScenario,
+} from "../coverageFixtures";
 import type { CoverageSearch } from "../coverageModel";
 import { FIXTURE_COMMIT, FIXTURE_PROJECT, fixtureSummaryResponse, fixtureTestApi } from "../fixtures";
 import { TestsCoverageView } from "../TestsCoveragePage";
@@ -153,9 +166,9 @@ describe("Coverage: no source", () => {
   const cases: [CoverageSourceScenario, string][] = [
     ["no-repo", "no linked GitHub repository"],
     ["uncommitted", "uncommitted changes"],
-    ["gone", "GitHub no longer has this version"],
-    ["revoked", "connection that reads this repository was revoked"],
-    ["not-yet-available", "coming"],
+    ["gone", "GitHub doesn't show you this version"],
+    ["revoked", "Connect GitHub to see source"],
+    ["not-yet-available", "can't read files from your linked repository"],
   ];
 
   it.each(cases)("%s: line numbers and hits, one line of why, the figures kept", async (scenario, why) => {
@@ -183,9 +196,33 @@ describe("Coverage: no source", () => {
     expect(await screen.findByTestId("tests-coverage-no-source")).toHaveAttribute("data-reason", "gone");
   });
 
-  it("the real fetch, until GetCoverageSource exists, says source is coming", async () => {
-    renderCoverage({ path: FIXTURE_REFUND_PATH }, { source: fetchCoverageSource });
-    expect(await screen.findByTestId("tests-coverage-no-source")).toHaveAttribute("data-reason", "not-yet-available");
+  it("the real fetch, from a reliant without GetCoverageSource, says source isn't available yet", async () => {
+    const restore = setTransport(createRouterTransport(() => {}));
+    try {
+      renderCoverage({ path: FIXTURE_REFUND_PATH }, { source: fetchCoverageSource });
+      expect(await screen.findByTestId("tests-coverage-no-source")).toHaveAttribute("data-reason", "not-yet-available");
+    } finally {
+      restore();
+    }
+  });
+
+  it("the real fetch draws the blob GetCoverageSource returns", async () => {
+    const restore = setTransport(
+      createRouterTransport(({ service }) => {
+        service(CoverageSourceService, {
+          getCoverageSource: (req) => ({
+            result: req.blobId === FIXTURE_REFUND_BLOB ? { case: "content", value: new TextEncoder().encode(FIXTURE_REFUND_SOURCE) } : { case: "unavailable", value: CoverageSourceUnavailable.GONE },
+          }),
+        });
+      })
+    );
+    try {
+      renderCoverage({ path: FIXTURE_REFUND_PATH }, { source: fetchCoverageSource });
+      const view = await screen.findByTestId("tests-coverage-source");
+      expect(view.querySelector('[data-line="22"]')).toHaveAttribute("data-tone", "covered");
+    } finally {
+      restore();
+    }
   });
 
   it("draws NO highlight over source that is not the report's blob, nor in any no-source state", async () => {

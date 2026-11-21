@@ -130,11 +130,13 @@ export function noSourceWords(reason: CoverageSourceUnavailableReason): string {
     case "uncommitted":
       return "Source isn't shown: the run had uncommitted changes to this file, so its version is in no commit GitHub has.";
     case "gone":
-      return "Source isn't shown: GitHub no longer has this version of the file (its history was rewritten, or the repository moved or was deleted).";
+      return "Source isn't shown: GitHub doesn't show you this version of the file (its history was rewritten, the repository moved or was deleted, or your GitHub account can't read it).";
     case "revoked":
-      return "Source isn't shown: the GitHub connection that reads this repository was revoked. Reconnect GitHub to see the code again.";
+      return "Source isn't shown: your GitHub isn't connected, or its connection was revoked. Connect GitHub to see source.";
     case "not-yet-available":
-      return "Source isn't shown here yet: reading files from your linked repository is coming. The hits below are complete.";
+      return "Source isn't shown here yet: this deployment can't read files from your linked repository. The hits below are complete.";
+    case "too-large":
+      return "Source isn't shown: this file is larger than the coverage view shows (2 MiB). The hits below are complete.";
     case "mismatch":
       return "Source isn't shown: what GitHub returned is not the version these tests ran on, and coverage drawn over other code would be wrong.";
     case "unreachable":

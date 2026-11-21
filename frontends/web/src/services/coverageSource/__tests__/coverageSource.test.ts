@@ -2,13 +2,23 @@
 
 /**
  * The source seam's guard: text is drawn only when it IS the blob the report
- * names (git's own blob id, computed here), and the real fetch, until
- * GetCoverageSource exists, says so.
+ * names (git's own blob id, computed here), and the real fetch maps
+ * GetCoverageSource's answers onto the seam.
  */
 
-import { describe, expect, it } from "vitest";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { FIXTURE_REFUND_BLOB, FIXTURE_REFUND_SOURCE } from "@/components/Forge/Tests/coverageFixtures";
+
+import {
+  CoverageSourceService,
+  CoverageSourceUnavailable,
+  type GetCoverageSourceRequest,
+  type GetCoverageSourceResponseSchema,
+} from "@/gen/reliant/v1/coverage_source_pb";
+import { setTransport } from "@/lib/connect";
 
 import { fetchCoverageSource, gitBlobId, sha1Hex, sourceLineCount, verifySource } from "../coverageSource";
 
@@ -57,9 +67,54 @@ describe("verifySource", () => {
   });
 });
 
-describe("the real fetch", () => {
-  it("answers not-yet-available until GetCoverageSource exists, and uncommitted with no blob", async () => {
+describe("the real fetch: reliant's GetCoverageSource", () => {
+  let restore: (() => void) | undefined;
+  afterEach(() => restore?.());
+
+  function serve(answer: (req: GetCoverageSourceRequest) => MessageInitShape<typeof GetCoverageSourceResponseSchema> | Promise<never>) {
+    const asked: GetCoverageSourceRequest[] = [];
+    restore = setTransport(
+      createRouterTransport(({ service }) => {
+        service(CoverageSourceService, {
+          getCoverageSource: (req) => {
+            asked.push(req);
+            return answer(req);
+          },
+        });
+      })
+    );
+    return asked;
+  }
+
+  it("returns the blob's bytes as text, asking with the project, blob and org", async () => {
+    const asked = serve(() => ({ result: { case: "content", value: new TextEncoder().encode(FIXTURE_REFUND_SOURCE) } }));
+    await expect(fetchCoverageSource("shopfront", FIXTURE_REFUND_BLOB, { orgId: "org-1" })).resolves.toEqual({ text: FIXTURE_REFUND_SOURCE });
+    expect(asked.map((r) => [r.project, r.blobId, r.orgId])).toEqual([["shopfront", FIXTURE_REFUND_BLOB, "org-1"]]);
+  });
+
+  it.each([
+    [CoverageSourceUnavailable.NO_REPO, "no-repo"],
+    [CoverageSourceUnavailable.UNCOMMITTED, "uncommitted"],
+    [CoverageSourceUnavailable.GONE, "gone"],
+    [CoverageSourceUnavailable.REVOKED, "revoked"],
+    [CoverageSourceUnavailable.NOT_YET_AVAILABLE, "not-yet-available"],
+    [CoverageSourceUnavailable.TOO_LARGE, "too-large"],
+    [CoverageSourceUnavailable.UNSPECIFIED, "unreachable"],
+  ] as const)("maps reason %s to %s", async (wire, reason) => {
+    serve(() => ({ result: { case: "unavailable", value: wire } }));
+    await expect(fetchCoverageSource("shopfront", FIXTURE_REFUND_BLOB)).resolves.toEqual({ unavailable: reason });
+  });
+
+  it("a reliant without the rpc is not-yet-available; any other failure throws", async () => {
+    serve(() => Promise.reject(new ConnectError("no such rpc", Code.Unimplemented)));
     await expect(fetchCoverageSource("shopfront", FIXTURE_REFUND_BLOB)).resolves.toEqual({ unavailable: "not-yet-available" });
+    serve(() => Promise.reject(new ConnectError("needs tests:read", Code.PermissionDenied)));
+    await expect(fetchCoverageSource("shopfront", FIXTURE_REFUND_BLOB)).rejects.toThrow("needs tests:read");
+  });
+
+  it("a file with no blob is uncommitted, and nothing is asked", async () => {
+    const asked = serve(() => ({ result: { case: "unavailable", value: CoverageSourceUnavailable.GONE } }));
     await expect(fetchCoverageSource("shopfront", "")).resolves.toEqual({ unavailable: "uncommitted" });
+    expect(asked).toHaveLength(0);
   });
 });
