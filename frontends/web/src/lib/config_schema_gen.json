@@ -112,6 +112,11 @@
       "source": "runtime"
     },
     {
+      "name": "IDENTITY_DATA_LINKS",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "OTEL_ENDPOINT",
       "type": "string",
       "source": "config"
