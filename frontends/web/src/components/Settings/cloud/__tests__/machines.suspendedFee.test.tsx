@@ -40,8 +40,8 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
       plans: [],
       daemonPricing: {
         sizes: [
-          { size: 'm', multiplier: 1n, hourlyPriceCents: '13.0000', storageGib: 25n },
-          { size: 'xl', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 180n },
+          { size: 'm', hourlyPriceCents: '13.0000', storageGib: 25n },
+          { size: 'xl', hourlyPriceCents: '52.0000', storageGib: 180n },
         ],
         storageCentsPerGibMonth: '25.0000',
         placeholder: true,

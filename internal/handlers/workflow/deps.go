@@ -61,6 +61,10 @@ type Repository interface {
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 
+	// GetMachinePoolByName checks a workflow's `daemon: {pool: …}` names
+	// one of the user's pools (core.ErrMachinePoolNotFound when not).
+	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
+
 	// Installs is each machine's checkout of the project and who owns each
 	// machine (projectcheckout.Resolve).
 	daemonplacement.Installs

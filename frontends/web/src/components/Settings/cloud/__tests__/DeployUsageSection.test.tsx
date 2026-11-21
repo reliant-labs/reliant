@@ -364,7 +364,7 @@ describe("DeployUsageSection — immutable consent budget", () => {
   it("never offers the old cap mutation and discloses enforcement lag", () => {
     renderSection();
     expect(screen.queryByRole("button", { name: /save spending cap/i })).toBeNull();
-    expect(screen.getByText(/Changing it is not supported here/)).toBeDefined();
+    expect(screen.getByText(/set on the app hosting billing card above/)).toBeDefined();
     expect(screen.getByText(/not a guaranteed maximum bill/)).toBeDefined();
   });
 });
