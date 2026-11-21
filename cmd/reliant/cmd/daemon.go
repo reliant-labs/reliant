@@ -596,8 +596,13 @@ func readPastedToken(ctx context.Context, cmd *cobra.Command) (string, error) {
 	readCh := make(chan pastedTokenRead, 1)
 	// At a terminal the token is read without echo, as a password is: it is a
 	// credential, and echoing it leaves it in the scrollback and in any
-	// recording of the session (TL-34). If the read is interrupted the
-	// terminal's echo is restored before returning.
+	// recording of the session (TL-34). term.ReadPassword is what turns echo
+	// off: it clears ECHO in the terminal's termios before it reads and puts
+	// the termios back when the read returns (golang.org/x/term,
+	// term_unix.go readPassword). The state saved here is for the other way
+	// out: when ctx is cancelled this function returns while that read is
+	// still blocked, so ReadPassword's own restore has not run yet, and this
+	// one turns echo back on before the command exits.
 	if fd := int(os.Stdin.Fd()); !isPiped && term.IsTerminal(fd) {
 		if saved, err := term.GetState(fd); err == nil {
 			defer func() { _ = term.Restore(fd, saved) }()
