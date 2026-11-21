@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/errclass"
@@ -66,12 +67,16 @@ type UserChainDeps struct {
 	// Logger feeds the chain's recovery and logging layers; nil is
 	// slog.Default().
 	Logger *slog.Logger
+	// ClientVersions is the client version policy the chain counts and,
+	// when it says so, refuses callers by (clientVersionGate); nil counts
+	// and refuses nothing.
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewUserChain builds the API listener's chain. Outermost first:
 //
 //	trace → recovery → request-id → logging → metrics → deadline → auth →
-//	domain whitelist → activity → stream drain → svcerr
+//	domain whitelist → client version → activity → stream drain → svcerr
 //
 // and, inside it, a mount's own options (machinewake on the worktree and
 // filesystem services, forgeAPIDisabled when the forge API is off).
@@ -150,6 +155,7 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		},
 		Extras: []connect.Interceptor{
 			interceptors.NewDomainWhitelistInterceptor(deps.AllowedEmailDomains),
+			newClientVersionGate(deps.ClientVersions),
 		},
 		Validate:     serverkit.NoValidate,
 		ReadMaxBytes: -1,

@@ -5,8 +5,6 @@ description: "How Forge tests a Go API against a real embedded Postgres with no 
 keywords: ["Go integration test postgres", "embedded postgres go test", "test without docker", "generated CRUD tests", "Go test cache", "mark slow tests", "testkit.Slow", "generated mocks Go"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; every mechanism here ships in forge v1.0.0 or later) · L steps run in scratch (guides-scratch/how-forge-tests-work/shop, copied from add-table-crud-api-pages): task test:short twice (cached second run), a fresh Postgres 17 boot with DOCKER_HOST pointed at nothing, a test printing its server, data dir, database and template, testkit.Slow skipping under -short and running under task test, a git-exec test replaying a stale cached pass after an edit, lint --slow-tests, ci test-budget, ci verify-test-run · sources: forge pkg/pgtest/{pgtest.go,pool.go,template.go,version.go,bootlog.go}, pkg/testkit/{testkit.go,slow.go,lane_*.go,stub.go}, pkg/tdd/doc.go, internal/templates/service/handlers_crud_test.go.tmpl, internal/templates/mock_gen.go, the scaffolded Taskfile.yml, ci.yml and release.yml, `reliant forge skill load testing` (+ testing/unit, testing/flow, testing/integration, testing/e2e), `reliant forge ci gate|test-budget|verify-test-run --help`, `reliant forge lint --help` */}
-
 **In short**
 
 - Database tests run against a real Postgres that Forge downloads and boots on first use. Docker is not needed. One server per machine is shared by every test process, and each test gets a database of its own.
@@ -241,9 +239,9 @@ reliant forge ci verify-test-run --from skip.json
 ## Guides
 
 <CardGroup cols={2}>
-{/* defer-card:/guides/forge/test-go-api-real-postgres ICA8Q2FyZCB0aXRsZT0iVGVzdCBhIEdvIEFQSSBhZ2FpbnN0IGEgcmVhbCBQb3N0Z3JlcyBkYXRhYmFzZSIgaWNvbj0iZGF0YWJhc2UiIGhyZWY9Ii9ndWlkZXMvZm9yZ2UvdGVzdC1nby1hcGktcmVhbC1wb3N0Z3JlcyI+UnVuIHRoZSBnZW5lcmF0ZWQgbGlmZWN5Y2xlIHRlc3QsIHRoZW4gd3JpdGUgeW91ciBvd24gd2l0aCBmYWN0b3JpZXMgYW5kIG1vY2tzPC9DYXJkPg== */}
-{/* defer-card:/guides/forge/keep-test-suite-fast ICA8Q2FyZCB0aXRsZT0iS2VlcCB5b3VyIHRlc3Qgc3VpdGUgZmFzdCIgaWNvbj0iZ2F1Z2UiIGhyZWY9Ii9ndWlkZXMvZm9yZ2Uva2VlcC10ZXN0LXN1aXRlLWZhc3QiPk1hcmsgc2xvdyB0ZXN0cyBhbmQgZW5mb3JjZSBhIHRpbWUgYnVkZ2V0IG9uIHRoZSBmYXN0IHRpZXI8L0NhcmQ+ */}
-{/* defer-card:/guides/forge/gate-prs-forge-lint-tests ICA8Q2FyZCB0aXRsZT0iR2F0ZSBwdWxsIHJlcXVlc3RzIG9uIGxpbnQsIHRlc3RzIGFuZCBnZW5lcmF0ZWQtY29kZSBkcmlmdCIgaWNvbj0ic2hpZWxkLWNoZWNrIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2dhdGUtcHJzLWZvcmdlLWxpbnQtdGVzdHMiPlJ1biB0aGUgc2FtZSBnYXRlIGxvY2FsbHkgYW5kIGluIENJPC9DYXJkPg== */}
+  <Card title="Test a Go API against a real Postgres database" icon="database" href="/guides/forge/test-go-api-real-postgres">Run the generated lifecycle test, then write your own with factories and mocks</Card>
+  <Card title="Keep your test suite fast" icon="gauge" href="/guides/forge/keep-test-suite-fast">Mark slow tests and enforce a time budget on the fast tier</Card>
+  <Card title="Gate pull requests on lint, tests and generated-code drift" icon="shield-check" href="/guides/forge/gate-prs-forge-lint-tests">Run the same gate locally and in CI</Card>
   <Card title="Add a database table with a CRUD API and pages" icon="table" href="/guides/forge/add-table-crud-api-pages">The entity whose lifecycle test this page runs</Card>
 </CardGroup>
 

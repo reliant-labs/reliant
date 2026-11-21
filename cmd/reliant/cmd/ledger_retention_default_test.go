@@ -24,7 +24,7 @@ import (
 // durations directly, so without this a dropped env-map entry, or a default
 // that enabled deletion, would ship unnoticed.
 func TestLedgerRetentionDefaultReachesTheWorker(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/ledger_retention_default.k"

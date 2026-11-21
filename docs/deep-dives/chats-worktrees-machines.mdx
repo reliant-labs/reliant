@@ -5,8 +5,6 @@ description: "Which machine a chat runs on, why a branched chat stays on the mac
 keywords: ["reliant branched chat machine", "switch chat to another machine", "git worktree on which machine", "ai agent workspace cloud machine", "chat machine offline", "wake cloud machine", "no machine chat", "machine pool placement"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · commands run (read only): reliant daemon status, daemon ls, worktree --help, worktree reclaimed, worktree reclaim report, workflow run --help, machine --help · sources: internal/db/core/chat.go (Chat: WorktreeID, ActiveDaemonID, NoMachine, MachinePoolID), internal/db/core/project_worktree.go (Worktree.DaemonID), internal/daemonplacement/{daemonplacement.go (WorktreeOwner, ChatDaemonID), pin.go (Pinner), default.go (ProjectDefaultDaemonID, preferredInstall), checkout.go (per-machine project path), workspace.go (WorkspaceDaemon, WorkspaceMachineConflict, WorkspaceElsewhereMessage)}, internal/handlers/chat/rpc_set_chat_daemon.go + chat_workspace_machine.go + chat_wake.go, internal/daemonchoice (Validate), internal/launch/launcher.go:325-385 + session.go (InjectSessionDaemonID), internal/workflow/runtime/workflow.go (session daemon fallback, preflight wait constants :6240-6270), activities/handlers/{call_llm.go toolDaemonSelector, chat_machine.go, preflight_daemon.go}, internal/machinewake/contract.go + machinewake.go, internal/toolexec/daemon_router_nats.go (Wake), internal/db/daemon_registry.go (releaseDaemonBindings), internal/store/worktree_repo_ext.go (AdoptWorktreeDaemon), internal/handlers/worktree/worktree_placement.go (placeNewWorktree), internal/machinepool/machinepool.go (Decide), research/CHAT_MACHINE_PLACEMENT.md, research/NO_MACHINE_CHATS.md §6 */}
-
 **In short**
 
 - A chat runs on one machine. Reliant picks it once, when the chat's first run starts, and stores it with the chat. It changes only when you move the chat, or when that machine is deleted.
@@ -141,7 +139,7 @@ Deleting a machine releases everything bound to it. Chats pinned to it lose thei
 
 ### Reclaiming disk on a machine
 
-Each daemon reclaims the disk of linked git worktrees nobody is using on its own machine. A clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
+Each daemon can reclaim the disk of linked git worktrees nobody is using on its own machine. Reclaim reports only (`RELIANT_WORKTREE_RECLAIM=dry-run`) unless it is switched `on`. Switched `on`, it runs on its own schedule on any machine, your own computer included, whether or not the storage reaper runs. `reliant worktree reclaim scan --capture` captures what a pass would reclaim without deleting anything, so you can try a restore; see [Reclaim and restore worktrees](/guides/machines/reclaim-restore-worktrees). With it on, a clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
 
 ## Design decisions and trade-offs
 
@@ -241,10 +239,10 @@ reliant workflow run --help | grep -A5 'The run executes on'
 
 ```text
 The run executes on the project's machine, by default the user's default
-machine. --daemon (an id or hostname from 'reliant daemon list') runs it on
-that machine instead; with --project-path the folder is looked up, attached
-or created on that machine, which is the one that holds it. With --project-id
-the project must already be checked out on that machine; otherwise the run
+machine. --daemon (a machine's daemon id or hostname, as Settings → Machines
+shows them; a value that names no machine lists yours) runs it on that machine
+instead; with --project-path the folder is looked up, attached or created on
+that machine, which is the one that holds it. With --project-id the project
 ```
 
 ## Guides
@@ -256,10 +254,10 @@ the project must already be checked out on that machine; otherwise the run
   <Card title="Start, stop and resize cloud machines" icon="cloud" href="/guides/machines/manage-cloud-machines-cli">
     `reliant machine list/start/stop/resize/rename`, and what wakes a machine.
   </Card>
-  <Card title="Reclaim and restore worktrees" icon="box-archive" href="/guides/machines/reclaim-restore-worktrees">
+  <Card title="Reclaim and restore worktrees" icon="archive" href="/guides/machines/reclaim-restore-worktrees">
     Free worktree disk and bring back a reclaimed worktree from its capture.
   </Card>
-  <Card title="Troubleshoot an offline machine" icon="plug-circle-exclamation" href="/guides/machines/troubleshoot-offline-machine">
+  <Card title="Troubleshoot an offline machine" icon="plug-zap" href="/guides/machines/troubleshoot-offline-machine">
     Get a chat's machine connected again and resume a paused run.
   </Card>
 </CardGroup>

@@ -22,7 +22,7 @@ import (
 // moved to "on", a dropped env-map entry, or a root that stopped reaching the
 // variable would ship unseen.
 func TestWorktreeReclaimDefaultReachesEveryServerRoot(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/worktree_reclaim_default.k"

@@ -5,8 +5,6 @@ description: "How Forge keeps a Postgres schema change from breaking the release
 keywords: ["postgres migration safety", "zero downtime schema migration", "migration lock timeout", "roll forward migrations", "rollback floor", "read-only database role"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.7.0 (scratch project pin v1.6.1-0.20261115024114-0ab7c562e817, the v1.7.0 commit); sources read at forge v1.8.0 (0e50dd7b9) · L steps run in scratch (guides-scratch/safe-migrations/shop): db migration new, lint --migration-safety, lint --db-grants, generate, db analyze --base HEAD, env render prod --list, env floor --help · H steps: not run (env floor show/check need a hosted env) · sources: forge docs/concepts.md §2 and "Migrations in deployed environments"; pkg/migratekit/{locktimeout.go,ahead.go,grants.go,compat/compat.go,compat/timeouts.go}; pkg/dbgrants/dbgrants.go; internal/codegen/readonly_grants.go; internal/linter/migrationlint/compat_declaration.go; internal/cli/{db_analyze.go,release_migrations.go,release_floor_declarations.go}; pkg/release/migrations.go; kcl/workload.k; scaffolded deploy/kcl/workloads.k; control-plane internal/operators/workload/controller.go (reconcileGatingJob); docs forge/linting/rules-migrations, forge/deploy/release-gates, hosting/managed-postgres, forge/concepts/two-sources-of-truth */}
-
 **In short**
 
 - Your migrations are the schema. Forge applies them to a real Postgres and generates the ORM and the read-only role's grants from what Postgres reports.
@@ -58,7 +56,7 @@ Migrations are versioned by UTC timestamp and created with `reliant forge db mig
 
 ### Every migration declares whether the previous release survives
 
-`db migration new` writes the declaration as the file's first line:
+Pass `--backward-compatible "<why>"` or `--breaks-rollback "<why>"` to `db migration new` and it writes the declaration as the file's first line (without either flag, you add the line yourself):
 
 ```sql db/migrations/20261120071321_add_task_webhook_secret.up.sql
 -- forge:backward-compatible — new nullable column the running release never reads
@@ -217,7 +215,7 @@ reliant forge env floor show prod       # needs a hosted env
 ## Guides
 
 <CardGroup cols={2}>
-  <Card title="Zero-downtime migrations" icon="code-branch" href="/guides/forge/zero-downtime-postgres-migrations">
+  <Card title="Zero-downtime migrations" icon="git-branch" href="/guides/forge/zero-downtime-postgres-migrations">
     Declare compatibility, expand then contract, and lint each migration.
   </Card>
   <Card title="Measure migration locks" icon="lock" href="/guides/forge/measure-migration-locks">
@@ -226,11 +224,15 @@ reliant forge env floor show prod       # needs a hosted env
   <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
     Read-only, audited queries through the role that can't see secret columns.
   </Card>
-{/* defer-card:/guides/forge/seed-realistic-dev-data ICA8Q2FyZCB0aXRsZT0iU2VlZCByZWFsaXN0aWMgZGV2IGRhdGEiIGljb249InNlZWRsaW5nIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL3NlZWQtcmVhbGlzdGljLWRldi1kYXRhIj4KICAgIEdlbmVyYXRlIHJvd3MgdGhhdCBmaXQgdGhlIHNjaGVtYSB5b3VyIG1pZ3JhdGlvbnMgYnVpbGQuCiAgPC9DYXJkPg== */}
-  <Card title="Recover from a bad deploy" icon="rotate-left" href="/guides/hosting/recover-from-bad-deploy">
+  <Card title="Seed realistic dev data" icon="seedling" href="/guides/forge/seed-realistic-dev-data">
+    Generate rows that fit the schema your migrations build.
+  </Card>
+  <Card title="Recover from a bad deploy" icon="rotate-ccw" href="/guides/hosting/recover-from-bad-deploy">
     Roll forward, or redeploy an earlier release above every floor.
   </Card>
-{/* defer-card:/guides/hosting/restore-postgres-point-in-time ICA8Q2FyZCB0aXRsZT0iUmVzdG9yZSBQb3N0Z3JlcyB0byBhIHBvaW50IGluIHRpbWUiIGljb249ImNsb2NrLXJvdGF0ZS1sZWZ0IiBocmVmPSIvZ3VpZGVzL2hvc3RpbmcvcmVzdG9yZS1wb3N0Z3Jlcy1wb2ludC1pbi10aW1lIj4KICAgIFJlY292ZXIgZGF0YSBhIG1pZ3JhdGlvbiBvciBhIGJhZCByZWxlYXNlIGRhbWFnZWQuCiAgPC9DYXJkPg== */}
+  <Card title="Restore Postgres to a point in time" icon="history" href="/guides/hosting/restore-postgres-point-in-time">
+    Recover data a migration or a bad release damaged.
+  </Card>
 </CardGroup>
 
 ## Reference

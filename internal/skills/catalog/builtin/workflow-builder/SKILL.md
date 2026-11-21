@@ -622,7 +622,7 @@ triggers:
 
 ### Response tools
 - Force structured LLM output for routing/classification
-- `builtin://agent` returns when no tool calls remain (use `ask: true` to prompt for user feedback first)
+- `builtin://agent` returns when no tool calls remain (use `ask: true` to prompt for user feedback first). `args.max_turns` bounds it (0, the default, is no limit; set it in any unattended or `max_running` workflow) and `args.tool_params` binds tool parameters the model cannot see, e.g. `{shell: {credentials: none}}` (with `spawn_presets: []`, since a spawned sub-agent's tools are not bound)
 - `builtin://structured-agent` returns when the response tool is called (use `ask: true` to prompt for user feedback first)
 - Access structured output via `nodes.<execute_tools_id>.response_data.<tool_name>`
 
@@ -907,7 +907,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `presets` | PresetsConfig | No | - |
 | `entry` | string[] | No | - |
 | `api_version` | string | No | - |
-| `daemon` | CelDaemonSelector | No | - |
+| `daemon` | CelDaemonSelector | No | *Which machine runs the workflow's tools: a kind (`local`, `cloud`, `any`), a machine name, a DaemonSelector, or a CEL template producing either. A node's own `daemon:` wins over this, and this wins over the chat's or automation's machine. `{pool: <name>}` places the run once on one member of a machine pool instead of pinning one machine. See DaemonSelector below.* |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |
@@ -920,7 +920,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
-| `attention` | WorkflowAttention | No | - |
+| `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
 
 ## Edge

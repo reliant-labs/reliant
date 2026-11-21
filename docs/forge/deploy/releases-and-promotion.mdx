@@ -5,8 +5,6 @@ description: "How forge builds a release once and promotes it by digest: plans a
 keywords: ["release promotion", "build once deploy many", "deploy approval", "promote staging to production", "rollback floor", "deployment ledger", "deploy by digest"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (scratch project pin v1.6.1-0.20261115024114-0ab7c562e817); sources read at forge v1.8.0 (0e50dd7b9) · run: env render prod --list, env build --help, env floor --help (L); hosted cycle in the Reliant Labs org sandbox (guides-sandbox-releases, prod env deleted): env build prod --release v0.0.1/v0.0.2, env deploy --plan-only, --approve <digest>, a stale --approve (exit 3), --yes, env status, env releases list, env floor set/show/check, a below-floor deploy (exit 1), --offline-ledger on a hosted env (refused) · not run: --from (needs a second hosted env), health gate, exit 7 · sources: forge internal/cli/{deploy.go,deploy_confirm.go,deploy_autoversion.go,offline_ledger.go,hosted_cache.go,env_floor.go,ledger_cmd.go,release_record.go}, internal/ledgerfile/doc.go, kcl/schema.k (HealthGate, RequiredGates, ApprovalHook, DeliveryPolicy), docs forge/deploy/release-gates, hosting/overview */}
-
 **In short**
 
 - A deploy ships a **release**: an immutable record of one build, holding the digest of every image and static bundle, the commit and tree it came from, and the rendered objects the environment runs. It is built once, and every environment that takes it runs the same bytes.
@@ -118,7 +116,7 @@ Naming an environment in `after` is the opt-in, so a new project is never gated.
 
 Two more opt-in gates live on `delivery_policy`:
 
-- **`required_gates`** names checks a promotion must carry, each passed: `forge.RequiredGates {names = ["e2e"]}`. A deploy carries them with `--gate name=e2e,status=passed`. A missing gate is refused with exit 4, a failed one with exit 1. `forge gate record` attaches evidence to an existing promotion; without `required_gates`, evidence enforces nothing.
+- **`required_gates`** names checks a promotion must carry, each passed: `forge.RequiredGates {names = ["e2e"]}`. A deploy carries them with `--gate name=e2e,status=passed`. A missing gate is refused with exit 4, a failed one with exit 1. `forge release gate record` attaches evidence to an existing promotion; without `required_gates`, evidence enforces nothing.
 - **`approval_hook`** asks your approval system before the promotion is written, and anything but `approve` refuses it (exit 4). A hook that times out or answers nonsense counts as a deny, and `--yes` never answers for it. A `url` hook is asked by the control plane; an `argv` hook runs on your machine, so it is refused where there is a control plane.
 
 ### Rollback floors
@@ -138,7 +136,7 @@ Promotions are rows in an append-only ledger; moving prod back is one more row, 
 
 ### Delivery: from a recorded release to a running cluster
 
-Recording a release does not ship it. For a hosted environment, or a cluster registered with `forge cluster connect`, Flux run by Reliant converges the destination to the recorded bundle. For any other environment the same command applies the bundle from your machine. Either way `forge env deploy` waits until the release is live or says why not.
+Recording a release does not ship it. For a hosted environment, or a cluster registered with `forge cloud cluster connect`, Flux run by Reliant converges the destination to the recorded bundle. For any other environment the same command applies the bundle from your machine. Either way `forge env deploy` waits until the release is live or says why not.
 
 ![Part one of the delivery path. forge env deploy builds and packs the bundle, pushes it to the registry, Reliant records the release and checks the bundle, and the bundle is signed with your organization's key.](/images/forge/deploy/delivery-build.svg)
 
@@ -206,7 +204,7 @@ By the time you would run one, the release has applied its migrations and writte
 - **Signing proves the ledger, not the builder.** Hosted bundles are signed with a per-organization key; any valid deploy token can still record a bundle built anywhere. Signing defaults to `audit` on a control plane and is capped at `audit` (default `off`) self-hosted. `trusted_builder`, the vulnerability gate, admission verification and signed promotions are recorded but block nothing yet; `forge env shape <env> --json` shows the resolved `delivery_policy`.
 - **Floors need a control plane that supports them**, and `--floor` against one that doesn't is refused rather than dropped.
 - **`--from` works within one control plane.**
-- **A hosted deploy can be queued.** Past the free tier (one static site per organization, counted across environments), it is recorded and held on billing with exit 7, and goes live by itself once billing is set up.
+- **A hosted deploy can be queued.** Past the free tier (one static site per person across the organizations they own without a plan, counted across environments), it is recorded and held on billing with exit 7, and goes live by itself once billing is set up.
 
 ## See it for yourself
 
@@ -276,7 +274,7 @@ AT                    RELEASE        WHAT                   ROLLOUT       HEALTH
   <Card title="Release gates" icon="shield-check" href="/forge/deploy/release-gates">
     Judge a deploy with `obs check`, gate prod on staging, and set floors.
   </Card>
-  <Card title="Preview environments" icon="code-pull-request" href="/hosting/preview-environments">
+  <Card title="Preview environments" icon="git-pull-request" href="/hosting/preview-environments">
     Short-lived environments per pull request, built on the same releases.
   </Card>
   <Card title="Deploy a Go API with managed Postgres" icon="rocket" href="/guides/hosting/deploy-go-api-managed-postgres">
@@ -288,12 +286,14 @@ AT                    RELEASE        WHAT                   ROLLOUT       HEALTH
   <Card title="Gate prod on release health" icon="shield-check" href="/guides/hosting/gate-production-deploy-release-health">
     Hold production until staging proves a release good.
   </Card>
-  <Card title="Recover from a bad deploy" icon="rotate-left" href="/guides/hosting/recover-from-bad-deploy">
+  <Card title="Recover from a bad deploy" icon="rotate-ccw" href="/guides/hosting/recover-from-bad-deploy">
     Roll forward, or redeploy an earlier release above every floor.
   </Card>
 {/* defer-card:/guides/hosting/record-deploys-from-existing-ci ICA8Q2FyZCB0aXRsZT0iUmVjb3JkIGRlcGxveXMgZnJvbSB5b3VyIENJIiBpY29uPSJib29rbWFyayIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL3JlY29yZC1kZXBsb3lzLWZyb20tZXhpc3RpbmctY2kiPgogICAgR2l2ZSBtb25pdG9yaW5nIGEgZGVwbG95IG1hcmtlciB3aGVuIHlvdXIgb3duIHBpcGVsaW5lIHNoaXBzLgogIDwvQ2FyZD4= */}
-{/* defer-card:/guides/hosting/deploy-from-github-actions ICA8Q2FyZCB0aXRsZT0iRGVwbG95IGZyb20gR2l0SHViIEFjdGlvbnMiIGljb249ImdpdGh1YiIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL2RlcGxveS1mcm9tLWdpdGh1Yi1hY3Rpb25zIj4KICAgIERlcGxveSB3aXRoIGFuIGF1dG9tYXRpb24gdG9rZW4gYW5kIGJyYW5jaCBvbiB0aGUgZXhpdCBjb2Rlcy4KICA8L0NhcmQ+ */}
-  <Card title="Preview environment per pull request" icon="code-pull-request" href="/guides/hosting/preview-environment-every-pull-request">
+  <Card title="Deploy from GitHub Actions" icon="github" href="/guides/hosting/deploy-from-github-actions">
+    Deploy with an automation token and branch on the exit codes.
+  </Card>
+  <Card title="Preview environment per pull request" icon="git-pull-request" href="/guides/hosting/preview-environment-every-pull-request">
     Create a short-lived environment for each pull request.
   </Card>
 </CardGroup>
@@ -306,4 +306,4 @@ AT                    RELEASE        WHAT                   ROLLOUT       HEALTH
 - [Hosting on Reliant](/hosting/overview): what hosting runs and costs, and queued deploys
 - CLI: [`env build`](/reference/cli#reliant-forge-env-build), [`env deploy`](/reference/cli#reliant-forge-env-deploy), [`env floor`](/reference/cli#reliant-forge-env-floor), [`env releases`](/reference/cli#reliant-forge-env-releases), [`env status`](/reference/cli#reliant-forge-env-status), [`ledger where`](/reference/cli#reliant-forge-ledger-where), [`release record`](/reference/cli#reliant-forge-release-record), [`gate record`](/reference/cli#reliant-forge-gate-record), [`cloud token create`](/reference/cli#reliant-forge-cloud-token-create)
 
-Agents can run `forge skill load deploy` for the full reference.
+Agents can run `forge agent skill load deploy` for the full reference.

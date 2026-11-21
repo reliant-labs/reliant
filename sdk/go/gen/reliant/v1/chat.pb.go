@@ -1627,7 +1627,12 @@ type Message struct {
 	// sender is set when another agent, not the human, wrote this message. Such
 	// a message keeps role USER (every provider accepts it) but must not be
 	// presented as the user's own words. Unset means the human (or the model).
-	Sender        *MessageSender `protobuf:"bytes,20,opt,name=sender,proto3" json:"sender,omitempty"`
+	Sender *MessageSender `protobuf:"bytes,20,opt,name=sender,proto3" json:"sender,omitempty"`
+	// thinking_level is the effective thinking (reasoning-effort) level the
+	// assistant turn ran at, after the model's capabilities reconciled the
+	// requested one. Unset for a message no model wrote, a model that takes no
+	// level, and a message saved before this was recorded.
+	ThinkingLevel *string `protobuf:"bytes,21,opt,name=thinking_level,json=thinkingLevel,proto3,oneof" json:"thinking_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1793,6 +1798,13 @@ func (x *Message) GetSender() *MessageSender {
 		return x.Sender
 	}
 	return nil
+}
+
+func (x *Message) GetThinkingLevel() string {
+	if x != nil && x.ThinkingLevel != nil {
+		return *x.ThinkingLevel
+	}
+	return ""
 }
 
 // MessageSender attributes a message to the agent thread that sent it.
@@ -2764,12 +2776,14 @@ func (x *RunNowResponse) GetRunId() string {
 	return ""
 }
 
-// ListChatsRequest lists the caller's chats: in one project, or in all of them.
+// ListChatsRequest lists the caller's chats: in one project, in several, or in
+// all of them.
 type ListChatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The project to list. Empty lists every project the caller owns: the
-	// sidebar's "All projects" view. Chats are scoped by the caller either way,
-	// so a project id that is not the caller's lists nothing.
+	// The project to list. Empty (and no project_ids) lists every project the
+	// caller owns: the sidebar's "All projects" view. Chats are scoped by the
+	// caller either way, so a project id that is not the caller's lists
+	// nothing. Set with project_ids, it is one more project of that set.
 	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Limit     *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// List only this organization's chats. It must be one the caller is a
@@ -2782,7 +2796,16 @@ type ListChatsRequest struct {
 	// project_id and org_id when they are set; pair it with org_id, since an
 	// app's name is its identity only within one org. A malformed name lists
 	// nothing; an empty one is the same as unset.
-	AppName       *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	AppName *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	// List the chats of several projects at once: the sidebar's multi-project
+	// filter. The projects listed are the union of project_id and project_ids,
+	// so a client may set either or both; with both empty every project is
+	// listed, as before this field existed. One query answers it, ordered and
+	// limited exactly like a single project's list. Chats are still scoped by
+	// the caller, so an id that is not the caller's contributes nothing. At
+	// most 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+	// main_worktrees then holds the main workspace of each listed project.
+	ProjectIds    []string `protobuf:"bytes,6,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2843,6 +2866,13 @@ func (x *ListChatsRequest) GetAppName() string {
 		return *x.AppName
 	}
 	return ""
+}
+
+func (x *ListChatsRequest) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
+	}
+	return nil
 }
 
 // ListChatsResponse returns the list of chats
@@ -8093,7 +8123,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rworktree_name\x18\x02 \x01(\tH\x00R\fworktreeName\x88\x01\x01\x123\n" +
 	"\x13worktree_deleted_at\x18\x03 \x01(\tH\x01R\x11worktreeDeletedAt\x88\x01\x01B\x10\n" +
 	"\x0e_worktree_nameB\x16\n" +
-	"\x14_worktree_deleted_at\"\xd8\x06\n" +
+	"\x14_worktree_deleted_at\"\x97\a\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x10\n" +
@@ -8117,7 +8147,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rdisplay_style\x18\x11 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x05R\fdisplayStyle\x88\x01\x01\x12'\n" +
 	"\x0fsequence_number\x18\x12 \x01(\x03R\x0esequenceNumber\x12\x1c\n" +
 	"\anode_id\x18\x13 \x01(\tH\x06R\x06nodeId\x88\x01\x01\x121\n" +
-	"\x06sender\x18\x14 \x01(\v2\x19.reliant.v1.MessageSenderR\x06senderB\b\n" +
+	"\x06sender\x18\x14 \x01(\v2\x19.reliant.v1.MessageSenderR\x06sender\x12*\n" +
+	"\x0ethinking_level\x18\x15 \x01(\tH\aR\rthinkingLevel\x88\x01\x01B\b\n" +
 	"\x06_modelB\b\n" +
 	"\x06_agentB\x0f\n" +
 	"\r_input_tokensB\x10\n" +
@@ -8125,7 +8156,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\x10\n" +
 	"\x0e_display_styleB\n" +
 	"\n" +
-	"\b_node_id\"\x8e\x01\n" +
+	"\b_node_idB\x11\n" +
+	"\x0f_thinking_level\"\x8e\x01\n" +
 	"\rMessageSender\x12\x1b\n" +
 	"\tthread_id\x18\x01 \x01(\tR\bthreadId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x120\n" +
@@ -8267,13 +8299,15 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\xbe\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\xf0\x01\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
 	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\x1a\n" +
 	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01\x12\x1e\n" +
-	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01B\b\n" +
+	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01\x120\n" +
+	"\vproject_ids\x18\x06 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xc8\x01\"\x04r\x02\x10\x01R\n" +
+	"projectIdsB\b\n" +
 	"\x06_limitB\t\n" +
 	"\a_org_idB\v\n" +
 	"\t_app_nameJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +

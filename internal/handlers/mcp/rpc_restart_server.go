@@ -65,11 +65,10 @@ func (s *Service) RestartServer(
 	intCfg := scopedConfigToInternal(scoped.Config)
 
 	if err := s.preflightMCPServer(ctx, checkout, name, intCfg); err != nil {
-		logging.ErrorContext(ctx, "MCP server restart failed",
+		logServerFailure(ctx, "MCP server restart failed", err,
 			"operation", "restart",
 			"server", name,
 			"phase", "preflight",
-			"error", err,
 		)
 		return connect.NewResponse(&reliantv1.RestartServerResponse{
 			Success: false,
@@ -81,12 +80,14 @@ func (s *Service) RestartServer(
 	startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
 	defer cancel()
 
-	if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
-		logging.ErrorContext(ctx, "MCP server restart failed",
+	// The machine starts what its own copy of the project's config says now:
+	// the stored copy read above trails an edit to mcp.json by a few seconds,
+	// and restarting from it restarted the old command.
+	if err := mgr.StartProjectServerFromProjectConfig(startCtx, checkout.Path, name, intCfg); err != nil {
+		logServerFailure(ctx, "MCP server restart failed", err,
 			"operation", "restart",
 			"server", name,
 			"phase", "startup",
-			"error", err,
 		)
 		return connect.NewResponse(&reliantv1.RestartServerResponse{
 			Success: false,

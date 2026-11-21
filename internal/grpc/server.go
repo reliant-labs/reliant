@@ -91,6 +91,10 @@ type APIHTTPRoutesDeps struct {
 	// org's org-key usage (OrgKeyUsagePath). Optional; no public auth
 	// fallback.
 	OrgKeyUsage http.Handler
+	// EnsureProjectForApp is control-plane's internally authenticated
+	// find-or-create of a deployed app's project (EnsureProjectForAppPath).
+	// Optional; no public auth fallback.
+	EnsureProjectForApp http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -137,6 +141,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	}
 	if deps.OrgKeyUsage != nil {
 		handle(OrgKeyUsagePath, deps.OrgKeyUsage)
+	}
+	if deps.EnsureProjectForApp != nil {
+		handle(EnsureProjectForAppPath, deps.EnsureProjectForApp)
 	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
@@ -208,6 +215,15 @@ func terminalTokenValidator(settings auth.Settings) auth.TokenValidator {
 		} else if settings.JWKSURL != "" {
 			validator, _ = auth.LoadJWKS(context.Background(), settings.JWKSURL, settings.JWTOptions()...)
 		}
+		// The dev tier's signer too, so a dev sign-in can open a terminal.
+		// Refused outside the dev tier: nil then refuses every connection,
+		// and the gRPC interceptor has already refused the process.
+		if validator != nil {
+			var err error
+			if validator, err = auth.WithDevSigner(validator, settings); err != nil {
+				validator = nil
+			}
+		}
 	}
 	return validator
 }
@@ -232,6 +248,12 @@ var corsAllowedHeaders = []string{
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
 	"X-Daemon-Last-Seen",
+	// Which client is calling and its version, `<kind>/<version>`
+	// (internal/clientversion). Every first-party client sends it on every
+	// reliant.v1 call; the server judges it against its minimums
+	// (ClientVersionPolicy). Missing here, a client that sends it fails CORS
+	// on every RPC.
+	"Reliant-Client",
 }
 
 // corsExposedHeaders are the response headers cross-origin JavaScript may

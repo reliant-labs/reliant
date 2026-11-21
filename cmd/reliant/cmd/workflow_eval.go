@@ -220,13 +220,19 @@ func mergeKV(base map[string]any, kvs []string) (map[string]any, error) {
 
 // triggerSample is a sample event for `workflow validate --trigger-payload`.
 // activation is the sample activation (--activation-params, --owner-github-id).
+// trigger, when set (--trigger), is the one declared trigger to run it against.
 type triggerSample struct {
 	payload, sender map[string]any
 	activation      *celeval.ActivationSample
+	trigger         string
 }
 
-func triggerSampleFromFlags(payload, sender, params, ownerGitHubID string) (*triggerSample, error) {
+func triggerSampleFromFlags(payload, sender, params, ownerGitHubID, trigger string) (*triggerSample, error) {
+	only := strings.TrimSpace(trigger)
 	if strings.TrimSpace(payload) == "" {
+		if only != "" {
+			return nil, fmt.Errorf("--trigger needs --trigger-payload")
+		}
 		if strings.TrimSpace(sender) != "" {
 			return nil, fmt.Errorf("--trigger-sender needs --trigger-payload")
 		}
@@ -247,13 +253,55 @@ func triggerSampleFromFlags(payload, sender, params, ownerGitHubID string) (*tri
 	if err != nil {
 		return nil, err
 	}
-	return &triggerSample{payload: p, sender: s,
+	return &triggerSample{payload: p, sender: s, trigger: only,
 		activation: &celeval.ActivationSample{Params: a, OwnerGitHubID: strings.TrimSpace(ownerGitHubID)}}, nil
 }
 
-// dryRunTriggers runs every trigger a workflow declares against the sample and
+// triggerDryRun is what `validate --trigger-payload` did with one declared
+// trigger: the dry run's report, or why the trigger was not run against the
+// sample at all (Skipped).
+type triggerDryRun struct {
+	celeval.TriggerRun
+	// Skipped says why the sample was not run through this trigger: --trigger
+	// named another one, or the sample is an event this trigger does not
+	// listen for. Empty when it was run.
+	Skipped string `json:"skipped,omitempty"`
+}
+
+// sampleSkipReason is why a sample event cannot reach a trigger, or "" when
+// it can. Only an integration trigger is ruled out, and only by what the
+// sample itself says: its "integration" and "event" fields, matched the way
+// the router matches them (an exact type, "type.*", "*"). A sample that names
+// no event can reach every trigger, as before.
+func sampleSkipReason(wt *reliantv1.WorkflowTrigger, payload map[string]any) string {
+	src := wt.GetIntegration()
+	if src == nil {
+		return ""
+	}
+	if integration, _ := payload["integration"].(string); integration != "" && strings.TrimSpace(src.GetIntegration()) != integration {
+		return fmt.Sprintf("it listens to %s, and the sample is a %s event", src.GetIntegration(), integration)
+	}
+	event, _ := payload["event"].(string)
+	if event == "" {
+		return ""
+	}
+	for _, want := range src.GetEvents() {
+		want = strings.TrimSpace(want)
+		if want == "*" || want == event || (strings.HasSuffix(want, ".*") && strings.HasPrefix(event, strings.TrimSuffix(want, "*"))) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("it listens for %s, not %s", strings.Join(src.GetEvents(), ", "), event)
+}
+
+// dryRunTriggers runs the triggers a workflow declares against the sample and
 // folds what failed into the file's validation result. A trigger whose filter
 // does not match the sample is reported as a note on the result, not an error.
+// Only the triggers the sample can belong to are run: --trigger names one,
+// and an integration trigger that does not listen for the sample's event is
+// skipped (a multi-trigger workflow is otherwise always invalid, since no one
+// event satisfies every trigger's expressions). Each trigger's outcome is
+// recorded in result.TriggerRuns.
 func dryRunTriggers(result *validateResult, path string, sample *triggerSample) {
 	if sample == nil {
 		return
@@ -272,16 +320,72 @@ func dryRunTriggersOn(result *validateResult, data []byte, sample *triggerSample
 	}
 	wf, err := parseWorkflowForDryRun(data)
 	if err != nil || len(wf.GetTriggers()) == 0 {
+		if err == nil && sample.trigger != "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("--trigger %q: the workflow declares no triggers", sample.trigger))
+			result.Valid = false
+		}
 		return
 	}
+	if sample.trigger != "" {
+		declared := false
+		var names []string
+		for _, wt := range wf.GetTriggers() {
+			names = append(names, wt.GetName())
+			declared = declared || wt.GetName() == sample.trigger
+		}
+		if !declared {
+			result.Errors = append(result.Errors, fmt.Sprintf("--trigger %q: the workflow declares no such trigger (it declares %s)", sample.trigger, strings.Join(names, ", ")))
+			result.Valid = false
+			return
+		}
+	}
+	ran := 0
 	for _, wt := range wf.GetTriggers() {
+		skip := ""
+		if sample.trigger != "" && wt.GetName() != sample.trigger {
+			skip = "--trigger names " + sample.trigger
+		} else if sample.trigger == "" {
+			skip = sampleSkipReason(wt, sample.payload)
+		}
+		if skip != "" {
+			result.TriggerRuns = append(result.TriggerRuns, triggerDryRun{TriggerRun: celeval.TriggerRun{Trigger: wt.GetName()}, Skipped: skip})
+			continue
+		}
+		ran++
 		run := celeval.DryRunTrigger(wt, wf.GetInputs(), sample.payload, sample.sender, sample.activation)
+		result.TriggerRuns = append(result.TriggerRuns, triggerDryRun{TriggerRun: run})
 		result.Errors = append(result.Errors, run.Errors()...)
 		if run.Matched != nil && !*run.Matched {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("trigger %q: its filter does not match this sample event", run.Trigger))
 		}
 	}
+	if ran == 0 {
+		result.Warnings = append(result.Warnings, "no declared trigger listens for this sample event, so none was run against it")
+	}
 	result.Valid = len(result.Errors) == 0
+}
+
+// printTriggerRuns prints what each trigger did with the sample: matched (and
+// the inputs it maps), filtered out, failed, or skipped.
+func printTriggerRuns(indent string, runs []triggerDryRun) {
+	for _, r := range runs {
+		switch {
+		case r.Skipped != "":
+			fmt.Printf("%sTrigger %s: not run against the sample (%s)\n", indent, r.Trigger, r.Skipped)
+		case len(r.Errors()) > 0:
+			fmt.Printf("%sTrigger %s: failed on the sample (errors above)\n", indent, r.Trigger)
+		case r.Matched != nil && !*r.Matched:
+			fmt.Printf("%sTrigger %s: its filter does not match the sample, so it would start no run\n", indent, r.Trigger)
+		default:
+			line := fmt.Sprintf("%sTrigger %s: matches the sample", indent, r.Trigger)
+			if len(r.Inputs) > 0 {
+				if b, err := json.Marshal(r.Inputs); err == nil {
+					line += "; inputs " + string(b)
+				}
+			}
+			fmt.Println(line)
+		}
+	}
 }
 
 func parseWorkflowForDryRun(data []byte) (*reliantv1.Workflow, error) {

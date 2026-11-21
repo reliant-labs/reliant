@@ -5,8 +5,6 @@ description: "How a Reliant workflow runs: nodes as steps, CEL edges that choose
 keywords: ["how ai agent workflows work", "durable execution ai agents", "temporal ai workflow", "cel workflow conditions", "multi-agent workflow engine", "human in the loop approval workflow", "agent workflow loop until tests pass"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · commands run in guides-scratch/how-workflows-run: reliant workflow validate, lint, scenario run (3 scenarios), eval; lint-demo/ for the lint findings · sources: internal/workflow/runtime/workflow.go (DynamicWorkflow, loadWorkflowDefinition, FindTriggeredNodes error path, completion when nothing runs), internal/workflow/core/processor.go (Process, matchEdgeTargets), internal/workflow/runtime/engine.go (SimplifiedStateMachine), step_executor.go (dispatch, startCompute, activityOptionsWithSlack, stepActivityRetryPolicy), registry.go (activityHeartbeatTimeout 60s, stepActivityMaxAttempts 5), join.go, loop_executor.go (while after each iteration), approval_flow.go (1h default, signal + timer, unattended), question_flow.go (24h), unattended.go, pause_controller.go, pause_coordinator.go (signal.pause/resume), catalog_pin.go, continue_as_new.go (10k events / 10 MB), machine_resume_wake via step_executor, model/constants.go + proto/reliant/v1/workflow_v2.proto (is_structural), internal/workflow/scenario/runner/backend.go, internal/workflow/builtin/get-it-right.yaml; docs architecture/overview, architecture/distributed, workflows/workflow-control, workflows/lint, workflows/testing, reference/nodes, reference/workflow-schema */}
-
 **In short**
 
 - A workflow is a graph in YAML: **nodes** are steps (an agent, a model call, a shell command, an integration action, an approval), and **edges** say which node runs next. An edge picks its target with a CEL condition over the outputs of the nodes that already ran.
@@ -275,13 +273,13 @@ $ reliant workflow eval --nodes '{}' "nodes.ship.status == 'approved'"
 ## Guides
 
 <CardGroup cols={2}>
-  <Card title="Write your first multi-agent workflow" icon="diagram-project" href="/guides/workflows/first-multi-agent-workflow">A planner, an implementer and a reviewer, routed with CEL.</Card>
-  <Card title="Loop an agent until your tests pass" icon="rotate" href="/guides/workflows/run-tests-until-they-pass">A `run` step, a CEL condition and a bounded loop.</Card>
+  <Card title="Write your first multi-agent workflow" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">A planner, an implementer and a reviewer, routed with CEL.</Card>
+  <Card title="Loop an agent until your tests pass" icon="rotate-cw" href="/guides/workflows/run-tests-until-they-pass">A `run` step, a CEL condition and a bounded loop.</Card>
   <Card title="Require human approval" icon="user-check" href="/guides/workflows/require-human-approval">Approval and question nodes, the Inbox, and unattended runs.</Card>
-{/* defer-card:/guides/workflows/choose-model-per-step ICA8Q2FyZCB0aXRsZT0iVXNlIGEgZGlmZmVyZW50IG1vZGVsIGZvciBlYWNoIHN0ZXAiIGljb249InNsaWRlcnMiIGhyZWY9Ii9ndWlkZXMvd29ya2Zsb3dzL2Nob29zZS1tb2RlbC1wZXItc3RlcCI+UGljayB0aGUgbW9kZWwgYW5kIHRoaW5raW5nIGxldmVsIHBlciBub2RlLjwvQ2FyZD4= */}
-{/* defer-card:/guides/workflows/test-workflows-with-scenarios ICA8Q2FyZCB0aXRsZT0iVGVzdCBhIHdvcmtmbG93IGJlZm9yZSB5b3Ugc2hpcCBpdCIgaWNvbj0iZmxhc2siIGhyZWY9Ii9ndWlkZXMvd29ya2Zsb3dzL3Rlc3Qtd29ya2Zsb3dzLXdpdGgtc2NlbmFyaW9zIj5TY2VuYXJpb3Mgb24gdGhlIHJlYWwgZW5naW5lLCB3aXRoIGFjdGl2aXRpZXMgbW9ja2VkLjwvQ2FyZD4= */}
-{/* defer-card:/guides/workflows/lint-unattended-workflows ICA8Q2FyZCB0aXRsZT0iQ2F0Y2ggd29ya2Zsb3dzIHRoYXQgYnJlYWsgdW5hdHRlbmRlZCIgaWNvbj0ic2hpZWxkLWNoZWNrIiBocmVmPSIvZ3VpZGVzL3dvcmtmbG93cy9saW50LXVuYXR0ZW5kZWQtd29ya2Zsb3dzIj5UaGUgbGludCBydWxlcyBmb3IgcnVucyBub2JvZHkgaXMgd2F0Y2hpbmcuPC9DYXJkPg== */}
-{/* defer-card:/guides/workflows/pause-and-steer-a-run ICA8Q2FyZCB0aXRsZT0iUGF1c2UsIHN0ZWVyIGFuZCByZXN1bWUgYSBydW4iIGljb249InBhdXNlIiBocmVmPSIvZ3VpZGVzL3dvcmtmbG93cy9wYXVzZS1hbmQtc3RlZXItYS1ydW4iPkNvbnRyb2wgYSBydW4gd2hpbGUgaXQgd29ya3MuPC9DYXJkPg== */}
+  <Card title="Use a different model for each step" icon="sliders-horizontal" href="/guides/workflows/choose-model-per-step">Pick the model and thinking level per node.</Card>
+  <Card title="Test a workflow before you ship it" icon="flask-conical" href="/guides/workflows/test-workflows-with-scenarios">Scenarios on the real engine, with activities mocked.</Card>
+  <Card title="Catch workflows that break unattended" icon="shield-check" href="/guides/workflows/lint-unattended-workflows">The lint rules for runs nobody is watching.</Card>
+  <Card title="Pause, steer and resume a run" icon="pause" href="/guides/workflows/pause-and-steer-a-run">Control a run while it works.</Card>
 </CardGroup>
 
 ## Reference

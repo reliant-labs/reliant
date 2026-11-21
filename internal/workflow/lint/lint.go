@@ -100,10 +100,12 @@ const (
 	RuleAutomationUntriggered  = "automation-only-untriggered"
 	RuleRequiresUndeclaredTool = "requires-undeclared-tool"
 	RuleTimeoutIgnored         = "timeout-ignored"
+	RuleDaemonMachinePin       = "daemon-machine-pin"
 	RuleScenarioNone           = "scenario-none"
 	RuleScenarioTrigger        = "scenario-trigger-uncovered"
 	RuleScenarioTerminal       = "scenario-terminal-uncovered"
 	RuleAllowInvalid           = "lint-allow-invalid"
+	RuleAskQuestionType        = "ask-question-not-ask-user"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -127,10 +129,12 @@ var rules = []Rule{
 	rule(RuleApprovalDecider, SeverityWarning, "A step calls Reliant's ApprovalService to approve or deny, so this workflow can decide approvals (including the ones that gate it) with whatever token it holds."),
 	rule(RuleAutomationUntriggered, SeverityWarning, "automation_only: true with no triggers: no chat can start it and nothing else will."),
 	rule(RuleRequiresUndeclaredTool, SeverityWarning, "A triggered workflow's command calls an external tool (gh, task, jq, …) its requires.tools does not list, so preflight cannot check it."),
+	rule(RuleDaemonMachinePin, SeverityWarning, "A workflow or node daemon: pins one machine by name or id, so a replaced or busy machine stalls every run; pin a machine pool instead."),
 	rule(RuleScenarioNone, SeverityWarning, "The workflow has no scenarios."),
 	rule(RuleScenarioTrigger, SeverityWarning, "No scenario fires the workflow through this trigger (scenario `trigger:`)."),
 	rule(RuleScenarioTerminal, SeverityWarning, "No scenario expects the run to reach this terminal node."),
 	rule(RuleAllowInvalid, SeverityError, "A `lint:allow` comment names an unknown rule or gives no reason."),
+	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
 }
 
 // Rules lists every rule, in documentation order.

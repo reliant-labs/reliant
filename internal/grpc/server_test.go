@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 )
@@ -54,7 +55,8 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 // browser's session.id, recovery, request id, logging, tracing, metrics),
 // reliant's budgets in forge's Deadline slot, the authenticator and forge's
 // identity stamp after it (a no-op here: reliant's auth binds user.id itself,
-// through interceptors.RequestScope), then reliant's domain whitelist, forge's
+// through interceptors.RequestScope), then reliant's domain whitelist and
+// client version gate, forge's
 // activity stream, its stream drain, and svcerr's interceptor innermost. There is no error reporter: a failed RPC reaches
 // Sentry once, as forge's "rpc failed" log line.
 func TestUserChainOrder(t *testing.T) {
@@ -65,14 +67,16 @@ func TestUserChainOrder(t *testing.T) {
 	got := chain.Interceptors()
 	// 17 since forge #2068 (via #2065): observe.Chain installs the resumed
 	// sign-in heartbeat (auth_signed_in{kind=resumed}) right after auth and
-	// its identity span, ahead of the domain whitelist.
-	require.Len(t, got, 17)
+	// its identity span, ahead of the domain whitelist. 18 since the client
+	// version gate joined Extras, after the domain whitelist.
+	require.Len(t, got, 18)
 	require.IsType(t, interceptors.RequestScope(nil), got[0], "the trace span opens outermost, inside a request scope")
 	require.IsType(t, serverkit.Deadline{}, got[9], "the deadline wraps authentication")
 	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[13], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[15]),
+	require.IsType(t, clientVersionGate{}, got[14], "the client version gate runs after authentication")
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[16]),
 		"the stream drain sits outside svcerr, so it judges the code the client receives")
-	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[16]),
+	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[17]),
 		"svcerr is innermost, so logging records the status the client received")
 }
 
@@ -102,6 +106,20 @@ func TestUserChainDeadlineIsReliants(t *testing.T) {
 	require.Equal(t, interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()), d.Procedures)
 	for procedure, budget := range forge.ForgeRPCDeadlines() {
 		require.Equal(t, budget, d.Procedures[procedure], procedure)
+	}
+}
+
+// Bug report a5d5de15: enabling builtin://autopilot-review-responder's three
+// triggers at once ran past the 10s every unnamed rpc gets ("deadline
+// exceeded" on the third), and the enable undid the other two. The calls that
+// write a workflow's triggers one after another get a budget for several.
+func TestUserChainGivesWorkflowTriggerWritesTimeForSeveralTriggers(t *testing.T) {
+	d := userChainDeadline(t)
+	for _, procedure := range []string{
+		reliantv1connect.TriggerServiceEnableWorkflowProcedure,
+		reliantv1connect.TriggerServiceDisableWorkflowProcedure,
+	} {
+		require.GreaterOrEqual(t, d.Procedures[procedure], 60*time.Second, procedure)
 	}
 }
 

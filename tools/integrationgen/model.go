@@ -71,6 +71,7 @@ func (pl *plan) loadHooks(path string) error {
 var fieldKinds = map[string]bool{
 	"string": true, "integer": true, "boolean": true, "present": true,
 	"names": true, "strings": true, "integers": true, "object": true, "list": true,
+	"markers": true,
 }
 
 // check validates the specs against each other, the hooks, and the pinned
@@ -208,13 +209,17 @@ func (pl *plan) checkFields(fields fieldList, where string, errs *[]string) {
 			*errs = append(*errs, fmt.Sprintf("%s: field %q (line %d): %s", where, f.Name, f.line, fmt.Sprintf(format, args...)))
 		}
 		if !fieldKinds[f.Kind] {
-			bad("kind %q is not one of string, integer, boolean, present, names, strings, integers, object, list", f.Kind)
+			bad("kind %q is not one of string, integer, boolean, present, names, strings, integers, object, list, markers", f.Kind)
 			continue
 		}
 		switch f.Kind {
 		case "names", "integers":
 			if f.Pluck == "" {
 				bad("%s needs `pluck:`, the key read from each element", f.Kind)
+			}
+		case "markers":
+			if f.From == "" {
+				bad("markers needs `from:`, the text the markers are read from")
 			}
 		case "object":
 			if (f.Object == "") == (len(f.Fields) == 0) {
@@ -246,8 +251,8 @@ func (pl *plan) checkFields(fields fieldList, where string, errs *[]string) {
 		if f.Cap && f.Lower {
 			bad("cap and lower do not combine")
 		}
-		if f.OmitEmpty && f.Kind != "string" && f.Kind != "integer" && f.Kind != "object" {
-			bad("omit_empty applies to a string, an integer or an object")
+		if f.OmitEmpty && f.Kind != "string" && f.Kind != "integer" && f.Kind != "object" && f.Kind != "markers" {
+			bad("omit_empty applies to a string, an integer, an object or markers")
 		}
 		if f.Require != "" && (f.Kind != "object" || len(f.Fields) == 0 || !f.OmitEmpty) {
 			bad("require applies to an inline omit_empty object")
