@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
+	"gopkg.in/yaml.v3"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
@@ -300,4 +301,39 @@ nodes:
     args: {"<<": *b, content: hi}
 `))
 	require.ErrorContains(t, err, `"<<"`)
+}
+
+// Expansion yields a tree: an anchor merged in several places, and also
+// emitted itself, gives each site nodes of its own, so normalizing or
+// re-marshaling one site can never change another. mergedPairs expands the
+// merge value afresh at every site rather than reusing one expansion.
+func TestAliasExpansionSharesNoNode(t *testing.T) {
+	var doc yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(`
+base: &base {role: assistant, meta: {k: v}}
+a: {<<: *base, content: one}
+b: {<<: [*base], content: two}
+c: *base
+`), &doc))
+	out, err := expandYAMLAliases(&doc)
+	require.NoError(t, err)
+	seen := map[*yaml.Node]bool{}
+	var walk func(n *yaml.Node)
+	walk = func(n *yaml.Node) {
+		require.False(t, seen[n], "node %q (line %d) appears twice in the expanded tree", n.Value, n.Line)
+		seen[n] = true
+		for _, c := range n.Content {
+			walk(c)
+		}
+	}
+	walk(out)
+	// And none is a node of the parsed document.
+	var orig func(n *yaml.Node)
+	orig = func(n *yaml.Node) {
+		require.False(t, seen[n], "the expanded tree reuses parsed node %q (line %d)", n.Value, n.Line)
+		for _, c := range n.Content {
+			orig(c)
+		}
+	}
+	orig(&doc)
 }
