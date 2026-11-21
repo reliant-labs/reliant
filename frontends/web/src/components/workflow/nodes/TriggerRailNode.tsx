@@ -350,7 +350,7 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
       className={cn("relative rounded-xl border border-dashed p-2", statusBorder, selected && "ring-2 ring-primary/30")}
       style={{ width: NODE_DIMENSIONS.triggerRail.width }}
     >
-      <div className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-foreground">Triggers</div>
+      <div className="px-1 pb-1 text-xs font-semibold text-foreground">Triggers</div>
 
       <ul aria-label="How this workflow starts" className={cn("relative", horizontal && "pr-4")}>
         {rows.map((row, i) => (

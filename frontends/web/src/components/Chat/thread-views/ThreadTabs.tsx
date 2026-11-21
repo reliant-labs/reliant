@@ -1,12 +1,13 @@
 /**
- * Thread Tabs - Compact tab bar for switching between threads
- * 
- * Designed to integrate into ChatHeader as row 3.
- * Shows thread tabs with color indicators, message counts, activity state, and context usage.
+ * The thread switcher in the chat's top bar: one quiet control naming the
+ * thread in view, opening a menu of every thread with its colour, message
+ * count, activity and context usage. (Named ThreadTabs for its history: it
+ * was a row of tabs under the title.)
  */
 
 import { memo, useMemo } from "react";
-import { GitBranch } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
+import DropdownMenu, { type MenuItem } from "../../forge-ui/dropdown_menu";
 import { cn } from "../../../lib/utils";
 import Tooltip from "../../forge-ui/tooltip";
 import type { ThreadInfo } from "./useThreads";
@@ -136,7 +137,7 @@ export const ThreadTabs = memo(function ThreadTabs({
     [threads],
   );
 
-  // Check if any visible thread is active (for "All" tab indicator)
+  // Check if any visible thread is active (for "All" indicator)
   // Must be called before any early returns to satisfy hooks rules
   const isAnyActive = useMemo(() => {
     return visibleThreads.some(t => t.isActive);
@@ -144,9 +145,9 @@ export const ThreadTabs = memo(function ThreadTabs({
 
   // Don't show if only 1 visible thread
   if (visibleThreads.length <= 1) return null;
-  
+
   const totalMessages = visibleThreads.reduce((sum, t) => sum + t.messageCount, 0);
-  
+
   // Helper to get context usage for a thread
   const getContextUsage = (threadId: string, isMain: boolean): ContextUsageData | undefined => {
     if (!contextUsageByThread) return undefined;
@@ -158,89 +159,72 @@ export const ThreadTabs = memo(function ThreadTabs({
     }
     return undefined;
   };
-  
+
+  const threadMark = (thread: ThreadInfo) =>
+    thread.isActive ? (
+      <ActivityPulse color={thread.color} threadId={thread.id} />
+    ) : thread.isMain ? (
+      <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: thread.color }} />
+    ) : (
+      <GitBranch className="size-3.5 shrink-0" style={{ color: thread.color }} />
+    );
+
+  const selected = visibleThreads.find((thread) => thread.id === selectedThreadId);
+  const items: MenuItem[] = [
+    ...(showAllOption
+      ? [{
+          label: "All",
+          icon: isAnyActive ? <ActivityPulse /> : <span className="size-2 shrink-0 rounded-full bg-muted-foreground/50" />,
+          checked: selectedThreadId === null,
+          hint: <span className="tabular-nums">{totalMessages}</span>,
+          onClick: () => onSelectThread(null),
+        }]
+      : []),
+    ...visibleThreads.map((thread): MenuItem => {
+      const usage = getContextUsage(thread.id, thread.isMain);
+      return {
+        label: thread.name,
+        icon: threadMark(thread),
+        checked: selectedThreadId === thread.id,
+        testId: `thread-option-${thread.id}`,
+        hint: (
+          <span className="inline-flex items-center gap-1.5 tabular-nums">
+            {thread.messageCount}
+            {usage && <MiniContextIndicator usage={usage} color={thread.color} />}
+          </span>
+        ),
+        onClick: () => {
+          if (!thread.isMain) {
+            window.dispatchEvent(new CustomEvent("contextual-tip-thread-interacted"));
+          }
+          onSelectThread(thread.id);
+        },
+      };
+    }),
+  ];
+
+  // One quiet control in the top bar: the thread in view, and a menu of the
+  // others. Never a row of tabs of its own.
   return (
-    <div className="flex items-center gap-1.5 py-1.5 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-      {/* All threads option */}
-      {showAllOption && (
+    <DropdownMenu
+      align="right"
+      label="Threads"
+      groups={[{ items, selection: "single" }]}
+      menuClassName="min-w-[240px]"
+      trigger={(props) => (
         <button
-          onClick={() => onSelectThread(null)}
-          className={cn(
-            "px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5",
-            "border",
-            selectedThreadId === null
-              ? "bg-primary/10 text-primary-ink border-primary/30"
-              : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50"
-          )}
+          {...props}
+          ref={props.ref as React.Ref<HTMLButtonElement>}
+          type="button"
+          aria-label={`Thread: ${selected?.name ?? "All"}`}
+          data-contextual-tip="spawned-thread-item"
+          className="inline-flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {/* Activity indicator for "All" - shows when any thread is active */}
-          {isAnyActive && <ActivityPulse />}
-          <span>All</span>
-          <span className="text-2xs opacity-70 tabular-nums">{totalMessages}</span>
+          {selected ? threadMark(selected) : isAnyActive ? <ActivityPulse /> : <GitBranch className="size-3.5 shrink-0" />}
+          <span className="truncate">{selected ? selected.name : `${visibleThreads.length} threads`}</span>
+          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
         </button>
       )}
-
-      {/* Thread tabs */}
-      {visibleThreads.map((thread) => {
-        const isSelected = selectedThreadId === thread.id;
-        const isSpawnedThread = !thread.isMain;
-
-        return (
-          <button
-            key={thread.id}
-            onClick={() => {
-              if (isSpawnedThread) {
-                window.dispatchEvent(new CustomEvent("contextual-tip-thread-interacted"));
-              }
-              onSelectThread(thread.id);
-            }}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5",
-              "border",
-              isSelected
-                ? "border-current"
-                : "border-transparent hover:bg-muted/50"
-            )}
-            style={{
-              color: isSelected ? thread.color : undefined,
-              backgroundColor: isSelected ? `${thread.color}10` : undefined,
-            }}
-            data-contextual-tip={isSpawnedThread ? "spawned-thread-item" : undefined}
-          >
-            {/* Thread indicator - show activity pulse if active, otherwise static indicator */}
-            {thread.isActive ? (
-              <ActivityPulse color={thread.color} threadId={thread.id} />
-            ) : thread.isMain ? (
-              <span
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: thread.color }}
-              />
-            ) : (
-              <GitBranch 
-                className="h-3.5 w-3.5 flex-shrink-0" 
-                style={{ color: thread.color }}
-              />
-            )}
-            
-            {/* Name */}
-            <span className={cn(!isSelected && "text-muted-foreground")}>
-              {thread.name}
-            </span>
-            
-            {/* Message count */}
-            <span className="text-2xs opacity-60 tabular-nums">
-              {thread.messageCount}
-            </span>
-            
-            {/* Context usage indicator */}
-            {(() => {
-              const usage = getContextUsage(thread.id, thread.isMain);
-              return usage ? <MiniContextIndicator usage={usage} color={thread.color} /> : null;
-            })()}
-
-          </button>
-        );
-      })}
-    </div>
+    />
   );
 });

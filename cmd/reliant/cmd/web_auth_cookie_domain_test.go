@@ -22,7 +22,7 @@ import (
 // inject AUTH_COOKIE_DOMAIN directly, so without this a projection that
 // dropped or renamed the key would leave the setting documented and inert.
 func TestAuthCookieDomainReachesTheWebRuntimeConfig(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**", "frontends/web/src/lib/config_schema_gen.json"))
 
 	// The key the bundle reads at boot (lib/config_gen.ts, from this schema).

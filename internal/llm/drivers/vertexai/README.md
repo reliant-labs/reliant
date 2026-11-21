@@ -1,6 +1,8 @@
 # Vertex AI Driver
 
-Driver for Google Cloud Vertex AI supporting Gemini models. Claude models via Vertex AI Model Garden are **not yet implemented** — use the Anthropic direct driver or OpenRouter for Claude today.
+Driver for Google Cloud Vertex AI supporting Gemini and Claude models. See the
+model catalog for the current model IDs and use a location that supports the
+model you select.
 
 ## Supported Models
 
@@ -38,6 +40,30 @@ file, URL or program, which on a server would be the server's own. The key's
 `token_uri` must be Google's; tokens are self-signed JWTs.
 
 The region is the server's `VERTEXAI_LOCATION` (default `us-central1`).
+`VERTEXAI_PROJECT` (`llm.vertexai_project`), when set, is the project every call
+targets, as before; unset, each call goes to the connected key's project. The
+call is signed by the connected key either way, so a configured project must
+grant that key Vertex AI.
+
+## Post-deploy verification and recovery
+
+In an approved canary environment, use a dedicated test org and Google Cloud
+project with Vertex AI enabled, the Claude partner model enabled in the
+configured location, and a connected test service-account key. With model
+fallback disabled, run a one-message chat for an available Vertex Gemini
+model and one for an available Vertex Claude model. Both must stream an answer
+and finish successfully with the requested Vertex model; confirm in the test
+Google Cloud project's request metrics that both model calls reached that
+project. Do not log the key or authorization headers. A separate test account
+without that key must not be able to complete a Vertex request.
+
+If either model fails, stop promotion and use a working, non-Vertex provider
+via an existing connected account. If already promoted, stop using Vertex for
+the affected accounts and roll forward with a fix that keeps the connected-key
+requirement; do not roll back to a build with server ADC fallback.
+`VERTEXAI_PROJECT` only redirects which project the account's key calls; it
+never brings the server's credentials back. Repeat both canary checks before
+resuming promotion.
 
 ## Usage
 
@@ -68,15 +94,14 @@ VertexAIClient
 │   ├── SendMessages
 │   ├── StreamResponse
 │   └── Function Calling
-└── Claude Provider (planned)
+└── Claude Provider
     └── Via Vertex AI Anthropic REST API
 ```
 
 ## Limitations
 
-1. **Claude support** not yet implemented
-2. **Prompt caching** not yet implemented for Gemini
-3. **Extended thinking** not yet supported
+1. **Prompt caching** not yet implemented for Gemini
+2. **Extended thinking** not yet supported
 
 ## Troubleshooting
 

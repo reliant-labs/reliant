@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -22,6 +23,35 @@ const activationApprovalBatchChangeID = "activation-approvals-batched"
 // turn. Histories recorded before it settled every card the generic way, and
 // replay so.
 const connectionProposalChangeID = "connection-proposal-approvals"
+
+// activationPreviewBoundedChangeID gates bounding the approval preview: a
+// longer per-attempt timeout and at most activationPreviewAttempts attempts,
+// after which the call is refused ("could not validate"). Histories recorded
+// before it previewed with a 30s timeout and the server's default retry
+// policy, which retries without end: a preview that always outran its
+// timeout held the agent's turn for hours (2026-11-20).
+const activationPreviewBoundedChangeID = "activation-preview-bounded"
+
+// activationPreviewAttempts bounds the preview's attempts. A preview that
+// cannot finish fails into a refusal the model sees, instead of blocking it.
+const activationPreviewAttempts = 3
+
+// previewActivityOptions are the preview's options under
+// activationPreviewBoundedChangeID.
+func previewActivityOptions(gctx workflow.Context) workflow.ActivityOptions {
+	if workflow.GetVersion(gctx, activationPreviewBoundedChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second}
+	}
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:    activationPreviewAttempts,
+		},
+	}
+}
 
 // connectionProposalsEnabled reports whether this run settles connection
 // proposals as such: the production gate.
@@ -111,7 +141,7 @@ type activationCard struct {
 // preview validates one call. It returns the call's card when it needs one;
 // otherwise the call is card-free or already refused.
 func (a activationApprovalAsk) preview(gctx workflow.Context, tc *pb.ToolCallMsg) (activationCard, bool) {
-	previewCtx := workflow.WithActivityOptions(gctx, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second})
+	previewCtx := workflow.WithActivityOptions(gctx, previewActivityOptions(gctx))
 	var preview types.AutomationApprovalPreview
 	err := workflow.ExecuteActivity(previewCtx, "AutomationApprovalPreview", types.AutomationApprovalInput{ChatID: a.rtx.ChatID, Thread: a.rtx.Thread, ToolName: tc.GetName(), ToolInput: tc.GetInput(), ToolCallID: tc.GetId(), Unattended: a.unattended, Capabilities: a.capabilities}).Get(gctx, &preview)
 	switch {

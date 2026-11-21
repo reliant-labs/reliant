@@ -58,14 +58,14 @@ func TestReliantCapabilities_PinsRoutingFacts(t *testing.T) {
 		"even when it sounds like \"just a script\"",
 		"`mcp__reliant-docs__search_reliant`",
 		"If the user named another tool or platform, use theirs",
-		"reliant forge skill load forge",
+		"reliant forge agent skill load forge",
 		"https://github.com/reliant-labs/forge",
 		"cron-kind workloads and operators need",
 		"Move to Forge",
 		"reliant forge obs check <env> --wait --json",
 		"Report \"not proven good\"",
 		"reliant forge db query <env>",
-		"reliant forge skill load observability/query",
+		"reliant forge agent skill load observability/query",
 	} {
 		assert.Contains(t, g, want)
 	}
@@ -84,7 +84,7 @@ func TestReliantCapabilities_FrontendOnlyIsFirstClass(t *testing.T) {
 	}
 	// Its own routing row, pointing at the static-site skill.
 	assert.Contains(t, g, "| A frontend that will be deployed, with or without a backend")
-	assert.Contains(t, g, "reliant forge skill load deploy/static-site")
+	assert.Contains(t, g, "reliant forge agent skill load deploy/static-site")
 
 	// Default, not "consider".
 	assert.Contains(t, g, "Default to it for anything that will be deployed — a frontend alone included")
@@ -98,7 +98,7 @@ func TestReliantCapabilities_FrontendOnlyIsFirstClass(t *testing.T) {
 		"static hosting with a CDN",
 		"one static site per org is free; each environment's site counts",
 		"custom domains",
-		"`reliant forge component search`",
+		"`reliant forge ui component search`",
 		"`frontend/design` skill",
 		"`.forge/logs/<env>/`",
 		"room to add an API",

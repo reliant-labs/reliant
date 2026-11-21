@@ -11,7 +11,7 @@
 //
 // ── WHO DOES WHAT ─────────────────────────────────────────────────────
 // The mechanics are forge's (pkg/oauth2.LoopbackLogin, the same code
-// `forge login` runs) and so is the file (pkg/credentials). This package
+// `forge cloud login` runs) and so is the file (pkg/credentials). This package
 // decides only reliant's parts: its client id, the scopes it asks for, and
 // how to find the authorization server for a --server.
 //

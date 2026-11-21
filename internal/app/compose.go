@@ -346,13 +346,14 @@ func (g *Graph) newDaemon() (*daemon.Service, error) {
 // newSystem constructs the system handler (internal/handlers/system).
 func (g *Graph) newSystem() (*system.Service, error) {
 	return system.New(system.Deps{
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Repo:          g.Database(),
-		Temporal:      g.TemporalClient().Client,
-		NATSConnected: g.NATSConn().Conn.IsConnected,
-		StreamingHub:  g.StreamingHub().Hub,
-		OAuthProvider: g.APISettings().OAuthProvider,
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Temporal:       g.TemporalClient().Client,
+		NATSConnected:  g.NATSConn().Conn.IsConnected,
+		StreamingHub:   g.StreamingHub().Hub,
+		OAuthProvider:  g.APISettings().OAuthProvider,
+		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -616,6 +617,13 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 	})
 }
 
+func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
+	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
@@ -691,6 +699,7 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 		OAuthIssuers: g.ApiServerConfig.GetMcpOauthIssuers(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
+		Membership:   g.OrgResolver(),
 	})
 }
 

@@ -125,6 +125,15 @@ type DriverResponse struct {
 	// which the Anthropic API requires of a multi-turn exchange.
 	RedactedThinking string
 	ToolCalls        []message.ToolCall
+	// DroppedToolCalls are tool calls this stream OPENED — an EventToolUseStart
+	// went out for them — that the driver does not return in ToolCalls and
+	// that must never run: a call a Responses response that did not complete
+	// never confirmed, or one the stream never named. Each carries the ID it
+	// was opened under (for the Responses drivers the output item id, not the
+	// call_id) and the name if known, so the consumer can close the card the
+	// start opened instead of leaving it "requested". A call that was never
+	// opened may be listed too; consumers act only on calls they saw start.
+	DroppedToolCalls []message.ToolCall
 	Usage            TokenUsage
 	FinishReason     message.FinishReason
 

@@ -20,18 +20,11 @@ import {
 import "./settings-range.css";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
-type ChatTimelineVariant = "compact" | "card" | "minimal";
 
 const THEME_CHOICES: readonly Choice<ThemeMode>[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
   { value: "system", label: "System", description: "Follows your device" },
-];
-
-const CHAT_TIMELINE_VARIANTS: readonly Choice<ChatTimelineVariant>[] = [
-  { value: "compact", label: "Compact", description: "Balanced spacing for everyday chats" },
-  { value: "card", label: "Card", description: "Stronger message grouping and separation" },
-  { value: "minimal", label: "Minimal", description: "Reduced chrome for dense timelines" },
 ];
 
 const CHAT_THREAD_CHOICES: readonly Choice<ChatThreadModePreference>[] = CHAT_THREAD_MODE_CHOICES;
@@ -48,9 +41,13 @@ const DEFAULT_COLOR_SCHEME = "black";
 
 /**
  * Settings → Appearance: how the app looks — theme, colour scheme, fonts,
- * text size and chat density. How the chat and the editor BEHAVE (streaming,
+ * text size and the chat thread's detail. How the chat and the editor BEHAVE (streaming,
  * spawn and tool-call display, the workflow viewer, the file browser, the code
  * editor) is Settings → Chat & editor.
+ *
+ * The chat has one look: the "Chat density" setting (compact, card, minimal)
+ * is retired, and Simplified / Detailed is the chat's only switch. Its key
+ * stays readable for older desktop builds (SETTINGS_KEYS.CHAT_TIMELINE_VARIANT).
  *
  * Every control applies at once. "Reset to defaults" in the header resets
  * exactly what this page shows, and nothing on any other page.
@@ -64,7 +61,6 @@ export function AppearanceSettings() {
   // editor follow the app font. Derived from a non-default persisted EDITOR_FONT.
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
-  const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [chatThreadMode, setChatThreadModeState] = useState<ChatThreadModePreference>(DEFAULT_CHAT_THREAD_MODE);
   // Bumped by Reset so the colour-scheme picker re-reads the stored scheme.
   const [schemeKey, setSchemeKey] = useState(0);
@@ -82,7 +78,6 @@ export function AppearanceSettings() {
       setEditorFont(savedEditorFont);
       setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
-      setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setChatThreadModeState(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE)));
       setIsLoaded(true);
     })();
@@ -138,13 +133,6 @@ export function AppearanceSettings() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (persistPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant)) {
-      window.dispatchEvent(new CustomEvent("appearance-updated"));
-    }
-  }, [chatTimelineVariant, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
     // Unset already means the default; don't write it just for opening the page.
     if (chatThreadMode === DEFAULT_CHAT_THREAD_MODE && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
     if (persistPref(SETTINGS_KEYS.CHAT_THREAD_MODE, chatThreadMode)) {
@@ -161,7 +149,6 @@ export function AppearanceSettings() {
     setEditorFont("default");
     setUseCodeFont(false);
     setFontSize(DEFAULT_FONT_SIZE as FontSize);
-    setChatTimelineVariant("compact");
     setChatThreadModeState(DEFAULT_CHAT_THREAD_MODE);
   };
 
@@ -175,7 +162,7 @@ export function AppearanceSettings() {
       <div data-onboarding="appearance-settings">
         <SettingsPageHeader
           title="Appearance"
-          description="Theme, colour scheme, fonts and density. Changes apply immediately and are remembered on this device."
+          description="Theme, colour scheme, fonts and the chat thread. Changes apply immediately and are remembered on this device."
           actions={
             <Button variant="outline" size="sm" onClick={resetToDefaults} leftIcon={<RotateCcw className="h-3.5 w-3.5" />}>
               Reset to defaults
@@ -268,19 +255,6 @@ export function AppearanceSettings() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="space-y-3">
-            <span id="appearance-density" className="text-sm font-medium block">
-              Chat density
-            </span>
-            <ChoiceGroup
-              label="Chat density"
-              value={chatTimelineVariant}
-              choices={CHAT_TIMELINE_VARIANTS}
-              onChange={setChatTimelineVariant}
-              className="sm:grid-cols-3"
-            />
           </div>
 
           <div className="space-y-3">

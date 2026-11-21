@@ -67,6 +67,22 @@ type AcceptOptions struct {
 	// Manual is a human's "run now": it bypasses the filter, the enabled
 	// flag and nothing else.
 	Manual bool
+	// Batch, when set, is shared by every Accept of one routing attempt that
+	// reaches several triggers so each catalog scope is pinned and read once.
+	Batch *Batch
+	// Receipt links a targeted durable receipt to its first event atomically.
+	Receipt *IntakeReceipt
+}
+
+// IntakeReceipt fences event creation when processing one durable webhook.
+type IntakeReceipt struct {
+	ID, LeaseToken, EventID string
+	ReceivedAt              time.Time
+}
+
+type receiptEventRepo interface {
+	TriggerDeliveryEvent(ctx context.Context, id, triggerID, userID string) (*core.TriggerEvent, error)
+	RecordDeliveryTriggerEvent(ctx context.Context, id, token string, event *core.TriggerEvent) (*core.TriggerEvent, bool, error)
 }
 
 // AcceptResult is what Accept recorded.
@@ -147,6 +163,21 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		// with no hint why.
 		return nil, errors.New("triggers: an inbound event needs a sender")
 	}
+	var receiptRepo receiptEventRepo
+	if receipt := opts.Receipt; receipt != nil {
+		var ok bool
+		receiptRepo, ok = in.repo.(receiptEventRepo)
+		if !ok {
+			return nil, errors.New("triggers: receipt-aware event store is required")
+		}
+		if receipt.EventID != "" {
+			stored, err := receiptRepo.TriggerDeliveryEvent(ctx, receipt.EventID, trigger.ID, trigger.UserID)
+			if err != nil {
+				return nil, err
+			}
+			return in.startRecordedEvent(ctx, trigger.ID, stored, true, opts.Manual), nil
+		}
+	}
 	occurredAt := ev.OccurredAt
 	if occurredAt.IsZero() {
 		occurredAt = in.now().UTC()
@@ -165,8 +196,9 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	// one refuses it before any filter, so a broken file never reads as
 	// "did not match".
 	var (
-		decl *Declaration
-		def  *core.TriggerEventDefinition
+		decl      *Declaration
+		def       *core.TriggerEventDefinition
+		workflows = opts.Batch.workflows(in.workflows)
 	)
 	switch {
 	case err != nil:
@@ -174,10 +206,10 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		err = &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
 	default:
 		trigger = bound
-		if def, err = DefinitionOf(ctx, in.workflows, trigger); err != nil {
+		if def, err = DefinitionOf(ctx, workflows, trigger); err != nil {
 			return nil, err
 		}
-		decl, err = activationFor(ctx, PinnedTo(in.workflows, def), trigger)
+		decl, err = activationFor(ctx, PinnedTo(workflows, def), trigger)
 	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
@@ -210,7 +242,11 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		}
 	}
 
-	dedupeKey := in.declaredDedupeKey(ctx, trigger, decl, ev, occurredAt)
+	dedupeAt := in.now()
+	if opts.Receipt != nil {
+		dedupeAt = opts.Receipt.ReceivedAt
+	}
+	dedupeKey := in.declaredDedupeKeyAt(ctx, trigger, decl, ev, occurredAt, dedupeAt)
 	row := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,
@@ -226,34 +262,33 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		Definition:    def,
 		CreatedAt:     in.now().UTC(),
 	}
-	ev.DedupeKey = dedupeKey
-	created, err := in.repo.CreateTriggerEvent(ctx, row)
+	var created bool
+	if receiptRepo != nil {
+		row, created, err = receiptRepo.RecordDeliveryTriggerEvent(ctx, opts.Receipt.ID, opts.Receipt.LeaseToken, row)
+	} else {
+		created, err = in.repo.CreateTriggerEvent(ctx, row)
+		if err == nil && !created {
+			row, err = in.repo.GetTriggerEventByDedupe(ctx, ev.Kind, dedupeKey)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("record %s event for trigger %s: %w", ev.Kind, trigger.ID, err)
 	}
-	res := &AcceptResult{EventID: row.ID, Outcome: outcome, Detail: detail}
-	if !created {
-		stored, err := in.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
-		if err != nil {
-			return nil, fmt.Errorf("load existing event %s: %w", ev.DedupeKey, err)
-		}
-		res = &AcceptResult{EventID: stored.ID, Outcome: stored.Outcome, Detail: stored.OutcomeDetail, Duplicate: true}
-		if stored.Outcome != core.TriggerEventPending {
-			return res, nil
-		}
-		// Still pending: the first delivery's start may have failed, so
-		// (re)starting is the repair. The fire id is the event's, so if it
-		// is already running this attaches rather than duplicating.
-	} else if outcome != core.TriggerEventPending {
-		return res, nil
-	}
+	return in.startRecordedEvent(ctx, trigger.ID, row, !created, opts.Manual), nil
+}
 
-	input := EventFireInput{TriggerID: trigger.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey, Manual: opts.Manual}
-	if err := StartEventFire(ctx, in.starter, res.EventID, input, in.taskQueue); err != nil {
-		logging.WarnContext(ctx, "could not start the fire of an accepted trigger event; the redriver will retry",
-			"trigger_id", trigger.ID, "event_id", res.EventID, "error", err)
+func (in *Intake) startRecordedEvent(ctx context.Context, triggerID string, row *core.TriggerEvent, duplicate, manual bool) *AcceptResult {
+	res := &AcceptResult{EventID: row.ID, Outcome: row.Outcome, Detail: row.OutcomeDetail, Duplicate: duplicate}
+	if row.Outcome == core.TriggerEventPending {
+		// A crash after the write is repaired by the redriver. Re-delivery
+		// names the same event and does not create a second launch intent.
+		input := EventFireInput{TriggerID: triggerID, Kind: row.Kind, DedupeKey: row.DedupeKey, Manual: manual}
+		if err := StartEventFire(ctx, in.starter, row.ID, input, in.taskQueue); err != nil {
+			logging.WarnContext(ctx, "could not start the fire of an accepted trigger event; the redriver will retry",
+				"trigger_id", triggerID, "event_id", row.ID, "error", err)
+		}
 	}
-	return res, nil
+	return res
 }
 
 func (in *Intake) applyFilter(ctx context.Context, expr string, trigger *core.Trigger, decl *Declaration, ev InboundEvent, origin *core.TriggerOrigin, occurredAt time.Time) (core.TriggerEventOutcome, string) {

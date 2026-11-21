@@ -104,6 +104,7 @@
         FirstToken: 0s
       }
       ReliantBaseURL: "https://llm.surface.test"
+      VertexProject: "surface-project"
       VertexLocation: "europe-west4"
       DebugOpenAIResponsesInput: true
       DebugOpenAIToolSchemas: true

@@ -17,6 +17,7 @@ data:
       id: integer
       name: { kind: string, cap: true }
       notes: { kind: string, cap: true, omit_empty: true }
+      marks: { kind: markers, from: notes, omit_empty: true, description: The notes' markers. }
       owner: { kind: object, object: user }
       tags: { kind: names, pluck: name, description: Tag names. }
       draft: boolean
