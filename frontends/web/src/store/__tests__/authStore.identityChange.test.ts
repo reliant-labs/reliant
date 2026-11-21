@@ -69,6 +69,10 @@ vi.mock('@/lib/logger', () => ({
 }))
 
 const { queryClient } = await import('@/lib/query-client')
+const { commitRouteOrgScope, getRouteOrgScope } = await import('@/lib/routeOrg')
+const { getOrgScope } = await import('@/lib/orgScope')
+const { currentOrgId } = await import('@/services/controlPlane/orgs')
+const { requestOrgId } = await import('@/api/orgInterceptor')
 const { useAuthStore } = await import('@/store/authStore')
 const { useGlobalDataStore } = await import('@/store/globalDataStore')
 const { useApiKeySetupStore } = await import('@/store/apiKeySetupStore')
@@ -129,6 +133,27 @@ beforeEach(async () => {
 })
 
 describe('identity changes observed by the auth listener', () => {
+  it('withdraws a mounted org scope before the next session can use it', async () => {
+    await signedInAs('user-a')
+    commitRouteOrgScope({ kind: 'member', org: { id: 'org-a', slug: 'acme' } })
+    const invalidate = vi.fn(async () => commitRouteOrgScope({ kind: 'denied', reason: 'not-member' }))
+    const registry = globalThis as { __RELIANT_ROUTER?: unknown }
+    registry.__RELIANT_ROUTER = { invalidate }
+    try {
+      const adopting = auth.listener!('SIGNED_IN', sessionFor('user-b'))
+      expect(getRouteOrgScope()).toEqual({ kind: 'pending' })
+      expect(getOrgScope()).toMatchObject({ ready: false, orgId: null })
+      expect(requestOrgId()).toBeNull()
+      expect(await currentOrgId()).toBeNull()
+      await adopting
+      expect(invalidate).toHaveBeenCalledOnce()
+      expect(getRouteOrgScope()).toEqual({ kind: 'denied', reason: 'not-member' })
+    } finally {
+      delete registry.__RELIANT_ROUTER
+      commitRouteOrgScope({ kind: 'legacy' })
+    }
+  })
+
   it('clears user A\'s stores and cached answers when user B signs in elsewhere', async () => {
     await signedInAs('user-a')
 

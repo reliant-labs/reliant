@@ -33,11 +33,10 @@ type LLMConfig struct {
 	// The Reliant LLM gateway (control-plane's LLM proxy). Unset is a
 	// misconfigured server: it falls back to loopback, never to production.
 	ReliantApiBaseUrl string `protobuf:"bytes,1,opt,name=reliant_api_base_url,json=reliantApiBaseUrl,proto3" json:"reliant_api_base_url,omitempty"`
-	// Deprecated: accepted in existing configurations but not used for requests.
-	// Vertex AI uses the project of the connected service-account key, not this
-	// setting or the server's Google credentials.
-	//
-	// Deprecated: Marked as deprecated in reliant/config/v1/llm_config.proto.
+	// The project every Vertex AI call targets. Unset: each connected account's
+	// calls go to its service-account key's project. Either way the call is
+	// signed only by the connected account's key, never the server's Google
+	// credentials, so the key must be granted Vertex AI in this project.
 	VertexaiProject  string `protobuf:"bytes,2,opt,name=vertexai_project,json=vertexaiProject,proto3" json:"vertexai_project,omitempty"`
 	VertexaiLocation string `protobuf:"bytes,3,opt,name=vertexai_location,json=vertexaiLocation,proto3" json:"vertexai_location,omitempty"`
 	// The stream guards (internal/llm transport.go, stream_stall.go). Each is
@@ -90,7 +89,6 @@ func (x *LLMConfig) GetReliantApiBaseUrl() string {
 	return ""
 }
 
-// Deprecated: Marked as deprecated in reliant/config/v1/llm_config.proto.
 func (x *LLMConfig) GetVertexaiProject() string {
 	if x != nil {
 		return x.VertexaiProject
@@ -151,12 +149,12 @@ var File_reliant_config_v1_llm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_llm_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa8\f\n" +
+	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9f\f\n" +
 	"\tLLMConfig\x12i\n" +
 	"\x14reliant_api_base_url\x18\x01 \x01(\tB8\x82\xce\x184\n" +
-	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12\xa7\x01\n" +
-	"\x10vertexai_project\x18\x02 \x01(\tB|\x82\xce\x18v\n" +
-	"\x10VERTEXAI_PROJECT*bDeprecated: accepted for compatibility; Vertex AI uses the connected service-account key's project\x18\x01R\x0fvertexaiProject\x12\x84\x01\n" +
+	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12\x9e\x01\n" +
+	"\x10vertexai_project\x18\x02 \x01(\tBs\x82\xce\x18o\n" +
+	"\x10VERTEXAI_PROJECT*[Vertex AI project every call targets (default: the connected service-account key's project)R\x0fvertexaiProject\x12\x84\x01\n" +
 	"\x11vertexai_location\x18\x03 \x01(\tBW\x82\xce\x18S\n" +
 	"\x11VERTEXAI_LOCATION\x1a\vus-central1*1Vertex AI region for connected Vertex AI accountsR\x10vertexaiLocation\x12\xad\x01\n" +
 	"\x13stream_idle_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationBb\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18V\n" +

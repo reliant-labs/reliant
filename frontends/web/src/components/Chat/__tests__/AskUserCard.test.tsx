@@ -171,6 +171,17 @@ describe("AskUserCard", () => {
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
   });
 
+  it("links the URLs in a question it shows", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([]);
+    renderCard(true, { questions: [{ question: "Is https://example.com/pr/7 ready?", options: [] }] });
+
+    const questions = await screen.findByTestId("ask-user-questions");
+    expect(questions).toHaveTextContent("Is https://example.com/pr/7 ready?");
+    const link = screen.getByRole("link", { name: "https://example.com/pr/7" });
+    expect(link).toHaveAttribute("href", "https://example.com/pr/7");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   // Prod, chat 641e33c9 (2026-10-22): the model wrote `questions` as a
   // JSON-encoded string and no `blocking` flag; the call's result had landed
   // and its async row is found by tool call id.
@@ -256,7 +267,7 @@ describe("AskUserCard once settled", () => {
     expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "true");
     expect(summary).toHaveAttribute("aria-expanded", "false");
     expect(summary).toHaveAccessibleName(/^Question answered: Which database\?.*SQLite$/);
-    expect(summary).toHaveClass("min-h-[44px]");
+    expect(summary).toHaveClass("touch:min-h-[44px]");
     // Collapsed means collapsed: no title, status line, or answer list.
     expect(screen.queryByText("Question answered")).toBeNull();
     expect(screen.queryByTestId("ask-user-answers")).toBeNull();

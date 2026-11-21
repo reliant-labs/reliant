@@ -767,3 +767,31 @@ func TestEvaluateSaveMessageConfig_ProviderAccountID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "acct-a", buildSaveMessageNode(result).GetSaveMessageNode().GetResolvedProviderAccountId())
 }
+
+// The effective thinking level rides from CallLLMOutput (thinking_level) onto
+// the save, as the model does, so messages.thinking_level records the level
+// the turn actually ran at after the model's capabilities reconciled it.
+func TestEvaluateSaveMessageConfig_ThinkingLevel(t *testing.T) {
+	t.Parallel()
+	config := &reliantv1.SaveMessageConfig{Role: celLiteral("assistant"), Content: celLiteral("test")}
+	scope := testSaveMessageScope(map[string]interface{}{workflowContextKeyInputs: map[string]interface{}{}},
+		"chat-123", "thread-path", "workflow-123", "step-id", nil)
+
+	for name, tc := range map[string]struct {
+		output map[string]interface{}
+		want   string
+	}{
+		"from the output":      {map[string]interface{}{"thinking_level": "high"}, "high"},
+		"absent stays empty":   {map[string]interface{}{}, ""},
+		"non-string ignored":   {map[string]interface{}{"thinking_level": 3}, ""},
+		"explicit nil ignored": {map[string]interface{}{"thinking_level": nil}, ""},
+	} {
+		result, err := evaluateSaveMessageConfig(config, tc.output, scope)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.want, result.ThinkingLevel, name)
+	}
+
+	result, err := evaluateSaveMessageConfig(config, map[string]interface{}{"thinking_level": "high"}, scope)
+	require.NoError(t, err)
+	assert.Equal(t, "high", buildSaveMessageNode(result).GetSaveMessageNode().GetResolvedThinkingLevel())
+}

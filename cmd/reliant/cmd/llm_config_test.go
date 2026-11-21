@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
-	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 var llmEnv = []string{
@@ -64,6 +62,7 @@ func TestLLMEnvContract(t *testing.T) {
 
 	for name, value := range map[string]string{
 		"RELIANT_API_BASE_URL":                       "http://control-plane:8090/v1",
+		"VERTEXAI_PROJECT":                           "reliant-prod",
 		"VERTEXAI_LOCATION":                          "europe-west4",
 		"RELIANT_LLM_STREAM_IDLE_TIMEOUT":            "3m",
 		"RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT":   "12m",
@@ -79,42 +78,11 @@ func TestLLMEnvContract(t *testing.T) {
 	want = drivers.Settings{
 		StreamTimeouts: llm.StreamTimeouts{Idle: 3 * time.Minute, ContentStall: 12 * time.Minute,
 			Progress: 20 * time.Minute, MidBlock: 45 * time.Minute},
-		ReliantBaseURL: "http://control-plane:8090/v1", VertexLocation: "europe-west4",
+		ReliantBaseURL: "http://control-plane:8090/v1", VertexProject: "reliant-prod", VertexLocation: "europe-west4",
 		DebugOpenAIResponsesInput: true, DebugOpenAIToolSchemas: true,
 	}
 	assert.Equal(t, want, api)
 	assert.Equal(t, want, worker)
-}
-
-func TestLegacyVertexProjectConfigDoesNotChangeDriverSettings(t *testing.T) {
-	isolateLLMEnv(t)
-	wantAPI, wantWorker, err := llmOf(t)
-	require.NoError(t, err)
-
-	file := filepath.Join(t.TempDir(), "reliant.yaml")
-	require.NoError(t, os.WriteFile(file, []byte("llm:\n  vertexai_project: legacy-file-project\n"), 0o600))
-	assertLegacyProject := func(want string) {
-		t.Helper()
-		for _, role := range []string{"api", "worker"} {
-			cmd, _, err := NewRootCmd().Find([]string{"server", role})
-			require.NoError(t, err)
-			process, err := config.LoadServerProcessConfig(cmd)
-			require.NoError(t, err)
-			// Read the deprecated binding without making the driver consume it.
-			llmConfig := process.GetLlm().ProtoReflect()
-			field := llmConfig.Descriptor().Fields().ByNumber(2)
-			require.NotNil(t, field)
-			assert.Equal(t, want, llmConfig.Get(field).String(), role)
-		}
-		api, worker, err := llmOf(t)
-		require.NoError(t, err)
-		assert.Equal(t, wantAPI, api)
-		assert.Equal(t, wantWorker, worker)
-	}
-	t.Setenv("RELIANT_CONFIG", file)
-	assertLegacyProject("legacy-file-project")
-	t.Setenv("VERTEXAI_PROJECT", "legacy-env-project")
-	assertLegacyProject("legacy-env-project")
 }
 
 // A deadline the guard cannot honour stops the server at load (each used to

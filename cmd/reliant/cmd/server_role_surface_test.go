@@ -187,7 +187,7 @@ var serverRoleSurfaceEnv = map[string]string{
 
 	// llm
 	"RELIANT_API_BASE_URL":                       "https://llm.surface.test",
-	"VERTEXAI_PROJECT":                           "legacy-surface-project", // accepted, not passed to driver options
+	"VERTEXAI_PROJECT":                           "surface-project",
 	"VERTEXAI_LOCATION":                          "europe-west4",
 	"RELIANT_LLM_STREAM_IDLE_TIMEOUT":            "91s",
 	"RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT":   "6m",

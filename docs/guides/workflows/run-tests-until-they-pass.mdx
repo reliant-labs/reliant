@@ -5,8 +5,6 @@ description: "Have an AI agent fix code, run your test command and try again unt
 keywords: ["AI agent run tests until pass", "agent fix failing tests loop", "loop until tests pass", "workflow loop node", "test-driven agent workflow"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · L/S steps run in scratch (guides-scratch/run-tests-until-they-pass): validate, lint (plus a copy with the cap removed, for the loop-unbounded finding), scenario run (3 scenarios) · account steps: run in the Reliant Labs org on a throwaway project (guides-sandbox-tests-loop): run e9b75db6… passed on attempt 1; run c7a4f936… with test_command "exit 1", max_attempts=2, gave up after 2 attempts; both ended, project left in place (no CLI delete verb), recorded in the sandbox ledger · unverified: the live run never needed a second fix, so the retry prompt is covered by scenario, not by a live run */}
-
 By the end of this guide you have a workflow in which an agent fixes your code, your own test command runs, and the agent tries again until the command exits `0`. A cap on attempts ends a run that cannot succeed, so it does not keep spending.
 
 The agent does not decide when it is done. A `run` node executes your test command, and the loop and the final edge route on its `exit_code`.
@@ -245,13 +243,13 @@ A single round is not capped. `builtin://agent` works until it finishes its turn
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Write your first multi-agent workflow" icon="diagram-project" href="/guides/workflows/first-multi-agent-workflow">
+  <Card title="Write your first multi-agent workflow" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     A planner, an implementer and a reviewer that sends work back.
   </Card>
   <Card title="Get It Right" icon="circle-check" href="/guides/get-it-right">
     The built-in loop with lint, test and build gates and a reviewer.
   </Card>
-  <Card title="How workflows run" icon="gears" href="/deep-dives/how-workflows-run">
+  <Card title="How workflows run" icon="settings-2" href="/deep-dives/how-workflows-run">
     How loops, edges and outcomes are evaluated at run time.
   </Card>
   <Card title="CEL expressions" icon="code" href="/reference/cel-expressions">

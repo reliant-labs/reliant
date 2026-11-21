@@ -132,3 +132,34 @@ func TestNewClientNeverUsesTheServersGoogleCredentials(t *testing.T) {
 		}
 	}
 }
+
+// TestConfiguredProjectIsStillTheTarget pins VERTEXAI_PROJECT's meaning: when
+// set, it is the project every call targets; unset, the key's project is.
+// The account's key signs the call either way.
+func TestConfiguredProjectIsStillTheTarget(t *testing.T) {
+	t.Cleanup(func() { Configure("", "") })
+	key := testServiceAccountKey(t, nil)
+	for _, tc := range []struct{ configured, want string }{
+		{"", "account-project"},
+		{"operator-project", "operator-project"},
+	} {
+		Configure(tc.configured, "europe-west4")
+		for _, id := range []models.ModelID{"vertex-gemini-test", "vertex-claude-test"} {
+			c, err := NewClient(llm.DriverOptions{ApiKey: key, Model: models.Model{ID: id, APIModel: string(id)}})
+			if err != nil {
+				t.Fatalf("NewClient(%s): %v", id, err)
+			}
+			if got := targetProject(c.account); got != tc.want {
+				t.Errorf("VERTEXAI_PROJECT=%q: NewClient(%s) targets %q, want %q", tc.configured, id, got, tc.want)
+			}
+			if c.provider == providerClaude {
+				if ep := c.getClaudeEndpoint(false); !strings.Contains(ep, "/projects/"+tc.want+"/locations/europe-west4/") {
+					t.Errorf("VERTEXAI_PROJECT=%q: Claude endpoint %s, want project %s", tc.configured, ep, tc.want)
+				}
+			}
+		}
+	}
+	if _, err := NewClient(llm.DriverOptions{Model: models.Model{ID: "vertex-claude-test", APIModel: "vertex-claude-test"}}); !errors.Is(err, ErrNoVertexCredential) {
+		t.Errorf("a configured project without the account's key: err = %v, want ErrNoVertexCredential", err)
+	}
+}

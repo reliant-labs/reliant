@@ -23,8 +23,8 @@ import "strings"
 //
 // The suffix step exists because reliant surfaces forge's skills under a
 // synthetic "forge/" namespace (and, in multi-repo projects, a further
-// "<repo>/" prefix) while forge's own CLI uses the bare path — `forge skill
-// list` prints "frontend/design", `forge skill load frontend/design` works,
+// "<repo>/" prefix) while forge's own CLI uses the bare path — `forge agent skill
+// list` prints "frontend/design", `forge agent skill load frontend/design` works,
 // and forge's skill bodies cross-reference each other unprefixed ("see the
 // frontend/state skill"). Every one of those references is a path the tool
 // must accept, or following a skill's own advice 404s.

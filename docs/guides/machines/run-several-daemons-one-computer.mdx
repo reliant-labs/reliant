@@ -5,8 +5,6 @@ description: "Run one Reliant daemon per checkout or per account on the same com
 keywords: ["multiple reliant daemons", "reliant daemon ls", "reliant daemon --account", "reliant daemon --workspace", "two accounts one computer", "daemon instance directory", "~/.reliant/instances"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L steps run in scratch: yes (guides-scratch/several-daemons, scratch HOME via env -i, two scratch git repos, never this machine's own daemon): daemon status from a subdirectory, from a second repo, with --workspace, --account and --server (all exit 1, no daemon); three daemons started with --non-interactive (repo-a, repo-b, repo-a --account usr_alice), daemon ls and daemon status of each while awaiting credentials, daemon stop of each by --workspace/--account from another directory (exit 0), daemon ls after · H steps: none · sources: reliant daemon start/status/stop/logs/ls --help, internal/daemoninstance/daemoninstance.go (instance = server origin, account, workspace), internal/auth/daemon_file.go (credentials keyed by origin then account; daemon id per instance), internal/toolexec/daemonstate/lock.go + internal/toolexec/daemonruntime/runtime.go:339 (lock taken when the runtime starts), cmd/reliant/cmd/daemon.go:1487-1513 (refuseHeldDataDir) · unverified: connecting the daemons (pairing needs a person to approve a code in the app, so no scratch daemon signed in), a second checkout reusing the account's stored credential without pairing (from internal/auth/daemon_file.go), the connected `daemon ls` row (taken from this machine's own daemon) */}
-
 By the end of this guide you can run more than one Reliant daemon on one computer, for example one per checkout or one for each of two accounts, and check, read or stop any of them from any directory.
 
 Each daemon is an **instance**, named by three things: the server it talks to, the account it runs as, and the workspace it serves. Every combination gets its own folder under `~/.reliant/instances/<server>/<account>/<workspace>/`, with its runtime record, its daemon id and its logs ([one daemon per workspace](/machines/your-computer#one-daemon-per-workspace)). Each instance connects as a separate machine.
@@ -116,13 +114,13 @@ Each daemon is an **instance**, named by three things: the server it talks to, t
   <Card title="Run a machine from the CLI" icon="terminal" href="/cli/run-a-machine">
     Start, check, read logs and stop a daemon, with a systemd unit.
   </Card>
-  <Card title="Fix an offline machine" icon="plug-circle-exclamation" href="/guides/machines/troubleshoot-offline-machine">
+  <Card title="Fix an offline machine" icon="plug-zap" href="/guides/machines/troubleshoot-offline-machine">
     Read the stream state and re-register a refused credential.
   </Card>
-  <Card title="Daemon security model" icon="shield-halved" href="/deep-dives/daemon-security-model">
+  <Card title="Daemon security model" icon="shield-half" href="/deep-dives/daemon-security-model">
     Instance identity, `daemon.json` and what a command can reach.
   </Card>
-  <Card title="Reclaim and restore worktrees" icon="box-archive" href="/guides/machines/reclaim-restore-worktrees">
+  <Card title="Reclaim and restore worktrees" icon="archive" href="/guides/machines/reclaim-restore-worktrees">
     Free the disk each machine's worktrees hold.
   </Card>
 </CardGroup>

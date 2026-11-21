@@ -40,8 +40,10 @@ file, URL or program, which on a server would be the server's own. The key's
 `token_uri` must be Google's; tokens are self-signed JWTs.
 
 The region is the server's `VERTEXAI_LOCATION` (default `us-central1`).
-Existing `VERTEXAI_PROJECT` and `llm.vertexai_project` values are still accepted
-but have no effect on requests. Only the connected key selects a project.
+`VERTEXAI_PROJECT` (`llm.vertexai_project`), when set, is the project every call
+targets, as before; unset, each call goes to the connected key's project. The
+call is signed by the connected key either way, so a configured project must
+grant that key Vertex AI.
 
 ## Post-deploy verification and recovery
 
@@ -58,8 +60,9 @@ without that key must not be able to complete a Vertex request.
 If either model fails, stop promotion and use a working, non-Vertex provider
 via an existing connected account. If already promoted, stop using Vertex for
 the affected accounts and roll forward with a fix that keeps the connected-key
-requirement; do not roll back to a build with server ADC fallback or try to
-restore it by setting `VERTEXAI_PROJECT`. Repeat both canary checks before
+requirement; do not roll back to a build with server ADC fallback.
+`VERTEXAI_PROJECT` only redirects which project the account's key calls; it
+never brings the server's credentials back. Repeat both canary checks before
 resuming promotion.
 
 ## Usage

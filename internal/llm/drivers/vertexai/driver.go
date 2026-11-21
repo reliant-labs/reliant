@@ -90,30 +90,44 @@ func getProviderForModel(modelID models.ModelID) providerType {
 // defaultLocation is the Vertex AI region used when none is configured.
 const defaultLocation = llm.DefaultVertexLocation
 
-// configuredLocation is the process's Vertex AI region (VERTEXAI_LOCATION, the
-// server role's LLM config). The project is the connected account's.
-var configuredLocation atomic.Pointer[string]
+// placement is the process's configured Vertex AI project and region
+// (VERTEXAI_PROJECT, VERTEXAI_LOCATION: the server role's LLM config).
+type placement struct{ project, location string }
 
-// Configure sets the Vertex AI region. A server role calls it once at boot,
-// from its config, before any Vertex AI call. An empty location is
-// us-central1.
-func Configure(location string) {
-	location = strings.TrimSpace(location)
-	configuredLocation.Store(&location)
+var configured atomic.Pointer[placement]
+
+// Configure sets the Vertex AI target project and region. A server role calls
+// it once at boot, from its config, before any Vertex AI call. An empty
+// location is us-central1. An empty project means each account's calls go to
+// its key's project; a configured one is the project every call targets, as
+// it always was, while the call is still signed only by the account's key.
+func Configure(project, location string) {
+	configured.Store(&placement{project: strings.TrimSpace(project), location: strings.TrimSpace(location)})
 }
 
 // vertexLocation is the configured region, us-central1 when none is.
 func vertexLocation() string {
-	if l := configuredLocation.Load(); l != nil && *l != "" {
-		return *l
+	if p := configured.Load(); p != nil && p.location != "" {
+		return p.location
 	}
 	return defaultLocation
+}
+
+// targetProject is the project a call for account goes to: the configured
+// VERTEXAI_PROJECT when one is set, else the project of the account's key.
+// Either way only the account's credentials sign it, so the key's IAM
+// grants decide whether the configured project accepts it.
+func targetProject(account *accountCredential) string {
+	if p := configured.Load(); p != nil && p.project != "" {
+		return p.project
+	}
+	return account.project
 }
 
 // initGeminiClient initializes the Gemini provider client
 func (c *VertexAIClient) initGeminiClient() error {
 	client, err := llm.NewGenAISDKClient(context.Background(), &genai.ClientConfig{
-		Project:     c.account.project,
+		Project:     targetProject(c.account),
 		Location:    vertexLocation(),
 		Backend:     genai.BackendVertexAI,
 		Credentials: c.account.creds,

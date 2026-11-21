@@ -67,6 +67,12 @@ interface ActiveOrgState {
    * the next answer.
    */
   failure: { error: Error; retry: () => void } | null;
+  /**
+   * The URL segment of each org the membership list named (its slug, or its
+   * id when it has none), by id: what lib/paths puts in `/o/<org>` for a link
+   * built outside the org tree (lib/paths/org.ts). Learnt, never persisted.
+   */
+  segments: Readonly<Record<string, string>>;
 }
 
 export const useActiveOrgStore = create<ActiveOrgState>(() => ({
@@ -75,6 +81,7 @@ export const useActiveOrgStore = create<ActiveOrgState>(() => ({
   effectiveId: null,
   resolved: false,
   failure: null,
+  segments: {},
 }));
 
 function read(storage: () => Storage, key: string): string | null {
@@ -122,11 +129,11 @@ export function bindActiveOrgUser(userId: string | null): void {
     // A machine credential has no orgs to choose between (ListMyOrganizations
     // refuses it): it names none, and the server acts in the credential's own
     // org. Nothing to wait for.
-    useActiveOrgStore.setState({ userId, chosenId: null, effectiveId: null, resolved: true, failure: null });
+    useActiveOrgStore.setState({ userId, chosenId: null, effectiveId: null, resolved: true, failure: null, segments: {} });
     return;
   }
   const chosen = userId ? readPersisted(userId) : null;
-  useActiveOrgStore.setState({ userId, chosenId: chosen, effectiveId: chosen, resolved: false, failure: null });
+  useActiveOrgStore.setState({ userId, chosenId: chosen, effectiveId: chosen, resolved: false, failure: null, segments: {} });
 }
 
 /** Whether `userId` is a machine credential's session (no membership list). */
@@ -172,6 +179,20 @@ export function failOrgResolution(error: Error, retry: () => void): void {
   if (resolved || effectiveId !== null) return;
   if (failure?.error === error) return;
   useActiveOrgStore.setState({ failure: { error, retry } });
+}
+
+/** Remember the URL segment of each of the person's orgs (the membership list's answer). */
+export function learnOrgSegments(orgs: readonly { id: string; slug: string }[]): void {
+  const { segments } = useActiveOrgStore.getState();
+  if (orgs.every((org) => segments[org.id] === (org.slug || org.id))) return;
+  const next: Record<string, string> = { ...segments };
+  for (const org of orgs) next[org.id] = org.slug || org.id;
+  useActiveOrgStore.setState({ segments: next });
+}
+
+/** The URL segment of `orgId`, or null when the membership list has not named it. */
+export function orgSegmentOf(orgId: string | null): string | null {
+  return orgId ? (useActiveOrgStore.getState().segments[orgId] ?? null) : null;
 }
 
 /** The remembered choice no longer names an org the person is in: forget it. */

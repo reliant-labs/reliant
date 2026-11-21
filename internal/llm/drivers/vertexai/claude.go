@@ -575,7 +575,7 @@ func (c *VertexAIClient) convertSchemaToMap(schema interface{}) map[string]inter
 
 // getClaudeEndpoint returns the Vertex AI Claude API endpoint
 func (c *VertexAIClient) getClaudeEndpoint(stream bool) string {
-	project, location := c.account.project, vertexLocation()
+	project, location := targetProject(c.account), vertexLocation()
 
 	action := "rawPredict"
 	if stream {

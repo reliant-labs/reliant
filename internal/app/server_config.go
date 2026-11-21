@@ -147,6 +147,7 @@ func LLMSettings(cfg *configv1.LLMConfig) drivers.Settings {
 			MidBlock:     timeout(cfg.GetStreamMidBlockStallTimeout()),
 		},
 		ReliantBaseURL:            cfg.GetReliantApiBaseUrl(),
+		VertexProject:             cfg.GetVertexaiProject(),
 		VertexLocation:            cfg.GetVertexaiLocation(),
 		DebugOpenAIResponsesInput: cfg.GetDebugOpenaiResponsesInput(),
 		DebugOpenAIToolSchemas:    cfg.GetDebugOpenaiToolSchemas(),
