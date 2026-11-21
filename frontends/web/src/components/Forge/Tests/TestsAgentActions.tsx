@@ -1,21 +1,24 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The Tests pages' agent buttons: "Fix this flaky test" (Flaky tests, a
+ * The Tests pages' agent actions: "Ask an agent to fix" (Flaky tests, a
  * test's page) and "Raise coverage of <pkg>" (Coverage). Each builds its
- * AskReliant subject when clicked (testsAgent.ts), reading what the page has
+ * AskReliant subject when chosen (testsAgent.ts), reading what the page has
  * not loaded yet through the same query keys the pages use, so a read the
  * page already made is not made again. It then starts an agent the way "Fix
  * with agent" does: a new chat on a workspace and git branch of its own,
  * sent at once (useAskReliant, intent "fix").
  *
  * Where there is no chat to start (the forge shell, a demo: handoff mode),
- * each is the house's one "Ask an agent" button instead, opening the handoff
- * sheet with the same subject: its prompt and the forge commands to run.
+ * the same action opens the handoff sheet with the same subject: its prompt
+ * and the forge commands to run.
  *
- * Disabled, with the reason beside it, when no agent can start in Reliant
- * (agentAvailability): no Reliant project for this app, or a project that is
- * not a git repository.
+ * Unavailable when no agent can start in Reliant (agentAvailability): no
+ * Reliant project for this app, or a project that is not a git repository.
+ * The fix action is then a disabled button (or menu item) whose tooltip says
+ * why; the coverage button keeps its reason beside it.
+ *
+ * useFixFlakyTest is the action without a control, for a row's menu.
  */
 
 import { useCallback, useId, useState, type ReactNode } from "react";
@@ -23,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Sparkles } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { testKeys } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
 import { useOrgScope } from "@/lib/orgScope";
@@ -46,24 +50,22 @@ export function useTestsAgentAvailability(projectId: string | null | undefined):
   return agentAvailability({ mode, projectId, project });
 }
 
-interface AgentButtonProps {
-  project: string;
-  projectId: string | null | undefined;
-  label: ReactNode;
-  icon: ReactNode;
-  hint: string;
-  testId: string;
-  /** The subject, built when clicked. */
-  build: () => Promise<AskSubject>;
+/** An agent action, without its control: whether it can run (and why not), how to run it, and the dialog it may open. */
+export interface AgentAction {
+  availability: AgentAvailability;
+  start: () => void;
+  busy: boolean;
+  /** Handoff mode: the action opens the "Ask an agent" sheet rather than starting a chat. */
+  handoff: boolean;
+  /** Render it once, beside the control: the handoff sheet or the project chooser. */
+  dialog: ReactNode;
 }
 
-function AgentButton({ project, projectId, label, icon, hint, testId, build }: AgentButtonProps) {
+function useAgentAction({ project, projectId, build }: { project: string; projectId: string | null | undefined; build: () => Promise<AskSubject> }): AgentAction {
   const availability = useTestsAgentAvailability(projectId);
   const { ask, busy, dialog, mode } = useAskReliant({ forgeProject: project });
-  const handoff = mode === "handoff";
   const [building, setBuilding] = useState(false);
-  const reason = useId();
-  const onClick = useCallback(async () => {
+  const run = useCallback(async () => {
     setBuilding(true);
     let subject: AskSubject;
     try {
@@ -76,42 +78,20 @@ function AgentButton({ project, projectId, label, icon, hint, testId, build }: A
     }
     await ask(subject, undefined, "fix");
   }, [ask, build]);
-
-  if (!availability.available) {
-    return (
-      <span className="inline-flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" leftIcon={icon} disabled aria-describedby={reason} title={availability.reason} data-testid={testId}>
-          {label}
-        </Button>
-        <span id={reason} className="text-meta text-ink-muted" data-testid={`${testId}-reason`}>
-          {availability.reason}
-        </span>
-      </span>
-    );
-  }
-  return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        leftIcon={handoff ? <Bot className="h-3.5 w-3.5" /> : icon}
-        onClick={() => void onClick()}
-        loading={building || busy}
-        title={handoff ? ASK_AGENT_HINT : hint}
-        data-testid={testId}
-        data-mode={mode}
-      >
-        {handoff ? ASK_AGENT_LABEL : label}
-      </Button>
-      {dialog}
-    </>
-  );
+  return { availability, start: () => void run(), busy: building || busy, handoff: mode === "handoff", dialog };
 }
 
 const FIX_HINT = "Start an agent on it now, in a new chat on its own workspace and git branch: it makes the test deterministic or deletes it, runs it 50 times under -race, and removes its quarantine entry.";
 
-/** "Fix this flaky test": the test's failure signatures come from its own read (GetTest), cached when its page made it. */
-export function FixFlakyTestButton({ project, projectId, flake, defaultBranch }: { project: string; projectId: string | null | undefined; flake: TestFlake; defaultBranch?: string }) {
+export const FIX_LABEL = "Ask an agent to fix";
+
+/** The fix action's hint: what choosing it does. */
+export function fixHint(action: Pick<AgentAction, "handoff">): string {
+  return action.handoff ? ASK_AGENT_HINT : FIX_HINT;
+}
+
+/** "Ask an agent to fix": the test's failure signatures come from its own read (GetTest), cached when its page or row made it. */
+export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { project: string; projectId: string | null | undefined; flake: TestFlake; defaultBranch?: string }): AgentAction {
   const api = useTestApi();
   const org = useOrgScope();
   const client = useQueryClient();
@@ -135,7 +115,83 @@ export function FixFlakyTestButton({ project, projectId, flake, defaultBranch }:
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
   }, [api, client, defaultBranch, flake, org.orgId, project]);
-  return <AgentButton project={project} projectId={projectId} label="Fix this flaky test" icon={<Bot className="h-3.5 w-3.5" />} hint={FIX_HINT} testId="tests-fix-with-agent" build={build} />;
+  return useAgentAction({ project, projectId, build });
+}
+
+/** "Ask an agent to fix", as a button: disabled, its reason in a tooltip, when no agent can start here. */
+export function FixFlakyTestButton({
+  project,
+  projectId,
+  flake,
+  defaultBranch,
+  variant = "outline",
+}: {
+  project: string;
+  projectId: string | null | undefined;
+  flake: TestFlake;
+  defaultBranch?: string;
+  variant?: "primary" | "outline";
+}) {
+  const action = useFixFlakyTest({ project, projectId, flake, defaultBranch });
+  const reason = useId();
+  const icon = <Bot className="h-3.5 w-3.5" />;
+  if (!action.availability.available) {
+    return (
+      <Tooltip content={action.availability.reason} triggerClassName="inline-flex">
+        <span className="inline-flex">
+          <Button variant={variant} size="sm" leftIcon={icon} disabled aria-describedby={reason} data-testid="tests-fix-with-agent">
+            {FIX_LABEL}
+          </Button>
+          <span id={reason} className="sr-only" data-testid="tests-fix-with-agent-reason">
+            {action.availability.reason}
+          </span>
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <>
+      <Button variant={variant} size="sm" leftIcon={icon} onClick={action.start} loading={action.busy} title={fixHint(action)} data-testid="tests-fix-with-agent" data-mode={action.handoff ? "handoff" : "chat"}>
+        {FIX_LABEL}
+      </Button>
+      {action.dialog}
+    </>
+  );
+}
+
+/** The coverage action's button: its reason beside it when it cannot start. */
+function AgentButton({ project, projectId, label, icon, hint, testId, build }: { project: string; projectId: string | null | undefined; label: ReactNode; icon: ReactNode; hint: string; testId: string; build: () => Promise<AskSubject> }) {
+  const action = useAgentAction({ project, projectId, build });
+  const reason = useId();
+  if (!action.availability.available) {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" leftIcon={icon} disabled aria-describedby={reason} title={action.availability.reason} data-testid={testId}>
+          {label}
+        </Button>
+        <span id={reason} className="text-meta text-ink-muted" data-testid={`${testId}-reason`}>
+          {action.availability.reason}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={action.handoff ? <Bot className="h-3.5 w-3.5" /> : icon}
+        onClick={action.start}
+        loading={action.busy}
+        title={action.handoff ? ASK_AGENT_HINT : hint}
+        data-testid={testId}
+        data-mode={action.handoff ? "handoff" : "chat"}
+      >
+        {action.handoff ? ASK_AGENT_LABEL : label}
+      </Button>
+      {action.dialog}
+    </>
+  );
 }
 
 /**

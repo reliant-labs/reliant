@@ -64,6 +64,7 @@ import {
   type ConsolePage,
 } from "./paths";
 import { consoleNavEntries } from "./consoleNavRegistry";
+import { testIdParts } from "../Tests/flakyModel";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -284,7 +285,7 @@ export function consoleCrumbs(
     case "tests-flaky":
       return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests" }];
     case "tests-flaky-test":
-      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests", href: href({ kind: "tests-flaky" }) }, { label: page.test }];
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests", href: href({ kind: "tests-flaky" }) }, { label: testIdParts(page.test).name }];
     case "auth":
       return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
   }
