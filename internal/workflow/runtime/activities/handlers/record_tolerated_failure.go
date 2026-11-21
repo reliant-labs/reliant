@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -29,6 +30,10 @@ type RecordToleratedFailureInput struct {
 	LoopNodeID    string `json:"loop_node_id,omitempty" reliant:"-"`
 	LoopIteration int    `json:"loop_iteration,omitempty" reliant:"-"`
 	NodePath      string `json:"node_path,omitempty" reliant:"-"`
+	// Telemetry names the run the node belongs to; the wrapper records its
+	// root run id on the attempt row (step_executions.run_id), which is how
+	// the run's outcome finds the row as its own.
+	Telemetry *types.RunTelemetry `json:"telemetry,omitempty" reliant:"-"`
 }
 
 // RecordToleratedFailureOutput is empty: the activity always fails.

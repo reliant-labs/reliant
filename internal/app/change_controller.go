@@ -24,10 +24,9 @@ import (
 )
 
 // changeController is tools.ChangeController for the worker: Forge Changes
-// through the control plane's ChangesService, presenting the run owner's own
-// session token, so the control plane applies exactly the membership, grant,
-// declaration and production-approval rules the console gets (and records
-// the agent as a token acting for the user in the audit trail).
+// through the control plane's ChangesService. Browser sessions are not agent
+// credentials: until a scoped agent credential contract is wired here, launch,
+// ramp and roll-out fail closed. Other operations use the owner's session.
 //
 // ── WHY HAND-WRITTEN JSON, FOR NOW ──────────────────────────────────────────
 // ChangesService (control-plane proto/services/changes/v1/changes.proto) is
@@ -337,6 +336,16 @@ var changeMethods = map[string]string{
 }
 
 func (c *changeController) ApplyChange(ctx context.Context, userID string, op tools.ChangeOp) (tools.ChangeSummary, error) {
+	// Never send an exposure-increasing agent action as a human console
+	// session, even with a step-up code or a prior interactive confirmation.
+	// Block every ramp: deciding whether it increases exposure requires state.
+	switch op.Action {
+	case "launch", "ramp", "roll_out":
+		return tools.ChangeSummary{}, &tools.ChangeAPIError{
+			Code: "permission_denied", Reason: "agent_credential_required",
+			Message: "agent launch, ramp and roll-out are unavailable until scoped agent credentials are supported; use the Experiments page of the Forge console",
+		}
+	}
 	method, ok := changeMethods[op.Action]
 	if !ok {
 		return tools.ChangeSummary{}, fmt.Errorf("unknown change action %q", op.Action)

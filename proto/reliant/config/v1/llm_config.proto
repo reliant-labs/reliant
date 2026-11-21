@@ -20,14 +20,18 @@ message LLMConfig {
     description: "Reliant LLM gateway base URL"
   }];
 
+  // The project every Vertex AI call targets. Unset: each connected account's
+  // calls go to its service-account key's project. Either way the call is
+  // signed only by the connected account's key, never the server's Google
+  // credentials, so the key must be granted Vertex AI in this project.
   string vertexai_project = 2 [(forge.v1.config) = {
     env_var: "VERTEXAI_PROJECT"
-    description: "Vertex AI project (required to call Vertex AI models)"
+    description: "Vertex AI project every call targets (default: the connected service-account key's project)"
   }];
   string vertexai_location = 3 [(forge.v1.config) = {
     env_var: "VERTEXAI_LOCATION"
     default_value: "us-central1"
-    description: "Vertex AI region"
+    description: "Vertex AI region for connected Vertex AI accounts"
   }];
 
   // The stream guards (internal/llm transport.go, stream_stall.go). Each is

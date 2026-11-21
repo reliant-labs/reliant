@@ -88,14 +88,14 @@ func TestChangeControllerSendsTheRevisionAndScope(t *testing.T) {
 	envs := &fakeChangeEnvs{}
 	c := testChangeController(srv, envs)
 
-	_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{Action: "launch", ChangeID: "chg-1", ExpectedRevision: 9, PercentBP: 1000, StepUpCode: "123456"})
+	_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{Action: "update_draft", ChangeID: "chg-1", ExpectedRevision: 9, Unit: "account"})
 	require.NoError(t, err)
 	_, err = c.ApplyChange(context.Background(), "owner", tools.ChangeOp{Action: "stop", ChangeID: "chg-1"})
 	require.NoError(t, err)
 	_, err = c.CreateChange(context.Background(), "owner", "proj", tools.ChangeCreate{Environment: "staging", Key: "new-checkout", Unit: "visitor"})
 	require.NoError(t, err)
 
-	require.Equal(t, map[string]any{"_method": changesServicePath + "LaunchChange", "changeId": "chg-1", "expectedRevision": "9", "percentBp": float64(1000), "stepUpCode": "123456"}, (*got)[0])
+	require.Equal(t, map[string]any{"_method": changesServicePath + "UpdateChangeDraft", "changeId": "chg-1", "expectedRevision": "9", "unit": "CHANGE_UNIT_ACCOUNT"}, (*got)[0])
 	require.Equal(t, map[string]any{"_method": changesServicePath + "StopChange", "changeId": "chg-1"}, (*got)[1], "stop sends no revision")
 	require.Equal(t, map[string]any{"_method": changesServicePath + "CreateChange", "environmentId": "env-staging", "key": "new-checkout", "unit": "CHANGE_UNIT_VISITOR"}, (*got)[2])
 	require.Equal(t, "shop", envs.asked[len(envs.asked)-1].GetProject(), "the chat's forge project scopes the environment names")
@@ -109,7 +109,7 @@ func TestChangeControllerMapsRefusals(t *testing.T) {
 		_, _ = io.WriteString(w, `{"code":"permission_denied","message":"a person must approve this launch"}`)
 	})
 	c := testChangeController(srv, &fakeChangeEnvs{})
-	_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{Action: "launch", ChangeID: "chg-1", ExpectedRevision: 9, PercentBP: 1000})
+	_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{Action: "update_draft", ChangeID: "chg-1", ExpectedRevision: 9})
 	var apiErr *tools.ChangeAPIError
 	require.True(t, errors.As(err, &apiErr))
 	require.Equal(t, tools.ChangeAPIError{Code: "permission_denied", Reason: "approval_required", Message: "a person must approve this launch"}, *apiErr)
@@ -123,6 +123,25 @@ func TestChangeControllerTreatsAMissingServiceAsUnimplemented(t *testing.T) {
 	var apiErr *tools.ChangeAPIError
 	require.True(t, errors.As(err, &apiErr))
 	require.Equal(t, "unimplemented", apiErr.Code)
+}
+
+func TestChangeControllerBlocksExposureWithoutAgentCredentials(t *testing.T) {
+	for _, action := range []string{"launch", "ramp", "roll_out"} {
+		t.Run(action, func(t *testing.T) {
+			// Nil collaborators ensure rejection happens before session lookup,
+			// environment resolution or any RPC, even with human approval input.
+			c := &changeController{}
+			_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{
+				Action: action, ChangeID: "chg-1", ExpectedRevision: 9,
+				PercentBP: 10000, Everyone: true, StepUpCode: "123456",
+			})
+			var apiErr *tools.ChangeAPIError
+			require.ErrorAs(t, err, &apiErr)
+			require.Equal(t, "permission_denied", apiErr.Code)
+			require.Equal(t, "agent_credential_required", apiErr.Reason)
+			require.Contains(t, apiErr.Message, "Experiments page")
+		})
+	}
 }
 
 func TestChangeControllerNeedsALiveSession(t *testing.T) {

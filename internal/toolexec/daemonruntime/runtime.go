@@ -448,7 +448,8 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
 	// Every linked worktree on the machine, on the same schedule: captured,
-	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
+	// then reclaimed, or only reported in dry-run (worktree_sweep.go). Mode
+	// on runs it even where the storage reaper is off.
 	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
 	client.reclaimMode = opts.WorktreeReclaim.Mode
 	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,

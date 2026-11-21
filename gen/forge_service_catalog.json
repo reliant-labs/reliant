@@ -65,6 +65,7 @@
         "ProcessSettings",
         "Project",
         "ProviderAccount",
+        "PullRequestRecord",
         "Question",
         "QueuedDeliverer",
         "QueuedDelivery",
@@ -281,6 +282,13 @@
         {
           "component": "ProviderAccount",
           "service": "reliant.v1.ProviderAccountService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "PullRequestRecord",
+          "service": "reliant.v1.PullRequestRecordService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -29185,6 +29193,446 @@
       }
     },
     {
+      "name": "reliant.v1.PullRequestRecordService",
+      "proto_file": "reliant/v1/pull_request_record.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.PullRequestRecordService/GetPullRequestRecord",
+          "name": "GetPullRequestRecord",
+          "input": "reliant.v1.GetPullRequestRecordRequest",
+          "output": "reliant.v1.GetPullRequestRecordResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PullRequestRecordService/ListPullRequestRecords",
+          "name": "ListPullRequestRecords",
+          "input": "reliant.v1.ListPullRequestRecordsRequest",
+          "output": "reliant.v1.ListPullRequestRecordsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "PullRequestRecordService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPullRequestRecord",
+            "InputType": "GetPullRequestRecordRequest",
+            "OutputType": "GetPullRequestRecordResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPullRequestRecordRequest",
+            "OutputTypeFQ": "reliant.v1.GetPullRequestRecordResponse",
+            "InputProtoFile": "reliant/v1/pull_request_record.proto",
+            "OutputProtoFile": "reliant/v1/pull_request_record.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ListPullRequestRecords",
+            "InputType": "ListPullRequestRecordsRequest",
+            "OutputType": "ListPullRequestRecordsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListPullRequestRecordsRequest",
+            "OutputTypeFQ": "reliant.v1.ListPullRequestRecordsResponse",
+            "InputProtoFile": "reliant/v1/pull_request_record.proto",
+            "OutputProtoFile": "reliant/v1/pull_request_record.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/pull_request_record.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPullRequestRecordRequest": [
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "number",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "GetPullRequestRecordResponse": [
+            {
+              "Name": "record",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "Name": "heads",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestHead"
+            },
+            {
+              "Name": "reviews",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestReviewMarker"
+            }
+          ],
+          "ListPullRequestRecordsRequest": [
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "state",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "ListPullRequestRecordsResponse": [
+            {
+              "Name": "records",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPullRequestRecordRequest": [
+            {
+              "name": "repository",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "number",
+              "kind": "int32"
+            },
+            {
+              "name": "policy",
+              "kind": "message",
+              "type_name": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "reliant.v1.GetPullRequestRecordResponse": [
+            {
+              "name": "record",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "name": "heads",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestHead",
+              "repeated": true
+            },
+            {
+              "name": "reviews",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestReviewMarker",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ListPullRequestRecordsRequest": [
+            {
+              "name": "repository",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "state",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32"
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            },
+            {
+              "name": "policy",
+              "kind": "message",
+              "type_name": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "reliant.v1.ListPullRequestRecordsResponse": [
+            {
+              "name": "records",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestRecord",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.PullRequestCheck": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "app_slug",
+              "kind": "string"
+            },
+            {
+              "name": "check_run_id",
+              "kind": "int64"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            },
+            {
+              "name": "conclusion",
+              "kind": "string"
+            },
+            {
+              "name": "completed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestHead": [
+            {
+              "name": "sha",
+              "kind": "string"
+            },
+            {
+              "name": "previous_sha",
+              "kind": "string"
+            },
+            {
+              "name": "first_seen_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "superseded_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestRecord": [
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            },
+            {
+              "name": "repository_id",
+              "kind": "string"
+            },
+            {
+              "name": "number",
+              "kind": "int32"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "draft",
+              "kind": "bool"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "head_sha",
+              "kind": "string"
+            },
+            {
+              "name": "head_ref",
+              "kind": "string"
+            },
+            {
+              "name": "base_ref",
+              "kind": "string"
+            },
+            {
+              "name": "base_sha",
+              "kind": "string"
+            },
+            {
+              "name": "labels",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "merged_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "merge_commit_sha",
+              "kind": "string"
+            },
+            {
+              "name": "snapshot_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "observed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "verdict",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestVerdict"
+            },
+            {
+              "name": "checks",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestCheck",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.PullRequestReviewMarker": [
+            {
+              "name": "review_id",
+              "kind": "string"
+            },
+            {
+              "name": "commit_sha",
+              "kind": "string"
+            },
+            {
+              "name": "marker_sha",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "of_review_id",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "submitted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestVerdict": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "review_id",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "submitted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "rereview",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.VerdictPolicy": [
+            {
+              "name": "trusted_authors",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "rereview_authors",
+              "kind": "string",
+              "repeated": true
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPullRequestRecordRequest": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.GetPullRequestRecordResponse": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.ListPullRequestRecordsRequest": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.ListPullRequestRecordsResponse": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestCheck": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestHead": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestRecord": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestReviewMarker": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestVerdict": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.VerdictPolicy": "reliant/v1/pull_request_record.proto"
+        }
+      }
+    },
+    {
       "name": "reliant.v1.QuestionService",
       "proto_file": "reliant/v1/question.proto",
       "methods": [
@@ -42038,6 +42486,14 @@
             {
               "name": "reason",
               "kind": "string"
+            },
+            {
+              "name": "upgrade_command",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.ServerHeartbeat": [
@@ -53672,6 +54128,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "PullRequestRecord",
+      "name": "PullRequestRecord",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Service",
+      "source": {
+        "path": "internal/handlers/pull_request_record/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Question",
       "name": "Question",
       "kind": "component",
@@ -55431,6 +55899,19 @@
       "candidates": [],
       "providers": [
         "Chat",
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PullRequestRecord",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
         "Database"
       ],
       "resolution": "composition_expression"

@@ -232,6 +232,13 @@ const MARKERS: MarkerCase[] = [
     read: resumeErrorNeedsUpgrade,
   },
   {
+    name: "upgrade required (rpc policy)",
+    reason: "upgrade_required",
+    code: Code.FailedPrecondition,
+    legacy: prose("this web (1.8.0) is older than the minimum this server supports (1.9.0); upgrade: reload"),
+    read: (e) => classifyRpcFailure(e, { serviceTypeName: "reliant.v1.ChatService", signalAborted: false }) === "upgrade-required",
+  },
+  {
     name: "step-up required",
     reason: "step_up_required",
     code: Code.FailedPrecondition,

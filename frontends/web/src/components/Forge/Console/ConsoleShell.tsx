@@ -270,6 +270,12 @@ export function consoleCrumbs(
       return [{ label: "Experiments" }];
     case "experiment":
       return [{ label: "Experiments", href: href({ kind: "experiments" }) }, { label: "Change" }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 

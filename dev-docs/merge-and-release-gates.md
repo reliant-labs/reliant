@@ -47,6 +47,7 @@ task ci:merge                    # your branch, against its merge-base with orig
 task ci:merge -- --base <rev>    # a stacked branch
 task ci:merge -- --skip-lint     # leave vet and forge lint to the release gate
 task ci:merge -- --skip-golangci # leave golangci to a golangci (changed) job beside the gate (ci.yml's ci:run)
+task ci:merge -- --skip-vitest   # leave the selected vitest files to the merge queue's vitest shards
 ```
 
 `--skip-lint` drops `go vet` and the scoped forge lint and changes nothing else:
@@ -76,7 +77,7 @@ phase nests inside that slot, within a CPU budget (below). It prints one row per
 |---|---|---|---|
 | heavy slot (queue) | - | 86 | - |
 | plan | PASS | 28 | 1 |
-| npm-tools-protoc-gen-es | PASS | 10 | 32 |
+| pnpm-tools-protoc-gen-es | PASS | 10 | 32 |
 | generate | PASS | 352 | 49 |
 | docs | PASS | 136 | 58 |
 | build | PASS | 132 | 58 |
@@ -275,6 +276,17 @@ after generate only links and runs. In the merge queue generate averaged 313s
 and test 281s, one after the other, on 8 of 16 runs (2026-11-05/06).
 `MG_MEM_GIB=<n>` overrides the detected size.
 
+The two vite builds are deferred on the same small host. The forge demo bundle
+(`demo`) peaks at ~9 GB RSS and the renderer's release bundle (`webbuild`) at
+~12 GB, each on its own (reliant#2935 merged with main, 2026-11-21). Beside
+test, `tsc -b` and lint, the demo build alone took the queue's gate to
+14.6 GiB of the runner's 16 GiB; with the release build too, the runner lost
+its agent on four queue entries in a row (#2935 and #3009, two each), which
+the queue reports as `CI result` cancelled at its 30-minute timeout, often
+with no log. So under `MG_GEN_ALONE_GIB` they run after every other phase has
+finished, one at a time (`run_bundles`): slower in wall time, but never
+beside anything. A bigger host still runs them beside the rest.
+
 **Rollout check for the prewarm (reliant#2308).** It was estimated, not
 measured, so after it merges read the first 5 merge-queue runs (`merge-queue.yml`)
 whose summary carries the note `forge generate ran before the other phases,
@@ -456,8 +468,10 @@ when every change since it is release metadata: docs, `*.md`, or a change to
 field. So you can run the gate on main before opening the bump PR. As long as
 nothing else merges in between, the bump commit inherits that green.
 
-A hotfix that cannot wait takes `scripts/release-tag.sh --skip-release-gate`.
-Say so in the release notes. There is no waiver for a red run: fix it.
+A hotfix is cut from the commit prod runs and gated narrowly (below,
+"Hotfixes"). One that cannot wait even for that takes
+`scripts/release-tag.sh --skip-release-gate`. Say so in the release notes.
+There is no waiver for a red run: fix it.
 
 ### Release candidates: gate a frozen commit, never main's tip (owner, 2026-10-31)
 
@@ -496,6 +510,34 @@ gated yet. Two `v*` tags on one commit would also make
 `scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
 `release/` branch and the `rc/` tag trigger no workflow.
 
+### Hotfixes: prod's commit plus the fix, gated narrowly (owner, 2026-11-20)
+
+A `release:asap` fix whose train set is red, or that is still not in prod two
+hours after it merged, ships on its own: control-plane's rc-train **hotfix
+lane** (control-plane `docs/pr-pipeline.md`, "Hotfix lane") cuts it from the
+reliant commit prod runs, never from main.
+
+1. **Cut.** The commit prod runs, R', then each fix PR's squash commit
+   cherry-picked onto it (`RC-Set:` trailer, so the head keeps the RC shape),
+   then the version bump `scripts/hotfix-bump.sh vX.Y.Z` writes: the version
+   after prod's (above every final tag the commit contains), its notes
+   (`tools/releasenotes`) and the regenerated changelog. It is pushed as
+   `release/vX.Y.Z-rc.N`, like any RC. A pick that conflicts, or that changes a
+   migration or the forge pin, is refused: that fix waits for the train.
+2. **Gate the picks, on top of prod's green.** `scripts/release-gate.sh hotfix
+   --base <R'> <head>` runs the merge gate against R' with every dependent of a
+   change (`MG_REACH=all`) and the Go tests of each changed package under
+   `-race` with no `-short`, and records `{kind: "hotfix", base}`. `check`
+   passes that record only while R' is its ancestor and is itself green: the
+   whole release gate judged prod's commit, and the hotfix gate judges what the
+   picks can reach.
+3. **Tag.** `scripts/release-tag.sh vX.Y.Z --commit <head> --rc --hotfix`: the
+   version is the RC head's own, not main's (main declares the next release),
+   and the head must be on a `release/` branch.
+
+When main's bump PR later declares the same version, that version is burned and
+the train asks for the next bump, as after any release.
+
 ## The merge queue
 
 `main` merges only through GitHub's native merge queue. The ruleset
@@ -504,9 +546,9 @@ and lists one bypass actor, the `reliant-01` account the pipeline acts as
 (never use it to bypass: no `--admin`). `merge-queue.yml` runs on
 `merge_group`, so each queued PR is tested on main plus the entries ahead of it,
 and lands only if that run is green. The work is ONE job, `Merge gate`, running
-`task ci:merge -- --queue`; the required `CI result` is a few-second job that
-`needs:` it and `golangci (changed)` (below) and passes only when both
-succeeded. The gate's budget is five minutes of wall time, runner
+`task ci:merge -- --queue --skip-vitest`; the required `CI result` is a
+few-second job that `needs:` it, `golangci (changed)` and `vitest` (below) and
+passes only when each succeeded. The gate's budget is five minutes of wall time, runner
 queue included (owner, 2026-11-01): the queue tier leaves `go vet` to the
 release gate (and golangci to the job beside it) but runs the scoped forge
 lint, plus the queue entry's semantics: buf lint only for a proto change, and
@@ -595,6 +637,41 @@ gate's five minutes:
 - **What it still leaves to the release gate.** Packages the group did not
   change, findings in files it did not change, the build-tagged pass, and buf
   lint.
+
+### The merge queue's vitest files, in four shards (owner, 2026-11-21)
+
+A hub web module reaches a thousand vitest files at the gate's two-edge cut:
+#2935 (`paths.ts`, `orgInterceptor.ts`, `configReady.ts` and the web_config
+proto) selected ~1096 beside 95 Go packages, and its group was cancelled at the
+gate's 30 minutes twice; #3009 the same. One 4-CPU runner ran them in one
+process beside the Go tests. Capping the web reach would drop coverage, so
+the queue splits the same list instead.
+
+- **What runs where.** The gate runs `--skip-vitest`: its test phase keeps
+  the Go and electron lanes, and `tsc -b` stays. The `vitest` job, a matrix of
+  four legs (`fail-fast: false`, 30 minutes each), runs
+  `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. Each leg
+  plans the group exactly as the gate does (`tools/test-affected plan -reach
+  "${MG_REACH:-direct}"`, the same base and rules; a FULL fallback runs the
+  reached files) and runs `test-affected run -lanes web -web-full reached
+  -web-shard <i>/4`, which is `vitest run --shard=<i>/4 --passWithNoTests
+  <the plan's files>`. vitest splits one sorted list, so the four legs run
+  every selected file once and none twice.
+- **Never skipped.** A group whose plan selects no vitest file passes each
+  leg once the planner has run (Go setup without the build cache, about a
+  minute), with no install, so `needs.vitest.result` is always `success` or
+  `failure`. A leg whose plan fails or cannot be read fails.
+- **The verdict.** `CI result` needs `vitest`; `needs.vitest.result` is the
+  matrix's roll-up, `success` only when every leg succeeded, and the
+  aggregate requires it like the other two. A `--skip-vitest` gate with no
+  shard job beside it, a dropped leg or a shard count out of step fails
+  `tools/test-affected` (`TestMergeQueueVitestShards`,
+  `TestSkipVitestOnlyBesideShards`).
+- **Locally.** `task ci:merge` is unchanged: every lane, vitest included, in
+  one process. `scripts/vitest-shard.sh --base <rev> --shard 1/4` runs one leg.
+- **What it costs.** Four more runner starts per group, each from the start
+  of the group (no `needs`), so they add no hop; the org's 20-job limit is
+  the trade.
 
 ### golangci-lint before the queue (owner, 2026-11-18)
 
@@ -700,8 +777,8 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` (`merge-queue.yml`) | `Merge gate` and `golangci (changed)` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `CI result`: passes only when both succeeded, from `needs` alone. No path lanes |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
+| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)` and `vitest (1/4)`..`(4/4)` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `CI result`: passes only when all three succeeded, from `needs` alone. No path lanes |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (generate, webbuild, compile, lint, go 1/4..4/4, web; `task ci:repo-checks` in compile), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
 
 ### Why the release gate runs as parts in CI
 
@@ -709,11 +786,43 @@ Run in one job, step after step, the gate took 45-70 minutes on a CI runner
 (2026-10-30: `test` 1345-2112s, `integration` 591-897s, `lint` 365-549s,
 `generate` 201-396s), and every release waited on it. In CI each part is its
 own runner, so the gate's wall time is the slowest part's (target ~20 min, plus
-the runner queue). The Go suite is split three ways by package, balanced on
-the recorded `-race` package times in `scripts/release-gate-go-timings.json`;
-refresh it from a run's `test-go.log` when the shards drift apart. Locally
-`task release:gate` still runs every step in one process, and records the same
-way.
+the runner queue). Locally `task release:gate` still runs every step in one
+process, and records the same way.
+
+CI splits two parts further than the RC train (control-plane
+`scripts/rc/rl-gate.sh`, which runs static, lint, go and web) does, and
+`assemble` takes either set, because it requires every step, not a fixed list
+of parts:
+
+- **static is three parts**, generate (`npm generate docs`), webbuild
+  (`npm webbuild`) and compile (`npm build typecheck vet`). As one part its
+  slow steps ran one after another (generate 283s, webbuild 223s, vet 107s on
+  2026-11-20) and it was one of the three jobs that set the run's ~15 minutes.
+  The webbuild part also replaces the separate `web-bundle` job off a pull
+  request: both ran the same `task build:web:verify`.
+- **The Go suite is four shards** by package, balanced longest-first on
+  measured `go test -race` package seconds. Each go part records its packages'
+  seconds (`go_seconds`, read from `test-go.log`), the assembled record carries
+  them all, and the next run's `Lanes` job picks the newest earlier record that
+  has them (`scripts/release-gate.sh go-timings-source`) and hands that one sha
+  to every shard (`RG_GO_TIMINGS_FROM`), so the timings refresh themselves on
+  every main run. Each shard records a digest of the timings it split on and
+  `assemble` refuses shards that disagree, since some package would then have
+  run in no shard. Without a record the shards use the committed
+  `scripts/release-gate-go-timings.json` (`scripts/release-gate.sh go-timings >
+  scripts/release-gate-go-timings.json` refreshes it). On timings from
+  2026-11-10 the three shards ran 587-1030s of tests each.
+- **The lint part puts the pinned golangci-lint release on PATH** (the setup
+  action's `golangci: "true"`, the binary the merge queue's `golangci
+  (changed)` job runs), where forge lint used to build golangci-lint from
+  source first, and **restores golangci-lint's analysis cache** from the
+  previous main run; main saves it, trimmed to the entries the run used.
+  golangci-lint over the whole module was most of the part's 866s, cold every
+  time. Its cache is content-addressed, so a warm run lints what changed and
+  reports the same findings: on a 48-CPU host, cold 779s, the same commit warm
+  136s, four commits later (one touching `internal/workflow/cel`, which most
+  packages import) 616s. The key names `.golangci.yml` and `go.mod`: a change
+  to either starts cold.
 
 `task test:integration` runs only the packages that have integration-tagged
 test files (`scripts/integration-packages.sh`). There are none today: it used to
@@ -728,7 +837,8 @@ Playwright (`task test:web:e2e`), the electron package
 deploy key and judges the tree against the control-plane commit its `SOURCE`
 declares, never against control-plane's moving main; lag behind main is
 `cp-contract-drift.yml`'s issue, not a gate). Main runs all of them (the
-contract only when a push changed what it checks). The merge queue runs those
+contract only when a push changed what it checks; the release build as the
+release gate's webbuild part). The merge queue runs those
 the diff reaches: the release-gate record does not include them, so the queue
 is still where they protect a release. A `ci:run` pull request runs those its
 paths reach. `CI result` is the one verdict.

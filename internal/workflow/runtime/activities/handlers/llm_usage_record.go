@@ -205,9 +205,13 @@ func (e retriedRequestError) Error() string {
 // request number, as an error of the class its wait names, holding whatever
 // usage it reported before failing.
 func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driverRetries) {
-	for _, r := range retries.list {
+	for i, r := range retries.list {
 		c := call
-		c.Request = r.wait.Attempt
+		// Numbered by position in the call, not by the driver's attempt: a
+		// request resent after a context-window refusal is a new stream whose
+		// driver counts its own retries from 1 again. In a single stream the
+		// two are the same number.
+		c.Request = i + 1
 		c.LatencyMs = r.latencyMs
 		c.Usage = llm.TokenUsage{}
 		if r.wait.Usage != nil {

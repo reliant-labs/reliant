@@ -1896,7 +1896,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// here (Codex/OpenAI envelopes are organisation-bound): drop it before the
 	// request rather than learn that from a 400.
 	history = stripForeignReasoning(history, models.DriverID(resolved.ProviderDriver), accountID)
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
+	// Snapshot before the trim, so a request the provider refuses as too long
+	// can be resent trimmed further (contextOverflowRecovery).
+	overflowRecovery := newContextOverflowRecovery(chat.ID, resolved.ProviderDriver, resolvedModelID, history, systemPrompts, availableTools, ceiling)
+	history = overflowRecovery.sending(prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling))
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
 	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
@@ -2060,7 +2063,13 @@ streamLoop:
 					break streamLoop
 				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-					streamErr = err
+					// A request refused as too long is resent smaller.
+					next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+					if next != nil {
+						eventChan = next
+						continue
+					}
+					streamErr = failed
 					driverErrored = true
 					break streamLoop
 				}
@@ -2198,7 +2207,13 @@ streamLoop:
 
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-				streamErr = err
+				// A request refused as too long is resent smaller.
+				next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+				if next != nil {
+					eventChan = next
+					continue
+				}
+				streamErr = failed
 				driverErrored = true
 				break streamLoop
 			}
@@ -2270,6 +2285,17 @@ streamLoop:
 				"retry", retry,
 				"retryDelay", retryDelay)
 			return nil, stalled
+		}
+		// Malformed model output (Gemini's MALFORMED_FUNCTION_CALL and kin)
+		// is retried once, by the error's own schedule; see
+		// malformedOutputError.
+		if errors.Is(streamErr, drivererrors.ErrMalformedModelOutput) {
+			malformed := newMalformedOutputError(ctx, streamErr, resolved.ProviderDriver, resolvedModelID)
+			_, retry := malformed.RetryAfter()
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider reported malformed model output",
+				"chatID", chat.ID, "thread", thread, "provider", resolved.ProviderDriver,
+				"model", resolvedModelID, "attempt", malformed.attempt, "retry", retry, "error", streamErr)
+			return nil, malformed
 		}
 		failedCall := usageLimitContext{
 			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),

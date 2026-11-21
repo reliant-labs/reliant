@@ -108,6 +108,11 @@ type ResumeInput struct {
 	// the run they continue (runTelemetryFor). Empty when the checkpoint
 	// recorded none; the run then starts an id of its own.
 	RunID string `json:"run_id,omitempty"`
+	// RunStartedAtMs is when the run a continue-as-new successor continues
+	// began (unix ms): the run's outcome is judged from the node attempts
+	// since then, the predecessor's included (run_outcome.go). Zero on a
+	// resume that starts a run of its own.
+	RunStartedAtMs int64 `json:"run_started_at_ms,omitempty"`
 	// Spawns are the background spawns that were live when the predecessor
 	// ended. The successor relaunches each one on its SAME tool call, thread
 	// and child workflow id — no new thread, no seed message — before
@@ -496,6 +501,14 @@ type ChildWorkflowTracker struct {
 	// spawnReservations are the slots of spawns admitted but not yet
 	// dispatched, tool call id to parent thread (spawn_limits.go).
 	spawnReservations map[string]string
+	// runStartedAtMs is when this run began, across continue-as-new
+	// (run_outcome.go); carried to a successor by its handoff.
+	runStartedAtMs int64
+	// runID is the run's id (forge.ai.run.id, rootRunIDFrom): every node
+	// attempt of the run is recorded under it, so its outcome reads only its
+	// own attempts (run_outcome.go). A continue-as-new successor keeps it
+	// through its execution context's telemetry.
+	runID string
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -1887,6 +1900,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Sub-agent concurrency caps (spawn_limits.go): one setting for the run,
 	// read from the root run's inputs, whatever depth spawns.
 	childTracker.spawnLimits = types.SpawnLimitsFromInputs(input.Inputs)
+	// When the run began, and which run it is, for judging its outcome
+	// (run_outcome.go).
+	childTracker.runStartedAtMs = runStartedAtMs(ctx, input.Resume)
+	childTracker.runID = rootRunIDFrom(ctx)
 
 	// Continue-as-new handoff state (continue_as_new.go).
 	childTracker.chatID = input.ChatID
@@ -5584,6 +5601,14 @@ type workflowStatusOpts struct {
 	Outcome string
 	// OutcomeNode is the top-level node that declared a failure Outcome.
 	OutcomeNode string
+	// RunStartedAtMs is when the run began (ChildWorkflowTracker.runStartedAtMs),
+	// on a "completed" notification: the status activity judges the run's
+	// outcome from the node attempts since then when it has no RunID.
+	RunStartedAtMs int64
+	// RunID is the run's id (ChildWorkflowTracker.runID), on a "completed"
+	// notification: the status activity judges the run's outcome from the
+	// node attempts recorded under it.
+	RunID string
 	// Error is why the run failed, on a "failed" notification. It is what a
 	// workflow-event trigger reports as the source run's error.
 	Error string
@@ -5738,6 +5763,12 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.OutcomeNode != "" {
 			input["outcome_node"] = opts.OutcomeNode
+		}
+		if opts.RunStartedAtMs != 0 {
+			input["run_started_at_ms"] = opts.RunStartedAtMs
+		}
+		if opts.RunID != "" {
+			input["run_id"] = opts.RunID
 		}
 		if opts.Error != "" {
 			input["error"] = opts.Error
@@ -6128,7 +6159,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		outcomeNode = runOutcomeNode
 	}
 	if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun}); err != nil && attentionHandoff(ctx) != nil {
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun, RunStartedAtMs: childTracker.startedAtMs(), RunID: childTracker.outcomeRunID()}); err != nil && attentionHandoff(ctx) != nil {
 		// Exhausting durable terminal bookkeeping is a real execution error,
 		// not a different verdict on the job. In particular, do not let the
 		// reconciler convert an unwritten semantic failure into a successful

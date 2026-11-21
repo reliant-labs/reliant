@@ -6,6 +6,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useDefaultWorkflow } from "../../hooks/settings-queries";
 import * as chatActions from "../../hooks/chat-actions";
+import { registerDraftFlush } from "../../lib/draftFlush";
 
 interface UseChatInputStateProps {
   chatId?: string;
@@ -42,8 +43,9 @@ export function useChatInputState({
     return worktreeState.chatDrafts?.[draftKey] || "";
   });
 
-  // Ref for debounce timer
+  // Ref for debounce timer, and the value it will save when it fires
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDraftRef = useRef<string | null>(null);
 
   // Get user's default workflow from preferences
   const effectiveDefaultWorkflow = useDefaultWorkflow();
@@ -120,9 +122,27 @@ export function useChatInputState({
         clearTimeout(draftSaveTimeoutRef.current);
       }
       
-      draftSaveTimeoutRef.current = setTimeout(() => saveDraft(newValue), 300);
+      pendingDraftRef.current = newValue;
+      draftSaveTimeoutRef.current = setTimeout(() => {
+        draftSaveTimeoutRef.current = null;
+        pendingDraftRef.current = null;
+        saveDraft(newValue);
+      }, 300);
       
       return newValue;
+    });
+  }, [saveDraft]);
+
+  // A reload must not drop the keystrokes still inside the debounce: the
+  // forced upgrade prompt and pagehide flush them (lib/draftFlush.ts).
+  useEffect(() => {
+    return registerDraftFlush(() => {
+      if (!draftSaveTimeoutRef.current || pendingDraftRef.current === null) return;
+      clearTimeout(draftSaveTimeoutRef.current);
+      draftSaveTimeoutRef.current = null;
+      const value = pendingDraftRef.current;
+      pendingDraftRef.current = null;
+      saveDraft(value);
     });
   }, [saveDraft]);
 
