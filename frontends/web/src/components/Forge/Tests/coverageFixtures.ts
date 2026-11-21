@@ -275,11 +275,11 @@ export function fixtureFileCoverage(req: FileCoverageRequest): Promise<FileCover
  *
  *   github             serves refund.go's blob; any other blob is gone
  *   tampered           serves refund.go with a line changed (the mismatch guard)
- *   no-repo | uncommitted | gone | revoked | not-yet-available
+ *   no-repo | uncommitted | gone | revoked | too-large | not-yet-available
  *                      every file has that reason
  */
-export type CoverageSourceScenario = "github" | "tampered" | "no-repo" | "uncommitted" | "gone" | "revoked" | "not-yet-available";
-export const COVERAGE_SOURCE_SCENARIOS: readonly CoverageSourceScenario[] = ["github", "tampered", "no-repo", "uncommitted", "gone", "revoked", "not-yet-available"];
+export type CoverageSourceScenario = "github" | "tampered" | "no-repo" | "uncommitted" | "gone" | "revoked" | "too-large" | "not-yet-available";
+export const COVERAGE_SOURCE_SCENARIOS: readonly CoverageSourceScenario[] = ["github", "tampered", "no-repo", "uncommitted", "gone", "revoked", "too-large", "not-yet-available"];
 
 export type FixtureCoverageSource = FetchCoverageSource & { calls: { project: string; blobId: string }[] };
 

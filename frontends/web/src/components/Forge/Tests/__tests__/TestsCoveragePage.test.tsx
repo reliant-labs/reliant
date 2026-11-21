@@ -168,6 +168,7 @@ describe("Coverage: no source", () => {
     ["uncommitted", "uncommitted changes"],
     ["gone", "GitHub doesn't show you this version"],
     ["revoked", "Connect GitHub to see source"],
+    ["too-large", "larger than the coverage view shows (2 MiB)"],
     ["not-yet-available", "can't read files from your linked repository"],
   ];
 
