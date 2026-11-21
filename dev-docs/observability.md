@@ -78,10 +78,10 @@ HTTP clients use `otelhttp.NewTransport` over their existing transport.
 
 ## Machine health lines
 
-control-plane's `Machine*` alerts and machine-health dashboard read two log
+control-plane's machine-health dashboard and `Machine*` alerts read two log
 messages from tenant zero's `otel_logs`: `machine health` and `machine volume`
 (`internal/machinehealth`, whose package comment and `HeartbeatLines` hold the
-attribute contract). They come from two places:
+attribute contract). They come from two places, and each has its own rules:
 
 - **Managed machines** (ws-* pods) log them themselves once a minute
   (`machinehealth.Sampler`); the node agent ships the pod's stdout.
@@ -91,13 +91,22 @@ attribute contract). They come from two places:
   gateway writes the same two messages from them once a minute, with
   `machine_source=heartbeat` and the machine's `machine` (name), `daemon_id`
   and `org_id` (`internal/handlers/tools_daemon/tools_daemon_machine_stats.go`).
-  The lines land under `ServiceName = 'daemon-gateway'`.
+  The lines land under `ServiceName = 'daemon-gateway'`. control-plane's
+  heartbeat rules read exactly those (`ServiceName = 'daemon-gateway'`,
+  `machine_source = 'heartbeat'`, keyed by `machine`): `MachineDiskFull`,
+  `MachineDiskFilling`, `MachineMemoryLow`, `MachineLoadSustained` and
+  `MachineNotReporting` (control-plane#3121,
+  `deploy/observability/selfmon-alerts/`). The managed-workspace rules
+  (`MachineDiskLow`, `MachineLoadHigh`) select `ws-*` services and never see
+  heartbeat lines; that is intended, since their thresholds (and
+  `MachineLoadHigh`'s heavy-slot wait) are a managed workspace's.
 
 A self-hosted machine is watched only when all three hold, so nothing is
 watched by default and a customer cannot push lines into tenant zero:
 
 1. its org is in the gateway's `MACHINE_STATS_ORGS` (comma-separated org ids;
-   empty is off). control-plane sets the platform's own org.
+   empty is off). control-plane's prod env sets tenant zero's org id
+   (`daemon_gateway_env_overrides` in `deploy/kcl/prod/main.k`).
 2. it carries the durable machine label `MACHINE_STATS_LABEL` (default
    `monitor=platform`): set it in Settings → Machines, with
    `DaemonRegistryService.SetMachineLabels`, or declare it from the box

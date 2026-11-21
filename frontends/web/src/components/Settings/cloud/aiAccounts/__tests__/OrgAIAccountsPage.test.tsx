@@ -139,6 +139,31 @@ describe("OrgAIAccountsPage", () => {
     expect(screen.getByTestId("org-key-secret")).toBeInTheDocument();
   });
 
+  it("takes a Vertex AI service-account key file, refusing a paste that is not one before sending it", async () => {
+    renderPage();
+    await screen.findAllByTestId("org-key-row");
+    fireEvent.click(screen.getByTestId("org-key-add"));
+    fireEvent.change(screen.getByTestId("org-key-provider"), { target: { value: "vertexai" } });
+    fireEvent.change(screen.getByTestId("org-key-label"), { target: { value: "Acme Vertex" } });
+    expect(screen.getByTestId("org-key-secret").tagName).toBe("TEXTAREA");
+
+    fireEvent.change(screen.getByTestId("org-key-secret"), { target: { value: '{"type": "external_account"}' } });
+    fireEvent.click(screen.getByTestId("org-key-add-submit"));
+    expect(await screen.findByTestId("service-account-key-error")).toHaveTextContent(/workload identity/);
+    expect(mocks.add).not.toHaveBeenCalled();
+
+    const sa = JSON.stringify({
+      type: "service_account",
+      project_id: "acme-prod",
+      private_key: "fake-private-key-material",
+      client_email: "reliant@acme-prod.iam.gserviceaccount.com",
+    });
+    fireEvent.change(screen.getByTestId("org-key-secret"), { target: { value: sa } });
+    fireEvent.click(screen.getByTestId("org-key-add-submit"));
+    await waitFor(() => expect(mocks.add).toHaveBeenCalledTimes(1));
+    expect(mocks.add.mock.calls[0][0]).toMatchObject({ provider: "vertexai", label: "Acme Vertex", apiKey: sa });
+  });
+
   it("while the deployment has not enabled org accounts: no Add, a note, and pause still works", async () => {
     mocks.addingEnabled = false;
     renderPage();

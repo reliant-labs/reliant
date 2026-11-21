@@ -46,6 +46,7 @@ const (
 	CategoryToolBinding       Category = "tool_binding"       // tools_config.tools: unknown tool, or a parameter that tool cannot bind
 	CategoryToolTag           Category = "tool_tag"           // a tools-typed input value names a tag outside the vocabulary (an error only when authoring)
 	CategoryTrigger           Category = "trigger"            // triggers: a declared trigger that cannot be activated or cannot run
+	CategoryCredentials       Category = "credentials"        // a credentials: value the daemon refuses (an error only when authoring)
 )
 
 // Error represents a single validation issue.

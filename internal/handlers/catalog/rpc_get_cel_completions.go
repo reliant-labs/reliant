@@ -14,6 +14,8 @@ import (
 
 // GetCELCompletions returns CEL expression completion data for the workflow builder.
 // The response is computed once and cached since the data is static.
+//
+// forge:auth-unscoped-ok: CEL namespaces, functions and node output schemas are built into the binary and the same for every caller
 func (s *Service) GetCELCompletions(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetCELCompletionsRequest],

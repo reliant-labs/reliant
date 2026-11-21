@@ -16,8 +16,11 @@ import (
 // its load, memory and disk. For the machines the platform runs itself (the
 // pipeline boxes), the gateway — whose own logs land in tenant zero — writes
 // those as the same `machine health` / `machine volume` lines a managed
-// machine logs, so control-plane's Machine* alerts and dashboard watch them
-// too (internal/machinehealth).
+// machine logs, with machine_source=heartbeat under ServiceName
+// daemon-gateway. control-plane's heartbeat rules (MachineDiskFull,
+// MachineDiskFilling, MachineMemoryLow, MachineLoadSustained,
+// MachineNotReporting) and the machine-health dashboard read exactly those;
+// the managed-workspace rules (ws-* services) do not (internal/machinehealth).
 
 const (
 	// machineStatsInterval is how often a watched machine's lines are logged.

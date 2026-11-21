@@ -406,15 +406,24 @@ func validateOutputFields(result *ValidationResult, event SimulatedEvent, workfl
 		validFieldNames[f.Name] = true
 	}
 
-	// Check each output field
+	// Check each output field. A typed event (llm_response, tool_result)
+	// carries a shorthand payload the engine converts, so its `output:` keys
+	// are not activity output fields. A `workflow` node's outputs are its
+	// sub-workflow's declared outputs and a `loop` node's include its
+	// `_`-fields, none of which the node type lists. Checking any of them
+	// would warn on correct mocks.
+	checkNames := event.Type == "" && nodeType != model.NodeTypeWorkflow && nodeType != model.NodeTypeLoop
 	for fieldName := range event.Output {
+		if !checkNames {
+			break
+		}
 		if !validFieldNames[fieldName] {
 			names := make([]string, 0, len(fields))
 			for _, f := range fields {
 				names = append(names, f.Name)
 			}
-			result.AddWarning("event[%d]: output field %q not in %s type (valid: %s)",
-				eventIndex, fieldName, nodeType, strings.Join(names, ", "))
+			result.AddWarning("event[%d] (node %q): output field %q not in %s type (valid: %s): if it is misspelled, the real field is left unset and reads as its zero value",
+				eventIndex, event.Node, fieldName, nodeType, strings.Join(names, ", "))
 		}
 	}
 

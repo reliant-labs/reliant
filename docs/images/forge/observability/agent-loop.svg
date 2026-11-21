@@ -24,7 +24,7 @@
   <!-- six steps, box tops at 50, 134, 218, 302, 386, 470 -->
   <rect class="box" x="14" y="50" width="362" height="56" rx="6"/>
   <text x="28" y="73">1. Load a skill</text>
-  <text x="28" y="94" class="s">forge skill load, read from the binary</text>
+  <text x="28" y="94" class="s">forge agent skill load, read from the binary</text>
 
   <rect class="box" x="14" y="134" width="362" height="56" rx="6"/>
   <text x="28" y="157">2. Recon</text>

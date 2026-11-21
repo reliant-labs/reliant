@@ -56,7 +56,7 @@ func Boot(ctx context.Context, opts BootOptions) (Service, error) {
 	if opts.Hosted {
 		return nil, fmt.Errorf("%s is not set: a hosted reliant refuses to start without its vault key. "+
 			"Generate one with `openssl rand -base64 32`, then run "+
-			"`forge secret set --env <env> %s v1:<that value>` and redeploy", EnvKey, EnvKey)
+			"`forge env secret set --env <env> %s v1:<that value>` and redeploy", EnvKey, EnvKey)
 	}
 
 	path := filepath.Join(opts.DataDir, KeyFileName)

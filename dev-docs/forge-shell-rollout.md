@@ -150,8 +150,8 @@ credential):
 reliant forge env build demo --target forge-demo --release <v>
 reliant forge env deploy demo <v>
 reliant forge obs check demo --wait --json   # 0 good · 1 regressed · 2 not proven good · 8 not enough data yet
-reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
-reliant forge domain show demo.reliantlabs.io --env demo
+reliant forge cloud domain bind demo.reliantlabs.io --env demo --target forge-demo
+reliant forge cloud domain show demo.reliantlabs.io --env demo
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
@@ -172,8 +172,8 @@ build `prod/reliant-web` runs, which still mounts the demo shell on this host
 
 ```bash
 cd ../control-plane
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # serving: reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain bind demo.reliantlabs.io --env prod --target reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge cloud domain show demo.reliantlabs.io --env prod   # serving: reliant-web
 ```
 
 Then, from this checkout, `node frontends/web/scripts/demo/smoke-demo-site.mjs

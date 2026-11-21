@@ -10,9 +10,10 @@
  * follows the text colour in light and dark and never fights the tile.
  *
  *  - Claude, OpenAI (also used for Codex), Anthropic, GitHub Copilot,
- *    Google Gemini, OpenRouter: Simple Icons (https://simpleicons.org), CC0
- *    1.0 (Gemini from v16.36.0, as in Settings' ProviderMark). OpenAI is
- *    pinned to v11.15.0, the last release that shipped it.
+ *    Google Gemini, Google (for Vertex AI), OpenRouter: Simple Icons
+ *    (https://simpleicons.org), CC0 1.0 (Gemini and Google from v16.36.0, as
+ *    in Settings' ProviderMark). OpenAI is pinned to v11.15.0, the last
+ *    release that shipped it.
  *  - Reliant: the product mark (see ReliantIcon), flattened to one colour.
  *  - Antigravity: a simple "A" peak drawn here; Google publishes no
  *    icon-set mark for it.
@@ -89,6 +90,12 @@ const MARKS: Record<string, Mark> = {
     viewBox: "0 0 24 24",
     paths: [
       "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81",
+    ],
+  },
+  vertexai: {
+    viewBox: "0 0 24 24",
+    paths: [
+      "M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z",
     ],
   },
   openrouter: {

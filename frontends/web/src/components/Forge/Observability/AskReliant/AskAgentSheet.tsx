@@ -101,7 +101,7 @@ function CopyRow({ text, testId, onCopied, label }: { text: string; testId: stri
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</h4>
+      <h4 className="text-xs font-semibold text-ink-muted">{title}</h4>
       {children}
     </section>
   );
@@ -219,7 +219,7 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
 
           {standalone && (
             <p className="text-xs text-ink-muted" data-testid="ask-agent-login">
-              Your agent needs a forge login: <code className="font-mono">forge login</code>, once per machine. Signed in to Reliant?{" "}
+              Your agent needs a forge login: <code className="font-mono">forge cloud login</code>, once per machine. Signed in to Reliant?{" "}
               <code className="font-mono">reliant forge …</code> uses your session.
             </p>
           )}

@@ -610,6 +610,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
 	runtimeType := strings.TrimSpace(host.RuntimeType)
 
+	// The daemon runs in the user's environment, so the ${VAR} references in
+	// their MCP configs resolve from it (mcp/expand.go). Explicit, because a
+	// manager resolves nothing by default.
+	mcpOpts = append([]mcp.ManagerOption{mcp.WithEnvLookup(os.LookupEnv)}, mcpOpts...) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
 	mcpManager := mcp.NewManager(mcp.RoleDaemon, mcpOpts...)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {

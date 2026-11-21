@@ -134,7 +134,7 @@ func TestHeartbeatLinesAttributeContract(t *testing.T) {
 // stats) still logs its identity, disk and processes; no CPU count means no
 // per-CPU load; a value no kernel produces is dropped.
 func TestHeartbeatLinesOmitMissingReadings(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 	id := Identity{Machine: "ovh-build-1", DaemonID: "d-2", OrgID: "org-0"}
 
 	health, volumes := HeartbeatLines(id, nil, &reliantv1.DiskReport{
