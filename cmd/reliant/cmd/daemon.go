@@ -1035,12 +1035,15 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 				return err
 			}
 			// Before this daemon writes anything into the directory, and held
-			// until the runtime takes its own claim (claimDataDir).
+			// until the command returns: the runtime runs under it
+			// (StartOptions.DataDirClaim), so there is no gap between this
+			// check and the runtime in which a competing start could take
+			// the directory (claimDataDir).
 			claim, err := claimDataDir(dataDir)
 			if err != nil {
 				return err
 			}
-			defer claim.Release() //nolint:errcheck // safe twice; released before the runtime starts
+			defer claim.Release() //nolint:errcheck // safe on a nil claim
 
 			// Keep the foreground stdout stream used by Electron/task while also
 			// persisting an independently rotated tools-daemon log. Do not share
@@ -1072,8 +1075,8 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 				logging.Info("Starting tools-daemon in server mode",
 					"listen_port", listenPort, "data_dir", dataDir)
 
-				_ = claim.Release()
 				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
+					DataDirClaim:    claim,
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
@@ -1129,9 +1132,8 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
-				// The runtime takes the claim over (claimDataDir).
-				_ = claim.Release()
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
+					DataDirClaim:    claim,
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
@@ -1560,16 +1562,19 @@ func refuseToStop(state daemonstate.State, dataDir string) error {
 // daemon logs into the directory or touches its runtime record, and held while
 // it waits to be paired or signed in.
 //
-// The runtime claims the directory too (daemonstate.Acquire), but only once it
-// starts, and `daemon start` writes first: its log, and the awaiting-credentials
-// record while it waits to sign in. So a second daemon pointed at a running
-// one's directory overwrote that daemon's record with awaiting_credentials
-// while it was still connected (#2823). A probe alone fixed that, but a daemon
-// still waiting for its credentials held nothing, so a second start in the same
-// directory ran alongside it (TL-48). The caller releases the claim just
-// before daemonruntime.Start takes its own; a second start that wins that
-// instant is refused by the runtime's Acquire, never run beside this one. A
-// claim that cannot be checked at all is logged and left to that Acquire.
+// The runtime would claim the directory too (daemonstate.Acquire), but only
+// once it starts, and `daemon start` writes first: its log, and the
+// awaiting-credentials record while it waits to sign in. So a second daemon
+// pointed at a running one's directory overwrote that daemon's record with
+// awaiting_credentials while it was still connected (#2823). A probe alone
+// fixed that, but a daemon still waiting for its credentials held nothing, so
+// a second start in the same directory ran alongside it (TL-48). The claim is
+// handed to daemonruntime.Start (StartOptions.DataDirClaim), which runs under
+// it rather than taking its own, and released only when the command returns:
+// there is no instant in which the directory is unclaimed, so a competing
+// start is always refused here, before it logs in or registers. A claim that
+// cannot be checked at all is logged and returned nil, and the runtime then
+// takes its own.
 func claimDataDir(dataDir string) (*daemonstate.Lock, error) {
 	lock, err := daemonstate.Acquire(dataDir)
 	if err == nil {
