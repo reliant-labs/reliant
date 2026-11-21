@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=ae8d693ac0db053784e32d09b47a88347a4e19ca445efe646e72d5ef9c97ba9c
+// forge:hash=bada28056e059a5053b8be57e8c62552556eefddb195ca1f2a19b0f6d58b5a55
 
 // MockService is a test mock for the Service interface.
 //
@@ -49,6 +49,7 @@ type MockService struct {
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
 	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
+	ListHostedAppsFunc                  func(context.Context, string, string) ([]HostedApp, error)
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -265,6 +266,15 @@ func (m *MockService) HasCoverageBlob(ctx context.Context, token string, orgID s
 		return m.HasCoverageBlobFunc(ctx, token, orgID, project, blobID)
 	}
 	return CoverageBlob{}, contractkit.MockNotSet("MockService", "HasCoverageBlob")
+}
+
+// ListHostedApps records the call and delegates to ListHostedAppsFunc when set.
+func (m *MockService) ListHostedApps(ctx context.Context, jwt string, orgID string) ([]HostedApp, error) {
+	m.Recorder.Record("ListHostedApps", ctx, jwt, orgID)
+	if m.ListHostedAppsFunc != nil {
+		return m.ListHostedAppsFunc(ctx, jwt, orgID)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ListHostedApps")
 }
 
 // Compile-time check.
