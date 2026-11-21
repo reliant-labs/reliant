@@ -388,7 +388,7 @@ func invokeForgeReport(ctx context.Context, inv forgeInvocation) ([]byte, error)
 //
 // Verified against an installed forge v0.1.17:
 //
-//	forge secret list dev --json  -> stderr "…Error: unknown flag: --json", exit 1
+//	forge env secret list dev --json  -> stderr "…Error: unknown flag: --json", exit 1
 //	forge env topology --json     -> stderr "…Error: unknown flag: --json", exit 1
 //	forge env nosuchthing         -> stderr `…Error: unknown command "nosuchthing" for "forge env"`, exit 1
 var forgeUnsupportedMarkers = []string{
@@ -573,7 +573,7 @@ type forgeSecretListRequest struct {
 
 // handleForgeSecretList lists declared secrets and whether each HAS a value.
 //
-// `forge secret list --json` is built so that no field in its report can carry
+// `forge env secret list --json` is built so that no field in its report can carry
 // a secret VALUE — the report type graph holds only names, booleans and
 // coordinates, and forge pins that with a reflection test over an allow-list.
 // This handler's job is to not be the thing that undermines it:
@@ -606,7 +606,7 @@ func handleForgeSecretList(ctx context.Context, payload []byte) ([]byte, error) 
 	// flag, so an env that begins with "-" cannot be read as another flag.
 	return invokeForgeReport(ctx, forgeInvocation{
 		ProjectPath:    req.ProjectPath,
-		Args:           []string{"secret", "list", "--env=" + req.Env, "--json"},
+		Args:           []string{"env", "secret", "list", "--env=" + req.Env, "--json"},
 		WithholdStderr: true,
 	})
 }

@@ -212,6 +212,36 @@ func TestListShared(t *testing.T) {
 	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &other})
 	require.NoError(t, err)
 	assert.Empty(t, chats)
+	// Several projects are the union of project_id and project_ids.
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{other, f.ProjectID}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1)
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &f.ProjectID, ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1)
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Empty(t, chats, "a project with nothing shared narrows to nothing, never to every project")
+	// An unset project_id lists every project; a present-but-empty one
+	// lists nothing, as it did before project_ids existed. With project_ids
+	// set, an empty project_id adds nothing to the list.
+	empty := ""
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1, "project_id unset")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty})
+	require.NoError(t, err)
+	assert.Empty(t, chats, "project_id present and empty never broadens to every project")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty, ProjectIds: []string{f.ProjectID}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1, "an empty project_id with project_ids is just project_ids")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty, ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Empty(t, chats)
+	_, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: make([]string, core.MaxListProjectIDs+1)})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "too many ids")
+	_, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{f.ProjectID, ""}})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an empty id")
 
 	chats, err = listChats(f.Owner, &pb.ListSharedChatsRequest{})
 	require.NoError(t, err)

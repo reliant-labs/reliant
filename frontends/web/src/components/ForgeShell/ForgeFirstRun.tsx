@@ -32,8 +32,8 @@ export const CLAIMABLE_DEPLOY_ADOPTS = true;
 /**
  * The prompt for the visitor's own coding agent: run forge through
  * `npx …@latest` (a version floor, and no `npm i -g` EACCES), follow
- * `forge start`, deploy with no login, hand back the URL and the claim link
- * (opened here, the claim lands in this account). `forge start` is the router
+ * `forge project start`, deploy with no login, hand back the URL and the claim link
+ * (opened here, the claim lands in this account). `forge project start` is the router
  * from reliant-labs/forge#2173; it needs a release carrying it as npm latest.
  * Validated 2026-11-12 against forge main at #2173 with cold agents and no
  * credentials, in a bare Vite app and an empty folder.
@@ -41,17 +41,17 @@ export const CLAIMABLE_DEPLOY_ADOPTS = true;
  * src/content/forgeStart.ts.
  */
 export const AGENT_PROMPT =
-  "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.";
+  "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest project start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.";
 
 /** What to ask an agent that already has forge's MCP server (its deploy_claimable tool). */
 export const MCP_ASK = "Deploy this app with forge, no account needed. When it's live, give me its URL and the claim link.";
 
 export const DOCS_URL = "https://docs.reliantlabs.io/forge/quick-start";
-export const CLAUDE_MCP_COMMAND = "claude mcp add forge -- npx -y @reliantlabs/forge mcp";
+export const CLAUDE_MCP_COMMAND = "claude mcp add forge -- npx -y @reliantlabs/forge agent mcp";
 export const CURSOR_MCP_URL =
-  "https://cursor.com/en/install-mcp?name=forge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkByZWxpYW50bGFicy9mb3JnZSIsIm1jcCJdfQ==";
+  "https://cursor.com/en/install-mcp?name=forge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkByZWxpYW50bGFicy9mb3JnZSIsImFnZW50IiwibWNwIl19";
 export const VSCODE_MCP_URL =
-  "https://insiders.vscode.dev/redirect/mcp/install?name=forge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40reliantlabs%2Fforge%22%2C%22mcp%22%5D%7D";
+  "https://insiders.vscode.dev/redirect/mcp/install?name=forge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40reliantlabs%2Fforge%22%2C%22agent%22%2C%22mcp%22%5D%7D";
 
 export interface FirstRunCommand {
   /** Opaque id for analytics. */
@@ -63,7 +63,7 @@ export interface FirstRunCommand {
 /** A signed-in person's first deploy: the CLI signs in as them, adopts the app, deploys. */
 export function signedInDeployCommands(): FirstRunCommand[] {
   return [
-    { id: "login", label: "Sign the CLI in to this account", command: `${FORGE_NPX} login` },
+    { id: "login", label: "Sign the CLI in to this account", command: `${FORGE_NPX} cloud login` },
     { id: "adopt", label: "Add forge to a Vite or Next.js app (skip it if the folder has a forge.yaml)", command: `${FORGE_NPX} project new --in-place --kind site` },
     { id: "deploy", label: "Deploy to production", command: `${FORGE_NPX} env deploy prod` },
   ];
@@ -172,7 +172,7 @@ export function ForgeFirstRun({ testId = "apps-empty" }: { testId?: string }) {
             <div className="mt-2 space-y-2">
               <p className="text-xs text-ink-muted">
                 Add forge as an MCP server, then ask: “{MCP_ASK}” Its <code className="font-mono">deploy_claimable</code> tool deploys a Vite or Next.js app as
-                it stands. Starting from an empty folder? Use the prompt above: <code className="font-mono">forge start</code> covers that.
+                it stands. Starting from an empty folder? Use the prompt above: <code className="font-mono">forge project start</code> covers that.
               </p>
               <div className="space-y-1">
                 <span className="text-xs text-ink-muted">Claude Code</span>

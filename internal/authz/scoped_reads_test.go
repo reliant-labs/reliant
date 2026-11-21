@@ -79,10 +79,13 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
-	"ListDeletedProjects":          readCallersFilter,
-	"FindProjectOrgMoveByRequest":  readCallersFilter,
-	"ListUnlaunchedTriggerEvents":  readCallersFilter,
-	"ListWorktreeRecoveries":       readCallersFilter,
+	"ListDeletedProjects":         readCallersFilter,
+	"FindProjectOrgMoveByRequest": readCallersFilter,
+	"ListUnlaunchedTriggerEvents": readCallersFilter,
+	"ListWorktreeRecoveries":      readCallersFilter,
+	// The inbox passes each incident through authz.Visible (itemReads.incident:
+	// its chat and its project) before showing it.
+	"ListAttentionIncidents":       readCallersFilter,
 	"SearchChats":                  readCallersFilter,
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
@@ -98,14 +101,15 @@ var userScopedReads = map[string]string{
 	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,
 
-	"FiringsSinceLastSuccess":   readParentAuthorized,
-	"GetPresetBySlugAndProject": readParentAuthorized,
-	"GetWorktreeRecovery":       readParentAuthorized,
-	"ListPresetsByTag":          readParentAuthorized,
-	"ListTriggerChanges":        readParentAuthorized,
-	"ListTriggerRegistrations":  readParentAuthorized,
-	"ListUserPresetsByProject":  readParentAuthorized,
-	"ListWorktrees":             readParentAuthorized,
+	"FiringsSinceLastSuccess":          readParentAuthorized,
+	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
+	"GetPresetBySlugAndProject":        readParentAuthorized,
+	"GetWorktreeRecovery":              readParentAuthorized,
+	"ListPresetsByTag":                 readParentAuthorized,
+	"ListTriggerChanges":               readParentAuthorized,
+	"ListTriggerRegistrations":         readParentAuthorized,
+	"ListUserPresetsByProject":         readParentAuthorized,
+	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"ListChatsForWorktree":  readParentAuthorized,

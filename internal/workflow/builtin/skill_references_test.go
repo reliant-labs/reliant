@@ -139,7 +139,7 @@ var backtickToken = regexp.MustCompile(backtickTokenPattern)
 // skillNameShape is the spelling a catalog path can actually have: lowercase
 // components of letters/digits/hyphens, separated by "/". Everything else a
 // charter backticks — `forge.yaml`, `.proto`, `_gen`, `ALL_ROUTES`,
-// `reliant forge skill load migration` — fails this and is never treated as a
+// `reliant forge agent skill load migration` — fails this and is never treated as a
 // skill name, which is what keeps the anchor above from producing noise.
 var skillNameShape = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*$`)
 

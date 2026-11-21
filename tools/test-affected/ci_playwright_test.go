@@ -2,7 +2,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,11 +273,10 @@ func TestPlaywrightPipelineSplitContract(t *testing.T) {
 	// and no other job uploads under a leg's artifact name.
 	cacheKeys := map[string]string{}
 	artifacts := map[string]string{}
-	sawRestore, sawUpload := false, false
+	sawUpload := false
 	for _, s := range pw.Steps {
 		switch {
 		case strings.HasPrefix(s.Uses, "actions/cache/restore@"):
-			sawRestore = true
 			key := fmt.Sprint(s.With["key"])
 			if !strings.Contains(key, "${{ matrix.suite }}") {
 				t.Errorf("Playwright browser cache key %q does not include matrix.suite: the legs would share (and clobber) one entry", key)
@@ -307,9 +308,6 @@ func TestPlaywrightPipelineSplitContract(t *testing.T) {
 				artifacts[n] = suite
 			}
 		}
-	}
-	if !sawRestore {
-		t.Error("playwright job has no actions/cache/restore step for the browsers")
 	}
 	if !sawUpload {
 		t.Error("playwright job has no actions/upload-artifact step for the report")
@@ -494,148 +492,147 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 	})
 }
 
-// The browsers' system packages come from a cache of .deb files, never from
-// the Ubuntu mirror on every run: on 2026-11-09 the mirror served ~100 KB/s
-// and the responsive leg was cancelled at its timeout inside
-// `playwright install --with-deps` (control-plane main-red #2372).
-func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
-	wf := loadCIWorkflow(t)
-	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
-	pw := wf.job(t, "playwright")
-
-	// The suite step's env (ciStep is shared with workflows whose steps
-	// declare env their own way, so it is read here).
-	var envOnly struct {
+// The job runs in Playwright's image at the version frontends/web resolves,
+// so no step installs a browser's system packages from the Ubuntu mirror
+// (reliant#2880): the mirror cost the responsive leg 6.5, then 14+ minutes
+// (control-plane main-red #2909), and the .deb cache that replaced it missed
+// on every runner-image rollout. An image whose tag differs from the
+// resolved @playwright/test would run browsers that version does not expect
+// (and `playwright install` would fetch others without their packages), so
+// the tag and the lockfile move together.
+func TestPlaywrightRunsInThePinnedImage(t *testing.T) {
+	var wf struct {
 		Jobs map[string]struct {
+			Container struct {
+				Image   string `yaml:"image"`
+				Options string `yaml:"options"`
+			} `yaml:"container"`
 			Steps []struct {
-				Run string            `yaml:"run"`
-				Env map[string]string `yaml:"env"`
+				Name string            `yaml:"name"`
+				Run  string            `yaml:"run"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
-	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &envOnly); err != nil {
+	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &wf); err != nil {
 		t.Fatal(err)
 	}
-	var suiteEnv map[string]string
-	for _, s := range envOnly.Jobs["playwright"].Steps {
-		if strings.Contains(s.Run, "task test:web:e2e") {
-			suiteEnv = s.Env
+	pw, ok := wf.Jobs["playwright"]
+	if !ok {
+		t.Fatal("ci.yml has no playwright job")
+	}
+	m := regexp.MustCompile(`^mcr\.microsoft\.com/playwright:v(\d+\.\d+\.\d+)-noble$`).FindStringSubmatch(pw.Container.Image)
+	if m == nil {
+		t.Fatalf("playwright job's container.image = %q, want mcr.microsoft.com/playwright:v<version>-noble", pw.Container.Image)
+	}
+	locked := lockedWebVersions(t, "@playwright/test", "playwright")
+	for pkg, v := range locked {
+		if v != m[1] {
+			t.Errorf("playwright job runs image v%s, frontends/web/pnpm-lock.yaml resolves %s %s: move the image tag with the dependency", m[1], pkg, v)
 		}
 	}
-
-	var restore, save *ciStep
-	recordedIf := ""
-	for i := range pw.Steps {
-		s := &pw.Steps[i]
-		if strings.Contains(s.Run, "task test:web:e2e") {
-			// --with-deps (the mirror) only as the rollback, behind the variable.
-			if strings.Contains(s.Run, "--with-deps") &&
-				(!strings.Contains(s.Run, `if [ "$OS_DEPS_CACHE" = off ]`) || suiteEnv["OS_DEPS_CACHE"] != "${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}") {
-				t.Errorf("the suite step installs system packages from the mirror outside the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (%q)", s.Run)
+	if pw.Container.Options != "--user 1001" {
+		t.Errorf("playwright container options = %q, want --user 1001 (the runner's uid, which owns the mounted workspace and $HOME)", pw.Container.Options)
+	}
+	for _, s := range pw.Steps {
+		for _, bad := range []string{"--with-deps", "install-deps", "apt-get", "apt ", "playwright-os-deps", "PLAYWRIGHT_DEPS"} {
+			if strings.Contains(s.Run, bad) {
+				t.Errorf("playwright step %q installs system packages (%q): the image has them", s.Name, bad)
 			}
-			if !strings.Contains(s.Run, "PLAYWRIGHT_DEPS_CACHE=") {
-				t.Errorf("the suite step does not pass PLAYWRIGHT_DEPS_CACHE (%q)", s.Run)
-			}
 		}
-		if s.ID == "os-deps-recorded" {
-			recordedIf = s.If
-		}
-		if fmt.Sprint(s.With["path"]) != "~/.cache/playwright-os-deps" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(s.Uses, "actions/cache/restore@"):
-			restore = s
-		case strings.HasPrefix(s.Uses, "actions/cache/save@"):
-			save = s
+		if strings.HasPrefix(s.Uses, "actions/cache") {
+			t.Errorf("playwright step %q uses %s: the image carries the browsers and their packages, there is nothing to cache", s.Name, s.Uses)
 		}
 	}
-	if restore == nil || save == nil {
-		t.Fatalf("playwright job must restore and save ~/.cache/playwright-os-deps (restore=%v save=%v)", restore != nil, save != nil)
-	}
-	// The cached set is what ONE runner image lacks; another image's set
-	// could downgrade its libraries, so no prefix fallback.
-	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "steps.runner-image.outputs.image") {
-		t.Errorf("system-package cache key %q does not carry the runner image", key)
-	}
-	// The rollback: a version variable moves runs off a bad entry, and
-	// PLAYWRIGHT_OS_DEPS_CACHE=off skips the cache entirely.
-	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION") {
-		t.Errorf("system-package cache key %q has no PLAYWRIGHT_OS_DEPS_CACHE_VERSION to move off a bad entry", key)
-	}
-	if !strings.Contains(restore.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") || !strings.Contains(recordedIf, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
-		t.Errorf("PLAYWRIGHT_OS_DEPS_CACHE=off does not skip the restore (if %q) and the save (check if %q)", restore.If, recordedIf)
-	}
-	if _, ok := restore.With["restore-keys"]; ok {
-		t.Error("system-package cache has restore-keys: another runner image's packages could be installed")
-	}
-	if !strings.Contains(recordedIf, "refs/heads/main") || !strings.Contains(save.If, "os-deps-recorded") {
-		t.Errorf("system packages must be saved on main only, after the script recorded them (save if %q, check if %q)", save.If, recordedIf)
-	}
-
-	var runCmds strings.Builder
+	// The image has no jq: the suite's own task must not need it.
+	runsJQ := regexp.MustCompile(`(^|[\s|(])jq\s`)
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
 	for _, c := range tf.commands("web:e2e:run") {
-		runCmds.WriteString(c)
+		if runsJQ.MatchString(c) {
+			t.Errorf("web:e2e:run runs jq, which the Playwright image lacks: %q", c)
+		}
 	}
-	if !strings.Contains(runCmds.String(), "scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}") {
-		t.Error("web:e2e:run does not install the suite's system packages through scripts/playwright-os-deps.sh")
+	// Nor may the setup action's steps this job reaches with its inputs.
+	// (fetch-release-asset.sh, which Install Task runs on a cache miss, reads
+	// the API's JSON with node when there is no jq: TestFetchReleaseAsset.)
+	var with map[string]string
+	for _, s := range pw.Steps {
+		if s.Uses == "./"+setupDir {
+			with = s.With
+		}
+	}
+	if with == nil {
+		t.Fatalf("playwright job does not use %s", setupDir)
+	}
+	var action struct {
+		Inputs map[string]struct {
+			Default string `yaml:"default"`
+		} `yaml:"inputs"`
+		Runs struct {
+			Steps []ciStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, filepath.Join(setupDir, "action.yml")), &action); err != nil {
+		t.Fatal(err)
+	}
+	inputCond := regexp.MustCompile(`inputs\.([\w-]+) == '([^']*)'`)
+	for _, s := range action.Runs.Steps {
+		reached := true // every input condition in the action's ifs is a conjunct
+		for _, m := range inputCond.FindAllStringSubmatch(s.If, -1) {
+			v, ok := with[m[1]]
+			if !ok {
+				v = action.Inputs[m[1]].Default
+			}
+			if v != m[2] {
+				reached = false
+			}
+		}
+		if reached && runsJQ.MatchString(s.Run) {
+			t.Errorf("setup step %q runs jq in the playwright job, whose image lacks it", s.Name)
+		}
 	}
 }
 
-// A main run that misses the system-package cache seeds it before the suite
-// runs, so a failing or timed-out suite cannot leave the entry unsaved. On
-// 2026-11-18 the responsive leg timed out inside the mirror install on a
-// runner image with no entry, and since the save came after the suite, every
-// later run on that image missed again (control-plane main-red #2909).
-func TestPlaywrightSystemPackagesAreSavedBeforeTheSuite(t *testing.T) {
-	wf := loadCIWorkflow(t)
-	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
-	pw := wf.job(t, "playwright")
-
-	suiteIdx, installIdx, saveIdx := -1, -1, -1
-	var install ciStep
-	for i, s := range pw.Steps {
-		switch {
-		case strings.Contains(s.Run, "task test:web:e2e"):
-			suiteIdx = i
-		case strings.HasPrefix(strings.TrimSpace(s.Run), "scripts/playwright-os-deps.sh "):
-			installIdx, install = i, s
-		case strings.HasPrefix(s.Uses, "actions/cache/save@") && fmt.Sprint(s.With["path"]) == "~/.cache/playwright-os-deps":
-			saveIdx = i
+// lockedWebVersions returns the version frontends/web/pnpm-lock.yaml resolves
+// for each named direct dependency of the frontends/web importer (any peer
+// suffix stripped), failing on one it does not list.
+func lockedWebVersions(t *testing.T, pkgs ...string) map[string]string {
+	t.Helper()
+	type dep struct {
+		Version string `yaml:"version"`
+	}
+	type importer struct {
+		Dependencies    map[string]dep `yaml:"dependencies"`
+		DevDependencies map[string]dep `yaml:"devDependencies"`
+	}
+	// pnpm writes two YAML documents: the package manager's own lock, then
+	// the project's. Read every document's "." importer.
+	dec := yaml.NewDecoder(bytes.NewReader(readRepo(t, "frontends/web/pnpm-lock.yaml")))
+	out := map[string]string{}
+	for {
+		var doc struct {
+			Importers map[string]importer `yaml:"importers"`
+		}
+		if err := dec.Decode(&doc); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatalf("parse frontends/web/pnpm-lock.yaml: %v", err)
+		}
+		imp := doc.Importers["."]
+		for _, p := range pkgs {
+			for _, deps := range []map[string]dep{imp.Dependencies, imp.DevDependencies} {
+				if d, ok := deps[p]; ok {
+					v, _, _ := strings.Cut(d.Version, "(")
+					out[p] = v
+				}
+			}
 		}
 	}
-	if suiteIdx < 0 || installIdx < 0 || saveIdx < 0 {
-		t.Fatalf("playwright job needs an install step, a system-package save and the suite step (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
-	}
-	if installIdx >= saveIdx || saveIdx >= suiteIdx {
-		t.Errorf("system packages must be installed, then saved, then the suite run (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
-	}
-	if !strings.Contains(install.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
-		t.Errorf("the install step runs under the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (if %q)", install.If)
-	}
-
-	// The install step's browser list per suite is the suite task's BROWSERS.
-	m := regexp.MustCompile(`matrix\.suite == 'responsive' && '([^']+)' \|\| '([^']+)'`).FindStringSubmatch(install.Run)
-	if m == nil {
-		t.Fatalf("install step must pick browsers with `matrix.suite == 'responsive' && '<list>' || '<list>'`, runs %q", install.Run)
-	}
-	for suite, got := range map[string]string{"responsive": m[1], "desktop": m[2]} {
-		want := readE2ETask(t, tf, "test:web:e2e:"+suite).browsers
-		if !slices.Equal(strings.Fields(got), want) {
-			t.Errorf("install step's %s browsers = %q, want the Taskfile's %v", suite, got, want)
+	for _, p := range pkgs {
+		if out[p] == "" {
+			t.Fatalf("frontends/web/pnpm-lock.yaml resolves no %s for frontends/web", p)
 		}
 	}
-
-	// The responsive leg's budget leaves room for a mirror install on a miss.
-	var timeouts struct {
-		Jobs map[string]struct {
-			TimeoutMinutes string `yaml:"timeout-minutes"`
-		} `yaml:"jobs"`
-	}
-	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &timeouts); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := timeouts.Jobs["playwright"].TimeoutMinutes, "${{ matrix.suite == 'responsive' && 30 || 15 }}"; got != want {
-		t.Errorf("playwright timeout-minutes = %q, want %q", got, want)
-	}
+	return out
 }

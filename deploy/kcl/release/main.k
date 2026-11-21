@@ -50,6 +50,7 @@ apt's logs differ per run), whoever runs the build.
 
 import forge
 import ..workloads as wl
+import ..dev_sign_in as dsi
 
 # ── The version stamp (render options) ──────────────────────────────────────
 # Defaults are the Dockerfile's ARG defaults.
@@ -70,10 +71,10 @@ _server_image = wl.server_image | {
     build = wl.server_image_build(_stamp)
 }
 
-output = forge.render(forge.Bundle {
+output = forge.render(dsi.only_in_dev("release", forge.Bundle {
     project = "reliant"
     env = "release"
     workloads = [
         _server_image
     ]
-})
+}))

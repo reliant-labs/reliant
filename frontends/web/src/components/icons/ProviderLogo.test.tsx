@@ -12,6 +12,7 @@ const PROVIDER_IDS = [
   "anthropic",
   "openai",
   "gemini",
+  "vertexai",
   "openrouter",
 ];
 

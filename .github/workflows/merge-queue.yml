@@ -79,9 +79,12 @@ jobs:
   merge-gate:
     name: Merge gate
     runs-on: ubuntu-latest
-    # A runner that dies holds the queue entry until this fires (the ruleset's
-    # check timeout is 45 minutes).
-    timeout-minutes: 30
+    # A runner that dies holds the queue entry until this fires, so it stays
+    # under the ruleset's 45-minute check timeout. It is 44, not 30: a web
+    # change to a hub module (paths.ts, a primitive) reaches ~1100 vitest
+    # files at the merge tier's two-edge cut, and on this 4-CPU runner that
+    # gate ran past 30 minutes and was cancelled (#2935, #3009).
+    timeout-minutes: 44
     env:
       BASE: ${{ github.event.merge_group.base_sha }}
     steps:

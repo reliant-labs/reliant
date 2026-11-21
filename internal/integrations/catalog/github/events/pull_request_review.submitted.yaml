@@ -30,6 +30,17 @@ data:
         id: { type: integer }
         state: { type: string }
         body: { type: string }
+        markers:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, description: "The marker's name: review-passed in <!-- review-passed sha=abc -->." }
+              attrs: { type: object, additionalProperties: { type: string }, description: "The marker's key=value pairs: {sha: abc}." }
+          description: >-
+            The <!-- name key=value --> markers of the whole body, read before
+            it is capped: at most 16, in body order, none from a code block.
+            Absent when the body has none.
         html_url: { type: string }
         user: { $ref: ../schemas/user_schema.yaml }
         commit_id: { type: string }

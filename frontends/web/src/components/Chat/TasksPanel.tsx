@@ -106,7 +106,7 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
       <div className="m-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+            <div className="text-xs font-bold text-muted-foreground/80">
               Task Progress
             </div>
             <div className="text-xs text-muted-foreground">

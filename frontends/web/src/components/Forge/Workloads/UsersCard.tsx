@@ -116,7 +116,7 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
       testId="overview-users"
     >
       <div className="px-4 pb-3 pt-2">
-        <p className="mb-2 text-2xs uppercase tracking-wide text-ink-muted">Last 7 days</p>
+        <p className="mb-2 text-2xs text-ink-muted">Last 7 days</p>
         <dl className="grid grid-cols-3 gap-3">
           {rows.map((row) => {
             const change = describeChange(row.value.now, row.value.before, "count", "previous 7 days", row.exact);
