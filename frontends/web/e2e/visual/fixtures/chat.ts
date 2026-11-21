@@ -34,6 +34,12 @@ export const CHAT_IDS = {
   tools: 'c0ffee00-2222-4aaa-8bbb-000000000012',
   /** A turn that stopped on a failed tool call and a provider error. */
   failure: 'c0ffee00-2222-4aaa-8bbb-000000000013',
+  /**
+   * A turn that started twelve sub-agents at once (8 done, 3 running, 1
+   * failed). Opened by URL only: it is not in the chat list, so no other
+   * surface's sidebar changes.
+   */
+  agents: 'c0ffee00-2222-4aaa-8bbb-000000000014',
 }
 export const CHAT_TITLES = {
   tools: 'Move tax rates behind the pricing config',
@@ -94,6 +100,8 @@ const CHATS = [
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-000000000011', title: 'Write the webhooks guide', projectId: IDS.docsProject, worktreeId: WORKTREES.docsMain.id,
     worktree: WORKTREES.docsMain, ago: 5 * HOUR }),
 ]
+const AGENTS_CHAT = chat({ id: CHAT_IDS.agents, title: 'Pre-ship checks for the checkout rewrite', activity: 'CHAT_ACTIVITY_RUNNING',
+  workflowState: 'WORKFLOW_STATE_ACTIVE', workflowStopReason: undefined, ago: 10 * MIN })
 
 // ── The long agent run ────────────────────────────────────────────────
 type Block = Record<string, unknown>
@@ -476,8 +484,38 @@ const FAIL_ERRORS = [
   }, scriptedTime(95 * MIN, 2, 20_000), CHAT_IDS.failure),
 ]
 
+// ── A turn that fans out to twelve sub-agents: 8 done, 3 running, 1 failed ──
+const AGENT_TITLES = [
+  'Audit checkout for N+1 queries', 'Port the cart store to signals', 'Write bundle discount tests', 'Profile totals on 10k-line carts',
+  'Review the tax config change', 'Update the pricing docs', 'Check Stripe v18 webhooks', 'Add tracing to the checkout API',
+  'Benchmark cart totals', 'Draft the release notes', 'Fix flaky invoice snapshot', 'Survey currency rounding rules',
+]
+const AGENT_STATE = (i: number) => (i === 8 ? 'failed' : i >= 9 ? 'running' : 'done')
+const agentThread = (i: number) => `th-agents-${String(i + 1).padStart(2, '0')}`
+const AGENTS_TURNS: Turn[] = [
+  { role: 'user', blocks: [text('Before we ship the checkout rewrite, fan out and check everything on the list in parallel.')] },
+  { role: 'assistant', blocks: [
+    [text('Twelve independent checks: I am starting one agent for each.')],
+    ...AGENT_TITLES.map((title, i) => tool(`ag${i + 1}`, 'spawn', { title, preset: 'general', prompt: title }, `Started ${title}.`, { child: agentThread(i) })),
+  ] },
+]
+const AGENTS_WF = `wf-${'c0ffee00-2222-4aaa-8bbb-000000000014'}`
+const AGENTS_TREE = [
+  workflow(AGENTS_WF, 'c0ffee00-2222-4aaa-8bbb-000000000014', {
+    ...RUNNING,
+    children: AGENT_TITLES.map((title, i) => workflow(agentThread(i), agentThread(i), {
+      origin: 'spawn', parentId: AGENTS_WF, threadTitle: title,
+      createdAt: new Date(FIXED_NOW - 9 * MIN).toISOString(),
+      ...(AGENT_STATE(i) === 'running' ? RUNNING
+        : { completedAt: new Date(FIXED_NOW - 9 * MIN + (i + 2) * 37_000).toISOString(),
+          ...(AGENT_STATE(i) === 'failed' ? { stopReason: 'WORKFLOW_STOP_REASON_FAILED' } : {}) }),
+    })),
+  }),
+]
+
 /** Every chat but the fixture chat: its messages and the errors its stream carries. */
 const SCRIPTED: Record<string, { messages: () => Record<string, unknown>[]; errors: Record<string, unknown>[] }> = {
+  [CHAT_IDS.agents]: { messages: () => scripted(CHAT_IDS.agents, 10 * MIN, AGENTS_TURNS), errors: [] },
   [SHORT_CHAT_ID]: { messages: shortMessages, errors: [] },
   [CHAT_IDS.tools]: { messages: () => scripted(CHAT_IDS.tools, 12 * MIN, TOOLS_TURNS), errors: [] },
   [CHAT_IDS.failure]: { messages: () => scripted(CHAT_IDS.failure, 95 * MIN, FAIL_TURNS), errors: FAIL_ERRORS },
@@ -506,7 +544,7 @@ export const chatFixtures: Fixtures = {
   'reliant.v1.ChatService/ListArchivedChats': { chats: [], total: 0 },
   'reliant.v1.ChatService/GetChat': (req) => {
     const id = req.chatId ?? req.id
-    const found = CHATS.find((c) => c.id === id)
+    const found = [...CHATS, AGENTS_CHAT].find((c) => c.id === id)
     return found ? { chat: found } : { __error: { code: 'not_found', message: 'chat not found' } }
   },
   'reliant.v1.ChatService/ListMessages': (req) => {
@@ -519,7 +557,9 @@ export const chatFixtures: Fixtures = {
         : !req.chatId || req.chatId === MAIN ? messages(MAIN).filter((x) => !x.id.startsWith('optimistic-')) : []
     return { messages: m, total: m.length, count: m.length, hasMore: false, oldestSeq: '1' }
   },
-  'reliant.v1.ChatService/GetWorkflowExecutions': (req) => ({ allRootWorkflows: req.chatId === MAIN ? WORKFLOW_TREE : [] }),
+  'reliant.v1.ChatService/GetWorkflowExecutions': (req) => ({
+    allRootWorkflows: req.chatId === MAIN ? WORKFLOW_TREE : req.chatId === CHAT_IDS.agents ? AGENTS_TREE : [],
+  }),
   // Each chat works in its own project alone (chatWithAttachedProjects adds one).
   'reliant.v1.ChatService/ListChatProjects': (req) => ({ projects: chatProjectsOf(String(req.chatId), []) }),
   'reliant.v1.ApprovalService/ListApprovalsByChat': (req) => req.chatId === MAIN

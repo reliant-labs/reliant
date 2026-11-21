@@ -270,6 +270,19 @@ const SURFACES: Surface[] = [
     act: (page) => page.getByText(SHORT_CHAT_TITLE).first().click(),
   },
   {
+    // A turn that started twelve sub-agents at once (8 done, 3 running, 1
+    // failed): one group row, open while any runs, one dense row per agent.
+    // The whole fan-out fits on one screen.
+    name: 'chat-agents',
+    path: `/c/${CHAT_IDS.agents}`,
+    on: ['desktop'],
+    ready: (page) => page.getByText('Survey currency rounding rules').first(),
+    act: async (page) => {
+      await settle(page)
+      await scrollToEnd(page)
+    },
+  },
+  {
     name: 'chat-list',
     path: '/m/chats',
     on: ['mobile'],
