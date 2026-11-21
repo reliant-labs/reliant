@@ -1282,14 +1282,14 @@ schema ServerProcessConfigAnalytics:
     disabled: bool = False
 
 # forge:section schema ServerProcessConfigLLM
-# forge:hash=e5f33e134984577eb877450c159fb680136935899802c2958823fc764ceb0167
+# forge:hash=a835a5739e99e33d2c064b2e85b1afd0a0d1b0a76ba9cce9d9208df619d35ff0
 # ServerProcessConfigLLM is the llm block (LLMConfig) — author its values in config.k as `llm.<field> = ...`.
 schema ServerProcessConfigLLM:
     # Reliant LLM gateway base URL
     reliant_api_base_url: str = ""
-    # Vertex AI project (required to call Vertex AI models)
+    # Vertex AI project every call targets (default: the connected service-account key's project)
     vertexai_project: str = ""
-    # Vertex AI region
+    # Vertex AI region for connected Vertex AI accounts
     vertexai_location: str = "us-central1"
     # Cut a stream that sends no bytes for this long
     stream_idle_timeout: str = "90s"

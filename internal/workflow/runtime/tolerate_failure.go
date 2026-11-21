@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A node that declares `tolerate_failure: true` is optional (reliant#2752):
@@ -119,6 +120,12 @@ func recordToleratedFailure(ctx workflow.Context, scope toleratedScope, err erro
 	if scope.LoopNodeID != "" {
 		input["loop_node_id"] = scope.LoopNodeID
 		input["loop_iteration"] = scope.LoopIteration
+	}
+	// The run the node belongs to, recorded on its attempt row: the run's
+	// outcome reads only the attempts under its id
+	// (store.FirstHandledNodeFailure).
+	if root := rootRunIDFrom(ctx); root != "" {
+		input["telemetry"] = &types.RunTelemetry{RootRunID: root}
 	}
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,

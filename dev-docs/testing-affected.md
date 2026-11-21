@@ -121,7 +121,10 @@ a lockfile, the vite or tsconfig config. The plan still lists, in `web.tests`,
 the vitest files the diff's own web modules reach (at the merge gate's two-edge
 cut). The merge gate runs exactly those (`run -web-full reached`), beside
 `tsc -b` over every web source; the whole suite (1033 files, ~20 min on a
-loaded host) stays in the release gate.
+loaded host) stays in the release gate. In the merge queue the selected files,
+scoped or FULL, run in the `vitest` job's four shards (`run -web-shard <i>/4`,
+`scripts/vitest-shard.sh`) instead of on the gate's runner
+(merge-and-release-gates.md, "The merge queue's vitest files, in four shards").
 
 **Why this and not the alternatives** (decided 2026-11-13):
 

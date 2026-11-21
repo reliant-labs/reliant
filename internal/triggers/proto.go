@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/runstateproto"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
@@ -179,6 +180,7 @@ func EventWithRunToProto(ev *core.TriggerEventWithRun) (*reliantv1.TriggerEvent,
 			Title:        ev.Run.Title,
 			State:        reliantv1.WorkflowState(ev.Run.RootStatus.State),
 			StopReason:   reliantv1.WorkflowStopReason(ev.Run.RootStatus.StopReason),
+			RunOutcome:   runstateproto.Outcome(ev.Event.RunOutcome),
 		}
 	}
 	return out, nil

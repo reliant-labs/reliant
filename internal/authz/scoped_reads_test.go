@@ -120,10 +120,12 @@ var userScopedReads = map[string]string{
 	"RecentTriggerOutcomes": readParentAuthorized,
 	"WorkflowSlugExists":    readParentAuthorized,
 
-	"GetAnalyticsEnabled":             readPersonal,
-	"GetAutomationToken":              readPersonal,
-	"GetIntegrationAccessRefresh":     readPersonal,
-	"GetIntegrationAccessSubject":     readPersonal,
+	"GetAnalyticsEnabled":         readPersonal,
+	"GetAutomationToken":          readPersonal,
+	"GetIntegrationAccessRefresh": readPersonal,
+	"GetIntegrationAccessSubject": readPersonal,
+	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
+	"HasFreshIntegrationAccess":       readPersonal,
 	"GetLatestUserUpdateSequence":     readPersonal,
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,

@@ -1359,6 +1359,12 @@ func (e *StepExecutor) failStepInput(node *reliantv1.Node, errorMsg string) map[
 		input["loop_node_id"] = e.loopNodeID
 		input["loop_iteration"] = e.loopIteration
 	}
+	// The run the node belongs to, recorded on its step row, so the failure
+	// is never read as the next run's on the reused workflow id
+	// (store.FirstHandledNodeFailure).
+	if rt := e.runtimeTelemetry(); rt != nil {
+		input["telemetry"] = rt
+	}
 	return input
 }
 

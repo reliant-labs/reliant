@@ -157,7 +157,7 @@ export type AddOrgProviderAPIKeyRequest = Message<"reliant.v1.AddOrgProviderAPIK
   orgId: string;
 
   /**
-   * An API-key driver: "anthropic", "openai", "gemini" or "openrouter".
+   * An API-key driver: "anthropic", "openai", "gemini", "openrouter" or "vertexai" (the JSON of a Google service-account key).
    *
    * @generated from field: string provider = 2;
    */
