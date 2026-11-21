@@ -32,6 +32,7 @@ export function isPendingUpdate(status: UpdateStatus | null | undefined): status
 export function nextPendingUpdate(previous: PendingUpdate | null, event: UpdateStatus): PendingUpdate | null {
   switch (event.type) {
     case "checking":
+    case "forced":
       return previous;
     case "not-available":
       return null;
@@ -46,9 +47,22 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+/** The server requires a newer version (forceUpdate). */
+export interface ForcedUpdate {
+  minVersion: string;
+  /** Where to install from when the updater has nothing newer. */
+  upgradeUrl?: string;
+}
+
 interface AppUpdateState {
   /** The updater's latest status: what the update dialog shows. */
   status: UpdateStatus | null;
+  /**
+   * Set once the server requires a newer version, for the rest of the
+   * session: the dialog stays open and cannot be dismissed.
+   */
+  forced: ForcedUpdate | null;
+  isForcing: boolean;
   /** The update waiting for the user, if any: what the sidebar button shows. */
   pending: PendingUpdate | null;
   dialogOpen: boolean;
@@ -65,10 +79,18 @@ interface AppUpdateState {
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
+  /**
+   * The server requires `minVersion` or newer: open the dialog for good and
+   * have the main process check, download and install (preload forceUpdate).
+   * Called again, it retries.
+   */
+  forceUpdate: (minVersion: string, upgradeUrl?: string) => Promise<void>;
 }
 
 export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
   status: null,
+  forced: null,
+  isForcing: false,
   pending: null,
   dialogOpen: false,
   isChecking: false,
@@ -77,6 +99,27 @@ export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
 
   receiveStatus: (event) => {
     const { pending, isDownloading, dialogOpen, isChecking } = get();
+    // Another window (or the main process's own state) says the update is
+    // forced: this window shows it too, and cannot dismiss it.
+    const forced =
+      get().forced ??
+      (event.type === "forced" || event.forced ? { minVersion: event.minVersion ?? "" } : null);
+    if (forced) {
+      const shown = event.type === "forced" && isPendingUpdate(get().status) ? get().status! : event;
+      set({
+        forced,
+        status: { ...shown, forced: true, minVersion: forced.minVersion },
+        pending: nextPendingUpdate(pending, event),
+        isDownloading:
+          event.type === "download-progress"
+            ? true
+            : event.type === "downloaded" || event.type === "error"
+              ? false
+              : isDownloading,
+        dialogOpen: true,
+      });
+      return;
+    }
     set({
       // A background check must not swap an open dialog's content for
       // "checking"; only a check the user started shows that.
@@ -103,7 +146,10 @@ export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
     set({ status: show, dialogOpen: true });
   },
 
-  closeDialog: () => set({ dialogOpen: false }),
+  closeDialog: () => {
+    if (get().forced) return;
+    set({ dialogOpen: false });
+  },
 
   checkForUpdates: async () => {
     const api = window.electronAPI;
@@ -140,6 +186,45 @@ export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
     } catch (error) {
       logger.error("[appUpdate] update download failed", error);
       get().receiveStatus({ type: "error", error: errorText(error) });
+    }
+  },
+
+  forceUpdate: async (minVersion, upgradeUrl) => {
+    const api = window.electronAPI;
+    if (!api || get().isForcing) return;
+    const forced = { minVersion, upgradeUrl: upgradeUrl ?? get().forced?.upgradeUrl };
+    const current = get().status;
+    set({
+      forced,
+      isForcing: true,
+      dialogOpen: true,
+      status: isPendingUpdate(current)
+        ? { ...current, forced: true, minVersion }
+        : { type: "forced", forced: true, minVersion },
+    });
+    try {
+      if (!api.forceUpdate) {
+        // A desktop build without the forced IPC: the ordinary check, with
+        // the dialog held open by `forced`.
+        set({ isForcing: false });
+        await get().checkForUpdates();
+        return;
+      }
+      const result = await api.forceUpdate(minVersion);
+      if (result.outcome === "installing") {
+        set({ isInstalling: true });
+      } else if (result.outcome === "error") {
+        set({ status: { type: "error", error: result.error, forced: true, minVersion } });
+      } else {
+        // The updater has nothing newer (or this build cannot update itself):
+        // the dialog says where to install from.
+        set({ status: { type: "not-available", forced: true, minVersion } });
+      }
+    } catch (error) {
+      logger.error("[appUpdate] forced update failed", error);
+      set({ status: { type: "error", error: errorText(error), forced: true, minVersion } });
+    } finally {
+      set({ isForcing: false });
     }
   },
 

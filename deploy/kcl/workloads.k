@@ -264,3 +264,113 @@ debug_image = fw.Workload {
     runtime = forge.BuildOnly {}
     build = forge.DockerBuild {dockerfile = "Dockerfile.debug"}
 }
+
+# The standalone CLI: ./cmd/reliant cross-compiled for the platform matrix
+# .goreleaser.yml declares — linux, darwin and windows on amd64 and arm64,
+# minus windows/arm64 — one build variant each, named <goos>-<goarch> so forge
+# writes bin/reliant-cli-<goos>-<goarch> (.exe on windows). The name matches
+# control-plane's `reliant_cli_service`. forge builds every variant with
+# CGO_ENABLED=0, as goreleaser's `env` does.
+#
+# release.yml's build-backend builds a sixth target, windows/arm64, with
+# `-tags exp.winarm64` (a delve build tag). Adding it is one more entry with
+# `tags = ["exp.winarm64"]`; goreleaser's matrix leaves it out, so this does too.
+#
+# The ldflags are goreleaser's: `-s -w` plus the internal/version stamp. The
+# stamp's values are per build, so the env that binds this passes them
+# (`reliant_cli_variants`, keyed like `server_image_build`'s build args), never
+# this declaration; a key the stamp leaves out keeps its in-code "unknown".
+# It also writes CommitTime, as release.yml's build does (goreleaser's
+# ldflags predate that var).
+# Each value must be free of spaces: forge joins the ldflags with one.
+# goreleaser's four `internal/builddefaults` -X flags are not reproduced: that
+# package no longer exists, so the linker ignores them, and with goreleaser's
+# empty defaults they stamped nothing anyway. The OSS-clean equivalent is no
+# endpoint stamp, which is what this builds (release.yml's
+# pkg/config.BuildDefaults stamp is the release's opt-in, not goreleaser's).
+_CLI_PLATFORMS = [
+    ["linux", "amd64"]
+    ["linux", "arm64"]
+    ["darwin", "amd64"]
+    ["darwin", "arm64"]
+    ["windows", "amd64"]
+]
+
+# The internal/version var each stamp key writes (the Dockerfile's build-arg
+# names, so one stamp serves both builds).
+_VERSION_VARS = {
+    VERSION = "Version"
+    COMMIT = "Commit"
+    BUILD_DATE = "Date"
+    BRANCH = "Branch"
+    COMMIT_TIME = "CommitTime"
+}
+
+reliant_cli_variants = lambda stamp: {str: str} -> [forge.BuildVariant] {
+    _ldflags = ["-s", "-w"] + [
+        "-X github.com/reliant-labs/reliant/internal/version.${var}=${stamp[key]}"
+        for key, var in _VERSION_VARS if key in stamp
+    ]
+    [forge.BuildVariant {
+        name = "${p[0]}-${p[1]}"
+        goos = p[0]
+        goarch = p[1]
+        ldflags = _ldflags
+    } for p in _CLI_PLATFORMS]
+}
+
+reliant_cli = fw.Workload {
+    name = "reliant-cli"
+    kind = "tool"
+    runtime = forge.BuildOnly {build_variants = reliant_cli_variants({})}
+    build = forge.GoBuild {cmd = "./cmd/reliant"}
+}
+
+# ── The desktop app ─────────────────────────────────────────────────────────
+#
+# The packaged Electron app users download: .dmg/.zip on macOS, .exe on
+# Windows, .AppImage/.deb on Linux. The build is electron/scripts/pack-desktop.js,
+# the one electron-builder call release.yml's release-macos, release-linux and
+# release-windows jobs also run, here for the machine's own platform (`host`)
+# and never published (`never`). The signed, published installers are still
+# release.yml's: it holds the signing and R2 secrets this build never sees.
+#
+# PREREQUISITES. This packages; it does not build what it packages, because
+# release.yml downloads those from other jobs. pack-desktop.js refuses, naming
+# what is missing, unless they are on disk (paths from the repo root):
+#
+#   electron/node_modules                    cd electron && pnpm install --frozen-lockfile
+#   electron/resources/server/<plat>-<arch>/ scripts/build-electron.sh <mac|linux|win>
+#     reliant-backend[.exe], both arches
+#   frontends/web/dist                       cd frontends/web && pnpm install --frozen-lockfile \
+#                                              && NODE_ENV=production pnpm run build
+#   electron/src/build-config.js and         cd electron && node scripts/with-release-config.mjs
+#     electron/src/release-renderer-config.js  pnpm run build:config
+#
+# No `image`: the app is not one, and at this forge pin a build-only ShellBuild
+# needs none (`forge env build release --target reliant-desktop` runs it), so
+# this does not invent one the way control-plane's reliant-cli declaration
+# does. forge still writes a placeholder `reliant-desktop:latest` into
+# .forge/state after the build; that is a forge defect (reported), not an
+# artifact.
+#
+# No `inputs`: they would let forge skip the command when they are unchanged,
+# and with nothing recording what the last run produced, a skip would report a
+# build whose electron/dist may since have been deleted.
+#
+# FOLLOW-UP (forge #2428, open): once `Build.outputs` lands, declare the files
+# this writes so a release records them — electron/dist/ *.dmg, *.zip,
+# *-mac.yml, *.exe, latest.yml, alpha.yml, *.AppImage, *.deb, *-linux.yml,
+# *-linux-arm64.yml and *.blockmap (release.yml's upload-artifact globs).
+#
+# `cwd` resolves against the project that renders this. control-plane imports
+# this file but binds only the server workloads, so it is always reliant's.
+desktop_app = fw.Workload {
+    name = "reliant-desktop"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = forge.ShellBuild {
+        cwd = "electron"
+        cmd = "node scripts/pack-desktop.js host electron-builder.js never"
+    }
+}

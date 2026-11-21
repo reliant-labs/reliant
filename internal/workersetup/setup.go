@@ -334,6 +334,17 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		reports := workflowcheck.Activities{Service: checks}
 		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
 		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
+
+		// A workflow's `daemon: {pool: …}` or labels-only `daemon:
+		// {labels: …}` places its run (or a node) through this, on every
+		// worker with a database: a run is not a trigger fire, so it needs
+		// no launcher.
+		runs := machinepool.NewRunPlacer(cfg.Database)
+		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
+			runs = runs.WithWaker(poolMemberWaker{w: w})
+		}
+		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: cfg.Database, Placer: runs}.Execute,
+			activity.RegisterOptions{Name: machinepool.PlaceRunActivityName})
 	}
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
@@ -574,7 +585,10 @@ func TaskQueueName(suffix string) string {
 // owner's behalf: the trigger was authorized to run on the pool when it was
 // enabled, exactly as a resuming run was authorized to use its machine, so it
 // goes through the same door (WakeForRun), with the trigger's delegated
-// access as the fallback credential. A member already on its way is success.
+// access as the fallback credential. A workflow placing its run on its
+// owner's pool (machinepool.PlaceRunActivity) wakes the same way: the run is
+// the owner's, started with their machines. A member already on its way is
+// success.
 type poolMemberWaker struct{ w toolexec.RunWaker }
 
 func (p poolMemberWaker) WakeMember(ctx context.Context, userID, daemonID string) error {

@@ -96,6 +96,7 @@ const FORKS_POOL_FILES = [
   "src/components/Auth/__tests__/CliLogin.test.tsx",
   "src/components/Auth/__tests__/DevicePairing.test.tsx",
   "src/components/Billing/__tests__/LinkIdentityModal.test.tsx",
+  "src/components/Chat/__tests__/draftSurvivesForcedReload.test.tsx",
   "src/components/Settings/__tests__/ConnectorConsent.defaults.test.tsx",
   "src/components/Settings/__tests__/IntegrationsSettings.test.tsx",
   "src/components/__tests__/AppOutOfDateModal.test.tsx",

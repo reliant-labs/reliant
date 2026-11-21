@@ -91,6 +91,10 @@ type APIHTTPRoutesDeps struct {
 	// org's org-key usage (OrgKeyUsagePath). Optional; no public auth
 	// fallback.
 	OrgKeyUsage http.Handler
+	// EnsureProjectForApp is control-plane's internally authenticated
+	// find-or-create of a deployed app's project (EnsureProjectForAppPath).
+	// Optional; no public auth fallback.
+	EnsureProjectForApp http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -137,6 +141,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	}
 	if deps.OrgKeyUsage != nil {
 		handle(OrgKeyUsagePath, deps.OrgKeyUsage)
+	}
+	if deps.EnsureProjectForApp != nil {
+		handle(EnsureProjectForAppPath, deps.EnsureProjectForApp)
 	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
@@ -241,6 +248,12 @@ var corsAllowedHeaders = []string{
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
 	"X-Daemon-Last-Seen",
+	// Which client is calling and its version, `<kind>/<version>`
+	// (internal/clientversion). Every first-party client sends it on every
+	// reliant.v1 call; the server judges it against its minimums
+	// (ClientVersionPolicy). Missing here, a client that sends it fails CORS
+	// on every RPC.
+	"Reliant-Client",
 }
 
 // corsExposedHeaders are the response headers cross-origin JavaScript may

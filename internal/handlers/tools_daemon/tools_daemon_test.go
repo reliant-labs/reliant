@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -352,7 +353,7 @@ func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 	}}
 	require.NoError(t, svc.handleProjectDiscovery(context.Background(), conn, discovery))
 
-	project, err := repo.GetProjectByPath(context.Background(), "/tmp/discovered-proj")
+	project, err := store.GetProjectByPath(context.Background(), repo.ORM(), "/tmp/discovered-proj")
 	require.NoError(t, err)
 	require.Equal(t, "test-user", project.UserID)
 	require.Equal(t, "Discovered Project", project.Name)
@@ -428,7 +429,7 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	// The snapshot path (" /tmp/test ") normalizes to /tmp/test; the handler
 	// creates/owns a project at that path, and the config record is keyed on
 	// that project's ID. Resolve it rather than assuming a fixed seed ID.
-	project, err := repo.GetProjectByPath(context.Background(), "/tmp/test")
+	project, err := store.GetProjectByPath(context.Background(), repo.ORM(), "/tmp/test")
 	require.NoError(t, err)
 	require.NotNil(t, project)
 

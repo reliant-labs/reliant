@@ -760,6 +760,11 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 	syntheticNode := &reliantv1.Node{
 		Id:   r.node.GetId(),
 		Type: model.NodeTypeWorkflow,
+		// The router's own selector: a pool on it places the dispatched
+		// workflow, at the router's path, on the member its decision step
+		// was placed on (placeStructuralDaemon). Any other selector is
+		// ignored there, as before.
+		Daemon: r.node.GetDaemon(),
 		Args: &reliantv1.Node_Workflow{
 			Workflow: &reliantv1.SubWorkflowArgs{
 				Ref: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: r.decision.Workflow}},

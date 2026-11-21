@@ -26,7 +26,7 @@ function childThread(overrides: Partial<ThreadInfo>): ThreadInfo {
   };
 }
 
-describe("ThreadTabs", () => {
+describe("ThreadTabs (the top bar's thread switcher)", () => {
   it("filters spawn-origin threads even when a node thread makes tabs visible", () => {
     render(
       <ThreadTabs
@@ -41,6 +41,8 @@ describe("ThreadTabs", () => {
       />,
     );
 
+    // One control in the bar; its menu lists the threads.
+    fireEvent.click(screen.getByRole("button", { name: "Thread: All" }));
     expect(screen.getByText("All")).toBeInTheDocument();
     expect(screen.getByText("Main")).toBeInTheDocument();
     expect(screen.getByText("Review Step")).toBeInTheDocument();
@@ -79,6 +81,7 @@ describe("ThreadTabs", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Thread: All" }));
     fireEvent.click(screen.getByText("Review Step"));
 
     expect(onSelectThread).toHaveBeenCalledWith("thread-node");

@@ -29,6 +29,27 @@ var (
 	)
 )
 
+// ─── Client versions ────────────────────────────────────────────────────────
+
+var (
+	// ClientVersionTotal counts reliant.v1 calls by the client kind their
+	// Reliant-Client header names (internal/clientversion) and what the
+	// server made of it: met, below (observed, enforce off), refused,
+	// no_floor, unparseable, unidentified, unidentified_refused,
+	// legacy_not_found (the API edge's 404 for a pre-header bundle). kind is
+	// one of the six kinds, "unknown" for a header that does not parse, or
+	// "none" for no header. It is the evidence for turning enforcement on.
+	ClientVersionTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "client",
+			Name:      "version_total",
+			Help:      "reliant.v1 calls by Reliant-Client kind and outcome (met, below, refused, no_floor, unparseable, unidentified, unidentified_refused, legacy_not_found).",
+		},
+		[]string{"kind", "outcome"},
+	)
+)
+
 // ─── Daemon link liveness ───────────────────────────────────────────────────
 //
 // A daemon that registers has proven only that its stream opened. The gateway
@@ -103,6 +124,20 @@ var (
 			Help:      "Daemon work refused while a worktree recovery was finalizing, by kind (command, tool_call).",
 		},
 		[]string{"kind"},
+	)
+	// DaemonVersionFloorTotal counts daemons that registered below the
+	// daemon version floor (ClientVersionPolicy.daemon), by what the gateway
+	// did: restart_requested (sent RestartRequested), refused (enforce on,
+	// and the daemon predates RestartRequested) or observed (logged only:
+	// enforce off, or a managed machine the observe phase does not drain).
+	DaemonVersionFloorTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "version_floor_total",
+			Help:      "Daemons that registered below the daemon version floor, by outcome (restart_requested, refused, observed).",
+		},
+		[]string{"outcome"},
 	)
 )
 
@@ -559,12 +594,15 @@ func initMetrics() {
 		NATSSubscriptionRefusalsTotal,
 		// Egress
 		EgressLimitedTotal,
+		// Client versions
+		ClientVersionTotal,
 		// Daemon link liveness
 		DaemonLinkProbeSeconds,
 		DaemonReconnectLatencySeconds,
 		DaemonConnectWorkDeferredTotal,
 		DaemonCommandsHeldTotal,
 		DaemonRecoveryAdmissionRefusedTotal,
+		DaemonVersionFloorTotal,
 		// Terminal output
 		TerminalOutputOverflowTotal,
 		// DB

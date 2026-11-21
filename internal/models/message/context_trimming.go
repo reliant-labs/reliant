@@ -96,6 +96,25 @@ func EstimateFullContextTokens(messages []Message, systemPrompts []string, tools
 	return estimateContextTokens(messages, systemPrompts, tools, 0)
 }
 
+// EstimateRequestTokens is the size, in estimated tokens, that the trim
+// backstop measures this request at for a model with the given prompt ceiling
+// (contextWindow <= 0: unknown) — the number TrimMessagesToFitContextWindow
+// compares against its limit.
+func EstimateRequestTokens(messages []Message, systemPrompts []string, tools []ToolDefinition, contextWindow int64) int {
+	return estimateContextTokens(messages, systemPrompts, tools, contextWindow).TotalTokens
+}
+
+// MessagesChars is the characters of message content the estimator counts.
+// Unlike a token estimate it never reads a stored TokenCount, so it drops
+// whenever trimming shortens anything.
+func MessagesChars(messages []Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += estimateMessageChars(msg)
+	}
+	return total
+}
+
 // unreliableTokenCountWarned makes the "TokenCount exceeds the window" warning
 // fire once per process. A thread that has one such count has one on every
 // turn, so per-call logging would bury everything else in the log.

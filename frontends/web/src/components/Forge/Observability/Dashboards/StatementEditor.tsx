@@ -231,17 +231,17 @@ function Insertable({ text, label, detail, onInsert }: { text: string; label?: s
       className="flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="min-w-0 truncate font-mono text-ink">{label ?? text}</span>
-      {detail && <span className="ml-auto shrink-0 truncate pl-2 text-2xs text-ink-muted">{detail}</span>}
+      {detail && <span className="ml-auto shrink-0 truncate pl-2 text-meta text-ink-muted">{detail}</span>}
     </button>
   );
 }
 
 function AttributeValues({ scope, range, attribute, onInsert }: { scope: ObsScope | null; range: RangePreset; attribute: string; onInsert: (text: string) => void }) {
   const values = useAttributeValues(scope, range, attribute, "");
-  if (values.isLoading) return <p className="px-1 text-2xs text-ink-muted">Reading values…</p>;
-  if (values.error) return <p className="px-1 text-2xs text-danger-ink">{obsErrorMessage(values.error)}</p>;
+  if (values.isLoading) return <p className="px-1 text-meta text-ink-muted">Reading values…</p>;
+  if (values.error) return <p className="px-1 text-meta text-danger-ink">{obsErrorMessage(values.error)}</p>;
   const list = values.data?.values ?? [];
-  if (!list.length) return <p className="px-1 text-2xs text-ink-muted">No values in this range.</p>;
+  if (!list.length) return <p className="px-1 text-meta text-ink-muted">No values in this range.</p>;
   return (
     <>
       {list.slice(0, 20).map((v) => (
@@ -257,10 +257,10 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
   return (
     <div className="space-y-2" data-testid="schema-clickhouse">
       <section>
-        <h4 className="text-2xs font-medium text-ink-muted">Tables</h4>
+        <h4 className="text-meta font-medium text-ink-muted">Tables</h4>
         {CLICKHOUSE_TABLES.map((table) => (
           <Disclosure key={table.name} title={table.name} testId={`schema-table-${table.name}`}>
-            <p className="px-1 text-2xs text-ink-muted">{table.about}</p>
+            <p className="px-1 text-meta text-ink-muted">{table.about}</p>
             <Insertable text={table.name} detail="table" onInsert={onInsert} />
             {table.columns.map(([column, type]) => (
               <Insertable key={column} text={column} detail={type} onInsert={onInsert} />
@@ -269,14 +269,14 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
         ))}
       </section>
       <section>
-        <h4 className="text-2xs font-medium text-ink-muted">Attributes</h4>
+        <h4 className="text-meta font-medium text-ink-muted">Attributes</h4>
         {ATTRIBUTE_KEYS.map((attribute) => (
           <div key={attribute.key}>
             <div className="flex items-center gap-1">
               <Insertable text={attributeExpression(attribute.key, attribute.class)} label={attribute.key} detail={attribute.label} onInsert={onInsert} />
               <button
                 type="button"
-                className="shrink-0 rounded px-1 text-2xs text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 rounded px-1 text-meta text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-expanded={opened === attribute.key}
                 aria-label={`Values of ${attribute.key}`}
                 onClick={() => setOpened(opened === attribute.key ? null : attribute.key)}
@@ -293,13 +293,13 @@ function ClickHouseSchema({ scope, range, onInsert }: { scope: ObsScope | null; 
         ))}
       </section>
       <section>
-        <h4 className="text-2xs font-medium text-ink-muted">Metrics in this range</h4>
+        <h4 className="text-meta font-medium text-ink-muted">Metrics in this range</h4>
         {metrics.isLoading ? (
-          <p className="px-1 text-2xs text-ink-muted">Reading the metric catalog…</p>
+          <p className="px-1 text-meta text-ink-muted">Reading the metric catalog…</p>
         ) : metrics.error ? (
-          <p className="px-1 text-2xs text-danger-ink">{obsErrorMessage(metrics.error)}</p>
+          <p className="px-1 text-meta text-danger-ink">{obsErrorMessage(metrics.error)}</p>
         ) : (metrics.data?.metrics ?? []).length === 0 ? (
-          <p className="px-1 text-2xs text-ink-muted">No metrics in this range.</p>
+          <p className="px-1 text-meta text-ink-muted">No metrics in this range.</p>
         ) : (
           (metrics.data?.metrics ?? []).slice(0, 100).map((metric) => (
             <Insertable key={`${metric.name}:${metric.kind}`} text={`'${metric.name}'`} label={metric.name} detail={`${metric.kind} → otel_metrics_${METRIC_TABLE[metric.kind] ?? "gauge"}`} onInsert={onInsert} />
@@ -328,7 +328,7 @@ function PostgresSchema({ environmentId, database, onDatabase, onInsert }: { env
         <div key={db.name} className={cn("rounded-md", db.name === database && "bg-ink/5")}>
           <div className="flex items-center gap-2 px-1 py-1">
             <span className="font-mono text-xs text-ink">{db.name}</span>
-            <span className="text-2xs text-ink-muted">
+            <span className="text-meta text-ink-muted">
               {db.rowCap} rows · {db.timeoutMs / 1000}s · {db.replica === "ro" ? "read replica" : "primary"}
             </span>
             {db.name !== database && (
@@ -338,7 +338,7 @@ function PostgresSchema({ environmentId, database, onDatabase, onInsert }: { env
             )}
           </div>
           {db.tablesError ? (
-            <p className="px-1 text-2xs text-danger-ink">{db.tablesError}</p>
+            <p className="px-1 text-meta text-danger-ink">{db.tablesError}</p>
           ) : (
             db.tables.map((table) => (
               <Disclosure key={`${table.schema}.${table.name}`} title={`${table.schema}.${table.name}`} count={table.columns.length} testId={`schema-table-${table.schema}.${table.name}`}>

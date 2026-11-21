@@ -185,6 +185,8 @@ export const ChatPresenter = memo(function ChatPresenter({
   // Thread selection state (lifted up to share between header and timeline).
   // Controlled when the host owns the thread picker (mobile top bar).
   const [localThreadId, setLocalThreadId] = useState<string | null>(null);
+  // Where the top bar lets the timeline render the prompt scrolled away from.
+  const [pinnedPromptSlot, setPinnedPromptSlot] = useState<HTMLElement | null>(null);
   const selectedThreadId = controlledThreadId !== undefined ? controlledThreadId : localThreadId;
   const setSelectedThreadId = onSelectThread ?? setLocalThreadId;
 
@@ -725,6 +727,7 @@ export const ChatPresenter = memo(function ChatPresenter({
       onLoadOlderMessages={onLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
+      pinnedPromptSlot={hideHeader ? null : pinnedPromptSlot}
     />
   );
 
@@ -747,6 +750,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
           isWorkflowViewerOpen={isWorkflowViewerOpen}
           hideTitle={hideChatTitle}
+          pinnedPromptSlotRef={setPinnedPromptSlot}
         />}
 
         {/* Inline Workflow Viewer Panel - shown when in inline mode */}
@@ -1007,7 +1011,7 @@ export const ChatPresenter = memo(function ChatPresenter({
               />
             </div>
           ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
-            <div className="p-2 border-t border-border bg-muted/20 text-center text-sm text-muted-foreground flex-shrink-0">
+            <div className="p-2 border-t border-border-subtle text-center text-ui text-muted-foreground flex-shrink-0">
               Click to focus and type a message
             </div>
           ) : null}

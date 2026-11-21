@@ -32,7 +32,8 @@ const (
 //
 // The paths are the command groups that talk to a Reliant server or touch
 // ~/.reliant. `server` and `db` are the hosted roles; `forge` is forge's own
-// CLI, whose flags are its own; `version` and `preview-url` read none of this.
+// CLI, whose flags are its own; `version` and `preview-url` read none of this
+// (`preview access` does: it calls the control plane as the login).
 type CLIConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connection    *CLIConnectionConfig   `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -306,13 +307,13 @@ var File_reliant_config_v1_cli_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/cli_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xd5\x02\n" +
+	"\"reliant/config/v1/cli_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xec\x02\n" +
 	"\tCLIConfig\x12F\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2&.reliant.config.v1.CLIConnectionConfigR\n" +
 	"connection\x121\n" +
 	"\x03web\x18\x02 \x01(\v2\x1f.reliant.config.v1.CLIWebConfigR\x03web\x12=\n" +
-	"\amachine\x18\x03 \x01(\v2#.reliant.config.v1.CLIMachineConfigR\amachine:\x8d\x01\xca\xc1\x18\x88\x01\n" +
+	"\amachine\x18\x03 \x01(\v2#.reliant.config.v1.CLIMachineConfigR\amachine:\xa4\x01\xca\xc1\x18\x9f\x01\n" +
 	"\areliant\x1a\x06\n" +
 	"\x04auth\x1a\x06\n" +
 	"\x04chat\x1a\b\n" +
@@ -322,11 +323,14 @@ const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\amachine\x1a\x05\n" +
 	"\x03mcp\x1a\b\n" +
 	"\x06models\x1a\t\n" +
+	"\apreview\x1a\t\n" +
 	"\aproject\x1a\v\n" +
 	"\tproviders\x1a\t\n" +
 	"\atrigger\x1a\n" +
 	"\n" +
-	"\bworkflow\"\xa0\x04\n" +
+	"\bworkflow\x1a\n" +
+	"\n" +
+	"\bworktree\"\xa0\x04\n" +
 	"\x13CLIConnectionConfig\x12s\n" +
 	"\n" +
 	"server_url\x18\x01 \x01(\tBT\x82\xce\x18P\n" +

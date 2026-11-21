@@ -127,18 +127,18 @@ function SilenceRow({ silence, readOnly, expiring, onExpire }: { silence: Silenc
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className={cn(
-              "rounded px-1.5 py-px text-2xs font-medium ring-1 ring-inset",
+              "rounded px-1.5 py-px text-meta font-medium ring-1 ring-inset",
               silence.state === "active" ? "bg-primary/10 text-primary-ink ring-primary/30" : "text-ink-muted ring-border"
             )}
           >
             {silence.state}
           </span>
           {own.map((m, i) => (
-            <code key={i} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-2xs text-ink ring-1 ring-inset ring-border/60">
+            <code key={i} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-meta text-ink ring-1 ring-inset ring-border/60">
               {matcherText(m)}
             </code>
           ))}
-          <span className="rounded px-1.5 py-px text-2xs text-ink-muted ring-1 ring-inset ring-border/60" title={`${ORG_MATCHER}, added by Reliant`}>
+          <span className="rounded px-1.5 py-px text-meta text-ink-muted ring-1 ring-inset ring-border/60" title={`${ORG_MATCHER}, added by Reliant`}>
             this organization only
           </span>
         </div>

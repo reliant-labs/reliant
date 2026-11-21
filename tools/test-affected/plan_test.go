@@ -787,9 +787,10 @@ func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 		{"frontends/web/package.json", "web", "/repo/frontends/web", pnpmLock},
 		{"frontends/web/pnpm-lock.yaml", "web", "/repo/frontends/web", pnpmLock},
 		{"frontends/web/pnpm-workspace.yaml", "web", "/repo/frontends/web", pnpmLock},
-		{"electron/package-lock.json", "electron", "/repo/electron", npmLock},
-		{"package-lock.json", "electron", "/repo", npmLock},
-		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es", npmLock},
+		{"electron/pnpm-lock.yaml", "electron", "/repo/electron", pnpmLock},
+		{"electron/pnpm-workspace.yaml", "electron", "/repo/electron", pnpmLock},
+		{"pnpm-lock.yaml", "electron", "/repo", pnpmLock},
+		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es", pnpmLock},
 	} {
 		steps := r.steps(classify(tc.path), laneSet(tc.lanes))
 		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv(tc.lock), " ") || steps[0].dir != tc.dir {

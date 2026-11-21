@@ -90,6 +90,10 @@ type streamProcessingState struct {
 	// resend it; nothing in the runtime makes a decision from it.
 	phase string
 
+	// prematureStop is the driver's llm.PrematureStop hint for this turn
+	// (OpenAI Responses only), read by planContinuation.
+	prematureStop llm.PrematureStop
+
 	// Delta identity: pre-allocated assistant message id (from
 	// RuntimeContext.AssistantMessageID) and the per-message monotonically
 	// increasing sequence stamped onto every published delta. Both zero when
@@ -476,7 +480,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	}
 
 	// Stream LLM response and collect data in memory
-	output, err := a.streamLLMResponse(ctx, chat, thread, history, rtx, args)
+	output, err := a.streamLLMResponse(ctx, chat, thread, history, rtx, args, requestedContinuation(args))
 	if err != nil {
 		return nil, fmt.Errorf("failed to stream LLM response: %w", err)
 	}
@@ -1244,9 +1248,9 @@ func (a *CallLLMActivity) loadConversationHistory(ctx context.Context, chatID st
 // still a turn worth taking, and the undelivered rows remain queued for the
 // next call. Returning an error here would fail the activity and, through the
 // step executor, skip the save_message that persists this turn's output.
-func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread string) {
+func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread string) int {
 	if thread == "" {
-		return
+		return 0
 	}
 
 	drain := NewDrainAgentMessagesActivity(a.repo, threads.NewService(a.repo))
@@ -1254,12 +1258,13 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",
 			"chatID", chatID, "thread", thread, "error", err)
-		return
+		return 0
 	}
 	if out.HasMessages {
 		logging.InfoContext(ctx, "[CallLLM] Delivered queued agent messages into history",
 			"chatID", chatID, "thread", thread, "count", out.Count)
 	}
+	return out.Count
 }
 
 // getProjectConfig reads the project's config as daemonID (the machine the
@@ -1297,7 +1302,7 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 }
 
 // streamLLMResponse streams an LLM response to content_block_chunks (UI-only) and collects data in memory
-func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
+func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs, continuation string) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
 	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
 	spawnDisabled := !tools.SpawnAllowedAtDepth(rtx.SpawnDepth)
@@ -1873,10 +1878,21 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// A loop resumed mid-work, or a turn re-dispatched after a pause cut it
 	// off, with nothing new to read: continue the cut-off turn rather than
-	// yield it as the agent's last word (resumeCutOffTurn).
-	if !model.CelBoolValue(args.GetContinueTurn()) && continuesCutOffTurn(rtx, history) {
+	// yield it as the agent's last word (resumeCutOffTurn). A turn the
+	// harness asked to continue (truncated, or a premature stop) carries its
+	// own hidden nudge instead (call_llm_continuation.go).
+	if continuation != "" {
+		nudge, err := a.continuationNudge(ctx, rtx, chat.ID, thread, continuation)
+		if err != nil {
+			return nil, err
+		}
+		history = appendContinuationNudge(history, nudge)
+	} else if !model.CelBoolValue(args.GetContinueTurn()) && continuesCutOffTurn(rtx, history) {
 		history = append(history, a.resumeCutOffTurn(ctx, rtx, chat.ID, thread))
 	}
+	// The request as the thread holds it, nudges and their Hidden flag
+	// included, for planContinuation's counts after the turn.
+	continuationHistory := history
 
 	if err := validateToolNamesForLLMRequest(availableTools); err != nil {
 		activity.GetLogger(ctx).Error("[CallLLM] Tool name invariant violation before LLM request",
@@ -1896,7 +1912,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// here (Codex/OpenAI envelopes are organisation-bound): drop it before the
 	// request rather than learn that from a 400.
 	history = stripForeignReasoning(history, models.DriverID(resolved.ProviderDriver), accountID)
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
+	// Snapshot before the trim, so a request the provider refuses as too long
+	// can be resent trimmed further (contextOverflowRecovery).
+	overflowRecovery := newContextOverflowRecovery(chat.ID, resolved.ProviderDriver, resolvedModelID, history, systemPrompts, availableTools, ceiling)
+	history = overflowRecovery.sending(prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling))
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
 	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
@@ -1938,7 +1957,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// conversation handed back so the model can carry on. The loop that saw
 	// that says so with continue_turn, and only then is an assistant tail the
 	// expected shape rather than a bug.
-	continueTurn := model.CelBoolValue(args.GetContinueTurn())
+	continueTurn := model.CelBoolValue(args.GetContinueTurn()) || continuation != ""
 	if len(history) > 0 && continueTurn && history[len(history)-1].Role == message.Assistant {
 		activity.GetLogger(ctx).Info("[CallLLM] Continuing a paused turn — history ends with the assistant by design",
 			"chatID", chat.ID,
@@ -2060,7 +2079,13 @@ streamLoop:
 					break streamLoop
 				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-					streamErr = err
+					// A request refused as too long is resent smaller.
+					next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+					if next != nil {
+						eventChan = next
+						continue
+					}
+					streamErr = failed
 					driverErrored = true
 					break streamLoop
 				}
@@ -2198,7 +2223,13 @@ streamLoop:
 
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-				streamErr = err
+				// A request refused as too long is resent smaller.
+				next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+				if next != nil {
+					eventChan = next
+					continue
+				}
+				streamErr = failed
 				driverErrored = true
 				break streamLoop
 			}
@@ -2270,6 +2301,17 @@ streamLoop:
 				"retry", retry,
 				"retryDelay", retryDelay)
 			return nil, stalled
+		}
+		// Malformed model output (Gemini's MALFORMED_FUNCTION_CALL and kin)
+		// is retried once, by the error's own schedule; see
+		// malformedOutputError.
+		if errors.Is(streamErr, drivererrors.ErrMalformedModelOutput) {
+			malformed := newMalformedOutputError(ctx, streamErr, resolved.ProviderDriver, resolvedModelID)
+			_, retry := malformed.RetryAfter()
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider reported malformed model output",
+				"chatID", chat.ID, "thread", thread, "provider", resolved.ProviderDriver,
+				"model", resolvedModelID, "attempt", malformed.attempt, "retry", retry, "error", streamErr)
+			return nil, malformed
 		}
 		failedCall := usageLimitContext{
 			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
@@ -2507,6 +2549,11 @@ streamLoop:
 	if contentFree {
 		output.ResponseText = contentFreeExplanation
 	}
+
+	// Whether the harness continues this turn (a truncation, or a premature
+	// Responses stop): the loop hands it back as the next call's continuation.
+	output.Continuation = planContinuation(output.StopReason, streamState.prematureStop, continuation, continuationHistory)
+	logContinuationPlan(ctx, chat.ID, thread, output.StopReason, streamState.prematureStop, continuation, output.Continuation)
 
 	// When a response_tool is configured, the LLM returns structured data as a
 	// tool call rather than text. Extract the response tool's input into
@@ -3471,6 +3518,7 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 
 	state.finishReason = event.Response.FinishReason
 	state.phase = event.Response.Phase
+	state.prematureStop = event.Response.PrematureStop
 
 	// CRITICAL: Extract complete tool calls with full inputs from the final response
 	// This is done here instead of EventToolUseStart because Input is empty at that point

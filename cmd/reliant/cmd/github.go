@@ -214,7 +214,7 @@ access before it mints the token, scopes the token to one repository, and
 records the mint in its audit log. Tokens last at most an hour and are never
 stored.`,
 	}
-	cmd.AddCommand(newGitHubTokenCmd(fetch), newGitHubGHCmd(fetch, run))
+	cmd.AddCommand(newGitHubTokenCmd(fetch), newGitHubGHCmd(fetch, run), newGitHubRecordsCmd())
 	return cmd
 }
 
