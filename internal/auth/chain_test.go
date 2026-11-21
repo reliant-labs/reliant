@@ -35,6 +35,14 @@ const (
 	testDevSecret      = "dev-signer-secret-at-least-32-bytes!"
 )
 
+// Fixed times, so no assertion depends on today: tokens valid until a date no
+// wall clock reaches, issued and expired long ago.
+var (
+	validUntil = time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+	issuedAt   = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+	expiredAt  = time.Date(2020, time.January, 2, 0, 0, 0, 0, time.UTC).Unix()
+)
+
 // testIdentity is a managed identity's issuer: an RSA key behind a JWKS.
 type testIdentity struct {
 	key     *rsa.PrivateKey
@@ -78,8 +86,8 @@ func identityClaimsFor(over map[string]any) jwt.MapClaims {
 		"email":          "person@example.com",
 		"email_verified": true,
 		"client_id":      "312309114829078532@reliant", // Zitadel stamps the app on every token
-		"exp":            time.Now().Add(time.Hour).Unix(),
-		"iat":            time.Now().Unix(),
+		"exp":            validUntil,
+		"iat":            issuedAt,
 	}
 	for k, v := range over {
 		if v == nil {
@@ -109,7 +117,7 @@ func supabaseClaims(over map[string]any) map[string]any {
 		"sub":   "user-1",
 		"email": "person@example.com",
 		"role":  "authenticated",
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"exp":   validUntil,
 	}
 	for k, v := range over {
 		if v == nil {
@@ -185,12 +193,12 @@ func TestTokenChainNeverConfusesItsIssuers(t *testing.T) {
 		{name: "Supabase key, another issuer", token: supabase(map[string]any{"iss": "https://other.supabase.co/auth/v1"})},
 		{name: "Supabase key, no issuer", token: supabase(map[string]any{"iss": nil})},
 		{name: "Supabase key, another audience", token: supabase(map[string]any{"aud": "anon"})},
-		{name: "Supabase key, expired", token: supabase(map[string]any{"exp": time.Now().Add(-time.Hour).Unix()})},
+		{name: "Supabase key, expired", token: supabase(map[string]any{"exp": expiredAt})},
 
 		// The identity's own checks.
 		{name: "identity issuer, another project's audience", token: ti.sign(t, map[string]any{"aud": []string{"another-project"}})},
 		{name: "identity issuer, no audience", token: ti.sign(t, map[string]any{"aud": nil})},
-		{name: "identity issuer, expired", token: ti.sign(t, map[string]any{"exp": time.Now().Add(-time.Hour).Unix()})},
+		{name: "identity issuer, expired", token: ti.sign(t, map[string]any{"exp": expiredAt})},
 		{name: "identity issuer, a key the issuer never published", token: signRS256(t, otherRSA, "identity-1", identityClaimsFor(nil))},
 		{name: "identity issuer, no subject", token: ti.sign(t, map[string]any{"sub": nil})},
 
