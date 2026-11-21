@@ -42,6 +42,9 @@ const (
 	// BillingServiceGetOrganizationCostSummaryProcedure is the fully-qualified name of the
 	// BillingService's GetOrganizationCostSummary RPC.
 	BillingServiceGetOrganizationCostSummaryProcedure = "/controlplane.v1.BillingService/GetOrganizationCostSummary"
+	// BillingServiceGetStorageUsageProcedure is the fully-qualified name of the BillingService's
+	// GetStorageUsage RPC.
+	BillingServiceGetStorageUsageProcedure = "/controlplane.v1.BillingService/GetStorageUsage"
 	// BillingServiceListOrganizationUsageProcedure is the fully-qualified name of the BillingService's
 	// ListOrganizationUsage RPC.
 	BillingServiceListOrganizationUsageProcedure = "/controlplane.v1.BillingService/ListOrganizationUsage"
@@ -168,6 +171,13 @@ type BillingServiceClient interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// The organization's storage pool: everything it keeps at rest, by product,
+	// against the pool's included amount. Requires billing:read, re-checked at use,
+	// scoped to the caller's organization. Read-only; reports today's billing basis
+	// per product (most products are tracked, not charged, until the pool's billing
+	// cutover).
+	// forge:custom
+	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	// History of the organization's usage and spend, built from durable
 	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
 	// and is scoped to the caller's organization. Range is at most 400 days.
@@ -351,6 +361,12 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetOrganizationCostSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+			connect.WithClientOptions(opts...),
+		),
+		getStorageUsage: connect.NewClient[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse](
+			httpClient,
+			baseURL+BillingServiceGetStorageUsageProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetStorageUsage")),
 			connect.WithClientOptions(opts...),
 		),
 		listOrganizationUsage: connect.NewClient[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse](
@@ -600,6 +616,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // billingServiceClient implements BillingServiceClient.
 type billingServiceClient struct {
 	getOrganizationCostSummary                 *connect.Client[v1.GetOrganizationCostSummaryRequest, v1.GetOrganizationCostSummaryResponse]
+	getStorageUsage                            *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
 	listOrganizationUsage                      *connect.Client[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse]
 	getProjectCost                             *connect.Client[v1.GetProjectCostRequest, v1.GetProjectCostResponse]
 	listPlans                                  *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
@@ -645,6 +662,11 @@ type billingServiceClient struct {
 // GetOrganizationCostSummary calls controlplane.v1.BillingService.GetOrganizationCostSummary.
 func (c *billingServiceClient) GetOrganizationCostSummary(ctx context.Context, req *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return c.getOrganizationCostSummary.CallUnary(ctx, req)
+}
+
+// GetStorageUsage calls controlplane.v1.BillingService.GetStorageUsage.
+func (c *billingServiceClient) GetStorageUsage(ctx context.Context, req *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {
+	return c.getStorageUsage.CallUnary(ctx, req)
 }
 
 // ListOrganizationUsage calls controlplane.v1.BillingService.ListOrganizationUsage.
@@ -867,6 +889,13 @@ type BillingServiceHandler interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// The organization's storage pool: everything it keeps at rest, by product,
+	// against the pool's included amount. Requires billing:read, re-checked at use,
+	// scoped to the caller's organization. Read-only; reports today's billing basis
+	// per product (most products are tracked, not charged, until the pool's billing
+	// cutover).
+	// forge:custom
+	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	// History of the organization's usage and spend, built from durable
 	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
 	// and is scoped to the caller's organization. Range is at most 400 days.
@@ -1046,6 +1075,12 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetOrganizationCostSummaryProcedure,
 		svc.GetOrganizationCostSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceGetStorageUsageHandler := connect.NewUnaryHandler(
+		BillingServiceGetStorageUsageProcedure,
+		svc.GetStorageUsage,
+		connect.WithSchema(billingServiceMethods.ByName("GetStorageUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceListOrganizationUsageHandler := connect.NewUnaryHandler(
@@ -1293,6 +1328,8 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case BillingServiceGetOrganizationCostSummaryProcedure:
 			billingServiceGetOrganizationCostSummaryHandler.ServeHTTP(w, r)
+		case BillingServiceGetStorageUsageProcedure:
+			billingServiceGetStorageUsageHandler.ServeHTTP(w, r)
 		case BillingServiceListOrganizationUsageProcedure:
 			billingServiceListOrganizationUsageHandler.ServeHTTP(w, r)
 		case BillingServiceGetProjectCostProcedure:
@@ -1384,6 +1421,10 @@ type UnimplementedBillingServiceHandler struct{}
 
 func (UnimplementedBillingServiceHandler) GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetOrganizationCostSummary is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetStorageUsage is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {

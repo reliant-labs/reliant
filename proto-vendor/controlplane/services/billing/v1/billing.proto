@@ -448,6 +448,19 @@ service BillingService {
     };
   }
 
+  // The organization's storage pool: everything it keeps at rest, by product,
+  // against the pool's included amount. Requires billing:read, re-checked at use,
+  // scoped to the caller's organization. Read-only; reports today's billing basis
+  // per product (most products are tracked, not charged, until the pool's billing
+  // cutover).
+  // forge:custom
+  rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // History of the organization's usage and spend, built from durable
   // ledgers (never live telemetry). Requires billing:read, re-checked at use,
   // and is scoped to the caller's organization. Range is at most 400 days.
@@ -1795,3 +1808,52 @@ message UpdateBillingEmailRequest {
 }
 
 message UpdateBillingEmailResponse {}
+
+message GetStorageUsageRequest {
+  string org_id = 1;
+}
+
+enum StorageProduct {
+  STORAGE_PRODUCT_UNSPECIFIED = 0;
+  STORAGE_PRODUCT_MACHINE_DISKS = 1; // agent sandbox disks (provisioned size)
+  STORAGE_PRODUCT_APP_VOLUMES = 2; // hosting PVCs incl. managed databases (provisioned size)
+  STORAGE_PRODUCT_CONTAINER_IMAGES = 3;
+  STORAGE_PRODUCT_STATIC_SITES = 4;
+  STORAGE_PRODUCT_BUCKETS = 5;
+  STORAGE_PRODUCT_TEST_REPORTS = 6;
+  STORAGE_PRODUCT_SBOM_COPIES = 7; // never counts toward the pool
+}
+
+enum StorageBillingBasis {
+  STORAGE_BILLING_BASIS_UNSPECIFIED = 0;
+  STORAGE_BILLING_BASIS_BILLED = 1; // billed today under its current terms
+  STORAGE_BILLING_BASIS_TRACKED = 2; // measured, not charged
+  STORAGE_BILLING_BASIS_NOT_COUNTED = 3; // a platform copy; shown, never counted
+}
+
+message StorageProductUsage {
+  StorageProduct product = 1;
+  // Absent when nothing has measured it yet (never a fake 0).
+  optional int64 bytes_now = 2;
+  google.protobuf.Timestamp measured_at = 3;
+  // GiB-hours this period, from the hourly ledger. Absent when unmeasured.
+  optional int64 gib_hours_period_to_date = 4;
+  bool counts_toward_pool = 5;
+  StorageBillingBasis billing_basis = 6;
+}
+
+message StoragePool {
+  int64 free_gib = 1; // F, 10
+  int64 plan_included_gib = 2; // sum of the org's machine plans' disk_gib
+  int64 included_gib = 3; // free_gib + plan_included_gib
+  int64 used_bytes = 4; // sum of bytes_now over counts_toward_pool products that are measured
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  // false until the billing cutover (P5): the pool is shown, not billed.
+  bool billing_active = 7;
+}
+
+message GetStorageUsageResponse {
+  StoragePool pool = 1;
+  repeated StorageProductUsage products = 2;
+}
