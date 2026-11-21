@@ -13,6 +13,45 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.26.0" description="November 21, 2026">
+### 8 new features, 10 fixes and 5 other changes
+
+Every pull request merged since v1.25.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **projects: internal ensure-for-app endpoint — a deploy's app gets a linked project in its org** [#3088](https://github.com/reliant-labs/reliant/pull/3088)
+- **config: typed client version policy, served on SystemService** [#3062](https://github.com/reliant-labs/reliant/pull/3062)
+- **web: restyle — chat** [#3010](https://github.com/reliant-labs/reliant/pull/3010)
+- **workflows: pin a workflow or node to a machine pool or labels** [#2966](https://github.com/reliant-labs/reliant/pull/2966)
+- **web: App hosting billing tab — editable budget, usage projection, free tier, limits strip, and billing for any org** [#3068](https://github.com/reliant-labs/reliant/pull/3068)
+- **worktree: list and archive workspaces from the CLI, scan --capture, and reclaim mode on without the storage reaper** [#3163](https://github.com/reliant-labs/reliant/pull/3163)
+- **deploy: declare the reliant CLI as build-only GoBuild variants** [#3037](https://github.com/reliant-labs/reliant/pull/3037)
+- **grpc: identify clients by Reliant-Client and refuse ones below the minimum** [#3069](https://github.com/reliant-labs/reliant/pull/3069)
+
+#### Changed
+
+- **playwright: run the E2E jobs in the pinned Playwright image instead of installing system packages** [#2916](https://github.com/reliant-labs/reliant/pull/2916)
+- **call a hosted Forge API from a frontend hosted elsewhere, preview fork guard, declared direct apply** [#3148](https://github.com/reliant-labs/reliant/pull/3148)
+- **release: one desktop pack script for release.yml and forge's ShellBuild** [#3041](https://github.com/reliant-labs/reliant/pull/3041)
+- **ci: main's release gate runs static as three parts, four balanced go shards, a warm golangci-lint and 2 Playwright workers** [#3166](https://github.com/reliant-labs/reliant/pull/3166)
+- **handlers: one rpc per file in project, worktree, worktree_reclaim, plan, task, repo** [#3007](https://github.com/reliant-labs/reliant/pull/3007)
+
+#### Fixed
+
+- **workflow: an interrupt settles the tool step in flight instead of re-dispatching it** [#3135](https://github.com/reliant-labs/reliant/pull/3135)
+- **workflow: YAML aliases expand templates like the value they point to** [#3015](https://github.com/reliant-labs/reliant/pull/3015)
+- **grpc: validate the ensure request's ids without a raw UserID comparison (TestNoRawOwnershipComparisons, red on main since #3088)** [#3184](https://github.com/reliant-labs/reliant/pull/3184)
+- **cli: daemon logs -n past 1MB, token rejection reasons, status while pairing, hidden token prompt, data dir held while awaiting credentials** [#3112](https://github.com/reliant-labs/reliant/pull/3112)
+- **workflow: a command node reattaches to its daemon command after a transport drop** [#2985](https://github.com/reliant-labs/reliant/pull/2985)
+- **triggers: ListTriggers resolves next fire times in parallel under a 3s budget** [#3144](https://github.com/reliant-labs/reliant/pull/3144)
+- **daemon: remove the credential.helper an old daemon wrote into each clone** [#2987](https://github.com/reliant-labs/reliant/pull/2987)
+- **mcp: chrome-devtools screenshots are saved by the daemon under the chat's path rules** [#2925](https://github.com/reliant-labs/reliant/pull/2925)
+- **merge-gate: mark a failed phase the runner's OOM killer ended with GATE-INFRA: oom** [#3175](https://github.com/reliant-labs/reliant/pull/3175)
+- **web: read observability usage from ObservabilityBillingService and derive env kind from placement fields** [#3013](https://github.com/reliant-labs/reliant/pull/3013)
+
+</Update>
+
 <Update label="v1.25.0" description="November 21, 2026">
 ### 11 new features, 29 fixes and 7 other changes
 
