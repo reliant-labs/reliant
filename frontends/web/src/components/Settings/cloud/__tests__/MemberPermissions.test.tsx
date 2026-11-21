@@ -40,11 +40,6 @@ const ADMIN_SET = [
   "billing:read",
   "deploy:config:read",
   "storage:read",
-  "vuln:read",
-  "tests:read",
-  "tests:write",
-  "changes:write",
-  "changes:launch",
 ];
 
 function roster(grantable: string[] = ADMIN_SET) {
@@ -199,22 +194,19 @@ describe("MemberPermissions", () => {
     expect(scopes).toEqual(expect.arrayContaining(["deploy:read", "identity:manage"]));
   });
 
-  it("offers vuln:read, tests:* and changes:*, and grants vuln:read on its own", async () => {
-    // forge's v1.9 scopes are per-org grants (control-plane orggrants.OrgScopes)
-    // that deploy:read does not imply: without a box an admin could not give a
-    // member vuln:read, and the member's deploy:read would not show findings.
+  it("does not offer token scopes the org grant authority does not accept", async () => {
     render(<MemberPermissions />);
     await screen.findByText("dev@example.test");
 
     for (const scope of ["vuln:read", "tests:read", "tests:write", "changes:write", "changes:launch"]) {
-      expect(screen.getByRole("checkbox", { name: `dev@example.test ${scope}` })).not.toBeChecked();
+      expect(screen.queryByRole("checkbox", { name: `dev@example.test ${scope}` })).toBeNull();
     }
-    fireEvent.click(screen.getByRole("checkbox", { name: "dev@example.test vuln:read" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "dev@example.test deploy:write" }));
 
     await waitFor(() => expect(updateMemberPermissions).toHaveBeenCalledTimes(1));
     const [userId, scopes] = updateMemberPermissions.mock.calls[0];
     expect(userId).toBe("u-dev");
-    expect([...scopes].sort()).toEqual(["deploy:read", "vuln:read"]);
+    expect([...scopes].sort()).toEqual(["deploy:read", "deploy:write"]);
   });
 
   it("revokes by omitting the permission from the set", async () => {
