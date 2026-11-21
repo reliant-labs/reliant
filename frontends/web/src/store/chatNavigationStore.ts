@@ -27,6 +27,8 @@
  * We learned this the hard way - don't repeat the mistake!
  */
 
+import { navigateToChatUrl } from "../lib/chatRoute";
+import { chatListScope } from "../lib/chatProjectFilter";
 import { create } from "zustand";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { isWorkspaceClosed, workspaceOfChat } from "../lib/chatWorkspace";
@@ -74,7 +76,13 @@ export function chatNeedsAttention(
   return activityNeedsAttention(activities.get(chat.id) ?? ChatActivity.IDLE, chat.unread);
 }
 
-async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
+/**
+ * Open `chat` at its URL (lib/chatRoute.ts): a push for the person's own
+ * move (next, previous, the next one waiting), a replace for the app's (the
+ * open chat was archived, and the one before it takes its place).
+ */
+async function selectChatWithWorktreeContext(chat: Chat, { replace = false }: { replace?: boolean } = {}): Promise<void> {
+  navigateToChatUrl(chat.id, { orgId: chat.orgId, replace });
   const { openChatInWorkspace } = await import("../lib/openChatInWorkspace");
   await openChatInWorkspace(chat);
 }
@@ -91,8 +99,11 @@ async function getOrderedChatList(): Promise<Chat[]> {
   const { useChatListPreferencesStore } = await import("./chatListPreferencesStore");
   // Read the chat list from the React Query cache — the same source the sidebar
   // renders from — so navigation order matches the sidebar exactly.
-  // The sidebar's scope: the project filter, or every project.
-  const scope = useWorkspaceStateStore.getState().projectFilterId;
+  // The sidebar's scope: the chat filter's projects (one, or several: the
+  // list it reads for `?projects=`), or every project.
+  const { chatProjectFilterIds } = await import("../hooks/useChatProjectFilter");
+  const projectFilterId = useWorkspaceStateStore.getState().projectFilterId;
+  const scope = chatListScope(chatProjectFilterIds());
   const chats = getCachedChatList(scope);
   const mainWorktrees = getCachedListMainWorktrees(scope);
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
@@ -133,7 +144,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // Across projects, the sidebar leaves hidden projects' chats out and lists
   // pinned projects first (listProjectGroups).
   let listing: ProjectListing | undefined;
-  if (!scope) {
+  if (!projectFilterId) {
     const [{ cachedSidebarProjectSettings }, { getOrgScope }] = await Promise.all([
       import("../hooks/sidebar-project-queries"),
       import("../lib/orgScope"),
@@ -178,8 +189,8 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // For grouped view, group (by project, then workspace) and flatten in
   // visual order — the same grouping Sidebar.tsx renders (lib/sidebarGroups).
   const groupOptions = { sortOrder, needsAttention };
-  if (scope) {
-    return groupByWorkspace(scope, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
+  if (projectFilterId) {
+    return groupByWorkspace(projectFilterId, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
   }
   const projects = (await import("../hooks/project-queries")).getCachedProjects();
   const groups = groupByProject(activeChats, mainWorktrees, projects, groupOptions);
@@ -416,7 +427,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
         // Use chatStore.selectChat() to switch to next chat
         const chat = getChatFromCache(nextChatId);
         if (chat) {
-          await selectChatWithWorktreeContext(chat);
+          await selectChatWithWorktreeContext(chat, { replace: true });
         }
       } else {
         // No more chats, clear active chat

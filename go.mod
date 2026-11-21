@@ -40,7 +40,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v1.8.1-0.20261119155832-982c391f6293
+	github.com/reliant-labs/forge v1.9.1-0.20261121194346-7cb21c2dc1a9
 	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261118022545-a03a070e8d9f
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
@@ -98,7 +98,7 @@ require (
 	buf.build/go/app v0.1.0 // indirect
 	buf.build/go/bufplugin v0.9.0 // indirect
 	buf.build/go/interrupt v1.1.0 // indirect
-	buf.build/go/protovalidate v1.4.0 // indirect
+	buf.build/go/protovalidate v1.4.1 // indirect
 	buf.build/go/protoyaml v0.6.0 // indirect
 	buf.build/go/spdx v0.2.0 // indirect
 	buf.build/go/standard v0.1.0 // indirect
@@ -219,7 +219,7 @@ require (
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 // indirect
 	github.com/golang-migrate/migrate/v4 v4.20.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/mock v1.6.0 // indirect
+	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect

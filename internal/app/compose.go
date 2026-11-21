@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
@@ -975,6 +976,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgProviderAccount: g.OrgProviderAccount(),
 		OrgUsage:           g.OrgUsage(),
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
+		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 	})
 }
@@ -1281,7 +1283,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Orgs:         g.OrgResolver(),
+		// The Projects list reads the org's hosted apps as the caller; nil
+		// self-hosted, where it lists them as unavailable.
+		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
+		Orgs: g.OrgResolver(),
 		// Moving a project is off until control-plane's half is in prod and
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
@@ -1569,6 +1574,27 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
 		Membership:  g.OrgResolver(),
+	})
+}
+
+// newCoverageSource constructs the coverage-source handler
+// (internal/handlers/coverage_source): a covered file's source, read from
+// GitHub with the viewer's own token once control-plane confirms a retained
+// coverage report names it. Without a control plane, or without a way to
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
+	blobs, err := CoverageSourceBlobs(g.Database(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	if err != nil {
+		return nil, err
+	}
+	return coverage_source.New(coverage_source.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Projects: g.Database(),
+		Orgs:     g.OrgResolver(),
+		Reports:  CoverageSourceReports(g.ServerProcessConfig.GetControlPlane()),
+		Blobs:    blobs,
+		Now:      nil, // optional — no provider
 	})
 }
 

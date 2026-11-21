@@ -1,3 +1,5 @@
+import { isForgeShell } from "./shell";
+
 /**
  * The one gate for the whole forge UI (topology, secrets, env status + audit,
  * promote, deploy).
@@ -19,7 +21,10 @@
  * that turns all five screens and three routes off together, which is what the
  * explicit off-switch in Settings → Developer needs in order to mean anything.
  *
- * THE TWO WAYS IT RESOLVES, in precedence order:
+ * On the forge brand the console is always enabled; the Developer preference
+ * applies only to the optional forge surfaces within the Reliant brand.
+ *
+ * On Reliant it resolves in precedence order:
  *
  *  1. An explicit preference stored in localStorage under FORGE_UI_FLAG_KEY.
  *     This is the switch the Developer settings toggle writes. It wins over
@@ -72,6 +77,9 @@ function readStoredFlag(): boolean | undefined {
  * reload to take effect.
  */
 export function isForgeUIEnabled(): boolean {
+  // The forge brand is the console itself, not an optional Reliant feature.
+  // Its home redirects to Apps, so hiding Apps here would create a loop.
+  if (isForgeShell()) return true;
   const stored = readStoredFlag();
   if (stored !== undefined) return stored;
   return true;

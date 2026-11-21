@@ -195,6 +195,27 @@ func TestCalculateBackoff(t *testing.T) {
 	}
 }
 
+// txRetryBackoff is exactly the hand-rolled ladder it replaced:
+// d = min(baseRetryDelay<<attempt, maxRetryDelay); d + rand(d/2) - d/4.
+func TestTxRetryBackoff_MatchesFormula(t *testing.T) {
+	t.Parallel()
+	for _, draw := range []func(n int64) int64{
+		func(int64) int64 { return 0 },
+		func(n int64) int64 { return n / 3 },
+		func(n int64) int64 { return n - 1 },
+	} {
+		b := txRetryBackoff
+		b.Rand = draw
+		for attempt := 0; attempt < 10; attempt++ {
+			d := min(baseRetryDelay*time.Duration(1<<uint(attempt)), maxRetryDelay)
+			want := d + time.Duration(draw(int64(d/2))) - d/4
+			if got := b.Delay(attempt + 1); got != want {
+				t.Fatalf("attempt %d: got %v, want %v", attempt, got, want)
+			}
+		}
+	}
+}
+
 func TestCalculateBackoffMonotonicity(t *testing.T) {
 	t.Parallel()
 

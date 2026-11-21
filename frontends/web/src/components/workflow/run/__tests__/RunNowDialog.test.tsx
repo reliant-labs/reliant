@@ -219,7 +219,7 @@ describe("RunNowDialog", () => {
     // It does not go through StartChat, and the new chat opens.
     expect(startChat).not.toHaveBeenCalled();
     await waitFor(() => expect(loadRunContext).toHaveBeenCalledWith("chat-new"));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/project/proj-1"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/c/chat-new"));
     expect(onClose).toHaveBeenCalled();
     // Ten user-event steps: ~0.6s idle, past the 5s default on a saturated merge-gate runner.
   }, 20_000);

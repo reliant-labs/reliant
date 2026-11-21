@@ -1,8 +1,8 @@
 /**
- * The forge console's pages, as the forge shell (forgeShellRoutes.tsx) and the
- * forge demo (demoShellRoutes.tsx) mount them: the same lazy chunks for every
- * route createForgeConsoleRoutes declares. Reliant's tree (routes.tsx) wraps
- * its own in ForgeGate, so it keeps its own map.
+ * The forge console's pages, as the forge demo (demoShellRoutes.tsx) mounts
+ * them: the same lazy chunks for every route createForgeConsoleRoutes
+ * declares. The app's tree (routes.tsx, on both hosts) wraps its own in
+ * ForgeGate, so it keeps its own map until the gate goes (U6).
  */
 
 import type { ForgeConsoleComponents } from './forgeConsoleRoutes'
@@ -24,6 +24,8 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   secrets: lazyRoute(() => import('./components/Forge/Console/SecretsPage'), 'SecretsPage'),
   domains: lazyRoute(() => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage'),
   activity: lazyRoute(() => import('./components/Forge/Console/ActivityPage'), 'ActivityPage'),
+  experiments: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentsPage'),
+  experiment: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentPage'),
   data: lazyRoute(() => import('./components/Forge/Data/DataPage'), 'DataPage'),
   users: lazyRoute(() => import('./components/Forge/Users/UsersPage'), 'UsersPage'),
   vulnerabilities: lazyRoute(() => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage'),

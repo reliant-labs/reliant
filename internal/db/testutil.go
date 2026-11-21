@@ -77,13 +77,10 @@ func NewTestRepo(t *testing.T) *Repo {
 // the cleanup, so a database can outlive the test that made it (a stack shared
 // by a whole test binary).
 //
-// RelaxProjectKeysForTest drops the per-user project keys (UNIQUE (user_id,
-// path) and (user_id, remote_url)) from the test's own database, leaving the
-// per-org ones (projects_org_user_path_key, projects_org_user_remote_url_key):
-// the schema of the later release that relaxes them. It is how this
-// release's readers are tested against that schema — the release that drops
-// the keys ships only once this one is its rollback target — and how a test
-// puts the same path in two orgs.
+// RelaxProjectKeysForTest dropped the per-user project keys from a test's
+// database, to test release 1's readers on release 2's schema. Release 2's
+// migrations drop them for every database now, so it changes nothing; it is
+// kept so the tests that call it read the same on both releases.
 func RelaxProjectKeysForTest(t *testing.T, repo *Repo) {
 	t.Helper()
 	for _, stmt := range []string{

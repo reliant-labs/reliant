@@ -11,6 +11,16 @@
 import { OrganizationUsageView } from "@/components/Forge/Observability/Dashboards/OrganizationUsageView";
 import { useRouteOrgIdOverride } from "@/lib/orgScope";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
+import { usagePath } from "@/lib/paths";
+import { AreaShell } from "../Layout/AreaShell";
+
+export function UsagePage() {
+  return (
+    <AreaShell areaPath={usagePath()} areaLabel="Usage" areaNoun="usage">
+      <ForgeUsagePage />
+    </AreaShell>
+  );
+}
 
 export function ForgeUsagePage() {
   const routeOrgId = useRouteOrgIdOverride();

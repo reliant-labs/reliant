@@ -4,13 +4,12 @@ vi.mock("@/hooks/settings-queries", () => ({
   completeCodexOAuth: vi.fn(),
 }));
 
-vi.mock("@/lib/oauth-local", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/oauth-local")>()),
-  startOAuthViaDaemon: vi.fn(),
+vi.mock("@/lib/oauth-desktop", () => ({
+  startOAuthViaDesktop: vi.fn(),
 }));
 
 import { completeCodexOAuth } from "@/hooks/settings-queries";
-import { startOAuthViaDaemon } from "@/lib/oauth-local";
+import { startOAuthViaDesktop } from "@/lib/oauth-desktop";
 import { CODEX_OAUTH_STATE_PREFIX, runCodexOAuthFlow } from "@/lib/codex-oauth";
 
 const setCryptoMock = () => {
@@ -49,12 +48,12 @@ const setCryptoMock = () => {
 
 describe("runCodexOAuthFlow", () => {
   const completeCodexOAuthMock = vi.mocked(completeCodexOAuth);
-  const startOAuthViaDaemonMock = vi.mocked(startOAuthViaDaemon);
+  const startOAuthViaDesktopMock = vi.mocked(startOAuthViaDesktop);
 
   beforeEach(() => {
     vi.clearAllMocks();
     setCryptoMock();
-    // Simulate Electron so the daemon path (which we mock) is taken
+    // Simulate Electron so the desktop receiver (which we mock) is used
     (window as any).electronAPI = {};
   });
 
@@ -62,10 +61,10 @@ describe("runCodexOAuthFlow", () => {
     delete (window as any).electronAPI;
   });
 
-  it("calls daemon, validates state, and exchanges code", async () => {
-    // The daemon mock captures the URL template and returns matching state
+  it("runs the desktop receiver, validates state, and exchanges code", async () => {
+    // The receiver mock captures the URL template and returns matching state
     let capturedUrlTemplate = "";
-    startOAuthViaDaemonMock.mockImplementation(async (urlTemplate: string) => {
+    startOAuthViaDesktopMock.mockImplementation(async (urlTemplate: string) => {
       capturedUrlTemplate = urlTemplate;
       const url = new URL(
         urlTemplate.replace("{redirect_uri}", "http://127.0.0.1:9999/callback"),
@@ -134,8 +133,8 @@ describe("runCodexOAuthFlow", () => {
     expect(completeCodexOAuthMock.mock.calls[0][0].accountId).toBe("acct-7");
   });
 
-  it("fails when daemon returns mismatched state", async () => {
-    startOAuthViaDaemonMock.mockResolvedValue({
+  it("fails when the receiver returns mismatched state", async () => {
+    startOAuthViaDesktopMock.mockResolvedValue({
       code: "test-code",
       state: "reliant:oauth:codex:wrong-state",
       redirectUri: "http://127.0.0.1:9999/callback",
@@ -150,21 +149,21 @@ describe("runCodexOAuthFlow", () => {
     expect(completeCodexOAuthMock).not.toHaveBeenCalled();
   });
 
-  it("returns daemon_error when daemon RPC throws", async () => {
-    startOAuthViaDaemonMock.mockRejectedValue(
-      new Error("Daemon not available"),
+  it("returns daemon_error when the receiver throws", async () => {
+    startOAuthViaDesktopMock.mockRejectedValue(
+      new Error("Receiver not available"),
     );
 
     const result = await runCodexOAuthFlow();
     expect(result).toEqual({
       ok: false,
       errorCode: "daemon_error",
-      message: "Daemon not available",
+      message: "Receiver not available",
     });
   });
 
   it("returns token_exchange_failed when completeCodexOAuth fails", async () => {
-    startOAuthViaDaemonMock.mockImplementation(async (urlTemplate: string) => {
+    startOAuthViaDesktopMock.mockImplementation(async (urlTemplate: string) => {
       const url = new URL(
         urlTemplate.replace("{redirect_uri}", "http://127.0.0.1:9999/callback"),
       );

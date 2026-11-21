@@ -42,9 +42,8 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/components/AuthInitializer.tsx", why: "Reliant authenticated startup" },
   { match: "src/components/AuthLayout.tsx", why: "Reliant sign-in" },
   { match: "src/components/AuthScreen.tsx", why: "Reliant sign-in" },
-  // The Reliant app and the other shells' route trees.
-  { match: "src/routes.tsx", why: "Reliant's route tree" },
-  { match: "src/forgeShellRoutes.tsx", why: "the forge shell's route tree" },
+  // The app's route tree (both app hosts: Reliant and the forge brand).
+  { match: "src/routes.tsx", why: "the app's route tree" },
   { match: "src/settingsSectionRoutes.tsx", why: "Reliant settings" },
   { match: "src/settingsConnectorRoutes.tsx", why: "Reliant settings" },
   { match: "src/workflowsAreaRoutes.tsx", why: "Reliant workflows" },
@@ -83,7 +82,20 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   // Settings, billing, orgs, projects: account pages.
   { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/providers/accountFormat.ts"] },
   { match: "src/components/Billing/", why: "billing" },
-  { match: "src/components/Projects/", why: "Reliant projects", except: ["src/components/Projects/cloneTargets.ts"] },
+  {
+    match: "src/components/Projects/",
+    why: "Reliant projects",
+    // The one project selector (U7) is the forge console's app switcher too.
+    // Its data hooks have demo twins (hooks/project-catalog-queries.demo.ts,
+    // hooks/sidebar-project-queries.demo.ts, Apps/startBuilding.demo.ts), so
+    // in the demo it lists the demo's apps and reaches no Reliant code.
+    except: [
+      "src/components/Projects/cloneTargets.ts",
+      "src/components/Projects/ProjectSelector.tsx",
+      "src/components/Projects/AppChip.tsx",
+      "src/components/Projects/ProjectRowSummary.tsx",
+    ],
+  },
   { match: "src/components/Claim/", why: "the forge shell's claim flow" },
 ];
 

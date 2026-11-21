@@ -5,8 +5,8 @@
  * (control-plane docs/design/unified-shell-and-projects.md §3, §12). Built
  * for U3 and meant to be reused by U4–U6: it answers "where does this URL
  * land, in which org, and what does a request from that page name" against
- * the trees the app really mounts (routes.tsx `routeTree`, forgeShellRoutes.tsx
- * `forgeRouteTree`), not a substitute tree.
+ * the tree the app really mounts (routes.tsx `routeTree`, on both hosts), not
+ * a substitute tree.
  *
  * Headless: the router loads, runs every `beforeLoad`, follows redirects and
  * commits matches (and so the root's commit hooks, lib/routeOrg.ts) without
@@ -39,7 +39,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { createRouterTransport } from "@connectrpc/connect";
+import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { createMemoryHistory, createRouter, type AnyRoute, type AnyRouter } from "@tanstack/react-router";
 
 import { orgInterceptor } from "@/api/orgInterceptor";
@@ -49,6 +49,7 @@ import {
   MyOrganizationSchema,
   OrganizationService,
 } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { ChatSchema, ChatService, GetChatResponseSchema } from "@/gen/reliant/v1/chat_pb";
 import { setTransport } from "@/lib/connect";
 import { orgOfPath } from "@/lib/paths/org";
 import { queryClient } from "@/lib/query-client";
@@ -67,8 +68,20 @@ export interface WorldOrg {
   name?: string;
 }
 
+/** A chat the person may read (ChatService.GetChat answers it); any other id is NotFound. */
+export interface WorldChat {
+  id: string;
+  /** `Chat.org_id`; "" for a chat from before orgs. */
+  orgId: string;
+  projectId?: string;
+}
+
 export interface OrgRouteWorld {
-  /** Which host's tree is mounted: the app host (routes.tsx) or the forge host (forgeShellRoutes.tsx). */
+  /**
+   * Which host the page load is on: the app host or the forge host. Both
+   * mount routes.tsx (U6); the host picks the brand (lib/shell.ts), which the
+   * links and redirects read.
+   */
   host: "reliant" | "forge";
   routeTree: AnyRoute;
   /** web.org_routes. */
@@ -82,6 +95,10 @@ export interface OrgRouteWorld {
   membershipError?: Error;
   /** The org this tab was last in (sessionStorage), as a page load finds it. */
   tabOrg?: string;
+  /** The chats GetChat answers (U5's chat URLs); any other id is NotFound. */
+  chats?: WorldChat[];
+  /** GetChat fails with this instead of answering. */
+  chatError?: Error;
 }
 
 export interface OrgRouteHarness {
@@ -90,10 +107,17 @@ export interface OrgRouteHarness {
   wireOrgs: string[];
   /** Times ListMyOrganizations was answered. */
   membershipCalls: () => number;
+  /** Every chat id GetChat was asked for, in order. */
+  chatReads: string[];
   /** Load `url` as a fresh page load would, following every redirect. */
   open: (url: string) => Promise<void>;
+  /** Reload the page on screen: a fresh page load of the committed URL. */
+  refresh: () => Promise<void>;
   /** An in-app navigation; resolves when it has committed or been superseded. */
   navigate: (href: string) => Promise<void>;
+  /** The browser's Back and Forward; resolve once the page they land on has loaded. */
+  back: () => Promise<void>;
+  forward: () => Promise<void>;
   /** Hold ListMyOrganizations until the returned release runs, and drop its cache so the next org load asks. */
   holdMemberships: () => () => void;
   /** Send the probe RPC as a page does with no org of its own: the interceptor fills the org. */
@@ -108,6 +132,10 @@ export interface OrgRouteHarness {
   orgRoute: () => OrgRouteState | undefined;
   /** Whether anything committed as not found. */
   notFound: () => boolean;
+  /** The committed leaf's loader data (the chat routes': lib/chatRouteResolve.ts ChatRouteData). */
+  leafData: () => unknown;
+  /** The committed URL's search, as the routes validated it. */
+  search: () => Record<string, unknown>;
 }
 
 const deferred = () => {
@@ -121,6 +149,7 @@ const deferred = () => {
 export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
   const user = world.user === undefined ? "alice" : world.user;
   const wireOrgs: string[] = [];
+  const chatReads: string[] = [];
   let calls = 0;
   let hold: Promise<void> | null = null;
 
@@ -168,6 +197,17 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
             return create(ListMembersResponseSchema, {});
           },
         });
+        service(ChatService, {
+          getChat: (req) => {
+            chatReads.push(req.chatId);
+            if (world.chatError) throw world.chatError;
+            const chat = world.chats?.find((c) => c.id === req.chatId);
+            if (!chat) throw new ConnectError("chat not found", Code.NotFound);
+            return create(GetChatResponseSchema, {
+              chat: create(ChatSchema, { id: chat.id, projectId: chat.projectId ?? "p-1", title: chat.id, ...(chat.orgId ? { orgId: chat.orgId } : {}) }),
+            });
+          },
+        });
       },
       { transport: { interceptors: [orgInterceptor] } },
     ),
@@ -179,6 +219,23 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
     (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER = r;
   };
 
+  const load = async (url: string) => {
+    // A fresh page load: nothing committed yet, so an org URL is pending.
+    useRouteOrgScope.setState({ scope: orgOfPath(url.split(/[?#]/, 1)[0]) === null ? { kind: "legacy" } : { kind: "pending" } });
+    register(createRouter({ routeTree: world.routeTree, history: createMemoryHistory({ initialEntries: [url] }) }));
+    await router.load();
+  };
+
+  /**
+   * Run a history move and load the page it lands on. Headless, nothing
+   * subscribes the router to its history (React's Transitioner does in the
+   * app), so the load is started here, as the subscription would.
+   */
+  const settle = async (move: () => void) => {
+    move();
+    await router.load();
+  };
+
   const committedOrgLayout = () => router.state.matches.find((match) => match.routeId === ORG_ROUTE_ID);
   const client = () => getControlPlaneClient(OrganizationService);
 
@@ -187,16 +244,21 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
       return router;
     },
     wireOrgs,
+    chatReads,
     membershipCalls: () => calls,
     open: async (url) => {
-      // A fresh page load: nothing committed yet, so an org URL is pending.
-      useRouteOrgScope.setState({ scope: orgOfPath(url.split(/[?#]/, 1)[0]) === null ? { kind: "legacy" } : { kind: "pending" } });
-      register(createRouter({ routeTree: world.routeTree, history: createMemoryHistory({ initialEntries: [url] }) }));
-      await router.load();
+      await load(url);
+    },
+    refresh: async () => {
+      // A reload keeps the URL and loses everything held in memory but the query cache's network answers.
+      queryClient.clear();
+      await load(router.state.location.href);
     },
     navigate: async (href) => {
       await router.navigate({ href });
     },
+    back: () => settle(() => router.history.back()),
+    forward: () => settle(() => router.history.forward()),
     holdMemberships: () => {
       const gate = deferred();
       hold = gate.promise;
@@ -218,5 +280,7 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
     leafRouteId: () => router.state.matches[router.state.matches.length - 1]?.routeId ?? "",
     orgRoute: () => (committedOrgLayout()?.context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute,
     notFound: () => router.state.matches.some((match) => match.status === "notFound" || match.globalNotFound),
+    leafData: () => router.state.matches[router.state.matches.length - 1]?.loaderData,
+    search: () => (router.state.matches[router.state.matches.length - 1]?.search ?? {}) as Record<string, unknown>,
   };
 }

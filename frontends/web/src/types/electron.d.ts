@@ -141,6 +141,8 @@ export interface ElectronAPI {
   onProjectInfo: (callback: (data: { id?: string; name?: string; path?: string }) => void) => void;
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void;
   onOpenProject: (callback: (projectPath: string) => void) => () => void;
+  /** An app page (a chat) a `reliant://open?url=` link named; absent before the desktop release that added it. */
+  onOpenRoute?: (callback: (route: string) => void) => () => void;
 
   // OAuth
   //
@@ -149,10 +151,13 @@ export interface ElectronAPI {
   // decides to open consent in the system browser instead of navigating this
   // window — Google refuses OAuth in an embedded webview.
   //
-  // Still OPTIONAL, deliberately: builds shipped before this existed do not
-  // provide it, and the renderer falls back to the hosted /auth/callback
-  // rather than throwing. Rejects (never resolves falsy) when the listener
-  // cannot start, so the fallback stays on one code path.
+  // Rejects (never resolves falsy) when the listener cannot start; the
+  // renderer then falls back to the hosted /auth/callback, on one code path.
+  //
+  // Optional, like every bridge the web bundle needs from the preload: the
+  // desktop app loads this bundle from the server, so it can be newer than the
+  // preload. A missing bridge means the desktop build is too old, and callers
+  // throw DesktopUpdateRequiredError (lib/desktopUpdate.ts) instead of crashing.
   //
   // The code comes back by NAVIGATING this window to /auth/callback, so there
   // is no callback-event bridge to declare. The previous `onOAuthCallback`
@@ -170,9 +175,6 @@ export interface ElectronAPI {
   // listener, so the browser's redirect hit a closed port. `start` binds the
   // port and returns at once; `wait` spans human time over IPC, which nothing
   // in between can time out.
-  //
-  // Optional like every bridge here: builds predating it fall back to the
-  // daemon RPC rather than throwing (see web/src/lib/oauth-desktop.ts).
   startProviderOAuth?: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>;
@@ -188,8 +190,8 @@ export interface ElectronAPI {
   startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>;
 
   // Stripe checkout in a controlled window, so the desktop app can observe the
-  // return instead of losing the purchase to the system browser. Optional: a
-  // build without it falls back to the plain redirect (see lib/stripeCheckout).
+  // return instead of losing the purchase to the system browser. Optional (see
+  // startOAuthRedirect): lib/stripeCheckout feature-detects it.
   openStripeCheckout?: (args: {
     checkoutUrl: string;
     returnUrl: string;

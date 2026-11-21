@@ -637,11 +637,14 @@ tasks:
     # browser and a production build, ~5 minutes on a loaded host). A UI PR
     # runs it and commits re-captured baselines, so the PR diff is the before
     # and after. VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
-    # re-captures; `-- --grep chat` narrows it.
+    # re-captures; `-- --grep chat` narrows it. The build pins its version
+    # (RELEASE_VERSION) so the settings footer reads the same whatever commit
+    # or working tree built it; it must equal VISUAL_RELEASE_VERSION in
+    # scripts/visual-docker.sh, which refuses a dist/ built with any other.
     desc: "Visual baseline in the pinned Playwright image: key surfaces (dark, light, mobile) vs committed screenshots; -- --update-snapshots re-captures"
     dir: frontends/web
     cmds:
-      - '{{if not .VISUAL_SKIP_BUILD}}npm run build:alpha{{end}}'
+      - '{{if not .VISUAL_SKIP_BUILD}}RELEASE_VERSION=0.0.0-visual npm run build:alpha{{end}}'
       - ./scripts/visual-docker.sh {{.CLI_ARGS}}
 
   web:e2e:run:

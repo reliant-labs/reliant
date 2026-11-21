@@ -1839,7 +1839,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=bec9244361c01475d0babfa55d89392be81f0d02175fe2f6a13f8ee7c19165a3
+# forge:hash=60481bc19e66cdc79b2686475e59586b2abaf78955a7d61ecf14c627665776f9
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1847,7 +1847,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 schema ReliantProcess:
     # Every `reliant` process: the binary-wide root config.
     reliant_config?: ReliantConfig
-    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
+    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -1897,7 +1897,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _path = _rest[:_flags[0]] if _flags else _rest
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
-    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -1906,7 +1906,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     assert all _n in config_secrets { _n in _root_sensitive or _n in _sub_sensitive or _n in _cmd_sensitive }, \
         "reliantProcessEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _root_sensitive and _n not in _sub_sensitive and _n not in _cmd_sensitive]}, which is not a `sensitive` field of the config(s) a `reliant` process running ${_path} loads. Sensitive fields: ${sorted(_root_sensitive + _sub_sensitive + _cmd_sensitive)}."
     assert p.reliant_config not in [None, Undefined], "reliantProcessEnvMap: every `reliant` process loads ReliantConfig — set `reliant_config` on the ReliantProcess."
-    assert not _in_cli_config or p.cli_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`, which loads CLIConfig — set `cli_config` on the ReliantProcess."
+    assert not _in_cli_config or p.cli_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`, which loads CLIConfig — set `cli_config` on the ReliantProcess."
     assert not _in_database_config or p.database_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, `reliant db migrate`, `reliant db vault`, which loads DatabaseConfig — set `database_config` on the ReliantProcess."
     assert not _in_server_process_config or p.server_process_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, which loads ServerProcessConfig — set `server_process_config` on the ReliantProcess."
     assert not _in_vault_maintenance_config or p.vault_maintenance_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant db vault`, which loads VaultMaintenanceConfig — set `vault_maintenance_config` on the ReliantProcess."
@@ -2001,6 +2001,16 @@ rootEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
 
 # workloadEnvMap is a workload's config env: rootEnvMap for a workload bound
 # to a root, reliantProcessEnvMap (its config_secrets) for any other.
+#
+# The caller layers the workload's own env over it (`| w.env`), so a name
+# the workload sets wins. A plain value is left out here rather than merged:
+# KCL's union refuses a string under a reference, and that is exactly
+# `forge.bucket_env("UPLOADS", "uploads")` over a typed config block whose
+# unset leaves project as "" (`conflicting values on the attribute
+# 'UPLOADS_ENDPOINT'`). A string the workload overrides with a string is
+# replaced either way.
 workloadEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
-    rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _all = rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _own = w.env or {}
+    {_k: _v for _k, _v in _all if _k not in _own or typeof(_v) != "str"}
 }

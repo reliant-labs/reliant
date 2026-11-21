@@ -117,7 +117,9 @@ export function nodesEdgesToWorkflow(
     .filter((node) => !isEntryFlowNodeType(node.type) && node.type !== "switchNode")
     .map((node) => {
       const step = node.data.step as WorkflowStep;
-      // Remove triggers and position from steps (deprecated, now using edges and ui.positions)
+      // A step's order is the edges and its place is ui.positions: a step
+      // read from a workflow file that still carries `triggers` or `position`
+      // is saved without them.
       const {
         triggers: _triggers,
         position: _position,

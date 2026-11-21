@@ -24,6 +24,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import { CHAT_SHELL_PREFIXES } from "../../../lib/chatRoute";
 import { reliantAppOrigin } from "../../../lib/shell";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
@@ -35,7 +36,7 @@ import { layoutActions } from "./layoutActions";
 import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
-import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
+import { homePath, newWorkflowPath, projectChatsPath, workflowBuilderPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
@@ -244,9 +245,11 @@ export const workflowsJourney: Journey = {
       ],
       route: {
         path: "/project/",
+        // The chat shell, open on a chat or a draft, is the same page (lib/chatRoute.ts).
+        alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
-          return projectId ? { to: projectPath(projectId) } : { to: homePath() };
+          return projectId ? { to: projectChatsPath(projectId) } : { to: homePath() };
         },
         label: "Open the chat",
       },

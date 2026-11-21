@@ -29,6 +29,7 @@
         "Connection",
         "Connector",
         "ConnectorGrants",
+        "CoverageSource",
         "DBRepo",
         "Daemon",
         "DaemonEventsConsumer",
@@ -170,6 +171,13 @@
         {
           "component": "Connector",
           "service": "reliant.v1.ConnectorService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "CoverageSource",
+          "service": "reliant.v1.CoverageSourceService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -12241,6 +12249,152 @@
           "reliant.v1.ConnectorKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorKind"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.CoverageSourceService",
+      "proto_file": "reliant/v1/coverage_source.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.CoverageSourceService/GetCoverageSource",
+          "name": "GetCoverageSource",
+          "input": "reliant.v1.GetCoverageSourceRequest",
+          "output": "reliant.v1.GetCoverageSourceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "CoverageSourceService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetCoverageSource",
+            "InputType": "GetCoverageSourceRequest",
+            "OutputType": "GetCoverageSourceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetCoverageSourceRequest",
+            "OutputTypeFQ": "reliant.v1.GetCoverageSourceResponse",
+            "InputProtoFile": "reliant/v1/coverage_source.proto",
+            "OutputProtoFile": "reliant/v1/coverage_source.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: one covered file's source from GitHub; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/coverage_source.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetCoverageSourceRequest": [
+            {
+              "Name": "project",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "blob_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "GetCoverageSourceResponse": [
+            {
+              "Name": "content",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            },
+            {
+              "Name": "unavailable",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetCoverageSourceRequest": [
+            {
+              "name": "project",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 256
+              }
+            },
+            {
+              "name": "blob_id",
+              "kind": "string",
+              "validate": {
+                "pattern": "^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+              }
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetCoverageSourceResponse": [
+            {
+              "name": "content",
+              "kind": "bytes",
+              "oneof": "result"
+            },
+            {
+              "name": "unavailable",
+              "kind": "enum",
+              "type_name": "reliant.v1.CoverageSourceUnavailable",
+              "oneof": "result"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetCoverageSourceRequest": "reliant/v1/coverage_source.proto",
+          "reliant.v1.GetCoverageSourceResponse": "reliant/v1/coverage_source.proto"
+        },
+        "Enums": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            "COVERAGE_SOURCE_UNAVAILABLE_UNSPECIFIED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NO_REPO",
+            "COVERAGE_SOURCE_UNAVAILABLE_UNCOMMITTED",
+            "COVERAGE_SOURCE_UNAVAILABLE_GONE",
+            "COVERAGE_SOURCE_UNAVAILABLE_REVOKED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NOT_YET_AVAILABLE",
+            "COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.CoverageSourceUnavailable": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "CoverageSourceUnavailable"
           }
         }
       }
@@ -25050,6 +25204,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/ListProjectsWithApps",
+          "name": "ListProjectsWithApps",
+          "input": "reliant.v1.ListProjectsWithAppsRequest",
+          "output": "reliant.v1.ListProjectsWithAppsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/ListRepositoriesForDaemon",
           "name": "ListRepositoriesForDaemon",
           "input": "reliant.v1.ListRepositoriesForDaemonRequest",
@@ -25824,6 +25988,25 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "ListProjectsWithApps",
+            "InputType": "ListProjectsWithAppsRequest",
+            "OutputType": "ListProjectsWithAppsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListProjectsWithAppsRequest",
+            "OutputTypeFQ": "reliant.v1.ListProjectsWithAppsResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/project.proto",
@@ -26435,6 +26618,37 @@
             {
               "Name": "total",
               "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListProjectsWithAppsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListProjectsWithAppsResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectWithApps"
+            },
+            {
+              "Name": "unlinked_apps",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.HostedApp"
+            },
+            {
+              "Name": "hosted_apps_state",
+              "ProtoType": "enum",
               "IsOptional": false
             }
           ],
@@ -27226,6 +27440,58 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.HostedApp": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "last_deployed_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "environments",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "has_static_site",
+              "kind": "bool"
+            },
+            {
+              "name": "sources",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedAppSource",
+              "repeated": true
+            },
+            {
+              "name": "warning",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.HostedAppSource": [
+            {
+              "name": "remote",
+              "kind": "string"
+            },
+            {
+              "name": "subpath",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "last_seen_at",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.InitializeGitRepoRequest": [
             {
               "name": "project_id",
@@ -27380,6 +27646,36 @@
             {
               "name": "total",
               "kind": "int32"
+            }
+          ],
+          "reliant.v1.ListProjectsWithAppsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListProjectsWithAppsResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectWithApps",
+              "repeated": true
+            },
+            {
+              "name": "unlinked_apps",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedApp",
+              "repeated": true
+            },
+            {
+              "name": "hosted_apps_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.HostedAppsState"
             }
           ],
           "reliant.v1.ListRepositoriesForDaemonRequest": [
@@ -27589,6 +27885,45 @@
               "name": "purge_started_at",
               "kind": "string",
               "optional": true
+            }
+          ],
+          "reliant.v1.ProjectApp": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "subpath",
+              "kind": "string"
+            },
+            {
+              "name": "link",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectAppLink"
+            },
+            {
+              "name": "hosted",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedApp"
+            }
+          ],
+          "reliant.v1.ProjectCheckout": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "install_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectInstallState"
             }
           ],
           "reliant.v1.ProjectDaemon": [
@@ -27870,6 +28205,49 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ProjectRepoSummary": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "relative_path",
+              "kind": "string"
+            },
+            {
+              "name": "remote",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectWithApps": [
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "repos",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectRepoSummary",
+              "repeated": true
+            },
+            {
+              "name": "apps",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectApp",
+              "repeated": true
+            },
+            {
+              "name": "checkouts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectCheckout",
+              "repeated": true
+            }
+          ],
           "reliant.v1.Prompt": [
             {
               "name": "id",
@@ -28095,6 +28473,8 @@
           "reliant.v1.GetProjectRequest": "reliant/v1/project.proto",
           "reliant.v1.GetProjectResponse": "reliant/v1/project.proto",
           "reliant.v1.GitBranch": "reliant/v1/project.proto",
+          "reliant.v1.HostedApp": "reliant/v1/project.proto",
+          "reliant.v1.HostedAppSource": "reliant/v1/project.proto",
           "reliant.v1.InitializeGitRepoRequest": "reliant/v1/project.proto",
           "reliant.v1.InitializeGitRepoResponse": "reliant/v1/project.proto",
           "reliant.v1.InitializeProjectRequest": "reliant/v1/project.proto",
@@ -28109,6 +28489,8 @@
           "reliant.v1.ListProjectOrgMovesResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsRequest": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsResponse": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectsWithAppsRequest": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectsWithAppsResponse": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledRequest": "reliant/v1/project.proto",
@@ -28118,6 +28500,8 @@
           "reliant.v1.PreviewProjectOrgMoveRequest": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
+          "reliant.v1.ProjectApp": "reliant/v1/project.proto",
+          "reliant.v1.ProjectCheckout": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
           "reliant.v1.ProjectMachineRemoval": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
@@ -28127,6 +28511,8 @@
           "reliant.v1.ProjectOrgMoveEffects": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveMachine": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveTriggerSetup": "reliant/v1/project.proto",
+          "reliant.v1.ProjectRepoSummary": "reliant/v1/project.proto",
+          "reliant.v1.ProjectWithApps": "reliant/v1/project.proto",
           "reliant.v1.Prompt": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonResponse": "reliant/v1/project.proto",
@@ -28164,6 +28550,18 @@
             "FILE_CHANGE_STATUS_STAGED",
             "FILE_CHANGE_STATUS_UNTRACKED",
             "FILE_CHANGE_STATUS_DELETED"
+          ],
+          "reliant.v1.HostedAppsState": [
+            "HOSTED_APPS_STATE_UNSPECIFIED",
+            "HOSTED_APPS_STATE_OK",
+            "HOSTED_APPS_STATE_NO_ACCESS",
+            "HOSTED_APPS_STATE_UNAVAILABLE"
+          ],
+          "reliant.v1.ProjectAppLink": [
+            "PROJECT_APP_LINK_UNSPECIFIED",
+            "PROJECT_APP_LINK_NOT_HOSTED",
+            "PROJECT_APP_LINK_NAME",
+            "PROJECT_APP_LINK_SOURCE"
           ],
           "reliant.v1.ProjectInstallState": [
             "PROJECT_INSTALL_STATE_UNSPECIFIED",
@@ -28210,6 +28608,18 @@
             3,
             4
           ],
+          "reliant.v1.HostedAppsState": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.ProjectAppLink": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProjectInstallState": [
             0,
             1,
@@ -28245,6 +28655,14 @@
           "reliant.v1.FileChangeStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileChangeStatus"
+          },
+          "reliant.v1.HostedAppsState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "HostedAppsState"
+          },
+          "reliant.v1.ProjectAppLink": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectAppLink"
           },
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -53560,6 +53978,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "CoverageSource",
+      "name": "CoverageSource",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/coverage_source.Service",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "DBRepo",
       "name": "DBRepo",
       "kind": "provider",
@@ -55303,6 +55733,50 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "CoverageSource",
+      "field": "Blobs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Blobs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Projects",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Reports",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "Daemon",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon.Sender",
@@ -55825,6 +56299,15 @@
         "Database"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
+      "field": "Apps",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Project",
@@ -56916,6 +57399,22 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "CoverageSource.Blobs",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "CoverageSource.Reports",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "DaemonEventPublisher.Ctx",
       "source": {
         "path": "internal/app/nodes_gateway.go",
@@ -56967,6 +57466,14 @@
       "component": "OrgUsage.Prices",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Apps",
+      "source": {
+        "path": "internal/handlers/project/service.go",
         "symbol": "New"
       }
     },

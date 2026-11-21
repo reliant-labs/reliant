@@ -6,9 +6,7 @@
  *   - pushes nothing just for being opened (the baseline is the server's);
  *   - pushes an edit whether or not a run is live, with the version it read;
  *   - adopts a change made elsewhere, or a model the server moved, but keeps an
- *     edit not yet pushed;
- *   - seeds a chat the server has no selection for from what an older build kept
- *     in localStorage, once, and then forgets it.
+ *     edit not yet pushed.
  */
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -121,8 +119,6 @@ setTransport(
     },
   }),
 );
-
-const LEGACY_KEY = "reliant-chat-params";
 
 function storeParams() {
   return useChatParamsStore.getState().getChatParams(CHAT_ID);
@@ -284,64 +280,5 @@ describe("composer pushes edits to the selection", () => {
     await waitFor(() => expect(server.refetches).toBeGreaterThan(0), PUSH_DEBOUNCE_WAIT);
     // The edit is still the user's: it stays in the composer for the next push.
     expect(storeParams().model).toEqual({ id: "claude-5.5-opus@claude", thinking_level: "high" });
-  });
-});
-
-describe("a chat the server has no selection for", () => {
-  it("is seeded once from what an older build kept in this browser, then forgets it", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        version: 7,
-        state: {
-          chatParams: { [CHAT_ID]: { model: { id: "gpt-5.6-sol@codex" } }, "other-chat": { mode: "plan" } },
-          chatPresets: {},
-        },
-      }),
-    );
-    server.selection = null;
-
-    renderComposer();
-
-    await waitFor(() => expect(server.updates.length).toBe(1), PUSH_DEBOUNCE_WAIT);
-    expect(server.updates[0].params).toEqual({ model: { id: "gpt-5.6-sol@codex" } });
-    const left = JSON.parse(localStorage.getItem(LEGACY_KEY) ?? "{}");
-    expect(left.state.chatParams).toEqual({ "other-chat": { mode: "plan" } });
-  });
-
-  it("repairs a poisoned key first, so it never seeds a selection the server would refuse", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        version: 7,
-        state: {
-          chatParams: { [CHAT_ID]: { model: { id: "claude-5.5-opus@claude" }, thinking_level: "high", "default.mode": "plan" } },
-          chatPresets: {},
-        },
-      }),
-    );
-
-    renderComposer();
-
-    await waitFor(() => expect(server.updates.length).toBe(1), PUSH_DEBOUNCE_WAIT);
-    expect(server.updates[0].params).toEqual({
-      model: { id: "claude-5.5-opus@claude", thinking_level: "high" },
-      mode: "plan",
-    });
-    expect(server.updates[0].params).not.toHaveProperty("thinking_level");
-  });
-
-  it("is not seeded from local values once the server has a selection", async () => {
-    localStorage.setItem(
-      LEGACY_KEY,
-      JSON.stringify({ version: 7, state: { chatParams: { [CHAT_ID]: { mode: "plan" } }, chatPresets: {} } }),
-    );
-    server.selection = { workflowName: WORKFLOW, params: { mode: "auto" }, version: 2n };
-
-    renderComposer();
-    await waitFor(() => expect(storeParams()).toEqual({ mode: "auto" }));
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    expect(server.updates).toEqual([]);
   });
 });

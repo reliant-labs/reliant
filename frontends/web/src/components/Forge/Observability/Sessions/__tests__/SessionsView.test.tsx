@@ -54,6 +54,20 @@ describe("the session list", () => {
     expect(within(screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`)).getByText("replay")).toBeInTheDocument();
   });
 
+  it.each([
+    [{ user: "not-the-session-user" }, "user"],
+    [{ browser: "Firefox" }, "browser"],
+    [{ os: "other-os" }, "OS"],
+    [{ fe: "other-version" }, "frontend version"],
+  ])("does not show sessions when the server ignores %s", async (search, label) => {
+    const api = createFixtureApi();
+    const listSessions = api.listSessions.bind(api);
+    api.listSessions = (req, options) => listSessions({ ...req, userId: "", browser: undefined, os: undefined, frontendVersion: undefined }, options);
+    renderPanel(api, { view: "sessions", range: "24h", ...search }, PROJECT_PLACE);
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(`can't filter sessions by ${label}`);
+    expect(screen.queryByTestId("obs-sessions-list")).not.toBeInTheDocument();
+  });
+
   it("lists only sessions with a replay, and dims one the player found unplayable", async () => {
     const api = createFixtureApi();
     const all = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 25 })).sessions;

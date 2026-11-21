@@ -12,7 +12,7 @@ import (
 )
 
 func TestIsForeignDaemonIDError(t *testing.T) {
-	legacy := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
+	unreasoned := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
 	otherDenial := connect.NewError(connect.CodePermissionDenied, errors.New("token is bound to a non-daemon resource"))
 	retagged := connect.NewError(connect.CodeUnauthenticated, errors.New("daemon id is owned by another user"))
 
@@ -22,7 +22,7 @@ func TestIsForeignDaemonIDError(t *testing.T) {
 	}{
 		"the gateway's refusal":                    {NewForeignDaemonIDError(), true},
 		"wrapped, as the runtime returns it":       {fmt.Errorf("daemon connection failed (not retrying): %w", NewForeignDaemonIDError()), true},
-		"a gateway that predates the reason":       {legacy, true},
+		"the same words without the reason":        {unreasoned, false},
 		"any other permission denial":              {otherDenial, false},
 		"a credential problem with the same words": {retagged, false},
 		"a plain error":                            {errors.New("daemon id is owned by another user"), false},

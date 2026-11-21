@@ -408,11 +408,15 @@ export const ChatPresenter = memo(function ChatPresenter({
     };
   }, [showDesktopChrome, chatId, projectId, worktreeId, getWorkflowViewerMode]);
 
-  // Reset thread selection when navigating to a different chat
+  // Reset thread selection when navigating to a different chat. Only our own:
+  // a host that controls it knows which thread goes with which chat (the
+  // desktop chat's URL names it, `/c/<chat>/t/<thread>`; the mobile screen
+  // resets its own), and resetting it here would drop a thread the URL opened.
   // Workflow viewer state is now loaded from persisted state in the effect above
+  const threadControlled = controlledThreadId !== undefined;
   useEffect(() => {
-    setSelectedThreadId(null);
-  }, [chatId, setSelectedThreadId]);
+    if (!threadControlled) setLocalThreadId(null);
+  }, [chatId, threadControlled]);
 
   // Convert single thread ID to Set for timeline filtering
   const selectedThreads = useMemo(() => {

@@ -2,7 +2,7 @@
  * "Your usage" on the Spend limits card, over the real generated client on a
  * mock transport: the member's spend against their cap and the org's against
  * the org cap, in words; an unlimited member; the audit-mode note; and an
- * older control plane without GetMyPolicyUsage shown as "not available yet",
+ * control plane without GetMyPolicyUsage shown as "not available yet",
  * never as an error, while any other failure is.
  */
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";

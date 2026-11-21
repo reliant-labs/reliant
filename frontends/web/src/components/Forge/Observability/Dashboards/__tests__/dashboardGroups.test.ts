@@ -2,16 +2,15 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The page groups: the server's `group` wins, an unknown one is Custom, and
- * only a dashboard from an older server (no group) is inferred from its key
- * and source. Search reaches across groups, by tag, workload and group name.
+ * The page groups: the server's `group`, and an unknown or absent one is
+ * Custom. Search reaches across groups, by tag, workload and group name.
  */
 
 import { describe, expect, it } from "vitest";
 
 import type { DashboardSource, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { groupCounts, groupIndex, groupOf, inferredGroup, listSections, workloadOf } from "../dashboardGroups";
+import { groupCounts, groupIndex, groupOf, listSections, workloadOf } from "../dashboardGroups";
 import { filterIndex, starredOf } from "../dashboardModel";
 
 function summary(key: string, source: DashboardSource = "generated", extra: Partial<DashboardSummary> = {}): DashboardSummary {
@@ -43,33 +42,9 @@ describe("groupOf", () => {
     expect(groupOf(summary("overview", "generated", { group: "dashboards-v2" }))).toBe("custom");
   });
 
-  it("infers a group only when the server sent none", () => {
-    expect(groupOf(summary("overview"))).toBe("overview");
-    expect(groupOf(summary("overview", "generated", { group: "" }))).toBe("overview");
-  });
-});
-
-describe("inferredGroup (older control planes)", () => {
-  it.each([
-    ["overview", "generated", "overview"],
-    ["process-orders", "generated", "services"],
-    ["service-orders", "generated", "services"],
-    ["worker-mailer", "generated", "services"],
-    ["jobs", "generated", "jobs"],
-    ["cron-nightly", "generated", "jobs"],
-    ["workloads", "generated", "platform"],
-    ["releases", "generated", "releases"],
-    ["frontend", "generated", "product"],
-    ["frontend-web", "generated", "product"],
-    ["custom-metrics", "generated", "custom"],
-    ["selfmon-postgres", "repo", "platform"],
-    ["product-funnel", "repo", "product"],
-    ["selfmon-fleet", "workspace", "platform"],
-    ["checkout", "repo", "custom"],
-    ["my-board", "workspace", "custom"],
-    ["org-costs", "builtin", "platform"],
-  ] as const)("%s (%s) is %s", (key, source, group) => {
-    expect(inferredGroup(summary(key, source))).toBe(group);
+  it("reads an absent group as custom, never as a guess from the key", () => {
+    expect(groupOf(summary("overview"))).toBe("custom");
+    expect(groupOf(summary("overview", "generated", { group: "" }))).toBe("custom");
   });
 });
 
@@ -90,11 +65,11 @@ describe("groupIndex", () => {
   it("returns every group in page order, built-in and generated first inside one, else the server's order", () => {
     const index = [
       summary("my-board", "workspace", { group: "platform" }),
-      summary("selfmon-db", "repo"),
-      summary("workloads"),
-      summary("process-b"),
-      summary("process-a"),
-      summary("org-costs", "builtin"),
+      summary("selfmon-db", "repo", { group: "platform" }),
+      summary("workloads", "generated", { group: "platform" }),
+      summary("process-b", "generated", { group: "services" }),
+      summary("process-a", "generated", { group: "services" }),
+      summary("org-costs", "builtin", { group: "platform" }),
     ];
     const grouped = groupIndex(index);
     expect(grouped.map((g) => g.group)).toEqual(["overview", "services", "jobs", "product", "platform", "releases", "custom"]);
@@ -104,13 +79,14 @@ describe("groupIndex", () => {
   });
 
   it("lists Built-in first, then only the groups that hold something", () => {
-    const index = [summary("process-a"), summary("org-costs", "builtin", { group: "product" }), summary("my-board", "workspace")];
+    const services = { group: "services" };
+    const index = [summary("process-a", "generated", services), summary("org-costs", "builtin", { group: "product" }), summary("my-board", "workspace")];
     expect(listSections(index).map((s) => [s.id, s.dashboards.map((d) => d.ref.key)])).toEqual([
       ["builtin", ["org-costs"]],
       ["services", ["process-a"]],
       ["custom", ["my-board"]],
     ]);
-    expect(listSections([summary("process-a")]).map((s) => s.id)).toEqual(["services"]);
+    expect(listSections([summary("process-a", "generated", services)]).map((s) => s.id)).toEqual(["services"]);
     expect(listSections([])).toEqual([]);
   });
 });

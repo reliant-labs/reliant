@@ -12,6 +12,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { FILTER_PROJECT_IDS, selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
@@ -343,6 +344,52 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront/environments/prod',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('shopfront-prod.reliant.app', { exact: false }).first(),
+  },
+  {
+    // The project selector (Projects/ProjectSelector), as Switch project…
+    // opens it over the page: pinned, recent and all, with app chips of
+    // every link kind and an app with no code here. Desktop only: on a phone
+    // the one shell's nav leads to the mobile surface's own project list
+    // (/m/projects), so nothing there opens the selector yet.
+    name: 'project-selector',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-selector-row-app:status-page'),
+    act: async (page) => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
+    },
+    harness: { fixtures: selectorSurfaceFixtures },
+  },
+  {
+    // The chat list's project filter, choose N of M: the selector in
+    // multi-select mode, three projects of eight chosen. Desktop only, like
+    // the selector: the phone surface's chat list has its own project list.
+    name: 'chat-filter-open',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
+    act: async (page) => {
+      // The home focuses its composer once it has rendered. Opening the filter
+      // before then lets that late focus land after the click, and the panel
+      // closes on losing focus. So wait for the composer to have it.
+      await expect(page.getByTestId('chat-input')).toBeFocused()
+      await page.getByTestId('chat-project-filter-trigger').click()
+      // One at a time: each pick moves the URL (one project is `/project/<id>`,
+      // two or more `?projects=`), so wait for it to land before the next.
+      for (const [i, id] of FILTER_PROJECT_IDS.entries()) {
+        await page.getByTestId(`project-selector-row-${id}`).click()
+        await expect(page.getByTestId('project-selector-chosen-count')).toHaveText(`${i + 1} chosen`)
+      }
+    },
+    harness: { fixtures: selectorSurfaceFixtures },
+  },
+  {
+    // The Chats heading once three projects are chosen, from the URL.
+    name: 'chat-filter-heading',
+    path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('project-filter-label').getByText('3 projects'),
+    harness: { fixtures: selectorSurfaceFixtures },
   },
   {
     // The chat's settings: scrolled to the "Fonts and size" panel.

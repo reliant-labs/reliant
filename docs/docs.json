@@ -385,6 +385,7 @@
               {
                 "group": "Start a project",
                 "pages": [
+                  "guides/forge/deploy-with-a-coding-agent",
                   "guides/forge/build-go-react-app-connect-rpc",
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",

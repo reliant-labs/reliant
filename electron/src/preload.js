@@ -76,6 +76,23 @@ ipcRenderer.on('menu-shortcut', (_event, shortcutId) => {
   heldMenuShortcuts = heldMenuShortcuts.slice(-MENU_SHORTCUT_HOLD_MAX);
 });
 
+// An app page a `reliant://open?url=` link asked for (deep-link.js), held the
+// same way as a menu shortcut: it can arrive once the page has loaded but
+// before the router's listener is mounted. Only the latest is kept, and only
+// for a while: a link clicked long ago is not where the person wants to be now.
+const OPEN_ROUTE_HOLD_MS = 10000;
+const openRouteSubscriptions = new Set();
+let heldOpenRoute = null; // { route, at }
+
+ipcRenderer.on('open-route', (_event, route) => {
+  if (typeof route !== 'string' || !route.startsWith('/') || route.startsWith('//')) return;
+  if (openRouteSubscriptions.size > 0) {
+    for (const callback of [...openRouteSubscriptions]) callback(route);
+    return;
+  }
+  heldOpenRoute = { route, at: Date.now() };
+});
+
 // The desktop app's versions, for the web runtime's telemetry: it reads
 // window.forgeDesktop once at startup and reports them as app.desktop.version,
 // app.desktop.electron.version and app.desktop.chromium.version, so the console
@@ -187,11 +204,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // and the renderer holding the PKCE verifier was stranded on the old route.
   // Sign-in could not complete on the desktop app at all.
   //
-  // electron.d.ts declares this `startOAuthRedirect?:` — OPTIONAL, so the
+  // electron.d.ts declared this `startOAuthRedirect?:` — OPTIONAL, so the
   // compiler could never catch its absence. That is the same trap that made
-  // `onOAuthCallback` inert before it (see main.js's handler comment); the
-  // optional marker is load-bearing for old shipped builds, so the guard
-  // against a third occurrence has to be a test, not a type.
+  // `onOAuthCallback` inert before it (see main.js's handler comment). The
+  // declaration is required now, but the type describes this file rather than
+  // checking it, so the guard against a third occurrence is still a test.
   //
   // Rejects rather than resolving falsy when the listener cannot start: the
   // renderer's fallback lives in one catch block, and a falsy resolve would
@@ -212,9 +229,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // down the request tore down the listener, so the redirect landed on a
   // closed port. Start binds the port and returns immediately; wait spans
   // human time over IPC, where no proxy or gateway can time it out.
-  //
-  // Optional in electron.d.ts like every bridge here, so the renderer keeps a
-  // working fallback on builds that predate it.
   startProviderOAuth: async (authorizeUrlTemplate) => {
     const result = await ipcRenderer.invoke('oauth:provider-login-start', authorizeUrlTemplate);
     if (!result?.success) {
@@ -247,8 +261,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Stripe checkout, kept inside the app. Resolves with the outcome Stripe
   // reported ('success' / 'cancelled'), or 'dismissed' if the user just closed
-  // the window. Optional in electron.d.ts like every bridge here: a build that
-  // predates it falls back to the plain redirect.
+  // the window.
   openStripeCheckout: async ({ checkoutUrl, returnUrl }) => {
     const result = await ipcRenderer.invoke('billing:open-checkout', {
       checkoutUrl,
@@ -421,6 +434,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event, port) => callback(port);
     ipcRenderer.on('backend-port', listener);
     return () => ipcRenderer.removeListener('backend-port', listener);
+  },
+
+  // Open an app page (a chat) a `reliant://open?url=` link named. A page that
+  // arrived before anyone subscribed goes to the first subscriber, a turn later.
+  onOpenRoute: (callback) => {
+    openRouteSubscriptions.add(callback);
+    // A turn later, so a subscription torn down and redone at once (React
+    // StrictMode) gets it once, by whoever is subscribed then.
+    if (heldOpenRoute) {
+      setTimeout(() => {
+        const held = heldOpenRoute;
+        if (!held || openRouteSubscriptions.size === 0) return;
+        heldOpenRoute = null;
+        if (Date.now() - held.at > OPEN_ROUTE_HOLD_MS) return;
+        for (const subscriber of [...openRouteSubscriptions]) subscriber(held.route);
+      }, 0);
+    }
+    return () => openRouteSubscriptions.delete(callback);
   },
 
   // Listen for open project events
