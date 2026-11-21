@@ -430,6 +430,20 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('services-charts').first(),
   },
   {
+    // The All dashboards gallery: cards with lazy sparkline previews, source badges, last viewed, stars.
+    name: 'shell-dashboards',
+    path: '/forge/p/shopfront/observability/dashboards',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('dashboards-card-checkout-funnel'),
+  },
+  {
+    // The gallery's search, from the URL: `?q=order` keeps the cards that match.
+    name: 'shell-dashboards-search',
+    path: '/forge/p/shopfront/observability/dashboards?q=order',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('dashboards-gallery').getByText('Order latency').first(),
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],
