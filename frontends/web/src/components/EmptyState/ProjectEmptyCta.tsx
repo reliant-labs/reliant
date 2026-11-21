@@ -47,11 +47,18 @@ export const MIGRATE_LABEL = "Migrate an existing app to forge";
 /**
  * The Reliant project an action runs in: the one named, the console's, the
  * one open in the shell, else the person's first. Null with no project at all.
+ *
+ * An explicit null is an answer, not a gap: a caller passing `projectId={null}`
+ * (a forge app no Reliant project declares), or a console whose app maps to no
+ * project, gets no project, never an unrelated current or first one. Only a
+ * page outside the console, naming nothing, falls back to the shell's.
  */
 function useActionProjectId(projectId?: string | null): string | null {
-  const consoleProjectId = useContext(ForgeConsoleContext)?.projectId ?? null;
+  const consoleCtx = useContext(ForgeConsoleContext);
   const current = useProjectStore((state) => state.currentProject?.id ?? null);
-  return projectId ?? consoleProjectId ?? current ?? getCachedProjects()[0]?.id ?? null;
+  if (projectId !== undefined) return projectId;
+  if (consoleCtx) return consoleCtx.projectId;
+  return current ?? getCachedProjects()[0]?.id ?? null;
 }
 
 /**

@@ -18,10 +18,11 @@
  * and the steps follow as the way to do it by hand.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 
 import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+import { ForgeConsoleContext } from "@/components/Forge/Console/consoleContextValue";
 import type { LearnSection } from "@/lib/learnLinks";
 
 /** The docs this frame links to, so one URL is spelled once. */
@@ -62,14 +63,17 @@ export interface GettingStartedProps {
   /**
    * The project shell's other ways forward beside `agent` (U6d,
    * EmptyState/ProjectEmptyCta.tsx): Migrate an existing app to forge, and the
-   * section's Learn link (default: the console page's). On whenever `agent`
-   * is set; false turns it off.
+   * section's Learn link (default: the console page's). By default on when
+   * `agent` is set inside the project shell (a forge console page) and off
+   * elsewhere; set it to turn it on anywhere, false to turn it off.
    */
   projectCta?: { learn?: LearnSection | false } | false;
   testId: string;
 }
 
-export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, projectCta = {}, testId }: GettingStartedProps) {
+export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, projectCta: projectCtaProp, testId }: GettingStartedProps) {
+  const inConsole = useContext(ForgeConsoleContext) !== null;
+  const projectCta = projectCtaProp ?? (inConsole ? {} : false);
   return (
     <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
       <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
