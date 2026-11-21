@@ -3,11 +3,23 @@
  * including the last keystrokes, which the composer saves only after a 300ms
  * debounce (useChatInputState): the prompt flushes them before it reloads.
  *
- * "After the reload" is a fresh module graph rehydrating from localStorage,
- * which is all a reload keeps.
+ * "After the reload" is a fresh workspace store module rehydrating from
+ * localStorage, which is all a reload keeps.
+ *
+ * The modules load once, at collection, not inside a test: importing this
+ * graph for the first time (projectStore reaches most of the app's stores)
+ * takes seconds on a loaded runner, and a test that imported it after
+ * vi.resetModules() spent its 5s timeout loading code. The stores are reset
+ * between tests instead. The debounce timer is faked, so it cannot
+ * fire mid-test however slowly the test runs: only the flush can have saved
+ * the draft.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { useProjectStore } from "../../../store/projectStore";
+import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
+import { useChatInputState } from "../useChatInputState";
+import { AppOutOfDateModal } from "../../AppOutOfDateModal";
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../../hooks/chat-queries", () => ({
@@ -21,22 +33,21 @@ const PROJECT = "project-1";
 const DRAFT = "half a thought about the migration";
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  useWorkspaceStateStore.setState(useWorkspaceStateStore.getInitialState(), true);
+  // After the reset, which persist writes through to storage.
   localStorage.clear();
-  vi.resetModules();
+  useProjectStore.setState({ currentProject: { id: PROJECT } as never });
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("a composer draft across the forced reload", () => {
   it("is written before the reload and restored after it", async () => {
-    const { useProjectStore } = await import("../../../store/projectStore");
-    const { useChatInputState } = await import("../useChatInputState");
-    const { AppOutOfDateModal } = await import("../../AppOutOfDateModal");
-    useProjectStore.setState({ currentProject: { id: PROJECT } as never });
-
     const { result } = renderHook(() => useChatInputState({}));
     act(() => result.current.setInput(DRAFT));
     // Still inside the debounce: nothing on disk yet. A plain reload now
@@ -51,20 +62,21 @@ describe("a composer draft across the forced reload", () => {
     expect(reload).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("workspace-state")).toContain(DRAFT);
 
-    // The reload: a new page rehydrates from storage alone.
+    // The reload: a new page rehydrates from storage alone. Only the store
+    // module is fresh; it was transformed at collection, so this re-runs a
+    // small module rather than loading a graph.
     cleanup();
     vi.resetModules();
-    const { useWorkspaceStateStore } = await import("../../../store/workspaceStateStore");
-    expect(useWorkspaceStateStore.getState().getNewChatDraft(PROJECT)).toBe(DRAFT);
+    const fresh = await import("../../../store/workspaceStateStore");
+    expect(fresh.useWorkspaceStateStore).not.toBe(useWorkspaceStateStore);
+    expect(fresh.useWorkspaceStateStore.getState().getNewChatDraft(PROJECT)).toBe(DRAFT);
   });
 
-  it("is also flushed when the page is hidden for any other reload or close", async () => {
-    const { useProjectStore } = await import("../../../store/projectStore");
-    const { useChatInputState } = await import("../useChatInputState");
-    useProjectStore.setState({ currentProject: { id: PROJECT } as never });
-
+  it("is also flushed when the page is hidden for any other reload or close", () => {
     const { result } = renderHook(() => useChatInputState({}));
     act(() => result.current.setInput(DRAFT));
+    expect(localStorage.getItem("workspace-state") ?? "").not.toContain(DRAFT);
+
     window.dispatchEvent(new Event("pagehide"));
 
     expect(localStorage.getItem("workspace-state")).toContain(DRAFT);
