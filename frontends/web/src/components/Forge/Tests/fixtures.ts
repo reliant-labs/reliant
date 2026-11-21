@@ -16,8 +16,8 @@
  * GetTestSummary is answered here (the Overview's one read, W1); ListTestRuns,
  * GetTestRun, ListFlakyTests and GetTest from runFlakeFixtures.ts (the Runs
  * and Flaky tests pages, W3); GetCoverage and GetFileCoverage from
- * coverageFixtures.ts (the Coverage page, W2). GetReleaseTests still answers
- * Unimplemented until the release Tests tab adds it.
+ * coverageFixtures.ts (the Coverage page, W2); GetReleaseTests from
+ * releaseTestsFixtures.ts (the release Tests tab and the Releases column, W4).
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -26,6 +26,7 @@ import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import type { TestApi } from "@/services/controlPlane/tests/TestApiContext";
 import {
   flakePageOf,
+  releaseTestsOf,
   runDetailOf,
   runPageOf,
   summaryOf,
@@ -42,6 +43,7 @@ import {
 
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
 import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
+import { fixtureReleaseTestsWire } from "./releaseTestsFixtures";
 
 /**
  * A fixed "now", so relative times do not move: the visual harness's and the
@@ -245,11 +247,6 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     if (scenario === "denied") return Promise.reject(new ConnectError("missing tests:read", Code.PermissionDenied));
     return Promise.reject(new ConnectError("TestsService is not available", Code.Unimplemented));
   };
-  // Answered by the release Tests tab, which adds its fixtures here.
-  const notInFixture = (method: keyof TestApi) => (req: unknown) => {
-    calls.push({ method, req });
-    return Promise.reject(new ConnectError(`${method} is not in the Tests fixture yet`, Code.Unimplemented));
-  };
   // A read the scenario refuses, or the fixture's answer (a NotFound or a bad page token it throws, rejected).
   function answer<T>(method: keyof TestApi, req: unknown, build: () => T): Promise<T> {
     calls.push({ method, req });
@@ -279,7 +276,7 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
         if (scenario === "no-runs" || scenario === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
         return req;
       }).then(fixtureFileCoverage),
-    getReleaseTests: notInFixture("getReleaseTests"),
+    getReleaseTests: (req) => answer("getReleaseTests", req, () => releaseTestsOf(fixtureReleaseTestsWire(scenario, req))),
     listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(scenario, req))),
     getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(scenario, req))),
   };

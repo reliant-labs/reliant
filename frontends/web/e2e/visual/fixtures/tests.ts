@@ -5,7 +5,8 @@
  * fixtures.ts: main's merged unit/integration/e2e report, a 30-commit
  * coverage trend with two releases marked, four flaky tests, the last CI
  * run; runFlakeFixtures.ts: nine runs, a failed branch run, ten flaky tests
- * and TestSyncJob's record), not a second copy. Two ways in, because the client does not call the
+ * and TestSyncJob's record; releaseTestsFixtures.ts: the evidence of each
+ * shopfront release, for its Tests tab and the Releases column), not a second copy. Two ways in, because the client does not call the
  * network until control-plane's TestsService is re-vendored (W0;
  * services/controlPlane/tests/testApi.ts):
  *
@@ -34,6 +35,7 @@ import {
 } from '../../../src/components/Forge/Tests/coverageFixtures'
 import { fixtureSummaryWire, fixtureTestApi, TESTS_SCENARIOS, type TestsScenario } from '../../../src/components/Forge/Tests/fixtures'
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from '../../../src/components/Forge/Tests/runFlakeFixtures'
+import { fixtureReleaseTestsWire } from '../../../src/components/Forge/Tests/releaseTestsFixtures'
 import { CoverageSourceProvider } from '../../../src/services/coverageSource/CoverageSourceContext'
 import { TestApiProvider } from '../../../src/services/controlPlane/tests/TestApiContext'
 import type { CoverageTarget } from '../../../src/services/controlPlane/tests/types'
@@ -98,6 +100,19 @@ function targetOfJson(req: Record<string, unknown>): CoverageTarget {
 const optionalString = (value: unknown) => (typeof value === 'string' && value !== '' ? value : undefined)
 
 const PROJECT = { orgId: null, project: 'shopfront' }
+
+/** GetReleaseTests' `status` is TestEvidenceStatus, not the TestCaseStatus every other `status` field is. */
+const EVIDENCE_STATUS: Record<number, string> = {
+  0: 'TEST_EVIDENCE_STATUS_UNSPECIFIED',
+  1: 'TEST_EVIDENCE_STATUS_OK',
+  2: 'TEST_EVIDENCE_STATUS_PARTIAL',
+  3: 'TEST_EVIDENCE_STATUS_UNAVAILABLE',
+}
+
+function releaseTestsJson(version: string): Record<string, unknown> {
+  const wire = fixtureReleaseTestsWire('report', { ...PROJECT, version })
+  return { ...(toProtoJson(wire) as Record<string, unknown>), status: EVIDENCE_STATUS[wire.status] }
+}
 const str = (value: unknown) => (typeof value === 'string' ? value : '')
 
 /** The report scenario's answers, read from the request's proto3-JSON fields (the filters the table can match on). */
@@ -107,6 +122,7 @@ export const testsFixtures: Fixtures = {
     toProtoJson(fixtureRunsWire('report', { ...PROJECT, filters: { branch: str(req.branch) || undefined, lane: str(req.lane) || undefined }, pageToken: str(req.pageToken) })) as Record<string, unknown>,
   'controlplane.v1.TestsService/GetTestRun': (req) => toProtoJson(fixtureRunWire('report', { ...PROJECT, runId: str(req.runId) })) as Record<string, unknown>,
   'controlplane.v1.TestsService/ListFlakyTests': () => toProtoJson(fixtureFlakyWire('report', { ...PROJECT, filters: {} })) as Record<string, unknown>,
+  'controlplane.v1.TestsService/GetReleaseTests': (req) => releaseTestsJson(str(req.version)),
   'controlplane.v1.TestsService/GetTest': (req) => toProtoJson(fixtureTestWire('report', { ...PROJECT, testId: str(req.testId) })) as Record<string, unknown>,
   'controlplane.v1.TestsService/GetCoverage': (req) =>
     toProtoJson(
