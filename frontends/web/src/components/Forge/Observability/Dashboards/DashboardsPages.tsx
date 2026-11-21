@@ -34,7 +34,10 @@ import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { builtinPageRef, compareParam, isDashboardPageKind, isStandardBuiltinRef, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
+import type { DashboardHub } from "./dashboardHubs";
 import { useDashboardHub } from "./useDashboardHub";
+import { useSeveralApps } from "../../Console/severalProjects";
+import { orgDashboardHref } from "../../Org/OrgDashboards";
 
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
@@ -138,6 +141,44 @@ function useNavigateTo() {
 }
 
 export function DashboardsPage() {
+  const several = useSeveralApps();
+  if (several) return <DashboardsAcrossProjects apps={several.apps.map((candidate) => candidate.app)} />;
+  return <ProjectDashboardsPage />;
+}
+
+/**
+ * Dashboards of several projects (U6c): the org-wide list (read-only; each
+ * row opens in its app), narrowed to the shell's projects by default, plus
+ * the organization's own views. The `apps` key is the URL's.
+ */
+function DashboardsAcrossProjects({ apps }: { apps: string[] }) {
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as DashboardsSearch & { apps?: string[] };
+  const onSearch = useSearchUpdater<DashboardsSearch>();
+  const navigateTo = useNavigateTo();
+  const orgEnvironments = useOrgScopedEnvs();
+  const selected = search.apps ?? apps;
+  const appFilter = useMemo(
+    () => ({
+      selected,
+      onChange: (next: string[]) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, apps: next.length ? next : undefined }), replace: true } as never),
+    }),
+    [selected, navigate]
+  );
+  return (
+    <div className="space-y-4" data-testid="console-dashboards" data-mode="several">
+      <div>
+        <h1 className="text-section text-ink">Dashboards</h1>
+        <p className="mt-1 text-ui text-ink-muted">Every dashboard of {apps.length} projects, and your organization&apos;s. Each opens in its own project.</p>
+      </div>
+      <DashboardsList env="all" environments={orgEnvironments.environments} search={{ q: search.q, group: search.group, source: search.source, owner: search.owner }} onSearch={onSearch} hrefs={ORG_HREFS} navigateTo={navigateTo} appFilter={appFilter} />
+    </div>
+  );
+}
+
+const ORG_HREFS = { dashboard: orgDashboardHref };
+
+function ProjectDashboardsPage() {
   const { forgeProject, env, roster } = useForgeConsole();
   const search = useSearch({ strict: false }) as DashboardsSearch;
   const onSearch = useSearchUpdater<DashboardsSearch>();
@@ -169,18 +210,34 @@ export function DashboardsPage() {
 }
 
 export function DashboardPage() {
-  const { forgeProject, env, setEnv } = useForgeConsole();
+  const { forgeProject, env } = useForgeConsole();
   const { kind, key = "" } = useParams({ strict: false }) as { kind?: string; key?: string };
+  const environments = useRecordedEnvs();
+  const dashRef = useMemo<DashboardRef | null>(
+    () => (!isDashboardPageKind(kind) ? null : kind === "builtin" ? builtinPageRef(key, forgeProject) : { kind, projectId: forgeProject, key }),
+    [kind, forgeProject, key]
+  );
+  // The hub the dashboard is a tab of, from the index the nav already reads for this scope (one cache entry).
+  const hub = useDashboardHub(forgeProject, env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id, dashRef);
+  if (!dashRef) return null;
+  return <DashboardBody dashRef={dashRef} hub={hub} />;
+}
+
+/**
+ * One dashboard in the console, by ref: the URL's viewer state, the scope and
+ * every link. DashboardPage mounts it for `dashboards/$kind/$key`; the
+ * Analytics page mounts it for each built-in tab (U6c) with no hub, its own
+ * tabs standing in for the hub's.
+ */
+export function DashboardBody({ dashRef, hub = null }: { dashRef: DashboardRef; hub?: DashboardHub | null }) {
+  const { forgeProject, env, setEnv } = useForgeConsole();
+  const key = dashRef.key;
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
   const onSearch = useSearchUpdater<DashboardSearch>(false);
   const environments = useRecordedEnvs();
   const orgEnvironments = useOrgScopedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
-  const dashRef = useMemo<DashboardRef | null>(
-    () => (!isDashboardPageKind(kind) ? null : kind === "builtin" ? builtinPageRef(key, forgeProject) : { kind, projectId: forgeProject, key }),
-    [kind, forgeProject, key]
-  );
   const search: DashboardSearch = {
     range: rangeParam(raw.range),
     service: typeof raw.service === "string" ? raw.service : undefined,
@@ -200,9 +257,6 @@ export function DashboardPage() {
     release: typeof raw.release === "string" ? raw.release : undefined,
     orgEnvs: Array.isArray(raw.orgEnvs) ? raw.orgEnvs.filter((name): name is string => typeof name === "string") : undefined,
   };
-  // The hub the dashboard is a tab of, from the index the nav already reads for this scope (one cache entry).
-  const hub = useDashboardHub(forgeProject, env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id, dashRef);
-  if (!dashRef) return null;
   // Organization accounting is discoverable without a deployed environment. A
   // project's standard built-ins read its environments, like any dashboard.
   if (dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef)) return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;

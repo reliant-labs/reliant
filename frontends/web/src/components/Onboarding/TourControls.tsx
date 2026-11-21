@@ -49,7 +49,7 @@ export interface TourControlsProps {
   /** The required action is done: a check beside Next. */
   actionDone?: boolean;
   nextLabel?: string;
-  /** The end card's second way out ("Try AI workflows in Reliant"). */
+  /** The end card's second way out ("Try AI workflows"). */
   secondary?: { label: string; onClick: () => void };
   /** A step's own way past its action (JourneyStep.skip, e.g. "Create it for me"); there is no generic Skip step. */
   skip?: { label: string; onClick: () => void };

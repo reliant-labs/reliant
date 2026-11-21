@@ -50,10 +50,16 @@ import { create } from "@bufbuild/protobuf";
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { ActivityPage } from "../Console/ActivityPage";
+import { ServicePage, ServicesPage } from "../Services/ServicesPages";
+import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
+import { AnalyticsPage } from "../Analytics/AnalyticsPage";
+import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
+import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
-import { UsersPage } from "../Users/UsersPage";
+import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
+import { AuthPage } from "../Users/AuthPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
@@ -437,16 +443,23 @@ function buildRouter(path: string) {
     releases: ReleasesPage,
     release: ReleasePage,
     observabilityView: ObservabilityViewPage,
+    obsOverview: ObsOverviewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
     storage: StoragePage,
     data: DataPage,
-    users: UsersPage,
+    auth: AuthPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
     activity: ActivityPage,
+    services: ServicesPage,
+    service: ServicePage,
+    usage: ProjectUsagePage,
+    events: EventsMetricsPage,
+    analytics: AnalyticsPage,
+    speedInsights: SpeedInsightsPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

@@ -18,10 +18,14 @@
  *    on every list page (replace, so it costs no history entry), remembered
  *    when the reader picks one.
  *
- * 3. THE CHROME: ConsoleShell — the nav, the top bar with the breadcrumb and
- *    scope, the rail (its collapsed state remembered per user) — in the led
- *    console (ledConsole.tsx): the grouped nav, and pages that lead with one
- *    sentence and the item worth opening first.
+ * 3. THE CHROME. Inside the one shell (Layout/shell/AppShell.tsx), the
+ *    shell's left nav draws this app's sections inline (the same model,
+ *    useConsoleNavModel.ts) and the console is a page under a slim bar with
+ *    the breadcrumb and scope (ConsoleFrame). Without the shell (the forge
+ *    host until it runs the one router), ConsoleShell — the nav, the top bar,
+ *    the rail (its collapsed state remembered per user). Either way in the
+ *    led console (ledConsole.tsx): pages that lead with one sentence and the
+ *    item worth opening first.
  *
  * Escape and the way out belong to the parent `_forge` layout (ForgeLayout),
  * which also hosts the redirects from the retired URLs.
@@ -31,14 +35,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { useForgeRoster } from "@/hooks/forge-queries";
-import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
-import { displayTitle, hubOf, hubsOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
 import { DOCS } from "../GettingStarted";
-import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
+import { useShellFrame } from "@/components/Layout/shell/shellFrame";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
-import { isQueued, queuedOnLabel } from "@/services/forge/live";
 import { isForgeShell } from "@/lib/shell";
 import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
@@ -47,15 +47,19 @@ import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { PrimeMetricCatalog } from "../Observability/Metrics/PrimeMetricCatalog";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
-import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
+import { useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+
+import { AppSectionEmptyState } from "./AppSectionEmptyState";
+import { ConsoleFrame } from "./ConsoleFrame";
+import { ConsoleShell } from "./ConsoleShell";
 import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
-import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
-import { useConsoleReliantProject, useConsoleUser } from "./consoleHost";
-import { useOptionalViews } from "./useOptionalViews";
+import { ForgeConsoleContext, rosterReadFailed, type ForgeConsole } from "./consoleContext";
+import { useConsoleUser } from "./consoleHost";
+import { useConsoleNavModel } from "./useConsoleNavModel";
 import { useObsNavOpen } from "./obsNavOpen";
-import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
-import { consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
-import { appsPath } from "@/lib/paths";
+import { rememberEnv } from "./envScope";
+import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { projectsHref } from "@/lib/paths";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -69,6 +73,8 @@ export function switchTarget(app: string, page: ConsolePage): string {
       ? { kind: "environments" }
       : page.kind === "workload"
         ? { kind: "overview" }
+        : page.kind === "service"
+          ? { kind: "services" }
         : page.kind === "release"
           ? { kind: "releases" }
           : page.kind === "dashboard"
@@ -82,19 +88,14 @@ export function ConsoleLayout() {
   const { pathname } = useLocation();
   const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
   const search = useSearch({ strict: false }) as { env?: string };
-  const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? { kind: "overview" }, [pathname]);
+  const { inShell } = useShellFrame();
+
+  // ── 1–2. The Reliant project, the roster and the environment scope: the
+  // same model the shell's nav draws this app's sections from. ──
+  const model = useConsoleNavModel(forgeProject, pathname, search);
+  const { orgId, page, env, listed, projectId, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
   const pinnedEnv = pinnedEnvOf(page);
-
-  // ── 1. The Reliant project (consoleHost.ts). ──
   const forgeShell = isForgeShell();
-  const { listed, projectId } = useConsoleReliantProject(forgeProject);
-
-  const roster = useForgeRoster(listed ? projectId : null, forgeProject);
-
-  // ── 2. The environment scope. ──
-  const settled = listed && !roster.isLoading && !roster.topology.isLoading;
-  const known = useMemo(() => (settled ? roster.envs.map((env) => env.name) : null), [settled, roster.envs]);
-  const env = resolveEnvScope(search.env, rememberedEnv(forgeProject), known);
 
   useEffect(() => {
     if (search.env && search.env === env) rememberEnv(forgeProject, env);
@@ -119,65 +120,6 @@ export function ConsoleLayout() {
   );
 
   // ── 3. The chrome. ──
-  const navEnvs: ConsoleNavEnv[] = useMemo(
-    () =>
-      roster.envs.map((candidate) => ({
-        name: candidate.name,
-        preview: candidate.live?.kind === "preview",
-        queuedOn: candidate.live && isQueued(candidate.live) ? queuedOnLabel(candidate.live.holds) : undefined,
-      })),
-    [roster.envs]
-  );
-  const scope = useMemo(() => scopeOptions(roster.envs), [roster.envs]);
-
-  // Firing alerts in scope, for the badge on Alerts. One org-wide read (shared
-  // with the Alerts page's cache), narrowed here to this project's envs.
-  const org = useObservabilityOrg();
-  const alerts = useAlerts(org.orgId);
-  const alertsFiring = useMemo(() => {
-    const ids = new Set(
-      roster.envs
-        .filter((candidate) => candidate.live && (env === ENV_ALL || candidate.name === env))
-        .map((candidate) => candidate.live!.id)
-    );
-    return (alerts.data ?? []).filter((alert) => alert.state === "firing" && ids.has(alert.envId)).length;
-  }, [alerts.data, roster.envs, env]);
-
-  // The caller's starred dashboards, nested under Dashboards — the same index
-  // (and cache entry) the Dashboards page reads for this scope.
-  const scopedEnvId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
-  // An unregistered scoped environment must not accidentally probe the whole project.
-  const discoveryScope = useMemo(() => org.orgId && settled && (env === ENV_ALL || scopedEnvId)
-    ? { orgId: org.orgId, projectId: forgeProject, envIds: scopedEnvId ? [scopedEnvId] : [], filters: [] }
-    : null, [org.orgId, settled, env, forgeProject, scopedEnvId]);
-  const optionalViews = useOptionalViews(discoveryScope);
-  const dashboards = useDashboardIndex(org.orgId, forgeProject, scopedEnvId);
-  const starred = useMemo(
-    () =>
-      (dashboards.data?.dashboards ?? []).flatMap((d) =>
-        d.starred && d.ref.kind !== "template" ? [{ title: displayTitle(d.title, forgeProject), dashKind: d.ref.kind, key: d.ref.key }] : []
-      ),
-    [dashboards.data, forgeProject]
-  );
-  // A hub's tab is named by the hub and the tab ("Product analytics · Users"); anything else by its title, less the project prefix.
-  const dashboardTitle = useMemo(() => {
-    if (page.kind !== "dashboard" || !dashboards.data) return undefined;
-    const ref = { kind: page.dashKind, key: page.key };
-    const hub = hubOf(dashboards.data.dashboards, ref, forgeProject);
-    const tab = hub && hubTabLabel(hub, ref);
-    if (hub && tab) return `${hub.title} · ${tab}`;
-    const title = dashboards.data.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title;
-    return title === undefined ? undefined : displayTitle(title, forgeProject);
-  }, [page, dashboards.data, forgeProject]);
-
-  // The open dashboard's own scope (the same cached read the page makes): a
-  // platform dashboard is not per environment, and the control must not imply it is.
-  const openDashboard = useDashboard(
-    org.orgId,
-    page.kind === "dashboard" && page.dashKind !== "builtin" ? { kind: page.dashKind, projectId: forgeProject, key: page.key } : null
-  );
-  const platformWide = openDashboard.data?.spec.scope === "platform";
-
   const [collapsed, setCollapsed] = useState(() => readRail());
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -205,14 +147,10 @@ export function ConsoleLayout() {
   );
 
   // The led console is the console's default (ledConsole.tsx): Product analytics leads to the project's hub, when it has one.
-  const ledHost = useMemo<LedConsoleHost>(() => {
-    const hub = hubsOf(dashboards.data?.dashboards ?? [], forgeProject).find((candidate) => candidate.id === "product");
-    const first = hub?.tabs[0];
-    return {
-      productAnalytics: hub && first && first.ref.kind !== "template" ? { open: { kind: "dashboard", dashKind: first.ref.kind, key: first.ref.key }, keys: hub.tabs.map((tab) => tab.ref.key) } : undefined,
-      releasesExplainer: { href: DOCS.deploys, label: "How releases work" },
-    };
-  }, [dashboards.data, forgeProject]);
+  const ledHost = useMemo<LedConsoleHost>(
+    () => ({ productAnalytics, releasesExplainer: { href: DOCS.deploys, label: "How releases work" } }),
+    [productAnalytics]
+  );
 
   // ConsoleShell is memoized: every element it takes is built once per input,
   // so a URL change that moves none of them (a tour step, a filter) leaves the
@@ -222,9 +160,9 @@ export function ConsoleLayout() {
     () => (
       <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
         {/* The forge shell has no app to close back to: its mark leads
-            home (the Apps list), and Reliant is a link in its own chrome. */}
+            home (Projects' apps), and Reliant is a link in its own chrome. */}
         {forgeShell ? (
-          <a href={appsPath()} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
+          <a href={projectsHref("apps")} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
             <ForgeMark className="h-6 w-6" />
           </a>
         ) : (
@@ -233,13 +171,20 @@ export function ConsoleLayout() {
         <ConsoleProjectSwitcher
           forgeProject={forgeProject}
           onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
-          onSelectAll={() => void navigate({ href: appsPath() })}
+          onSelectAll={() => void navigate({ href: projectsHref("apps") })}
         />
       </div>
     ),
     [trafficLightPadding, dragRegionStyle, forgeShell, onClose, forgeProject, navigate, page]
   );
   const brandCollapsed = useMemo(() => <ProjectMonogram name={forgeProject} />, [forgeProject]);
+  // Nothing deployed yet (the roster answered with no environment): inside
+  // the shell every page of the app says what it will show and how to deploy
+  // it (U6b; every project has the same nav). The shell's project names the
+  // code to deploy when no project declares the app yet.
+  const shellFocus = useShellLastPick((state) => state.focus);
+  const undeployed = inShell && model.settled && roster.envs.length === 0 && !rosterReadFailed(roster);
+  const deployProjectId = projectId ?? (shellFocus && !shellFocus.startsWith("app:") ? shellFocus : null);
   const body = useMemo(
     () =>
       listed ? (
@@ -247,7 +192,8 @@ export function ConsoleLayout() {
           <div className="empty:hidden [&:not(:empty)]:mb-4">
             <ObsQuotaBanner />
           </div>
-          <Outlet />
+          {/* The Overview is the landing: with nothing deployed it shows the chats and the way to deploy (WorkloadPages OverviewPage). */}
+          {undeployed && page.kind !== "overview" ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
@@ -255,8 +201,33 @@ export function ConsoleLayout() {
           <SkeletonLoader variant="table-row" count={4} />
         </div>
       ),
-    [listed, value]
+    [listed, value, undeployed, page, deployProjectId]
   );
+
+  const primeMetrics = page.kind === "obs-view" && page.view === "metrics" && (
+    <PrimeMetricCatalog orgId={orgId} forgeProject={forgeProject} env={env} roster={roster} />
+  );
+
+  // Inside the one shell the app's sections are rows of its nav: the console
+  // is a page under a slim bar, with no column of its own (ConsoleFrame).
+  if (inShell) {
+    return (
+      <LedConsoleProvider host={ledHost}>
+        <ConsoleFrame
+          project={forgeProject}
+          page={page}
+          env={env}
+          dashboardTitle={dashboardTitle}
+          scope={scope}
+          platformWide={platformWide}
+          onEnvChange={setEnv}
+        >
+          {primeMetrics}
+          {body}
+        </ConsoleFrame>
+      </LedConsoleProvider>
+    );
+  }
 
   return (
     <LedConsoleProvider host={ledHost}>
@@ -281,9 +252,7 @@ export function ConsoleLayout() {
       brand={brand}
       brandCollapsed={brandCollapsed}
     >
-      {page.kind === "obs-view" && page.view === "metrics" && (
-        <PrimeMetricCatalog orgId={org.orgId} forgeProject={forgeProject} env={env} roster={roster} />
-      )}
+      {primeMetrics}
       {body}
     </ConsoleShell>
     </LedConsoleProvider>

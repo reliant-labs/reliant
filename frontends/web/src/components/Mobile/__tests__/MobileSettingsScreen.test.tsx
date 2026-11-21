@@ -137,7 +137,7 @@ describe("MobileSettingsScreen", () => {
   it("notes top-level mobile management and what remains desktop-only", () => {
     renderMobile();
     expect(
-      screen.getByText(/Machines are in the main menu/i),
+      screen.getByText(/Agent sandboxes are in the main menu/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/MCP servers, prompts, keyboard shortcuts/i),

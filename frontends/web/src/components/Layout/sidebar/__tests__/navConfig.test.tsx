@@ -13,7 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
 
-import { consolePageOf, consolePath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
+import { registerConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
+import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
 import { activeArea, backHref, childrenOf, drillInIds, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../navConfig";
 import { NavRenderer } from "../NavRenderer";
 
@@ -44,16 +45,33 @@ describe("the hybrid nav's shape", () => {
       "agents",
       "dashboards",
       "observability",
+      "analytics",
       "deployments",
       "data",
       "storage",
-      "users",
+      "auth",
       "configure",
     ]);
   });
 
-  it("has Settings in the footer, and no footer Inbox", () => {
-    expect(hybridNav.footer.map((item) => item.id)).toEqual(["settings"]);
+  it("draws Security ▾ only once a page registers into it, with that page's row", () => {
+    const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
+    const ctx = ctxAt(consolePath("shopfront", { kind: "secrets" }), { console });
+    expect(flattenIds(hybridNav.items, ctx)).not.toContain("security");
+    const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
+    try {
+      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "security", "configure"]);
+      expect(flattenIds(hybridNav.items, ctx)).toContain("registered-advisories");
+      // Not in Analytics: a Security row joins Security alone.
+      const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
+      expect(childrenOf(analytics, ctx).map((item) => item.id)).not.toContain("registered-advisories");
+    } finally {
+      unregister();
+    }
+  });
+
+  it("has Usage & billing and Settings in the footer, and no footer Inbox", () => {
+    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "settings"]);
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
@@ -68,17 +86,17 @@ describe("the hybrid nav's shape", () => {
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
   });
 
-  it("Configure is Secrets, Domains, Activity", () => {
+  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Usage, Activity", () => {
     const ctx = ctxAt(inboxPath());
     const configure = hybridNav.items.find((item) => item.id === "configure")!;
-    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "activity"]);
+    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "project-usage", "activity"]);
   });
 
-  it("merges Releases and Environments into Deployments, with Previews a URL of its own", () => {
+  it("merges Services, Releases and Environments into Deployments, with Previews a URL of its own", () => {
     const ctx = ctxAt(inboxPath());
     const deployments = hybridNav.items.find((item) => item.id === "deployments")!;
     expect(deployments.kind).toBe("group");
-    expect(flattenIds([deployments], ctx)).toEqual(["deployments", "releases", "environments", "previews"]);
+    expect(flattenIds([deployments], ctx)).toEqual(["deployments", "services", "releases", "environments", "previews"]);
     const previews = childrenOf(deployments, ctx).find((item) => item.id === "previews")!;
     expect(hrefOf(previews, ctx)).toBe(`${consolePath("shopfront", { kind: "environments" })}?show=previews`);
     // The previews view lights Previews, not Environments.
@@ -87,11 +105,22 @@ describe("the hybrid nav's shape", () => {
     expect(isCurrent(childrenOf(deployments, onPreviews).find((item) => item.id === "environments")!, onPreviews)).toBe(false);
   });
 
-  it("lists Observability's views, then a Performance & issues divider over Errors … Sessions", () => {
+  it.each([
+    consolePath("shopfront", { kind: "services" }),
+    consolePath("shopfront", { kind: "service", name: "api" }),
+    `${consolePath("shopfront", { kind: "services" })}?view=charts`,
+  ])("opens Deployments and lights Services on %s", (href) => {
+    renderAt(href);
+    expect(screen.getByTestId("nav-deployments")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("nav-services")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("leads Observability with its Overview, then a Performance & issues divider over Errors … Sessions", () => {
     const ctx = ctxAt(inboxPath());
     const observability = hybridNav.items.find((item) => item.id === "observability")!;
     expect(flattenIds([observability], ctx)).toEqual([
       "observability",
+      "obs-overview",
       "obs-graph",
       "obs-metrics",
       "obs-logs",
@@ -101,28 +130,21 @@ describe("the hybrid nav's shape", () => {
       "obs-errors",
       "obs-alerts",
       "obs-traces",
+      "speed-insights",
       "obs-sessions",
     ]);
-    // Drilling in lands on its first view, the Service graph.
-    expect(hrefOf(observability, ctx)).toBe(consolePath("shopfront", { kind: "obs-view", view: "graph" }));
+    // Drilling in lands on the Overview, not the Service graph.
+    expect(hrefOf(observability, ctx)).toBe(`${obsOverviewPath("shopfront")}`);
   });
 
-  it("gives Agents its rows", () => {
-    const ids = flattenIds(hybridNav.items, ctxAt(inboxPath()));
-    expect(ids).toEqual(expect.arrayContaining(["sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
+  it("gives Agents a Connectors row and Analytics its tabs", () => {
+    const ctx = ctxAt(inboxPath());
+    const ids = flattenIds(hybridNav.items, ctx);
+    expect(ids).toEqual(expect.arrayContaining(["connectors", "sandboxes", "workflows-runs", "workflows-library", "slot-chat-list", "slot-new-chat"]));
     // AI providers lives in Settings only (U6e).
     expect(ids).not.toContain("ai-providers");
-  });
-
-  it("draws Analytics ▾ for an app with the Product analytics hub, its Insights row lit on a hub dashboard", () => {
-    expect(topIds()).not.toContain("analytics");
-    const hub = { open: { kind: "dashboard" as const, dashKind: "release" as const, key: "product-users" }, keys: ["product-users"] };
-    const console = { project: "shopfront", page: hub.open, env: "prod", envs: [], productAnalytics: hub };
-    const ctx = ctxAt(consolePath("shopfront", hub.open), { console });
-    expect(topIds(ctx)).toContain("analytics");
     const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
-    expect(flattenIds([analytics], ctx)).toEqual(["analytics", "analytics-insights"]);
-    expect(isCurrent(childrenOf(analytics, ctx)[0]!, ctx)).toBe(true);
+    expect(flattenIds([analytics], ctx)).toEqual(["analytics", "analytics-overview", "analytics-users", "analytics-product", "analytics-acquisition", "analytics-events"]);
   });
 
   it("keeps the same top level across several projects", () => {
@@ -137,7 +159,9 @@ describe("drill-in is derived from the route", () => {
     [newChatPath(), "agents"],
     [runsPath(), "agents"],
     [logs, "observability"],
+    [consolePath("shopfront", { kind: "speed-insights" }), "observability"],
     [orgPath({ kind: "obs-view", view: "traces" }), "observability"],
+    [consolePath("shopfront", { kind: "analytics" }), null],
     [consolePath("shopfront", { kind: "obs-view", view: "dashboards" }), null],
     [inboxPath(), null],
     [settingsPath("ai"), "settings"],
@@ -167,14 +191,20 @@ describe("drill-in is derived from the route", () => {
     renderAt(consolePath("shopfront", { kind: "obs-view", view: "logs" }));
     expect(screen.getByText("Performance & issues")).toBeInTheDocument();
     expect(screen.queryByTestId("nav-performance")).toBeNull();
-    for (const id of ["obs-errors", "obs-alerts", "obs-traces", "obs-sessions"]) expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
+    for (const id of ["obs-errors", "obs-alerts", "obs-traces", "speed-insights", "obs-sessions"]) expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
+  });
+
+  it("is Observability's on its Overview page, with the Overview row lit", () => {
+    renderAt(obsOverviewPath("shopfront"));
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "observability");
+    expect(screen.getByTestId("nav-obs-overview")).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps a drawer open on a drill-in and its back header, not on a destination", () => {
     const onNavigate = vi.fn();
     renderAt(inboxPath(), onNavigate);
     fireEvent.click(screen.getByTestId("nav-observability"));
-    expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "obs-view", view: "graph" }), { drill: true });
+    expect(onNavigate).toHaveBeenLastCalledWith(obsOverviewPath("shopfront"), { drill: true });
     fireEvent.click(screen.getByTestId("sidebar-settings-button"));
     expect(onNavigate).toHaveBeenLastCalledWith(settingsPath());
   });

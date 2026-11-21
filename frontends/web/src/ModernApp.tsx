@@ -6,7 +6,6 @@ import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
 import { logger } from "./lib/logger";
-import { cn } from "./lib/utils";
 import { isWorkflowSurfacePath } from "./lib/workflowsArea";
 import {
   useEffect,
@@ -17,7 +16,6 @@ import {
   startTransition,
 } from "react";
 import { ChatInterface } from "./components/Chat/ChatInterface";
-import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
 import { mostRecentProject, useProjectStore } from "./store/projectStore";
@@ -27,6 +25,7 @@ import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
 import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
+import { PageMain, toggleShellNav, useShellFrame } from "./components/Layout/shell/shellFrame";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
@@ -59,7 +58,6 @@ import { openAddProject } from "./store/addProjectDialogStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useShortcutHost, useShortcutLayer } from "./hooks/useShortcutHost";
 import { useElectronIPC } from "./hooks/useElectronIPC";
-import { useSidebarOverlay } from "./hooks/useSidebarOverlay";
 import { useGitInitialization } from "./hooks/useGitInitialization";
 import { useDaemonStatus } from "./hooks/useDaemonStatus";
 import { useProjectRescan } from "./hooks/useProjectRescan";
@@ -87,9 +85,9 @@ import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
-import { appsPath, homePath, inboxPath, onboardingPath, runsPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
-import { isForgeShell } from "@/lib/shell";
-import { forgeBrandHomeTarget, routeRequiresOnboarding } from "./components/OnboardingFlow/onboardingGate";
+import { homePath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
+import { chatSetupNeeded, chatSetupPath } from "./components/OnboardingFlow/onboardingGate";
+import { useChatRouteRedirect } from "./components/OnboardingFlow/useChatSetup";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -122,6 +120,23 @@ function App() {
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();
+
+  // Who may use the chat routes yet (onboardingGate.ts, chatRouteAction): the
+  // home sends a person who cannot run a chat — not onboarded, or onboarded
+  // with no usable machine — to their projects; a project's chats send a
+  // person who has not onboarded through /onboarding and back. `/?plan=…`
+  // and `/?start=…` ask for a chat, so they still go to the wizard, search
+  // and all (onboardingSearchSchema accepts the same fields).
+  //
+  // Deliberately NOT gated on `isBackendReady` or `isWorkspaceRestoring`: a
+  // person on their way elsewhere has no workspace to restore, and waiting
+  // for ListProjects only leaves them on a spinner. The hook waits for the
+  // user record (and, at the home, the daemon list) instead, so it never
+  // bounces twice. `holding` is true while it is about to leave.
+  const { holding: chatRouteHolding, setup: chatSetupState } = useChatRouteRedirect();
+  // New chat (the shortcut) while chats cannot run: set them up instead.
+  const chatSetupRef = useRef(chatSetupState);
+  chatSetupRef.current = chatSetupState;
 
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
@@ -163,23 +178,12 @@ function App() {
     return useWorkspaceStateStore.getState().getWorktreeState(projectId, worktreeId).rightPanelState.fileBrowser;
   });
   
-  // Left sidebar (chat sidebar) state - global across all workspaces
-  const showChatSidebar = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
-  const setShowChatSidebar = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    const currentValue = useWorkspaceStateStore.getState().leftSidebarExpanded;
-    const newValue = typeof value === 'function' ? value(currentValue) : value;
-    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(newValue);
-  }, []);
+  // The left nav belongs to the one shell (Layout/shell/AppShell.tsx), which
+  // docks, collapses and toggles it on every page; this page only reads
+  // whether it is docked, for the header's traffic-light inset.
+  const { navDocked } = useShellFrame();
   
-  // Sidebar overlay behavior for collapsed sidebar
-  const {
-    showOverlaySidebar,
-    isSidebarHovered,
-    handleSidebarMouseEnter,
-    handleSidebarMouseLeave,
-    handleOverlayMouseEnter,
-    handleOverlayMouseLeave,
-  } = useSidebarOverlay({ isSidebarExpanded: showChatSidebar });
+
 
   // Wrap setters to also persist to workspace state
   const setShowFileBrowser = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
@@ -436,6 +440,12 @@ function App() {
   const keyboardHandlers = useMemo(
     () => ({
       onNewChat: () => {
+        // Chats cannot run yet: walk them through setting chats up instead.
+        const setup = chatSetupRef.current;
+        if (chatSetupNeeded(setup)) {
+          void navigate({ href: chatSetupPath(setup) });
+          return;
+        }
         // The new-chat view, in the filter's project, else the open chat's,
         // else the last one used (openNewChat).
         void openNewChat();
@@ -636,16 +646,6 @@ function App() {
           return next;
         });
       },
-      onToggleSidebar: () => {
-        setShowChatSidebar((prev) => {
-          const next = !prev;
-          if (!next && isFocusWithin("left-sidebar")) {
-            clearPane("left-sidebar");
-            focusPrevious();
-          }
-          return next;
-        });
-      },
       onNextRightSidebarTab: () => {
         const projectId = currentProject?.id;
         if (!projectId) return;
@@ -673,10 +673,6 @@ function App() {
         // The active tab's own arrow/Enter handling takes over from there; we
         // deliberately do not implement sidebar-level item navigation.
         focusPane("right-sidebar");
-      },
-      onFocusLeftSidebar: () => {
-        setShowChatSidebar(true);
-        focusPane("left-sidebar");
       },
       onFocusTranscript: () => {
         focusPane("transcript");
@@ -734,9 +730,9 @@ function App() {
       currentProject?.id,
       currentWorktree?.id,
       setShowFileBrowser,
-      setShowChatSidebar,
       showSidebarTab,
       cycleProject,
+      navigate,
     ]
   );
 
@@ -927,7 +923,6 @@ function App() {
       ["chat-input", "focus-chat-input"],
       ["terminal", "focus-terminal"],
       ["right-sidebar", "focus-right-sidebar"],
-      ["left-sidebar", "focus-left-sidebar"],
       ["transcript", "focus-transcript"],
     ];
 
@@ -1555,47 +1550,6 @@ function App() {
     );
   };
 
-  // Whether the user is mid-onboarding. The onboarding UI itself lives at
-  // /onboarding now (see OnboardingRoute); this flag exists only so we can
-  // bounce stray landings on / or /project/$id over there.
-  // Asked through the one rule (onboardingGate.ts) so this redirect and
-  // OnboardingGate agree on which routes onboarding guards; ModernApp's own
-  // routes (`/`, `/project/$id`) are chat routes, so today it always says yes.
-  const inOnboarding =
-    !isUserLoading &&
-    (!currentUser || !currentUser.onboardingCompleted) &&
-    routeRequiresOnboarding(location.pathname);
-  // On the forge brand the home sends a person who has not onboarded to their
-  // apps instead (forgeBrandHomeTarget); a project's chats still onboard them.
-  const notOnboardedHome = forgeBrandHomeTarget(location.pathname, isForgeShell());
-
-  // If we land here while the user still needs to onboard, redirect to the
-  // dedicated route. Preserve any incoming search (e.g. legacy /?plan=... or
-  // /?github_connected=true) — onboardingSearchSchema accepts the same
-  // fields, and OnboardingRoute will pick them up.
-  //
-  // We deliberately do NOT gate on `isBackendReady` or `isWorkspaceRestoring`:
-  // a mid-onboarding user has no projects to list and no workspace to restore,
-  // and waiting for ListProjects to complete (which can run several hundred
-  // ms to a couple seconds before the shared fetch inside fetchProjects
-  // resolves) just delays the redirect — leaving the user staring at a
-  // LoadingSpinner before the OnboardingPage / ComputeStep mounts and fires
-  // its own queries (ListDaemons, etc.). Gate only on `isUserLoading` so we
-  // don't bounce twice (once before `currentUser` arrives, once after).
-  useEffect(() => {
-    if (isUserLoading) return;
-    if (!inOnboarding) return;
-    if (notOnboardedHome) {
-      navigate({ to: notOnboardedHome, search: {}, replace: true });
-      return;
-    }
-    navigate({
-      to: onboardingPath(),
-      search: (prev: Record<string, unknown>) => prev,
-      replace: true,
-    });
-  }, [isUserLoading, inOnboarding, notOnboardedHome, navigate]);
-
   // GitHub OAuth return for app-shell triggers (GitHubSyncStatus, AddRepoModal).
   // /onboarding and /settings/git-connections handle their own returns in-route.
   // Here we just toast, refresh the credential cache, and strip the params so
@@ -1650,10 +1604,10 @@ function App() {
       return <LoadingSpinner />;
     }
 
-    // Mid-onboarding users get redirected to /onboarding by the effect above;
-    // show a spinner instead of the picker for the one render between
-    // currentUser arriving and the navigate landing.
-    if (inOnboarding) {
+    // A person on their way elsewhere (useChatRouteRedirect: their projects,
+    // or /onboarding) gets a spinner instead of the workspace for the render
+    // or two before the navigate lands, or while the home is still checking.
+    if (chatRouteHolding) {
       return <LoadingSpinner />;
     }
 
@@ -1685,91 +1639,9 @@ function App() {
     // chat-shell content below it.
     <div className="flex flex-col flex-1 min-h-0 bg-background font-sans dense-ui">
       <div className="flex flex-1 min-h-0 relative">
-        {/* Hover trigger area - shows when sidebar is closed */}
-        {!showChatSidebar && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-2 z-40 hover:bg-primary/10 transition-colors"
-            onMouseEnter={handleSidebarMouseEnter}
-            onMouseLeave={handleSidebarMouseLeave}
-          />
-        )}
-
-        {/* Chat Sidebar - Toggle with Shift+Cmd+B */}
-        {showChatSidebar && (
-          <ResizableSidebar storageKey="chat-sidebar-width">
-            <div id="layout-left-sidebar" className="flex flex-col h-full">
-              <Sidebar
-                paddingClass=""
-                pathname={location.pathname}
-                search={location.search}
-                onOpenWorkflows={() => {
-                  navigate({ to: workflowsPath() });
-                }}
-                onOpenInbox={() => {
-                  navigate({ to: inboxPath() });
-                }}
-                onOpenRuns={(search) => {
-                  navigate({ to: runsPath(), search: search ?? {} });
-                }}
-                onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
-                onNavigateToSettings={() => {
-                  navigate({ to: settingsPath() });
-                }}
-                onManageProjects={() => {
-                  navigate({ to: settingsPath('projects') });
-                }}
-                onOpenForge={() => {
-                  navigate({ to: appsPath() });
-                }}
-              />
-            </div>
-          </ResizableSidebar>
-        )}
-
-        {/* Overlay sidebar - shows on hover when closed */}
-        {!showChatSidebar && showOverlaySidebar && (
-          <div
-            className={cn(
-              "absolute left-0 top-0 bottom-0 z-50 shadow-2xl transition-all duration-300 ease-out",
-              isSidebarHovered ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0"
-            )}
-            onMouseEnter={handleOverlayMouseEnter}
-            onMouseLeave={handleOverlayMouseLeave}
-          >
-            <ResizableSidebar storageKey="chat-sidebar-width">
-              <div className="flex flex-col h-full">
-                <Sidebar
-                  paddingClass=""
-                  pathname={location.pathname}
-                  search={location.search}
-                  onOpenWorkflows={() => {
-                    navigate({ to: workflowsPath() });
-                  }}
-                  onOpenInbox={() => {
-                    navigate({ to: inboxPath() });
-                  }}
-                  onOpenRuns={(search) => {
-                    navigate({ to: runsPath(), search: search ?? {} });
-                  }}
-                  onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
-                  onNavigateToSettings={() => {
-                    navigate({ to: settingsPath() });
-                  }}
-                  onManageProjects={() => {
-                    navigate({ to: settingsPath('projects') });
-                  }}
-                  onOpenForge={() => {
-                    navigate({ to: appsPath() });
-                  }}
-                />
-              </div>
-            </ResizableSidebar>
-          </div>
-        )}
-
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 flex overflow-hidden relative">
+          <PageMain className="flex-1 flex overflow-hidden relative">
             {/* Main Chat Content Area */}
             <div
               id="layout-main-content"
@@ -1820,7 +1692,7 @@ function App() {
               </ResizableSidebar>
             )}
 
-          </main>
+          </PageMain>
         </div>
       </div>
 
@@ -1909,7 +1781,7 @@ function App() {
     isBackendReady &&
     !isWorkspaceRestoring &&
     !isUserLoading &&
-    !inOnboarding;
+    !chatRouteHolding;
 
   // Contribute the workspace's shortcut handlers to the keyboard host — from
   // the moment the workspace can act on them (the same gate as the header:
@@ -1927,12 +1799,13 @@ function App() {
   );
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex h-full min-h-0 flex-col">
       <ProjectFilterRouteSync />
       {showHeader && (
         <Header
           ref={headerRef}
-          windowAligned={true}
+          // Docked, the nav's top holds the macOS traffic lights; collapsed, this bar does.
+          windowAligned={!navDocked}
           onNavigateHome={() => {
             navigate({ to: homePath() });
           }}
@@ -1944,7 +1817,7 @@ function App() {
           }}
           onToggleTerminal={toggleTerminal}
           onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
-          onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
+          onToggleChatSidebar={toggleShellNav}
           onOpenWorkflows={() => {
             navigate({ to: workflowsPath() });
           }}

@@ -30,6 +30,11 @@
  * Observability has no home of its own: its health strip is the Overview's,
  * so the parent row opens its first view.
  *
+ * In the product the console renders inside the one shell, whose left nav
+ * draws these sections inline under the open app (ConsoleLayout,
+ * ConsoleFrame.tsx, Layout/sidebar/AppsNavSection.tsx): this column is the
+ * frame of the public demo and the dev preview harnesses only.
+ *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
  * inline, and the group holding the current page stays open. Observability
@@ -49,6 +54,8 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
+  ANALYTICS_TAB_LABELS,
+  AUTH_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -56,6 +63,7 @@ import {
   withSearch,
   type ConsolePage,
 } from "./paths";
+import { consoleNavEntries } from "./consoleNavRegistry";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -158,7 +166,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Data", { kind: "data" }, icon(Database)),
       row("Storage", { kind: "storage" }, icon(HardDrive)),
-      row("Users", { kind: "users" }, icon(Users)),
+      // Auth (U6d): Users and Sign-in tabs; the old Users page redirects to it.
+      row("Auth", { kind: "auth" }, icon(Users), { active: is("auth") || is("users") }),
       ...configureNavRows({ page, envs }, href),
     ],
     footer: [row("Activity", { kind: "activity" }, icon(Activity))],
@@ -225,6 +234,8 @@ export function consoleCrumbs(
       return [{ label: "Releases" }];
     case "release":
       return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
+    case "obs-overview":
+      return [{ label: "Observability" }, { label: "Overview" }];
     case "obs-view":
       return [{ label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) }, { label: OBS_NAV_LABELS[page.view] }];
     case "dashboard":
@@ -249,6 +260,28 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "services":
+      return [{ label: "Services" }];
+    case "service":
+      return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
+    case "events":
+      return [{ label: "Product analytics" }, { label: "Events & metrics" }];
+    case "analytics":
+      return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
+    case "speed-insights":
+      return [{ label: "Observability" }, { label: "Speed insights" }];
+    case "extension":
+      return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
+    case "auth":
+      return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 
@@ -328,30 +361,7 @@ function ConsoleShellImpl({
         navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
         headerContent={
           <>
-            <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
-              <Link
-                href={nav.linkTo ? nav.linkTo({ kind: "overview" }) : withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
-                className="truncate hover:text-ink"
-              >
-                {nav.project}
-              </Link>
-              {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
-                  <span aria-hidden="true" className="text-ink-subtle">
-                    ›
-                  </span>
-                  {crumb.href ? (
-                    <Link href={crumb.href} className="truncate hover:text-ink">
-                      {crumb.label}
-                    </Link>
-                  ) : (
-                    <span aria-current="page" className="truncate font-medium text-ink">
-                      {crumb.label}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </nav>
+            <ConsoleBreadcrumb project={nav.project} env={nav.env} linkTo={nav.linkTo} crumbs={crumbs} />
             {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
@@ -367,6 +377,46 @@ function ConsoleShellImpl({
         {children}
       </SidebarLayout>
     </div>
+  );
+}
+
+/** The console's breadcrumb: the app (its Overview), then the page's trail. */
+export function ConsoleBreadcrumb({
+  project,
+  env,
+  linkTo,
+  crumbs,
+}: {
+  project: string;
+  env: string;
+  linkTo?: (target: ConsolePage) => string;
+  crumbs: { label: string; href?: string }[];
+}) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
+      <Link
+        href={linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env })}
+        className="truncate hover:text-ink"
+      >
+        {project}
+      </Link>
+      {crumbs.map((crumb, index) => (
+        <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
+          <span aria-hidden="true" className="text-ink-subtle">
+            ›
+          </span>
+          {crumb.href ? (
+            <Link href={crumb.href} className="truncate hover:text-ink">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span aria-current="page" className="truncate font-medium text-ink">
+              {crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }
 

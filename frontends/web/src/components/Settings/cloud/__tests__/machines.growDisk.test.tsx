@@ -318,7 +318,7 @@ describe('machine detail — grow disk', () => {
     expect(notice).toHaveTextContent(/Restart .+ to use the extra 40 GB on its disk/)
 
     await user.click(within(notice).getByRole('button', { name: /^restart$/i }))
-    expect(await screen.findByRole('heading', { name: /restart machine/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /restart sandbox/i })).toBeInTheDocument()
   })
 
   it('offers Grow disk beside Free up space on a volume under pressure', async () => {
