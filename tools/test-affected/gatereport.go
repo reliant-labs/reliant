@@ -119,9 +119,16 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 			fmt.Fprintf(out, "failed phase: %s (rc %d); complete log: %s\n", name, rc, logPath)
 			failed = append(failed, name)
 			killed[name] = endedByKill(logPath, rc)
-			if tail := unnamedFailureTail(logPath); tail != "" {
+			if tail, ok := unnamedFailureTail(logPath); ok {
+				// A readable log that names no failure qualifies even when it
+				// is empty: a phase SIGKILLed before it printed anything (a
+				// silent go build) is the commonest OOM shape.
 				unnamed[name] = true
-				fmt.Fprintf(out, "last lines of %s.log (it names no failure):\n%s", name, tail)
+				if tail != "" {
+					fmt.Fprintf(out, "last lines of %s.log (it names no failure):\n%s", name, tail)
+				} else {
+					fmt.Fprintf(out, "%s.log is empty (it names no failure).\n", name)
+				}
 			}
 		}
 	}
@@ -206,13 +213,15 @@ func readOOMKills(dir string, phases []string) map[string]int64 {
 }
 
 // unnamedFailureTail is the last failedLogTail non-empty lines of a failed
-// phase's log, indented, when that log names no failure gateFailures
-// recognises; "" when it does (those lines already lead the report) or when
-// the log cannot be read.
-func unnamedFailureTail(path string) string {
+// phase's log, indented, and true when that log was read and names no
+// failure gateFailures recognises. The tail is "" for a readable log with no
+// non-empty lines, which still reports true. It reports false when the log
+// names a failure (those lines already lead the report) or cannot be read
+// (fail closed: an unreadable log is no evidence of anything).
+func unnamedFailureTail(path string) (string, bool) {
 	b, err := os.ReadFile(path)
 	if err != nil || len(gateFailures(string(b))) > 0 {
-		return ""
+		return "", false
 	}
 	var lines []string
 	for _, line := range strings.Split(ansiEscape.ReplaceAllString(string(b), ""), "\n") {
@@ -227,5 +236,5 @@ func unnamedFailureTail(path string) string {
 	for _, line := range lines {
 		sb.WriteString("    " + line + "\n")
 	}
-	return sb.String()
+	return sb.String(), true
 }

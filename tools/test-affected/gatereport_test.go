@@ -313,3 +313,28 @@ func TestGateReportMarksAnOOMKilledPhase(t *testing.T) {
 		t.Fatalf("an ordinary failure beside a killed phase must print no marker: %s", s)
 	}
 }
+
+// A phase SIGKILLed before it printed anything (rc 137, an empty but
+// readable log) is the commonest OOM shape and must still be marked; an
+// unreadable log stays fail-closed.
+func TestGateReportMarksASilentlyKilledPhase(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "build.log"), nil, 0600)
+	os.WriteFile(filepath.Join(dir, "build.row"), []byte("build 137 40 0\n"), 0600)
+	os.WriteFile(filepath.Join(dir, "build.oom"), []byte("1\n"), 0600)
+	budgets := filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")
+	report := func() string {
+		var out bytes.Buffer
+		if rc := runGateReport([]string{"-dir", dir, "-wall", "10", "-budgets", budgets}, &out, &out); rc != 0 {
+			t.Fatalf("rc %d: %s", rc, &out)
+		}
+		return out.String()
+	}
+	if s := report(); !strings.Contains(s, "!! GATE-INFRA: oom build (1 oom_kill while it ran;") || !strings.Contains(s, "build.log is empty") {
+		t.Fatalf("an empty log, rc 137 and an oom_kill must mark the phase: %s", s)
+	}
+	os.Remove(filepath.Join(dir, "build.log"))
+	if s := report(); strings.Contains(s, "GATE-INFRA") {
+		t.Fatalf("an unreadable log must print no marker: %s", s)
+	}
+}
