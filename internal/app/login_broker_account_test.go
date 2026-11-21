@@ -27,15 +27,22 @@ func TestSessionReportsTheControlPlaneAccount(t *testing.T) {
 		}
 	}
 
+	// The account id is control-plane's own; its external id is the
+	// identity's subject.
 	b := &loginBroker{logger: logger, accounts: reader(&controlplane.Account{
-		ID: "user-1", Email: "p@example.com", Name: "P", CreatedAt: created, OnboardingCompleted: true,
+		ID: "cp-uuid-1", ExternalID: "user-1", Email: "p@example.com", Name: "P", CreatedAt: created, OnboardingCompleted: true,
 	}, nil)}
 	require.Equal(t, &sessionAccount{
-		ID: "user-1", Email: "p@example.com", Name: "P", CreatedAt: "2025-03-04T05:06:07Z", OnboardingCompleted: true,
+		ID: "cp-uuid-1", Email: "p@example.com", Name: "P", CreatedAt: "2025-03-04T05:06:07Z", OnboardingCompleted: true,
 	}, b.account(context.Background(), "the-token", "user-1"))
 
-	b.accounts = reader(&controlplane.Account{ID: "user-2"}, nil)
+	b.accounts = reader(&controlplane.Account{ID: "cp-uuid-2", ExternalID: "user-2"}, nil)
 	require.Nil(t, b.account(context.Background(), "the-token", "user-1"), "another person's account is never reported")
+
+	// No external id in the answer: the control plane resolved the caller
+	// from their own token, which is the binding.
+	b.accounts = reader(&controlplane.Account{ID: "cp-uuid-1"}, nil)
+	require.NotNil(t, b.account(context.Background(), "the-token", "user-1"))
 
 	b.accounts = reader(nil, errors.New("control plane down"))
 	require.Nil(t, b.account(context.Background(), "the-token", "user-1"))
