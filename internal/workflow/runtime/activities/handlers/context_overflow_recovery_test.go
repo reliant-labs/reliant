@@ -233,6 +233,68 @@ func TestContextOverflowRecovery_NeverResendsAfterOutput(t *testing.T) {
 	assert.Equal(t, "partial", events[0].Content)
 }
 
+// unbufferedOutputThenOverflowDriver streams text, an overflow, and then the
+// usage the provider billed, on an unbuffered channel: its goroutine finishes
+// only if the consumer reads the stream to its close.
+type unbufferedOutputThenOverflowDriver struct {
+	mockLLMDriverForIdempotency
+	done chan struct{}
+}
+
+func (d *unbufferedOutputThenOverflowDriver) StreamResponse(context.Context, []string, []message.Message, []tools.Tool) <-chan llm.DriverEvent {
+	ch := make(chan llm.DriverEvent)
+	go func() {
+		// done closes before ch, so a consumer that saw ch close sees done.
+		defer close(ch)
+		defer close(d.done)
+		ch <- llm.DriverEvent{Type: llm.EventContentDelta, Content: "partial"}
+		ch <- llm.DriverEvent{Type: llm.EventError, Error: errors.New(overflowRefusalText)}
+		ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{Usage: llm.TokenUsage{InputTokens: 210_000}}}
+	}()
+	return ch
+}
+
+// A refusal after output is drained to its close, so the driver finishes and
+// releases its stream, and what the provider billed for it is kept.
+func TestContextOverflowRecovery_DrainsTheRefusedStreamAfterOutput(t *testing.T) {
+	t.Parallel()
+	driver := &unbufferedOutputThenOverflowDriver{done: make(chan struct{})}
+	ctx := context.Background()
+	history := historyWithToolOutput(1_000)
+	recovery := newContextOverflowRecovery("chat", "anthropic", "claude-test", history, nil, nil, 0)
+	recovery.sending(prepareHistoryForLLM("chat", history, nil, nil, 0))
+	state := &streamProcessingState{blockStates: NewBlockStreamState(), retries: newDriverRetries()}
+	ch := driver.StreamResponse(ctx, nil, nil, nil)
+	ev := <-ch
+	state.textParts = append(state.textParts, ev.Content)
+	ev = <-ch
+	require.Equal(t, llm.EventError, ev.Type)
+
+	next, err := recovery.resend(ctx, driver, ch, ev.Error, state)
+	assert.Nil(t, next, "no resend after output")
+	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow)
+	select {
+	case <-driver.done:
+	default:
+		t.Fatal("the refused stream must be read to its close before resend returns")
+	}
+	assert.EqualValues(t, 210_000, state.usage.InputTokens, "the billed usage of the refused request is kept")
+}
+
+// End to end: an overflow after output fails the turn with the overflow, and
+// saves nothing of the partial, so a retry starts from the history as it was.
+func TestCallLLM_ContextOverflowAfterOutputFailsAndSavesNoPartial(t *testing.T) {
+	t.Parallel()
+	driver := &outputThenOverflowDriver{}
+	_, h, err := runCallLLMWithToolOutput(t, driver, 1_000)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow)
+	assert.Equal(t, 1, driver.calls, "never resent")
+	var messages int
+	require.NoError(t, h.DB().QueryRowContext(context.Background(), "SELECT count(*) FROM messages").Scan(&messages))
+	assert.Equal(t, 1, messages, "only the user's message: the partial is not saved")
+}
+
 // End to end through CallLLM: the turn's tool output overflows the provider,
 // the activity resends it trimmed, and the turn completes with the answer.
 func TestCallLLM_ContextOverflowIsRecoveredInTheTurn(t *testing.T) {

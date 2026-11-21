@@ -41,7 +41,17 @@ labels '[]'; events '[]'
 check "breaks-rollback with no label fails" 1 CI_PR=7
 labels '[{"name":"migration:breaks-rollback-approved"}]'
 events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-labs[bot]"}}]'
-check "the label applied by a bot does not count" 1 CI_PR=7
+# The owner and the Reliant bot (labelling on the owner's instruction) count; any other
+# account does not (owner decision, 2026-11-19).
+check "the Reliant bot's label passes" 0 CI_PR=7
+grep -q 'applied by reliant-labs\[bot\]' "$T/out" || { echo "FAIL: the approval does not name the bot"; fail=1; }
+check "COMPAT_OWNERS narrowed to the owner refuses the bot's label" 1 CI_PR=7 COMPAT_OWNERS=reliant-01
+events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"some-author"}}]'
+check "the label applied by an unrelated account does not count" 1 CI_PR=7
+events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"github-actions[bot]"}}]'
+check "the label applied by another bot does not count" 1 CI_PR=7
+events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-labs[bot]"}},{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"some-author"}}]'
+check "an unrelated account re-applying the bot's label does not count" 1 CI_PR=7
 events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-01"}}]'
 check "the owner's label passes" 0 CI_PR=7
 check "an owner event from a paginated read that then failed does not count" 1 CI_PR=7 FAKE_GH_EVENTS_EXIT=1
@@ -114,8 +124,10 @@ labels '[]'; events '[]'
 CMD=proto check "deleting buf.yaml beside a breaking change fails" 1 CI_PR=9
 grep -q 'buf.yaml' "$T/out" || { echo "FAIL: the refusal does not name buf.yaml"; fail=1; }
 labels '[{"name":"breaking:approved"}]'
+events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"some-author"}}]'
+CMD=proto check "an unrelated account's breaking:approved does not accept it" 1 CI_PR=9
 events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"reliant-labs[bot]"}}]'
-CMD=proto check "a bot's breaking:approved does not accept it" 1 CI_PR=9
+CMD=proto check "the Reliant bot's breaking:approved accepts it" 0 CI_PR=9
 events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"reliant-01"}}]'
 CMD=proto check "the owner's breaking:approved accepts it" 0 CI_PR=9
 exit "$fail"

@@ -123,7 +123,7 @@ export function MessageActionsSheet({
       {/* Backdrop */}
       <div
         className={cn(
-          "absolute inset-0 bg-black/50 transition-opacity duration-200",
+          "absolute inset-0 bg-scrim transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0",
         )}
         onClick={onClose}

@@ -125,6 +125,15 @@ func (r *contextOverflowRecovery) resend(ctx context.Context, driver llm.Driver,
 	refusal := markedOverflow(err)
 	if producedOutput(state) {
 		// The user watched that output stream in; a resend would repeat it.
+		// The turn then fails as any provider error after output does: the
+		// activity returns the error, nothing of the partial is saved (only
+		// an interrupted turn persists its partial, persistInterruptedTurn),
+		// so a retry starts from the history as it was. The refused stream is
+		// drained to close here, keeping what the provider billed for it, so
+		// the driver always finishes and releases its stream.
+		if usage := drainRefused(refused); usage != nil {
+			state.usage = *usage
+		}
 		return nil, refusal
 	}
 	if r.sent == nil {
@@ -136,14 +145,9 @@ func (r *contextOverflowRecovery) resend(ctx context.Context, driver llm.Driver,
 	}
 	r.resends++
 
-	// A driver closes its stream right after its error, after reporting what
-	// the provider billed for the refused request, if anything
-	// (llm.EndStreamWithError).
 	var billed *llm.TokenUsage
-	for ev := range refused {
-		if ev.Type == llm.EventComplete && ev.Response != nil {
-			billed = llm.FailedAttemptUsage(ev.Response.Usage)
-		}
+	if usage := drainRefused(refused); usage != nil {
+		billed = llm.FailedAttemptUsage(*usage)
 	}
 	if state.retries != nil {
 		state.retries.observe(llm.RetryWait{
@@ -164,6 +168,21 @@ func (r *contextOverflowRecovery) resend(ctx context.Context, driver llm.Driver,
 		"error", refusal)
 	r.sent = next
 	return driver.StreamResponse(ctx, r.systemPrompts, next, r.tools), nil
+}
+
+// drainRefused reads a refused stream to its close and returns the usage its
+// complete event reported, if any. A driver closes its stream right after its
+// error, after reporting what the provider billed for the refused request, if
+// anything (llm.EndStreamWithError).
+func drainRefused(refused <-chan llm.DriverEvent) *llm.TokenUsage {
+	var usage *llm.TokenUsage
+	for ev := range refused {
+		if ev.Type == llm.EventComplete && ev.Response != nil {
+			u := ev.Response.Usage
+			usage = &u
+		}
+	}
+	return usage
 }
 
 // producedOutput reports whether the stream has delivered anything the user

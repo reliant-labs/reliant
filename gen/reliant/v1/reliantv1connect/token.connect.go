@@ -85,8 +85,8 @@ type TokenServiceClient interface {
 	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
 	// ExchangeToken trades the CALLING access token for a short-lived one that
 	// carries only control-plane authority — what forge presents to the control
-	// plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
-	// so a user signed in to Reliant never runs `forge login` as well.
+	// plane for `forge env deploy`, `forge env secret`, `forge cloud domain` and friends,
+	// so a user signed in to Reliant never runs `forge cloud login` as well.
 	//
 	// ATTENUATION ONLY. The minted token's scopes are the requested ones that are
 	// exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
@@ -101,7 +101,7 @@ type TokenServiceClient interface {
 	// nothing.
 	//
 	// Machine credential only — the exchange needs a credential to attenuate. A
-	// human session signs in with `forge login` or uses the web app.
+	// human session signs in with `forge cloud login` or uses the web app.
 	//
 	// auth_required: false means "not gated by the API's auth interceptor",
 	// never "unauthenticated": the handler authenticates its own bearer, against
@@ -146,7 +146,8 @@ type TokenServiceClient interface {
 	// session's acting user must have push access to the repository, so the bot
 	// is never a way past the user's own permissions. The token is scoped to
 	// that one repository and to the requested permissions (issues,
-	// pull_requests, contents; default all three at write), expires within an
+	// pull_requests, contents, actions, checks; default issues,
+	// pull_requests and contents at write), expires within an
 	// hour, and is never stored or logged here. control-plane's audit log
 	// records each mint.
 	//
@@ -295,8 +296,8 @@ type TokenServiceHandler interface {
 	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
 	// ExchangeToken trades the CALLING access token for a short-lived one that
 	// carries only control-plane authority — what forge presents to the control
-	// plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
-	// so a user signed in to Reliant never runs `forge login` as well.
+	// plane for `forge env deploy`, `forge env secret`, `forge cloud domain` and friends,
+	// so a user signed in to Reliant never runs `forge cloud login` as well.
 	//
 	// ATTENUATION ONLY. The minted token's scopes are the requested ones that are
 	// exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
@@ -311,7 +312,7 @@ type TokenServiceHandler interface {
 	// nothing.
 	//
 	// Machine credential only — the exchange needs a credential to attenuate. A
-	// human session signs in with `forge login` or uses the web app.
+	// human session signs in with `forge cloud login` or uses the web app.
 	//
 	// auth_required: false means "not gated by the API's auth interceptor",
 	// never "unauthenticated": the handler authenticates its own bearer, against
@@ -356,7 +357,8 @@ type TokenServiceHandler interface {
 	// session's acting user must have push access to the repository, so the bot
 	// is never a way past the user's own permissions. The token is scoped to
 	// that one repository and to the requested permissions (issues,
-	// pull_requests, contents; default all three at write), expires within an
+	// pull_requests, contents, actions, checks; default issues,
+	// pull_requests and contents at write), expires within an
 	// hour, and is never stored or logged here. control-plane's audit log
 	// records each mint.
 	//

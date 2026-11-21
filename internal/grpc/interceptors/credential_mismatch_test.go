@@ -39,7 +39,7 @@ func TestCredentialMismatchNamesTheOrgAndTheFix(t *testing.T) {
 	if !errors.As(err, &cerr) || cerr.Meta().Get(svcerr.ReasonHeader) != orgs.ReasonOrgMismatch {
 		t.Fatalf("want reason %q: %v", orgs.ReasonOrgMismatch, err)
 	}
-	for _, want := range []string{"home", "acme", "reliant auth login", "forge login --org acme"} {
+	for _, want := range []string{"home", "acme", "reliant auth login", "forge cloud login --org acme"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q: %v", want, err)
 		}

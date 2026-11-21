@@ -70,7 +70,7 @@ export function InitializationModal({
         )}
 
         <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold text-foreground mb-3">
             This will create:
           </p>
           <ul className="text-sm text-muted-foreground space-y-2">

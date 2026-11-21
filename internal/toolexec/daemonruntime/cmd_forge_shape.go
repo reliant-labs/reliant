@@ -33,7 +33,7 @@ type forgeEnvShapeArgs struct {
 
 // shapeArgs pins the env as a POSITIONAL, which is what `forge env shape`
 // takes (the same position `forge env build <env>` and `forge env render
-// <env>` use). Contrast `forge secret list`, whose env moved to a required
+// <env>` use). Contrast `forge env secret list`, whose env moved to a required
 // --env flag and silently broke this daemon for a release: that is the
 // regression cmd_forge_argv_test.go exists to catch, and it covers this argv
 // too.

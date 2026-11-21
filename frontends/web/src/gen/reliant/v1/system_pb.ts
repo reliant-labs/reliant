@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/system.proto.
  */
 export const file_reliant_v1_system: GenFile = /*@__PURE__*/
-  fileDesc("ChdyZWxpYW50L3YxL3N5c3RlbS5wcm90bxIKcmVsaWFudC52MSIPCg1IZWFsdGhSZXF1ZXN0IjEKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJIg4KDFJlYWR5UmVxdWVzdCIyCg1SZWFkeVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIRCgl0aW1lc3RhbXAYAiABKAMiDQoLSW5mb1JlcXVlc3QihAEKDEluZm9SZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg4KBmNvbW1pdBgCIAEoCRIMCgRkYXRlGAMgASgJEg4KBmJyYW5jaBgEIAEoCRILCgNhcGkYBSABKAkSEQoJdGltZXN0YW1wGAYgASgDEhUKDXdvcmt0cmVlX25hbWUYByABKAkiEAoOVmVyc2lvblJlcXVlc3QiUAoPVmVyc2lvblJlc3BvbnNlEg8KB3ZlcnNpb24YASABKAkSDgoGY29tbWl0GAIgASgJEgwKBGRhdGUYAyABKAkSDgoGYnJhbmNoGAQgASgJIisKF1N0YXJ0T0F1dGhTaWduSW5SZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJIn8KGFN0YXJ0T0F1dGhTaWduSW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRIPCgd1c2VyX2lkGAMgASgJEg0KBWVtYWlsGAQgASgJEhYKDnByb3ZpZGVyX3Rva2VuGAUgASgJIhQKEkRldkF1dGhMb2FkUmVxdWVzdCJSChNEZXZBdXRoTG9hZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSGQoMc2Vzc2lvbl9qc29uGAIgASgJSACIAQFCDwoNX3Nlc3Npb25fanNvbiIqChJEZXZBdXRoU2F2ZVJlcXVlc3QSFAoMc2Vzc2lvbl9qc29uGAEgASgJIiYKE0RldkF1dGhTYXZlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCIVChNEZXZBdXRoQ2xlYXJSZXF1ZXN0IicKFERldkF1dGhDbGVhclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgy1wcKDVN5c3RlbVNlcnZpY2USSgoGSGVhbHRoEhkucmVsaWFudC52MS5IZWFsdGhSZXF1ZXN0GhoucmVsaWFudC52MS5IZWFsdGhSZXNwb25zZSIJkAIBorsYAggAEkcKBVJlYWR5EhgucmVsaWFudC52MS5SZWFkeVJlcXVlc3QaGS5yZWxpYW50LnYxLlJlYWR5UmVzcG9uc2UiCZACAaK7GAIIABJECgRJbmZvEhcucmVsaWFudC52MS5JbmZvUmVxdWVzdBoYLnJlbGlhbnQudjEuSW5mb1Jlc3BvbnNlIgmQAgGiuxgCCAASTQoHVmVyc2lvbhIaLnJlbGlhbnQudjEuVmVyc2lvblJlcXVlc3QaGy5yZWxpYW50LnYxLlZlcnNpb25SZXNwb25zZSIJkAIBorsYAggAEsIBChBTdGFydE9BdXRoU2lnbkluEiMucmVsaWFudC52MS5TdGFydE9BdXRoU2lnbkluUmVxdWVzdBokLnJlbGlhbnQudjEuU3RhcnRPQXV0aFNpZ25JblJlc3BvbnNlImOiuxhfCAA6WzpZc2lnbi1pbiBoYW5kc2hha2U6IHJldHVybnMgc2Vzc2lvbiB0b2tlbnMgdG8gdGhlIGRlc2t0b3AgYXBwIGFuZCBjaGFuZ2VzIG5vIHJlbGlhbnQgc3RhdGUSmQEKC0RldkF1dGhMb2FkEh4ucmVsaWFudC52MS5EZXZBdXRoTG9hZFJlcXVlc3QaHy5yZWxpYW50LnYxLkRldkF1dGhMb2FkUmVzcG9uc2UiSaK7GEUIADpBOj9kZXZlbG9wbWVudCBvbmx5OiByZWFkcyB0aGUgZGV2ZWxvcGVyJ3MgbG9jYWwgYXV0aCBzZXNzaW9uIGZpbGUSmgEKC0RldkF1dGhTYXZlEh4ucmVsaWFudC52MS5EZXZBdXRoU2F2ZVJlcXVlc3QaHy5yZWxpYW50LnYxLkRldkF1dGhTYXZlUmVzcG9uc2UiSqK7GEYIADpCOkBkZXZlbG9wbWVudCBvbmx5OiB3cml0ZXMgdGhlIGRldmVsb3BlcidzIGxvY2FsIGF1dGggc2Vzc2lvbiBmaWxlEp0BCgxEZXZBdXRoQ2xlYXISHy5yZWxpYW50LnYxLkRldkF1dGhDbGVhclJlcXVlc3QaIC5yZWxpYW50LnYxLkRldkF1dGhDbGVhclJlc3BvbnNlIkqiuxhGCAA6QjpAZGV2ZWxvcG1lbnQgb25seTogY2xlYXJzIHRoZSBkZXZlbG9wZXIncyBsb2NhbCBhdXRoIHNlc3Npb24gZmlsZUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge]);
+  fileDesc("ChdyZWxpYW50L3YxL3N5c3RlbS5wcm90bxIKcmVsaWFudC52MSIPCg1IZWFsdGhSZXF1ZXN0IjEKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJIg4KDFJlYWR5UmVxdWVzdCIyCg1SZWFkeVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRIRCgl0aW1lc3RhbXAYAiABKAMiDQoLSW5mb1JlcXVlc3QiuQEKDEluZm9SZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg4KBmNvbW1pdBgCIAEoCRIMCgRkYXRlGAMgASgJEg4KBmJyYW5jaBgEIAEoCRILCgNhcGkYBSABKAkSEQoJdGltZXN0YW1wGAYgASgDEhUKDXdvcmt0cmVlX25hbWUYByABKAkSMwoPY2xpZW50X21pbmltdW1zGAggASgLMhoucmVsaWFudC52MS5DbGllbnRNaW5pbXVtcyIQCg5WZXJzaW9uUmVxdWVzdCKFAQoPVmVyc2lvblJlc3BvbnNlEg8KB3ZlcnNpb24YASABKAkSDgoGY29tbWl0GAIgASgJEgwKBGRhdGUYAyABKAkSDgoGYnJhbmNoGAQgASgJEjMKD2NsaWVudF9taW5pbXVtcxgFIAEoCzIaLnJlbGlhbnQudjEuQ2xpZW50TWluaW11bXMiUgoNQ2xpZW50TWluaW11bRITCgttaW5fdmVyc2lvbhgBIAEoCRITCgt1cGdyYWRlX3VybBgCIAEoCRIXCg91cGdyYWRlX2NvbW1hbmQYAyABKAkinwIKDkNsaWVudE1pbmltdW1zEiYKA3dlYhgBIAEoCzIZLnJlbGlhbnQudjEuQ2xpZW50TWluaW11bRIqCgdkZXNrdG9wGAIgASgLMhkucmVsaWFudC52MS5DbGllbnRNaW5pbXVtEikKBmRhZW1vbhgDIAEoCzIZLnJlbGlhbnQudjEuQ2xpZW50TWluaW11bRImCgNjbGkYBCABKAsyGS5yZWxpYW50LnYxLkNsaWVudE1pbmltdW0SKQoGc2RrX2dvGAUgASgLMhkucmVsaWFudC52MS5DbGllbnRNaW5pbXVtEikKBnNka190cxgGIAEoCzIZLnJlbGlhbnQudjEuQ2xpZW50TWluaW11bRIQCghlbmZvcmNlZBgHIAEoCCIrChdTdGFydE9BdXRoU2lnbkluUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCSJ/ChhTdGFydE9BdXRoU2lnbkluUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhUKDXJlZnJlc2hfdG9rZW4YAiABKAkSDwoHdXNlcl9pZBgDIAEoCRINCgVlbWFpbBgEIAEoCRIWCg5wcm92aWRlcl90b2tlbhgFIAEoCSIUChJEZXZBdXRoTG9hZFJlcXVlc3QiUgoTRGV2QXV0aExvYWRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhkKDHNlc3Npb25fanNvbhgCIAEoCUgAiAEBQg8KDV9zZXNzaW9uX2pzb24iKgoSRGV2QXV0aFNhdmVSZXF1ZXN0EhQKDHNlc3Npb25fanNvbhgBIAEoCSImChNEZXZBdXRoU2F2ZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiFQoTRGV2QXV0aENsZWFyUmVxdWVzdCInChREZXZBdXRoQ2xlYXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIMtcHCg1TeXN0ZW1TZXJ2aWNlEkoKBkhlYWx0aBIZLnJlbGlhbnQudjEuSGVhbHRoUmVxdWVzdBoaLnJlbGlhbnQudjEuSGVhbHRoUmVzcG9uc2UiCZACAaK7GAIIABJHCgVSZWFkeRIYLnJlbGlhbnQudjEuUmVhZHlSZXF1ZXN0GhkucmVsaWFudC52MS5SZWFkeVJlc3BvbnNlIgmQAgGiuxgCCAASRAoESW5mbxIXLnJlbGlhbnQudjEuSW5mb1JlcXVlc3QaGC5yZWxpYW50LnYxLkluZm9SZXNwb25zZSIJkAIBorsYAggAEk0KB1ZlcnNpb24SGi5yZWxpYW50LnYxLlZlcnNpb25SZXF1ZXN0GhsucmVsaWFudC52MS5WZXJzaW9uUmVzcG9uc2UiCZACAaK7GAIIABLCAQoQU3RhcnRPQXV0aFNpZ25JbhIjLnJlbGlhbnQudjEuU3RhcnRPQXV0aFNpZ25JblJlcXVlc3QaJC5yZWxpYW50LnYxLlN0YXJ0T0F1dGhTaWduSW5SZXNwb25zZSJjorsYXwgAOls6WXNpZ24taW4gaGFuZHNoYWtlOiByZXR1cm5zIHNlc3Npb24gdG9rZW5zIHRvIHRoZSBkZXNrdG9wIGFwcCBhbmQgY2hhbmdlcyBubyByZWxpYW50IHN0YXRlEpkBCgtEZXZBdXRoTG9hZBIeLnJlbGlhbnQudjEuRGV2QXV0aExvYWRSZXF1ZXN0Gh8ucmVsaWFudC52MS5EZXZBdXRoTG9hZFJlc3BvbnNlIkmiuxhFCAA6QTo/ZGV2ZWxvcG1lbnQgb25seTogcmVhZHMgdGhlIGRldmVsb3BlcidzIGxvY2FsIGF1dGggc2Vzc2lvbiBmaWxlEpoBCgtEZXZBdXRoU2F2ZRIeLnJlbGlhbnQudjEuRGV2QXV0aFNhdmVSZXF1ZXN0Gh8ucmVsaWFudC52MS5EZXZBdXRoU2F2ZVJlc3BvbnNlIkqiuxhGCAA6QjpAZGV2ZWxvcG1lbnQgb25seTogd3JpdGVzIHRoZSBkZXZlbG9wZXIncyBsb2NhbCBhdXRoIHNlc3Npb24gZmlsZRKdAQoMRGV2QXV0aENsZWFyEh8ucmVsaWFudC52MS5EZXZBdXRoQ2xlYXJSZXF1ZXN0GiAucmVsaWFudC52MS5EZXZBdXRoQ2xlYXJSZXNwb25zZSJKorsYRggAOkI6QGRldmVsb3BtZW50IG9ubHk6IGNsZWFycyB0aGUgZGV2ZWxvcGVyJ3MgbG9jYWwgYXV0aCBzZXNzaW9uIGZpbGVCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
 
 /**
  * HealthRequest is the request for the Health RPC
@@ -171,6 +171,13 @@ export type InfoResponse = Message<"reliant.v1.InfoResponse"> & {
    * @generated from field: string worktree_name = 7;
    */
   worktreeName: string;
+
+  /**
+   * The oldest build of each client this server serves (see ClientMinimums).
+   *
+   * @generated from field: reliant.v1.ClientMinimums client_minimums = 8;
+   */
+  clientMinimums?: ClientMinimums | undefined;
 };
 
 /**
@@ -228,6 +235,13 @@ export type VersionResponse = Message<"reliant.v1.VersionResponse"> & {
    * @generated from field: string branch = 4;
    */
   branch: string;
+
+  /**
+   * The oldest build of each client this server serves (see ClientMinimums).
+   *
+   * @generated from field: reliant.v1.ClientMinimums client_minimums = 5;
+   */
+  clientMinimums?: ClientMinimums | undefined;
 };
 
 /**
@@ -236,6 +250,102 @@ export type VersionResponse = Message<"reliant.v1.VersionResponse"> & {
  */
 export const VersionResponseSchema: GenMessage<VersionResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_system, 7);
+
+/**
+ * ClientMinimum is the oldest build of one kind of client this server serves.
+ * A client names itself in the `Reliant-Client: <kind>/<version>` request
+ * header; it is below the minimum iff its version is valid semver (no leading
+ * v) and orders before min_version by semver precedence, prerelease and dev
+ * builds included, build metadata ignored. An unknown or unparseable version
+ * is never below it.
+ *
+ * @generated from message reliant.v1.ClientMinimum
+ */
+export type ClientMinimum = Message<"reliant.v1.ClientMinimum"> & {
+  /**
+   * Semver without a leading v ("1.9.0"); empty means no floor.
+   *
+   * @generated from field: string min_version = 1;
+   */
+  minVersion: string;
+
+  /**
+   * Where a below-minimum client sends its user to upgrade; may be empty.
+   *
+   * @generated from field: string upgrade_url = 2;
+   */
+  upgradeUrl: string;
+
+  /**
+   * What a below-minimum client tells its user to run (e.g. "brew upgrade
+   * --cask reliant"); may be empty.
+   *
+   * @generated from field: string upgrade_command = 3;
+   */
+  upgradeCommand: string;
+};
+
+/**
+ * Describes the message reliant.v1.ClientMinimum.
+ * Use `create(ClientMinimumSchema)` to create a new message.
+ */
+export const ClientMinimumSchema: GenMessage<ClientMinimum> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_system, 8);
+
+/**
+ * ClientMinimums is the oldest build of each client kind this server serves,
+ * public (no sign-in), so a stale client can always learn it, and show its
+ * forced-upgrade screen before a call is refused.
+ *
+ * @generated from message reliant.v1.ClientMinimums
+ */
+export type ClientMinimums = Message<"reliant.v1.ClientMinimums"> & {
+  /**
+   * @generated from field: reliant.v1.ClientMinimum web = 1;
+   */
+  web?: ClientMinimum | undefined;
+
+  /**
+   * @generated from field: reliant.v1.ClientMinimum desktop = 2;
+   */
+  desktop?: ClientMinimum | undefined;
+
+  /**
+   * @generated from field: reliant.v1.ClientMinimum daemon = 3;
+   */
+  daemon?: ClientMinimum | undefined;
+
+  /**
+   * @generated from field: reliant.v1.ClientMinimum cli = 4;
+   */
+  cli?: ClientMinimum | undefined;
+
+  /**
+   * @generated from field: reliant.v1.ClientMinimum sdk_go = 5;
+   */
+  sdkGo?: ClientMinimum | undefined;
+
+  /**
+   * @generated from field: reliant.v1.ClientMinimum sdk_ts = 6;
+   */
+  sdkTs?: ClientMinimum | undefined;
+
+  /**
+   * True when the server refuses a below-minimum client's calls
+   * (FailedPrecondition, x-forge-error-reason: upgrade_required); false, the
+   * minimums are advertised only.
+   *
+   * @generated from field: bool enforced = 7;
+   */
+  enforced: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.ClientMinimums.
+ * Use `create(ClientMinimumsSchema)` to create a new message.
+ */
+export const ClientMinimumsSchema: GenMessage<ClientMinimums> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_system, 9);
 
 /**
  * @generated from message reliant.v1.StartOAuthSignInRequest
@@ -254,7 +364,7 @@ export type StartOAuthSignInRequest = Message<"reliant.v1.StartOAuthSignInReques
  * Use `create(StartOAuthSignInRequestSchema)` to create a new message.
  */
 export const StartOAuthSignInRequestSchema: GenMessage<StartOAuthSignInRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 8);
+  messageDesc(file_reliant_v1_system, 10);
 
 /**
  * @generated from message reliant.v1.StartOAuthSignInResponse
@@ -291,7 +401,7 @@ export type StartOAuthSignInResponse = Message<"reliant.v1.StartOAuthSignInRespo
  * Use `create(StartOAuthSignInResponseSchema)` to create a new message.
  */
 export const StartOAuthSignInResponseSchema: GenMessage<StartOAuthSignInResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 9);
+  messageDesc(file_reliant_v1_system, 11);
 
 /**
  * DevAuthLoadRequest loads the auth session
@@ -306,7 +416,7 @@ export type DevAuthLoadRequest = Message<"reliant.v1.DevAuthLoadRequest"> & {
  * Use `create(DevAuthLoadRequestSchema)` to create a new message.
  */
 export const DevAuthLoadRequestSchema: GenMessage<DevAuthLoadRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 10);
+  messageDesc(file_reliant_v1_system, 12);
 
 /**
  * DevAuthLoadResponse returns the auth session
@@ -332,7 +442,7 @@ export type DevAuthLoadResponse = Message<"reliant.v1.DevAuthLoadResponse"> & {
  * Use `create(DevAuthLoadResponseSchema)` to create a new message.
  */
 export const DevAuthLoadResponseSchema: GenMessage<DevAuthLoadResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 11);
+  messageDesc(file_reliant_v1_system, 13);
 
 /**
  * DevAuthSaveRequest saves the auth session
@@ -353,7 +463,7 @@ export type DevAuthSaveRequest = Message<"reliant.v1.DevAuthSaveRequest"> & {
  * Use `create(DevAuthSaveRequestSchema)` to create a new message.
  */
 export const DevAuthSaveRequestSchema: GenMessage<DevAuthSaveRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 12);
+  messageDesc(file_reliant_v1_system, 14);
 
 /**
  * DevAuthSaveResponse confirms session save
@@ -372,7 +482,7 @@ export type DevAuthSaveResponse = Message<"reliant.v1.DevAuthSaveResponse"> & {
  * Use `create(DevAuthSaveResponseSchema)` to create a new message.
  */
 export const DevAuthSaveResponseSchema: GenMessage<DevAuthSaveResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 13);
+  messageDesc(file_reliant_v1_system, 15);
 
 /**
  * DevAuthClearRequest clears the auth session
@@ -387,7 +497,7 @@ export type DevAuthClearRequest = Message<"reliant.v1.DevAuthClearRequest"> & {
  * Use `create(DevAuthClearRequestSchema)` to create a new message.
  */
 export const DevAuthClearRequestSchema: GenMessage<DevAuthClearRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 14);
+  messageDesc(file_reliant_v1_system, 16);
 
 /**
  * DevAuthClearResponse confirms session cleared
@@ -406,7 +516,7 @@ export type DevAuthClearResponse = Message<"reliant.v1.DevAuthClearResponse"> & 
  * Use `create(DevAuthClearResponseSchema)` to create a new message.
  */
 export const DevAuthClearResponseSchema: GenMessage<DevAuthClearResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_system, 15);
+  messageDesc(file_reliant_v1_system, 17);
 
 /**
  * SystemService provides system-level operations like health checks and version info

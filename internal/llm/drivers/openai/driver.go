@@ -951,8 +951,14 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 
 	content := resp.OutputText()
 	toolCalls := make([]message.ToolCall, 0)
+	gate := responseswire.GateToolCalls(resp)
+	dropped := 0
 	for _, out := range resp.Output {
 		if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
+			if !gate.Allows(responseswire.FunctionCallKey(fc)) {
+				dropped++
+				continue
+			}
 			toolCalls = append(toolCalls, message.ToolCall{
 				ID:       o.toolCallID(fc.CallID),
 				Name:     fc.Name,
@@ -961,6 +967,10 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 				Finished: true,
 			})
 		}
+	}
+
+	if dropped > 0 {
+		logDroppedToolCalls(ctx, resp, dropped, len(toolCalls))
 	}
 
 	finishReason := responseswire.FinishReason(resp, len(toolCalls))
@@ -978,6 +988,17 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		UpstreamRequestID:  upstreamRequestID,
 		UpstreamProxymanID: upstreamProxymanID,
 	}, nil
+}
+
+// logDroppedToolCalls records the tool calls of an unfinished response that
+// responseswire.ToolCallGate kept from running.
+func logDroppedToolCalls(ctx context.Context, resp *responses.Response, dropped, kept int) {
+	logging.WarnContext(ctx, "[OpenAI Responses] Dropped tool calls of an unfinished response",
+		"dropped", dropped,
+		"kept", kept,
+		"status", resp.Status,
+		"incompleteReason", resp.IncompleteDetails.Reason,
+		"responseID", resp.ID)
 }
 
 func extractUpstreamCorrelationHeaders(resp *http.Response) (requestID string, proxymanID string) {
@@ -1098,7 +1119,9 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				tc.Input += v.Delta
 				eventChan <- llm.DriverEvent{Type: llm.EventToolUseDelta, ToolCall: &message.ToolCall{ID: itemID, Input: v.Delta}}
@@ -1111,7 +1134,9 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				// Done event contains full args + name; prefer it.
 				tc.Name = v.Name
@@ -1146,52 +1171,71 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			return
 		}
 
-		// If we received a completed response, map function_call output items into tool calls.
-		if finalResp != nil {
-			for _, out := range finalResp.Output {
-				if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
-					itemID := fc.ID
-					if itemID == "" {
-						itemID = fc.CallID
-					}
-					tc := toolCallsByID[itemID]
-					if tc == nil {
-						tc = &message.ToolCall{ID: itemID, Type: "function"}
-						toolCallsByID[itemID] = tc
-					}
-					// Ensure the ID we expose to our system matches the tool_call_id used for tool outputs.
-					// That must be call_id -- or ours, when this client mints
-					// (the input we send back pairs function_call and
-					// function_call_output by whichever id the transcript has;
-					// no previous_response_id or stored reasoning item refers
-					// to the server's). The item id above only keyed the
-					// argument deltas of this stream.
-					tc.ID = o.toolCallID(fc.CallID)
-					tc.Name = fc.Name
-					if tc.Input == "" {
-						tc.Input = fc.Arguments
-					}
+		// A clean EOF with no terminal event is a response cut short, not a
+		// finished one: retry it. Matches the Codex driver; see
+		// responseswire.ErrStreamEndedWithoutTerminalEvent.
+		if finalResp == nil {
+			logging.WarnContext(ctx, "[OpenAI Responses] Stream error",
+				"error", responseswire.ErrStreamEndedWithoutTerminalEvent,
+				"streamedChars", len(currentContent),
+				"streamedToolCalls", len(toolCallsByID))
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: responseswire.ErrStreamEndedWithoutTerminalEvent}
+			return
+		}
+
+		// Map the terminal response's function_call output items into tool calls.
+		for _, out := range finalResp.Output {
+			if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
+				itemID := responseswire.FunctionCallKey(fc)
+				tc := toolCallsByID[itemID]
+				if tc == nil {
+					tc = &message.ToolCall{ID: itemID, Type: "function"}
+					toolCallsByID[itemID] = tc
+				}
+				// Ensure the ID we expose to our system matches the tool_call_id used for tool outputs.
+				// That must be call_id -- or ours, when this client mints
+				// (the input we send back pairs function_call and
+				// function_call_output by whichever id the transcript has;
+				// no previous_response_id or stored reasoning item refers
+				// to the server's). The item id above only keyed the
+				// argument deltas of this stream.
+				tc.ID = o.toolCallID(fc.CallID)
+				tc.Name = fc.Name
+				if tc.Input == "" {
+					tc.Input = fc.Arguments
 				}
 			}
 		}
 
+		// A call of a response that did not complete runs only if the
+		// response confirms it finished; see responseswire.ToolCallGate.
+		gate := responseswire.GateToolCalls(finalResp)
 		finalToolCalls := make([]message.ToolCall, 0, len(toolCallsByID))
-		for _, tc := range toolCallsByID {
+		// Calls that will not run, under the key their EventToolUseStart
+		// carried, so call_llm can close the cards it opened for them.
+		var droppedToolCalls []message.ToolCall
+		dropped := 0
+		for key, tc := range toolCallsByID {
 			// Drop incomplete ones without a call_id.
 			if tc.ID == "" || tc.Name == "" {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
+				continue
+			}
+			if !gate.Allows(key) {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
+				dropped++
 				continue
 			}
 			tc.Finished = true
 			finalToolCalls = append(finalToolCalls, *tc)
 			eventChan <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: tc}
 		}
+		if dropped > 0 {
+			logDroppedToolCalls(ctx, finalResp, dropped, len(finalToolCalls))
+		}
 
 		finishReason := responseswire.FinishReason(finalResp, len(finalToolCalls))
-
-		usage := llm.TokenUsage{}
-		if finalResp != nil {
-			usage = responseswire.TokenUsage(finalResp.Usage)
-		}
+		usage := responseswire.TokenUsage(finalResp.Usage)
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
 
@@ -1200,6 +1244,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			Response: &llm.DriverResponse{
 				Content:            currentContent,
 				ToolCalls:          finalToolCalls,
+				DroppedToolCalls:   droppedToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
 				Phase:              responseswire.AssistantPhase(finalResp),

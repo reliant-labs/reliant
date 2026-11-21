@@ -99,6 +99,13 @@ func ClassifyError(err error) error {
 			temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
 	}
 
+	// A provider stream cut short before its terminal event is retryable by
+	// identity, before any text rule: no word a wrapping layer adds can make
+	// it terminal.
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return err
+	}
+
 	// Auto-classify based on error content
 	return autoClassify(err)
 }
@@ -237,6 +244,10 @@ func IsTerminal(err error) bool {
 		return true
 	}
 
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return false
+	}
+
 	return drivererrors.IsProviderCreditExhaustion(err)
 }
 
@@ -261,6 +272,10 @@ func CategorizeError(err error) ErrorCategory {
 
 	if errors.Is(err, drivererrors.ErrContextOverflow) {
 		return ErrorCategoryTerminal
+	}
+
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return ErrorCategoryNetwork
 	}
 
 	errStr := strings.ToLower(err.Error())

@@ -1,6 +1,6 @@
 ---
 title: "Linting: new rules warn before they gate"
-description: "How a new or tightened forge lint rule warns for one release before it fails your build, how your forge_version pin decides, and how to gate early or stay in the grace period"
+description: "How a new or tightened forge lint rule warns for one release before it gates, how your forge_version pin decides, and how to opt in early or extend the grace."
 ---
 
 A forge release can add a lint rule or tighten an old one. If every new rule failed your build the day you bumped the pin, upgrading forge would also be the day you learned about two hundred findings you did not write. Forge avoids that. A new or tightened rule warns for one release, then gates in the next. The pin in your `forge.yaml` decides which side of that line you are on.
@@ -48,7 +48,7 @@ The verdict counts these findings and names them, so a green run never hides tha
 }
 ```
 
-`fix` names the `forge fix` codemod or the `--fix` flag when one clears the finding. It is omitted when you have to make the change by hand.
+`fix` names the `forge lint fix` codemod or the `--fix` flag when one clears the finding. It is omitted when you have to make the change by hand.
 
 <Note>
 The two lint captures above ran the forge v1.0.14 binary against a project whose pin was set to `v1.0.0` with `--allow-version-skew`, so the rule's `introduced_in` and `gates_from` shown are the ones the rollout table declares for that rule. They illustrate the mechanism for any rule in its grace period.
@@ -76,7 +76,7 @@ A key that names no gradable rule is an error, so a typo cannot quietly disable 
 
 ## Bumping the pin
 
-When you move `forge_version` forward, run lint before you commit the bump. Anything that was in its grace period at the old pin and reaches `gates_from` at the new one will start to fail. The warnings you saw before the bump are the exact list. Clear them first (most have a mechanical fix: `forge lint --fix`, `forge fix connect-errors`, `forge fix narrow-deps <package-dir>`), or pin them to `warn` in `lint.rules` with a note that says when you will turn them back on.
+When you move `forge_version` forward, run lint before you commit the bump. Anything that was in its grace period at the old pin and reaches `gates_from` at the new one will start to fail. The warnings you saw before the bump are the exact list. Clear them first (most have a mechanical fix: `forge lint --fix`, `forge lint fix connect-errors`, `forge lint fix narrow-deps <package-dir>`), or pin them to `warn` in `lint.rules` with a note that says when you will turn them back on.
 
 `forge project upgrade list` shows the one-time migration playbooks that apply to a pin bump. The rollout is a complement to them, not a replacement: the playbooks cover changes to files, the rollout covers new checks.
 
@@ -87,7 +87,7 @@ Adding a rule to forge means adding it to `gradableRules` in `lint_rules.go` and
 ## Where to go next
 
 <CardGroup cols={2}>
-  <Card title="Linting overview" icon="magnifying-glass" href="/forge/linting/overview">
+  <Card title="Linting overview" icon="search" href="/forge/linting/overview">
     The lanes, flags, the verdict line, and where lint runs.
   </Card>
   <Card title="Rule reference" icon="list-check" href="/forge/linting/rules-index">

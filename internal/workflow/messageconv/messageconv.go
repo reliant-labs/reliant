@@ -108,6 +108,16 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 		}
 		part := ContentBlockToPart(ctx, dbMsg.ChatID, block, repo)
 		if part != nil {
+			// The vision payload lets the model see an upload, but its bytes
+			// do not carry the stored ID. Give it the reference alongside the
+			// preview so it can save the original without recreating it.
+			if image, ok := part.(message.BinaryContent); ok && role == message.User &&
+				block.Content != nil && strings.HasPrefix(image.MIMEType, "image/") && len(image.Data) > 0 {
+				parts = append(parts, message.TextContent{Text: fmt.Sprintf(
+					"[Attached image (attachment_id=%s). To copy the original file into the workspace, use save_attachment with this attachment_id.]",
+					*block.Content,
+				)})
+			}
 			parts = append(parts, part)
 		}
 	}

@@ -63,8 +63,28 @@ func readRepo(t *testing.T, rel string) []byte {
 	return b
 }
 
+// isolatedPath returns a PATH holding only the named tools (symlinked from the
+// test's PATH into dir), so a script run on it cannot find anything else:
+// Playwright's container image has node but no jq, and the runners have both.
+func isolatedPath(t *testing.T, dir string, tools ...string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools {
+		p, err := exec.LookPath(tool)
+		if err != nil {
+			t.Skipf("%s not on PATH", tool)
+		}
+		if err := os.Symlink(p, filepath.Join(dir, tool)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
 func TestFetchReleaseAsset(t *testing.T) {
-	for _, tool := range []string{"bash", "jq", "sha256sum"} {
+	for _, tool := range []string{"bash", "sha256sum"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s not on PATH", tool)
 		}
@@ -138,67 +158,100 @@ func TestFetchReleaseAsset(t *testing.T) {
 			wantGET: []string{direct, meta},
 			wantErr: "fetching it through the API",
 		},
+		{
+			name:    "the release has no such asset",
+			web:     map[string][]byte{meta: []byte(`{"assets":[{"name":"other","id":7}]}`)},
+			pin:     goodSum,
+			wantGET: []string{direct, meta},
+			wantErr: "has no asset tool-linux",
+		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			bin, web := filepath.Join(dir, "bin"), filepath.Join(dir, "web")
-			for _, d := range []string{bin, web} {
-				if err := os.Mkdir(d, 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			writeExec(t, filepath.Join(bin, "curl"), fakeCurl)
-			writeExec(t, filepath.Join(dir, "fetch.sh"), string(script))
-			for url, body := range tc.web {
-				if err := os.WriteFile(filepath.Join(web, webKey(url)), body, 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			out, log := filepath.Join(dir, "out"), filepath.Join(dir, "curl.log")
-			args := []string{filepath.Join(dir, "fetch.sh"), repo, tag, asset, out}
-			if tc.pin != "" {
-				args = append(args, tc.pin)
-			}
-			cmd := exec.CommandContext(t.Context(), "bash", args...)
-			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"),
-				"FAKE_WEB="+web, "CURL_LOG="+log, "GH_TOKEN=tok")
-			output, err := cmd.CombinedOutput()
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("fetch failed: %v\n%s", err, output)
-				}
-				if got, _ := os.ReadFile(out); !bytes.Equal(got, good) {
-					t.Errorf("out = %q, want %q", got, good)
-				}
-			} else {
-				if err == nil {
-					t.Fatalf("fetch succeeded, want a failure mentioning %q\n%s", tc.wantErr, output)
-				}
-				if !strings.Contains(string(output), tc.wantErr) {
-					t.Errorf("output lacks %q:\n%s", tc.wantErr, output)
-				}
-			}
+		// The API metadata is read with whichever of jq, node and python3 the
+		// PATH holds: each case runs once with each alone.
+		for _, parser := range []string{"jq", "node", "python3"} {
+			t.Run(tc.name+"/"+parser, func(t *testing.T) {
+				t.Parallel()
+				dir := t.TempDir()
+				tools := isolatedPath(t, filepath.Join(dir, "tools"), "bash", "cat", "tr", "sha256sum", parser)
+				runFetchCase(t, dir, tools, string(script), tc.web, tc.pin, tc.wantErr, tc.wantGET, good)
+			})
+		}
+	}
 
-			raw, _ := os.ReadFile(log)
-			var got []string
-			for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-				url, hdrs, _ := strings.Cut(line, "|")
-				// meta is fetched once per release_meta call; compare distinct urls.
-				if len(got) == 0 || got[len(got)-1] != url {
-					got = append(got, url)
-				}
-				if strings.HasPrefix(url, "https://api.github.com/") && !strings.Contains(hdrs, "Authorization: Bearer tok") {
-					t.Errorf("API call %s sent no GH_TOKEN: %q", url, hdrs)
-				}
-				if strings.HasPrefix(url, "https://github.com/") && strings.Contains(hdrs, "Authorization") {
-					t.Errorf("github.com download %s carries the token", url)
-				}
-			}
-			if strings.Join(got, "\n") != strings.Join(tc.wantGET, "\n") {
-				t.Errorf("curl fetched\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(tc.wantGET, "\n  "))
-			}
-		})
+	// A PATH with none of the three fails with a message naming them, not a
+	// "command not found" from deep in a pipeline.
+	t.Run("no JSON reader on PATH", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		tools := isolatedPath(t, filepath.Join(dir, "tools"), "bash", "cat", "tr", "sha256sum")
+		runFetchCase(t, dir, tools, string(script),
+			map[string][]byte{meta: release(""), apiAsset: good}, goodSum,
+			"needs jq, node or python3", []string{direct, meta}, good)
+	})
+}
+
+// runFetchCase runs fetch-release-asset.sh for acme/tool@v1.2.3/tool-linux
+// with PATH = a fake curl serving web, then tools; and checks the outcome
+// (good written to the output, or a failure mentioning wantErr) and the urls
+// curl was asked for.
+func runFetchCase(t *testing.T, dir, tools, script string, webBodies map[string][]byte, pin, wantErr string, wantGET []string, good []byte) {
+	t.Helper()
+	const repo, tag, asset = "acme/tool", "v1.2.3", "tool-linux"
+	bin, web := filepath.Join(dir, "bin"), filepath.Join(dir, "web")
+	for _, d := range []string{bin, web} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeExec(t, filepath.Join(bin, "curl"), fakeCurl)
+	writeExec(t, filepath.Join(dir, "fetch.sh"), script)
+	for url, body := range webBodies {
+		if err := os.WriteFile(filepath.Join(web, webKey(url)), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, log := filepath.Join(dir, "out"), filepath.Join(dir, "curl.log")
+	args := []string{filepath.Join(dir, "fetch.sh"), repo, tag, asset, out}
+	if pin != "" {
+		args = append(args, pin)
+	}
+	cmd := exec.CommandContext(t.Context(), "bash", args...)
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+tools,
+		"FAKE_WEB="+web, "CURL_LOG="+log, "GH_TOKEN=tok")
+	output, err := cmd.CombinedOutput()
+	if wantErr == "" {
+		if err != nil {
+			t.Fatalf("fetch failed: %v\n%s", err, output)
+		}
+		if got, _ := os.ReadFile(out); !bytes.Equal(got, good) {
+			t.Errorf("out = %q, want %q", got, good)
+		}
+	} else {
+		if err == nil {
+			t.Fatalf("fetch succeeded, want a failure mentioning %q\n%s", wantErr, output)
+		}
+		if !strings.Contains(string(output), wantErr) {
+			t.Errorf("output lacks %q:\n%s", wantErr, output)
+		}
+	}
+
+	raw, _ := os.ReadFile(log)
+	var got []string
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		url, hdrs, _ := strings.Cut(line, "|")
+		// meta is fetched once per asset_field call; compare distinct urls.
+		if len(got) == 0 || got[len(got)-1] != url {
+			got = append(got, url)
+		}
+		if strings.HasPrefix(url, "https://api.github.com/") && !strings.Contains(hdrs, "Authorization: Bearer tok") {
+			t.Errorf("API call %s sent no GH_TOKEN: %q", url, hdrs)
+		}
+		if strings.HasPrefix(url, "https://github.com/") && strings.Contains(hdrs, "Authorization") {
+			t.Errorf("github.com download %s carries the token", url)
+		}
+	}
+	if strings.Join(got, "\n") != strings.Join(wantGET, "\n") {
+		t.Errorf("curl fetched\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(wantGET, "\n  "))
 	}
 }
 

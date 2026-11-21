@@ -337,7 +337,21 @@ message StartRunResponse {
 message SignalRunRequest {
   string run_id = 1;
 
-  // Thread targets a specific thread of the run. Defaults to its root thread.
+  // Thread targets a specific thread of the run: a thread id, or the node name
+  // of an agent running in it ("implement", or a full node path such as
+  // "implement.agent_loop").
+  //
+  // Unset, the message goes to the run's running (listening) agent: the root
+  // thread when an agent reads it (an agent chat), else the run's one running
+  // agent. With several agents running in parallel the call is refused
+  // (FailedPrecondition, reason run_recipient_ambiguous) with a message that
+  // lists them, so the caller resends naming one. With none running it
+  // reports delivered=false with not_delivered_reason run_no_listening_agent
+  // and queues nothing, except for a paused builtin agent, whose root thread
+  // reads the message once the run resumes. A sub-agent's run keeps its own
+  // thread as the default. When the run cannot say which threads its agents
+  // read (an older worker, Temporal unreachable), the message goes to the
+  // root thread.
   string thread = 2;
 
   // Messages are appended to the thread before the run is woken.
@@ -353,6 +367,16 @@ message SignalRunResponse {
   // MessageIds are the ids of any messages persisted by this call. They are
   // saved even when delivery fails, so the next run reads them.
   repeated string message_ids = 2;
+
+  // NotDeliveredReason says why a live run did not take the message, as an
+  // error reason (run_no_listening_agent: no agent of the run is running to
+  // read it, and nothing was queued). Empty when the message was delivered,
+  // and when the run was not live (delivered=false with no reason).
+  //
+  // The X-Reliant-Not-Delivered-Reason response header carries the same
+  // value for older clients; read this field, and fall back to the header
+  // only against a server that predates it.
+  string not_delivered_reason = 3;
 }
 
 message GetRunRequest {

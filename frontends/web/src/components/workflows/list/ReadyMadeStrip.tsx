@@ -24,7 +24,7 @@ export function ReadyMadeStrip({ rows, projectId }: { rows: WorkflowListRow[]; p
   if (rows.length === 0) return null;
   return (
     <details open className="group space-y-2" data-testid="ready-made">
-      <summary className="cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <summary className="cursor-pointer select-none px-1 text-xs font-semibold text-muted-foreground">
         Ready-made automations
         <span className="ml-1.5 font-medium text-muted-foreground/70">{rows.length}</span>
       </summary>

@@ -253,7 +253,7 @@ describe('Restoration Planning', () => {
       expect(plan.viewers).toEqual([]);
       expect(plan.chatId).toBeNull();
       expect(plan.panels.terminalOpen).toBe(false);
-      expect(plan.panels.fileBrowser).toBe(true);
+      expect(plan.panels.fileBrowser).toBe(false);
       expect(plan.leftSidebarExpanded).toBe(true); // Global state
       expect(plan.activeView).toBe('chats');
     });

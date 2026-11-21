@@ -48,7 +48,7 @@
   <rect class="box" x="16" y="556" width="368" height="82" rx="4"/>
   <text class="t" x="30" y="584">Destination cluster</text>
   <text class="s" x="30" y="606">Reliant hosting, or a cluster you</text>
-  <text class="s" x="30" y="626">connected with forge cluster connect</text>
+  <text class="s" x="30" y="626">connected with forge cloud cluster connect</text>
   <path class="la" d="M384 597 H414 V117 H388" stroke-dasharray="5 4" marker-end="url(#ab)"/>
   <text class="lbla" transform="translate(430 357) rotate(-90)" text-anchor="middle">release health verdict, read before the next promotion</text>
 

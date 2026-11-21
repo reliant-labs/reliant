@@ -128,6 +128,49 @@ func (s *SpawnLimitsSuite) TestTotalCap_CountsTheWholeTree() {
 	s.Contains(got.Refused[0], types.MaxConcurrentSubAgentsTotalInput)
 }
 
+// A sub-agent told to stop is cancelled for spawn_status at once, but stays
+// registered live until its loop reaches a step boundary. It starts no new
+// step, so neither it nor a sub-agent of its own holds a slot (9021e589:
+// refused at "8 running" while spawn_status listed 4).
+func (s *SpawnLimitsSuite) TestStoppingSpawns_HoldNoSlot() {
+	tracker := &ChildWorkflowTracker{spawnLimits: types.SpawnLimits{PerAgent: 8, Total: 10}}
+	liveSpawns(tracker, "lead", 8)
+	// A sub-agent of a stopping one: it counts toward the run's total.
+	liveSpawns(tracker, "child-lead-live-0", 2)
+	stopped := map[string]bool{
+		"lead-live-0": true, "lead-live-1": true, // by tool call (a card's cancel)
+		"child-lead-live-2": true, "child-lead-live-3": true, // by thread (spawn_stop)
+	}
+	tracker.spawnCancelled = func(toolCallID, childThread string) bool {
+		return stopped[toolCallID] || stopped[childThread]
+	}
+	mine, total := tracker.spawnCounts("lead", true)
+	s.Equal(4, mine, "the four stopping sub-agents are not counted")
+	s.Equal(4, total, "nor is a sub-agent of a stopping one")
+
+	got := s.admit(tracker, "lead", "a", "b", "c", "d", "e")
+	s.Equal([]string{"a", "b", "c", "d"}, got.Admitted, "the four stopped agents' slots are free")
+	s.Require().Len(got.Refused, 1)
+	s.Contains(got.Refused[0], "already have 8 sub-agents running")
+}
+
+// A history recorded before stopping spawns were left out replays the count
+// it made: every live spawn holds a slot.
+func (s *SpawnLimitsSuite) TestStoppingSpawns_OldHistoryCountsThem() {
+	tracker := &ChildWorkflowTracker{}
+	liveSpawns(tracker, "lead", types.DefaultMaxConcurrentSubAgents)
+	tracker.spawnCancelled = func(toolCallID, _ string) bool { return toolCallID == "lead-live-0" }
+
+	env := s.NewTestWorkflowEnvironment()
+	env.OnGetVersion(spawnCapSkipsStoppingChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	env.ExecuteWorkflow(admitSpawnsWorkflow(tracker, "lead", []*spawnChildWorkflowConfig{{toolCallID: "a", childThread: "child-a"}}))
+	s.Require().NoError(env.GetWorkflowError())
+	var out admitResult
+	s.Require().NoError(env.GetWorkflowResult(&out))
+	s.Empty(out.Admitted)
+	s.Len(out.Refused, 1)
+}
+
 // Resuming an agent that is already running starts nothing, so it neither
 // takes a slot nor is refused for one: refuseResumingLiveAgent answers it.
 func (s *SpawnLimitsSuite) TestResumingALiveAgent_IsNotCapped() {

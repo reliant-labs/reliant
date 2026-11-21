@@ -8,3 +8,9 @@ declare const __RELIANT_BUILD__: import("./lib/releaseIdentity").BuildInfo;
 // Which build this bundle is: "app" (index.html) or "demo" (demo.html, the
 // forge demo). vite.config.ts defines it; read it through lib/shell.ts.
 declare const __WEB_TARGET__: "app" | "demo";
+
+interface ImportMetaEnv {
+  // "true" turns on dev sign-in in a Vite dev server (lib/devSignIn.ts).
+  // control-plane's dev KCL sets it; its KCL refuses it in any other env.
+  readonly VITE_DEV_SIGN_IN?: string;
+}

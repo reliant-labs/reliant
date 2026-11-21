@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
+	"github.com/reliant-labs/reliant/internal/llm/historyrepair"
 	"github.com/reliant-labs/reliant/internal/llm/imagefit"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -52,7 +53,7 @@ func (p *baseDriver) Name() string {
 func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, false)
 	defer span.End()
-	resp, err := p.client.SendMessages(ctx, prompts, imagefit.ForRequest(ctx, messages), tools)
+	resp, err := p.client.SendMessages(ctx, prompts, p.forRequest(ctx, messages), tools)
 	err = markContextOverflow(err)
 	span.RecordResponse(resp, "")
 	span.RecordError(err)
@@ -74,9 +75,9 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 // second hop between the driver and a consumer that keeps taking already
 // produced events after it cancels.
 //
-// And it is where a request's images are fit within the provider's
-// many-image limits (imagefit.ForRequest), so no driver can send a history
-// the provider would refuse on every later turn.
+// And it is where a request's history is made one the provider accepts
+// (forRequest), so no driver can send a history the provider would refuse on
+// every later turn.
 //
 // And where a provider's context-window refusal is marked as
 // drivererrors.ErrContextOverflow (markContextOverflow), so every driver's
@@ -85,7 +86,7 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
 	ch := make(chan llm.DriverEvent)
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, true)
-	in := p.client.StreamResponse(ctx, prompts, imagefit.ForRequest(ctx, messages), tools)
+	in := p.client.StreamResponse(ctx, prompts, p.forRequest(ctx, messages), tools)
 	go func() {
 		defer close(ch)
 		defer span.End()
@@ -107,6 +108,28 @@ func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messa
 		}
 	}()
 	return ch
+}
+
+// historyRuler is implemented by a driver client whose provider differs from
+// the default in the history it accepts: the tool-call ids it takes, whether
+// it refuses two user turns in a row. Declared here, at its one consumer.
+type historyRuler interface {
+	HistoryRules() historyrepair.Rules
+}
+
+// forRequest is the history a request sends: its images fit within the
+// provider's many-image limits (imagefit.ForRequest), then repaired into a
+// history the provider accepts (historyrepair.ForRequest) — orphaned and
+// missing tool results, blank text, an opening assistant turn, and the
+// client's own rules. Both work on a copy, so the stored history is never
+// changed, and both are deterministic, so the provider's prompt cache keeps
+// matching from turn to turn.
+func (p *baseDriver) forRequest(ctx context.Context, messages []message.Message) []message.Message {
+	var rules historyrepair.Rules
+	if r, ok := p.client.(historyRuler); ok {
+		rules = r.HistoryRules()
+	}
+	return historyrepair.ForRequest(ctx, imagefit.ForRequest(ctx, messages), rules)
 }
 
 // consumerGoneGrace is how long a send waits for a receiver once ctx is done

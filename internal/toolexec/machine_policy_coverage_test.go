@@ -50,8 +50,8 @@ var commandSites = map[string]string{
 	"internal/toolexec/tool_result_redelivery.go:followToolResult:toolexec": "carries only a request id: waits for a result an earlier, policed dispatch started",
 	// The Commands panel: a command a person starts from the app, not an
 	// agent's; org policy does not govern a person at the keyboard (§4.6).
-	"internal/handlers/package_commands/package_commands_processes.go:RunCommand:request":  "person-driven Commands panel",
-	"internal/handlers/package_commands/package_commands_processes.go:RunCommand:dispatch": "person-driven Commands panel",
+	"internal/handlers/package_commands/rpc_run_command.go:RunCommand:request":  "person-driven Commands panel",
+	"internal/handlers/package_commands/rpc_run_command.go:RunCommand:dispatch": "person-driven Commands panel",
 	// The machine's side: it receives and classifies commands, it builds none.
 	"internal/toolexec/daemonruntime/cmd_exec.go:init:dispatch":                         "the machine's handler registration",
 	"internal/toolexec/daemonruntime/worktree_activity.go:selfAdmittedCommand:dispatch": "classifies a received command",

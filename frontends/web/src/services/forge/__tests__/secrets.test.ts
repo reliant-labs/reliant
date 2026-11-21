@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The additive `forge secret list --json` fields: report `verifiable`,
+ * The additive `forge env secret list --json` fields: report `verifiable`,
  * per-secret `presence` (set | missing | unknown) and `version`, and the
  * `rendered` provider. Each one is a way a newer report could be MISLABELLED
  * — an unknown painted as missing, an unverifiable `ok:false` painted as a

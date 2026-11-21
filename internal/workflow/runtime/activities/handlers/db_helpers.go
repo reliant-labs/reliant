@@ -24,6 +24,17 @@ import (
 // must verify before re-running side-effectful calls.
 const InterruptedToolResultContent = "Tool execution was interrupted — outcome unknown. The previous run was interrupted before the result was recorded; verify the effects of this call before re-running it."
 
+// NotRunInterruptedToolResultContent answers a call of a turn the user
+// interrupted ("Interrupt & send now") before the call started: it was never
+// run, so, unlike InterruptedToolResultContent, its effects are known — none.
+const NotRunInterruptedToolResultContent = "Tool not run: the user interrupted the agent before this tool started, so it did nothing. Read the user's new message before deciding whether to call it again."
+
+// CancelledByInterruptToolResultContent answers a call of an interrupted turn
+// that had started but recorded no outcome. Same wording as the result the
+// API's InterruptThread records for a call it cancels
+// (threads.CancelledToolResultContent).
+const CancelledByInterruptToolResultContent = "Tool execution cancelled by user. The tool was stopped before it reported a result; its effects are unknown, so verify before re-running it."
+
 // LoadMessagesForLLM loads messages for LLM context, guaranteeing the result
 // satisfies the tool-pairing invariant. This is the primary function for loading
 // messages to send to the LLM.
