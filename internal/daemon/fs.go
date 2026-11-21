@@ -24,6 +24,13 @@ type FileSystem interface {
 	// file are not a diffable string.
 	WriteBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error)
 
+	// CreateBinaryFile writes raw bytes to a NEW file, creating parent
+	// directories as needed. The check and the create are one atomic open, so
+	// it never replaces anything: when the path exists it fails with
+	// ErrFileExists, and a daemon that predates it fails with
+	// ErrCreateUnsupported. Neither writes.
+	CreateBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error)
+
 	// PatchFile applies a set of edits (old_string → new_string replacements) to a file.
 	// Each edit is applied independently. If an edit's OldString is not found,
 	// it is reported in PatchResult.Failed. Edits that match are applied in order.

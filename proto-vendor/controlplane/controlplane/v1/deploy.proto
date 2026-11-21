@@ -1830,6 +1830,58 @@ message DeployCommitRange {
   bool truncated = 5;
 }
 
+// DeployCodeSource is where a release cut or a deploy came from: the app →
+// code half of the code link (docs/design/unified-shell-and-projects.md, D3).
+// forge captures it from the checkout it runs in (forge#2328) and sends it on
+// CutReleaseRequest and OpenDeployAttemptRequest.
+//
+// EVIDENCE, NOT IDENTITY. It is recorded per app (hosted_project_sources) and
+// never takes part in what a release is: a cut retried from another checkout
+// is still the same release. Every field is best-effort and may be empty; a
+// field the server cannot accept as the shape below is dropped, never refused.
+message DeployCodeSource {
+  // The canonical repository, "host/owner/repo" (forge's
+  // release.CanonicalRepo): no scheme, credentials, port or ".git". Empty for
+  // a checkout with no shareable remote, such as a local folder.
+  string remote = 1;
+  // forge.yaml's directory within the repository, slash-separated. Empty is
+  // the repository root.
+  string subpath = 2;
+  // The full commit object id the release or deploy was made from. Empty
+  // when unknown.
+  string commit = 3;
+  // The Reliant project whose chat ran forge (RELIANT_PROJECT_ID), when one
+  // did. REQUEST-ONLY: an untrusted hint from the checkout's environment,
+  // never proof of who owns or may see that project. It is stored, and never
+  // set in any response of this service; a caller-visible project link is
+  // resolved under reliant's own org, ownership and sharing checks.
+  string reliant_project_id = 4;
+}
+
+// DeployCodeSourceSighting is one source an app has been cut or deployed from,
+// with when it was first and last seen. The commit and reliant project id are
+// the latest seen from it.
+message DeployCodeSourceSighting {
+  DeployCodeSource source = 1;
+  google.protobuf.Timestamp first_seen_at = 2;
+  google.protobuf.Timestamp last_seen_at = 3;
+}
+
+// DeployAppCodeSources is every source one app (a forge project in an org) has
+// been cut or deployed from.
+message DeployAppCodeSources {
+  // The forge project (forge.yaml `name`).
+  string project = 1;
+  // Newest first; at most 50.
+  repeated DeployCodeSourceSighting sources = 2;
+  // Set when the app has received sources from more than one repository:
+  // two repositories in one org use the same forge.yaml name and so deploy
+  // to the same app (D5). A warning for a person to read, never a refusal —
+  // a fork or a renamed repository is a second remote too. Empty otherwise.
+  // Counted over every recorded source, not only the ones `sources` shows.
+  string warning = 3;
+}
+
 // DeployWorktree identifies one checkout on one machine.
 //
 // A developer runs several worktrees of one project at once, and each may have

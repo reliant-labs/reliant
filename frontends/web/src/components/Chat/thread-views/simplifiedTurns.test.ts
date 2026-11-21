@@ -22,7 +22,7 @@ import {
   type FoldKeys,
 } from "./simplifiedTurns";
 
-type Block = { t: string } | { call: string; tool?: string };
+type Block = { t: string } | { think: string } | { call: string; tool?: string };
 type Item =
   | { type: "message"; message: Message; workflow: { thread: string } }
   | { type: "thread-start" }
@@ -42,7 +42,9 @@ function msg(
     contentBlocks: blocks.map((b, index) =>
       "t" in b
         ? { id: `${id}-b${index}`, index, type: ContentBlockType.TEXT, content: b.t }
-        : {
+        : "think" in b
+          ? { id: `${id}-b${index}`, index, type: ContentBlockType.THINKING, content: b.think }
+          : {
             id: `${id}-b${index}`,
             index,
             type: ContentBlockType.TOOL_CALL,
@@ -501,6 +503,51 @@ describe("buildSimplifiedTimeline", () => {
         "surfaced:a1:0~ask@a1:0:ask",
         "msg:a2",
       ]);
+    });
+  });
+
+  describe("thinking goes with what it led to", () => {
+    it("keeps a turn that thinks before every call one fold, its thinking inside", () => {
+      const out = build([
+        row(asst("a1", [{ think: "find the readers" }, { call: "c1" }, { call: "c2" }])),
+        row(asst("a2", [{ think: "now edit" }, { call: "c3" }])),
+        row(asst("a3", [{ think: "sum up" }, { t: "Done." }])),
+      ]);
+      expect(summarize(out)).toEqual(["work:work-a1-1[a1:0,1 a2:0,1]", "msg:a3"]);
+    });
+
+    it("keeps thinking between two calls of one message inside the fold", () => {
+      const out = build([row(asst("a1", [{ call: "c1" }, { think: "hm" }, { call: "c2" }]))]);
+      expect(summarize(out)).toEqual(["work:work-a1-0[a1:0,1,2]"]);
+    });
+
+    it("keeps thinking that leads into prose on screen, above that prose", () => {
+      const out = build([row(asst("a1", [{ call: "c1" }, { think: "that is it" }, { t: "Found it." }]))]);
+      expect(summarize(out)).toEqual(["work:work-a1-0[a1:0]", "prose:a1:1,2*"]);
+    });
+
+    it("folds a message that has only thought so far into the open run", () => {
+      const out = build([row(asst("a1", [{ call: "c1" }])), row(asst("a2", [{ think: "next…" }]))]);
+      expect(summarize(out)).toEqual(["work:work-a1-0[a1:0 a2:0]"]);
+    });
+
+    it("leaves thinking with no run of calls to join as its own row", () => {
+      const lone = row(asst("a1", [{ think: "hmm" }]));
+      expect(build([lone])[0]).toBe(lone);
+      // A run of mail alone is no run of calls: the thought stays out of it.
+      const out = build([mail("m1"), row(asst("a2", [{ think: "hmm" }]))]);
+      expect(summarize(out)).toEqual(["msg:m1", "msg:a2"]);
+    });
+
+    it("keeps thinking that leads into a surfaced call on screen, before its card", () => {
+      const out = build([row(asst("a1", [{ think: "ask first" }, { call: "q1", tool: "ask_user" }, { call: "c2" }]))]);
+      expect(summarize(out)).toEqual(["prose:a1:0*", "surfaced:a1:1~q1@a1:1:q1", "work:work-a1-1:c2[a1:1~c2]"]);
+    });
+
+    it("never renames the fold a call already opened when its thinking arrives first", () => {
+      const before = build([row(asst("a1", [{ call: "c1" }]))]);
+      const after = build([row(asst("a1", [{ call: "c1" }])), row(asst("a2", [{ think: "more" }, { call: "c2" }]))]);
+      expect((after[0] as { work: { key: string } }).work.key).toBe((before[0] as { work: { key: string } }).work.key);
     });
   });
 

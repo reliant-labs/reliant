@@ -116,6 +116,13 @@ func (s *Service) ConnectDaemon(
 		},
 	)
 
+	// The daemon version floor (version_floor.go), before any side effect: a
+	// refused daemon leaves no row, lease or connection behind.
+	floorRestart, err := s.applyVersionFloor(ctx, userID, daemonID, reg, registeredManaged(reg), false)
+	if err != nil {
+		return err
+	}
+
 	// The machine's org, as its daemon-bound credential's introspection
 	// named it (control-plane's daemons.org_id). Only a bound credential
 	// speaks for the machine: the bound id is this daemonID (resolveDaemonID).
@@ -287,6 +294,10 @@ func (s *Service) ConnectDaemon(
 	// first; handleIncoming has normally released the stream already).
 	s.startSender(conn)
 	defer conn.releaseStream()
+
+	// A daemon below the version floor is asked, once, to restart: after
+	// the registration_ack, which a daemon reads first.
+	s.sendFloorRestart(conn, floorRestart)
 
 	// Start heartbeat goroutine
 	go s.runHeartbeat(conn)
