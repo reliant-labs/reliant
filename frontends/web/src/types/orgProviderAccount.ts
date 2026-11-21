@@ -130,6 +130,8 @@ export const ORG_KEY_PROVIDERS: ReadonlyArray<{ id: string; name: string; placeh
   { id: "openai", name: "OpenAI", placeholder: "sk-…" },
   { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-…" },
   { id: "gemini", name: "Google Gemini", placeholder: "AIza…" },
+  // A service-account key file, pasted into a multi-line field (ServiceAccountKeyField).
+  { id: "vertexai", name: "Vertex AI", placeholder: "" },
 ];
 
 /** The access setting in words: "Everyone in Acme" / "Owners and admins" / "Selected people". */

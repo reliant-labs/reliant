@@ -2826,13 +2826,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						cancelCause := "pause"
-						if executor.threadInterruptedSince(running.ThreadInterruptEpoch) {
-							cancelCause = "interrupt"
-						}
 						logger.Info("[Workflow Runtime] Activity cancelled, blocking until resume then retrying",
 							"stepID", running.StepID,
-							"cause", cancelCause,
+							"cause", executor.cancelCause(running),
 						)
 						checkPause(ctx)
 						// If root context is genuinely cancelled (CancelWorkflow, not just pause),
@@ -2844,8 +2840,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						_ = workflow.Sleep(ctx, 0)
 						// Resumed - re-start the step with fresh activity
 						// context. A call_llm the pause cut off continues its
-						// partial.
-						executor.noteCancelledForPause(running)
+						// partial; a tool batch an interrupt cancelled is
+						// settled instead of run again (interrupt_settle.go).
+						executor.noteCancelled(running)
 						triggeredNode := &core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

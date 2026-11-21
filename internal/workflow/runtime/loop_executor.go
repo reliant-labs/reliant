@@ -1965,9 +1965,10 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineLoop] Activity cancelled (pause), blocking until resume then retrying in place",
+						e.logger.Info("[InlineLoop] Activity cancelled, blocking until resume then retrying in place",
 							"stepID", running.StepID,
 							"iteration", e.iteration,
+							"cause", iterExecutor.cancelCause(running),
 						)
 						e.pauseCtrl.DoCheckPause(e.ctx)
 						// A genuine CancelWorkflow (not a pause) must still unwind.
@@ -1981,8 +1982,10 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						// that paused it. Re-dispatch with that, not the
 						// inputs this iteration started with.
 						e.syncIterationInputs(iterInputs)
-						// A call_llm the pause cut off continues its partial.
-						iterExecutor.noteCancelledForPause(running)
+						// A call_llm the pause cut off continues its partial;
+						// a tool batch an interrupt cancelled is settled
+						// instead of run again (interrupt_settle.go).
+						iterExecutor.noteCancelled(running)
 						newRunning := iterExecutor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,

@@ -821,6 +821,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
+		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
