@@ -46,12 +46,18 @@ describe("the hybrid nav's shape", () => {
       "observability",
       "analytics",
       "deployments",
+      "tests",
       "data",
       "storage",
       "auth",
       "security",
       "configure",
     ]);
+  });
+
+  it("puts Tests right after Deployments", () => {
+    const ids = topIds();
+    expect(ids.indexOf("tests")).toBe(ids.indexOf("deployments") + 1);
   });
 
   it("has Usage & billing and Settings in the footer, and no footer Inbox", () => {
