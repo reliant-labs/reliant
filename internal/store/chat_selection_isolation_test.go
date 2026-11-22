@@ -40,7 +40,7 @@ func TestMutateChatSelectionLoserReadsTheWinnersWrite(t *testing.T) {
 	var seen []*chatselection.Selection
 	done := make(chan error, 1)
 	go func() {
-		_, err := probe.Repo.MutateChatSelection(ctx, "sel-race", func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+		_, err := store.NewChatSelectionExtStore(probe.Repo.ORM()).MutateChatSelection(ctx, "sel-race", func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 			seen = append(seen, cur)
 			if cur == nil {
 				return &chatselection.Selection{UserID: storetest.SeedUserID, WorkflowName: "builder", Params: map[string]any{"loser": true}}, nil
@@ -75,7 +75,7 @@ func TestMutateChatSelectionLoserReadsTheWinnersWrite(t *testing.T) {
 	if len(seen) != 1 || seen[0] == nil || seen[0].Params["winner"] != true {
 		t.Fatalf("mutate saw %+v; want one call, seeing the winner's edit", seen)
 	}
-	got, err := store.GetChatSelection(ctx, env.ORM, "sel-race", false)
+	got, err := store.GetChatSelection(ctx, env.ORM, "sel-race")
 	if err != nil {
 		t.Fatalf("GetChatSelection: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestChatSelectionConcurrentWritersLoseNothing(t *testing.T) {
 		}
 	}
 	probe := env.Probe(t)
-	svc := chatselection.New(probe.Repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(probe.Repo.ORM())})
 
 	// run starts every writer at once and returns each one's error.
 	run := func(write func(i int) error) []error {

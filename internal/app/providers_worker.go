@@ -331,8 +331,15 @@ type RunLauncherDeps struct {
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
-	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue,
-		launch.WithChatPinner(pinner)), nil
+	return launch.New(launch.Deps{
+		Store:      d.DB,
+		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:    threads.NewService(d.DB),
+		Temporal:   d.Temporal.Client,
+		Runs:       d.Runs,
+		TaskQueue:  v2workflow.SharedTaskQueue,
+		Pinner:     pinner,
+	}), nil
 }
 
 // WorkerChat is the chat service as the run tools reach it on the worker.
@@ -358,6 +365,8 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:      d.Config,
 		Repo:        d.DB,
 		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,

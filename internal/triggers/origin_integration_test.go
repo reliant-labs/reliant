@@ -62,7 +62,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	})
 	ctx := context.Background()
 
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), f.starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.NewService(f.repo), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	workflows := launchableDeclarations{fakeWorkflows: fakeWorkflows{yaml: map[string]string{scenarioWorkflow: workflow}}}
 	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), f.repo, "reliant-labs")
 	starter := &recordingStarter{}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -26,7 +27,7 @@ import (
 func basicViewStepIDs(t *testing.T, view reliantv1.WorkflowExecutionView, repo Repository, ctx context.Context, chatID string) (map[string]*reliantv1.StepExecution, *countingRepo) {
 	t.Helper()
 	counting := &countingRepo{Repository: repo}
-	service := &Service{deps: Deps{Repo: counting, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
+	service := &Service{deps: Deps{Repo: counting, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
 		View:   view,
@@ -191,7 +192,7 @@ func TestGetWorkflowExecutions_ThreadTreeHasNoPerWorkflowQueries(t *testing.T) {
 	}))
 
 	counting := &countingRepo{Repository: repo}
-	service := &Service{deps: Deps{Repo: counting, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
+	service := &Service{deps: Deps{Repo: counting, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.AllRootWorkflows[0].Children, childCount+1)

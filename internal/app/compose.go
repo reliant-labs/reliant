@@ -1105,6 +1105,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Repo:        g.Database(),
 		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
+		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,

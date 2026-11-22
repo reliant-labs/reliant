@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -59,7 +60,7 @@ func TestLaunchValidation_FailsWithThePolicysReason(t *testing.T) {
 	}}))
 	org := "org-acme"
 	chat := &db.Chat{ProjectID: "project-1", OrgID: &org}
-	launcher := NewLauncher(nil, nil, nil, nil, "")
+	launcher := New(Deps{Store: nil, Selections: nil, Threads: nil, Temporal: nil, Runs: nil, TaskQueue: ""})
 	inputs := func() map[string]interface{} {
 		return map[string]interface{}{"mode": "auto", "model": map[string]interface{}{"id": "claude-4.6-sonnet@anthropic"}}
 	}
@@ -116,7 +117,7 @@ func TestLaunchValidation_AnUnreadablePolicyIsRetryable(t *testing.T) {
 	org := "org-acme"
 	chat := &db.Chat{ProjectID: "project-1", OrgID: &org}
 
-	errs := NewLauncher(nil, nil, nil, nil, "").validateChatWorkflowInputsAt(ctx, "user-1", chat, launchAccountScope(Spec{Unattended: true}, "user-1", chat),
+	errs := New(Deps{Store: nil, Selections: nil, Threads: nil, Temporal: nil, Runs: nil, TaskQueue: ""}).validateChatWorkflowInputsAt(ctx, "user-1", chat, launchAccountScope(Spec{Unattended: true}, "user-1", chat),
 		"builtin://agent", "", map[string]interface{}{"mode": "auto", "model": map[string]interface{}{"id": "llama3@local"}}, false)
 	require.Len(t, errs, 1)
 	assert.ErrorIs(t, errs[0], drivers.ErrDriverLookupFailed)

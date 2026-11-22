@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -39,6 +40,9 @@ type Deps struct {
 	Questions Questions
 	// Spawns reads the spawn tree (Spawns, deps.go).
 	Spawns Spawns
+	// Selections stores each chat's composer selection (chatselection.Store;
+	// store.ChatSelectionExtStore satisfies it).
+	Selections chatselection.Store
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -101,6 +105,9 @@ func (d Deps) validateDeps() error {
 	if d.Spawns == nil {
 		return fmt.Errorf("chat: Deps.Spawns is required")
 	}
+	if d.Selections == nil {
+		return fmt.Errorf("chat: Deps.Selections is required")
+	}
 	if d.Temporal == nil {
 		return fmt.Errorf("chat: Deps.Temporal is required")
 	}
@@ -159,8 +166,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, workflow.SharedTaskQueue,
-			launch.WithChatPinner(s.chatPinner()))
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.NewService(s.deps.Repo), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

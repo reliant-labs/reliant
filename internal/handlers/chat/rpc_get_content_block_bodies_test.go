@@ -46,7 +46,7 @@ func TestGetContentBlockBodies(t *testing.T) {
 		return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	}
 	ctx := as("test-user")
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	mine := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 	theirs := dbtest.SeedTranscriptBodies(t, as("someone-else"), repo, "someone-else")
 
@@ -196,7 +196,7 @@ func TestGetToolResultAndBodiesAgreeOnBranches(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	mine := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 	branch := seedToolResult(t, repo, "test-user", "", "", ptr.Of(mine.ContextWindowID))
 

@@ -102,7 +102,7 @@ func setupPausedAgentMessageFixture(t *testing.T) pausedAgentMessageFixture {
 	}
 	pause := &orderedPauseController{log: &log}
 	service := &Service{
-		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal},
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}
 	return pausedAgentMessageFixture{

@@ -125,7 +125,7 @@ func TestSendMessage_LiveAutoRunHeldToTheOrgModeFloor(t *testing.T) {
 				}},
 				inputs: map[string]interface{}{"mode": tc.runMode},
 			}
-			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 			_, err := service.SendMessage(ctx, plainMessage(chatID))
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, stateUpdateModes(temporal))
@@ -141,7 +141,7 @@ func TestSendMessage_LiveAutoRunHeldToTheOrgModeFloor(t *testing.T) {
 		}},
 		inputs: map[string]interface{}{"mode": "auto"},
 	}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 	_, err := service.SendMessage(ctx, plainMessage(chatID))
 	require.NoError(t, err)
 	assert.Empty(t, stateUpdateModes(temporal))
@@ -163,7 +163,7 @@ func TestWithLiveModeFloor_UnknownModeRefusesTheSend(t *testing.T) {
 	// The run is closed (its inputs cannot be queried), and the chat's
 	// workflow cannot be built (its mode cannot be resolved).
 	temporal := &queryRecorder{closed: true}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 	update, err := service.withLiveModeFloor(ctx, "floor-user", chat, "builtin://no-such-workflow", nil)
 	require.Error(t, err)
 	assert.Nil(t, update)

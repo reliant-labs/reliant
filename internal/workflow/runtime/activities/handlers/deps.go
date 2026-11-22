@@ -35,10 +35,47 @@ import (
 // Shared helper roles
 // ============================================================================
 
-// RunOwnerReader is what resolveRunOwner reads: the parent run, then the chat.
+// WorkflowLoader reads one workflow (run) row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// RunOwnerReader is what resolveRunOwner reads after the parent run: the chat.
 type RunOwnerReader interface {
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
+// WorkflowRuns is what WorkflowStatusActivity reads and ends on a run's rows
+// that carry no chat activity: the run itself, its descendants' terminal
+// cascade, its position checkpoint and its node attempts. NewWorkflowRuns
+// builds it over the generated ext stores.
+type WorkflowRuns interface {
+	WorkflowLoader
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentID string, reason core.WorkflowStopReason) error
+	ClearWorkflowCheckpoint(ctx context.Context, workflowID string) error
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*core.StepExecution, error)
+}
+
+type workflowRuns struct {
+	store.WorkflowExtStore
+	store.WorkflowCheckpointExtStore
+	store.StepExecutionExtStore
+}
+
+// NewWorkflowRuns is the WorkflowRuns over the generated ext stores of db.
+func NewWorkflowRuns(db orm.Context) WorkflowRuns {
+	return workflowRuns{
+		WorkflowExtStore:           store.NewWorkflowExtStore(db),
+		WorkflowCheckpointExtStore: store.NewWorkflowCheckpointExtStore(db),
+		StepExecutionExtStore:      store.NewStepExecutionExtStore(db),
+	}
+}
+
+// QuestionsByStep reads the questions one step raised in one loop iteration.
+// store.QuestionExtStore satisfies it.
+type QuestionsByStep interface {
+	ListQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*core.Question, error)
 }
 
 // WorktreeOwnerReader is what worktreeOwnerOf reads.
@@ -165,7 +202,6 @@ type CallLLMStore interface {
 // run: pending approvals, unanswered tool calls and their synthetic results.
 type CleanupStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
@@ -393,7 +429,6 @@ type PreflightDaemonCheckStore interface {
 // runevents.Store).
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*db.Question, error)
 	CreateQuestion(ctx context.Context, question *db.Question) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
@@ -471,8 +506,9 @@ type RunRecords interface {
 
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
-	Repo WorkflowStatusStore
-	Runs RunRecords
+	Repo      WorkflowStatusStore
+	Runs      RunRecords
+	Workflows WorkflowRuns
 }
 
 type runRecords struct {
@@ -498,17 +534,13 @@ func NewRunRecords(db orm.Context) RunRecords {
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
 	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
-	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
-	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
-	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error

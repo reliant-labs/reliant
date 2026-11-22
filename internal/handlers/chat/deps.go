@@ -13,7 +13,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -168,7 +167,6 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
-	chatselection.Store
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore

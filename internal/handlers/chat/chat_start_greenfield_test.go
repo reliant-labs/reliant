@@ -88,7 +88,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	e.svc = &Service{
 		deps: Deps{
 			Repo:   e.repo,
-			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
+			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
 		}, threads: threads.NewService(e.repo),
 		runs: runs.New(runs.Deps{Repo: e.repo, Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
@@ -166,7 +166,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	svc := &Service{
 		deps: Deps{
 			Repo:   repo,
-			Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal, Router: router,
+			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal, Router: router,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}

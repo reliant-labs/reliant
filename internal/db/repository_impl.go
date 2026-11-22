@@ -3304,10 +3304,6 @@ func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, node
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
-func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
-}
-
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
 	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
 }
@@ -4053,10 +4049,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
 	return store.GetQuestion(ctx, r.ORM(), id)
-}
-
-func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
 }
 
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
