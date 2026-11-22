@@ -98,6 +98,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/reliant-labs/reliant/internal/servergateway"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -1473,11 +1474,15 @@ func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 // newSharing constructs the sharing handler (internal/handlers/sharing):
 // read-only sharing of chats and projects with their org's live members.
 func (g *Graph) newSharing() (*sharing.Service, error) {
+	o := g.Database().ORM()
 	return sharing.New(sharing.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Orgs:   g.OrgResolver(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Chats:    store.NewChatsWithActivityExtStore(o),
+		Projects: store.NewProjectExtStore(o),
+		Shares:   store.NewShareEventExtStore(o),
+		Tx:       o,
+		Orgs:     g.OrgResolver(),
 	})
 }
 
