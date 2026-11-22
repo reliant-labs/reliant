@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -19,7 +21,7 @@ func TestRemoveRepo_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	store.DeleteRepoFunc = func(context.Context, string) error { return nil }
-	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
+	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RemoveRepoRequest, pb.RemoveRepoResponse]{
 		{

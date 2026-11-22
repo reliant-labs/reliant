@@ -41,12 +41,12 @@ func (s *Service) UpdateTrigger(
 	// change it at all (updatedTriggerOrg).
 	var source, target *core.Project
 	if existing.OrgID == nil {
-		if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
+		if source, err = s.deps.Projects.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
 			return nil, triggerDBError("get project", err)
 		}
 	}
 	if updated.ProjectID != existing.ProjectID {
-		if target, err = s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID); err != nil {
+		if target, err = s.deps.Projects.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID); err != nil {
 			return nil, triggerDBError("get project", err)
 		}
 	}

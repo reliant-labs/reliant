@@ -28,15 +28,10 @@ type Repository interface {
 	MergeDeclaredDaemonLabels(ctx context.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error)
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
-	SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error
 
-	// The attachment lease a connected daemon holds on this gateway.
+	// The attachment lease a connected daemon holds on this gateway is the
+	// Attachments role; UpsertDaemonAttachment stays here for now.
 	UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error
-	RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (created bool, err error)
-	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
-	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
-	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
-	UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health db.MachineHealth) error
 
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
@@ -49,10 +44,6 @@ type Repository interface {
 	// checkout at a path (ensureOwnedProjectForPath).
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
-	// WithMachineCheckoutsLocked runs fn under the lock a detach from the
-	// machine takes, so a reported path is resolved against the detach
-	// whole or not at all (ensureOwnedProjectForPath).
-	WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
@@ -61,18 +52,62 @@ type Repository interface {
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 
-	// ListProjects is called directly too; ProjectReconcileStore declares it.
-	ProjectReconcileStore
+	// ListProjects is called directly too; ProjectReconcileRepo declares it.
+	ProjectReconcileRepo
 	CheckoutRestoreStore
 	daemonHostnameLookup
 	projectfacts.ForgeNameWriter
 }
 
+// MachineCheckouts is the machine's checkout lock and the detachments recorded
+// against it. store.ProjectDaemonDetachmentExtStore satisfies it.
+type MachineCheckouts interface {
+	MachineDetachments
+	// WithMachineCheckoutsLocked runs fn under the lock a detach from the
+	// machine takes, so a reported path is resolved against the detach
+	// whole or not at all (ensureOwnedProjectForPath).
+	WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error
+}
+
+// MachineDetachments is what a reconcile pass does with the machine's
+// detachments.
+type MachineDetachments interface {
+	// DetachProjectDaemonOfOtherOrg removes a checkout record from the
+	// machine when its project is, under its row lock, still in another org,
+	// recording it whole so it can be restored: the reconcile's machine-org
+	// cleanup.
+	DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string) (bool, error)
+	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
+	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
+}
+
+// reconcileStore is the repository and the machine's checkouts together: what
+// a reconcile pass reads and writes.
+type reconcileStore struct {
+	ProjectReconcileRepo
+	checkouts MachineDetachments
+}
+
+func (r reconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string) (bool, error) {
+	return r.checkouts.DetachProjectDaemonOfOtherOrg(ctx, projectID, daemonID, userID, machineOrg)
+}
+
+func (r reconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	return r.checkouts.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+}
+
 // ProjectReconcileStore is what a reconcile pass (reconcileProjectDaemons)
-// reads and writes: the user's projects, the project_daemons row of each one
+// reads and writes.
+type ProjectReconcileStore interface {
+	ProjectReconcileRepo
+	MachineDetachments
+}
+
+// ProjectReconcileRepo is the repository's part of ProjectReconcileStore: the user's projects, the project_daemons row of each one
 // found on the daemon, and the remote_url backfill that respects the
 // (user_id, remote_url) unique index.
-type ProjectReconcileStore interface {
+type ProjectReconcileRepo interface {
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	// ListProjectDaemonsForDaemon is what the machine already has on record,
 	// which a creation-path probe never overrules.
@@ -98,17 +133,32 @@ type ProjectReconcileStore interface {
 	// remote in one org (nil scope: any): the remote backfill's uniqueness
 	// check, per (org, user, remote_url).
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
-	// DetachProjectDaemonOfOtherOrg removes a checkout record from the
-	// machine when its project is, under its row lock, still in another org,
-	// recording it whole so it can be restored: the reconcile's machine-org
-	// cleanup.
-	DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string) (bool, error)
-	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
-	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
-	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
+	// The machine's detachments and cleanup of other orgs' checkouts are the
+	// service's Checkouts (MachineCheckouts), joined to this by reconcileStore.
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
 	projectfacts.ProjectUpdater
 	// ForgeAppsStore records the forge apps the reconcile probe reports for
 	// each repo of a checkout it found (projectfacts.RecordForgeApps).
 	projectfacts.ForgeAppsStore
+}
+
+// Attachments is the lease a connected daemon holds on this gateway and what
+// its heartbeats record on it. store.DaemonAttachmentExtStore satisfies it.
+type Attachments interface {
+	// RenewDaemonAttachment renews the lease of a stream the caller is
+	// holding right now, re-creating the row if it is gone, and reports
+	// whether it had to.
+	RenewDaemonAttachment(ctx context.Context, att *core.DaemonAttachment) (created bool, err error)
+	// ReleaseDaemonAttachment deletes the lease a session created, never a
+	// newer session's.
+	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
+	SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
+	SetDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
+	SetDaemonAttachmentHealth(ctx context.Context, daemonID string, health core.MachineHealth) error
+}
+
+// LocalModels stores the model inventory a daemon publishes.
+// store.DaemonExtStore satisfies it.
+type LocalModels interface {
+	SetDaemonLocalModels(ctx context.Context, daemonID, inventoryJSON string) error
 }

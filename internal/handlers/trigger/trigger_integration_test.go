@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -81,7 +83,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 
 	// The real service, over the real schedule and workflow clients.
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -244,7 +246,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -333,7 +335,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()

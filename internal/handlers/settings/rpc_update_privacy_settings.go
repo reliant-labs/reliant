@@ -18,7 +18,7 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 	userID := auth.MustGetUserID(ctx)
 
 	// Get current settings
-	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
+	analyticsEnabled, crashReportingEnabled, err := s.deps.Privacy.GetPrivacySettings(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update privacy settings"))
 	}
@@ -32,7 +32,7 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 	}
 
 	// Save the updated settings
-	if err := s.deps.Repo.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
+	if err := s.deps.Privacy.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save privacy settings"))
 	}
 

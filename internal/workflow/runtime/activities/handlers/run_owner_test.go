@@ -116,7 +116,7 @@ func TestWorkflowStatus_CreatedRunsCarryAnOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewWorkflowStatusActivity(h.Repo())
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 
 	rootID := uuid.NewString()
 	var out WorkflowStatusOutput

@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -64,7 +65,7 @@ func waitForLockWaiter(t *testing.T, repo *db.Repo, done <-chan error) {
 // chatFeed is the shared chat's feed rows, in sequence order.
 func chatFeed(t *testing.T, repo *db.Repo, f *viewertest.Fixture) []reliantv1.OrgUpdateType {
 	t.Helper()
-	rows, err := repo.OrgUpdatesSince(context.Background(), viewertest.OrgID, 0, 100)
+	rows, err := store.OrgUpdatesSince(context.Background(), repo.ORM(), viewertest.OrgID, 0, 100)
 	require.NoError(t, err)
 	var out []reliantv1.OrgUpdateType
 	for _, r := range rows {

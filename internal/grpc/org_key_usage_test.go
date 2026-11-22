@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 type orgKeyStore struct {
@@ -21,10 +21,10 @@ type orgKeyStore struct {
 	from, to time.Time
 }
 
-func (s *orgKeyStore) SumLLMOrgKeyUsage(_ context.Context, orgID string, from, to time.Time) ([]db.OrgKeyModelUsage, error) {
+func (s *orgKeyStore) SumLLMOrgKeyUsage(_ context.Context, orgID string, from, to time.Time) ([]store.OrgKeyModelUsage, error) {
 	s.calls++
 	s.org, s.from, s.to = orgID, from, to
-	return []db.OrgKeyModelUsage{{Provider: "anthropic", Model: "claude-sonnet-4-5", Calls: 3, InputTokens: 100, OutputTokens: 10, CacheReadTokens: 5, CacheWriteTokens: 1}}, nil
+	return []store.OrgKeyModelUsage{{Provider: "anthropic", Model: "claude-sonnet-4-5", Calls: 3, InputTokens: 100, OutputTokens: 10, CacheReadTokens: 5, CacheWriteTokens: 1}}, nil
 }
 
 // Only the internal service reads an org's org-key counts, for one org and a

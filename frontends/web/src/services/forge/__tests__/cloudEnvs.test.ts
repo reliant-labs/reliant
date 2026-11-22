@@ -25,7 +25,6 @@ vi.mock("@/services/controlPlane/client", () => ({
 }));
 
 import {
-  DeployEnvironmentKind,
   DeployEnvironmentLifetime,
   DeployEnvironmentSchema,
   DeploymentSchema,
@@ -37,26 +36,6 @@ import {
   DeployTier,
   DeployVerdict,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
-
-/**
- * The placement fields the control plane sends for each kind:
- * DeployEnvironment.kind left the wire with control-plane#3095, so a test
- * environment of a kind is built from what replaced it.
- */
-function placement(kind: DeployEnvironmentKind) {
-  switch (kind) {
-    case DeployEnvironmentKind.LOCAL:
-      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE };
-    case DeployEnvironmentKind.PREVIEW:
-      return { lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
-    case DeployEnvironmentKind.PERSISTENT:
-      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
-    case DeployEnvironmentKind.SELF_MANAGED:
-      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
-    default:
-      return {};
-  }
-}
 import {
   DeploymentStatusSchema,
   GetDeploymentStatusResponseSchema,
@@ -67,6 +46,11 @@ import {
   getEnvironmentStatus,
   listProjectEnvironments,
 } from "../cloudEnvs";
+
+// The placement fields each kind is derived from (environmentKind.ts).
+const PERSISTENT = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+const SELF_MANAGED = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
+const LOCAL = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE };
 
 beforeEach(() => {
   listEnvironments.mockReset();
@@ -90,11 +74,11 @@ describe("listProjectEnvironments", () => {
   it("drops rows for another project — an old control plane ignores the filter", async () => {
     listEnvironments.mockResolvedValue({
       environments: [
-        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", ...placement(DeployEnvironmentKind.PERSISTENT) }),
-        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", ...placement(DeployEnvironmentKind.PERSISTENT) }),
+        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", ...PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", ...PERSISTENT }),
         // A server predating the field sends no project at all.
-        create(DeployEnvironmentSchema, { id: "c", name: "staging", ...placement(DeployEnvironmentKind.PERSISTENT) }),
-        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", ...placement(DeployEnvironmentKind.LOCAL) }),
+        create(DeployEnvironmentSchema, { id: "c", name: "staging", ...PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", ...LOCAL }),
       ],
     });
     const envs = await listProjectEnvironments("barksocial", null);
@@ -106,23 +90,22 @@ describe("listProjectEnvironments", () => {
 
   it("reads a self-managed environment as itself, not as an unknown kind", async () => {
     listEnvironments.mockResolvedValue({
-      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", ...placement(DeployEnvironmentKind.SELF_MANAGED) })],
+      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", ...SELF_MANAGED })],
     });
     const envs = await listProjectEnvironments("control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
   });
 
-
-  // DeployEnvironment.kind leaves the wire with control-plane#3095; every
-  // server since #1349 also sends lifetime, secret_posture and hosted_slot.
-  it("derives each kind from the placement fields when kind is absent", async () => {
+  // control-plane#3095 removed DeployEnvironment.kind; every server since
+  // #1349 sends lifetime, secret_posture and hosted_slot instead.
+  it("derives each kind from the placement fields", async () => {
     listEnvironments.mockResolvedValue({
       environments: [
         create(DeployEnvironmentSchema, { id: "a", name: "a", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE }),
         create(DeployEnvironmentSchema, { id: "b", name: "b", project: "p", lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
         create(DeployEnvironmentSchema, { id: "c", name: "c", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
         create(DeployEnvironmentSchema, { id: "d", name: "d", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY }),
-        // Neither kind nor the placement fields: a server older than both.
+        // No placement fields: a row the client cannot place.
         create(DeployEnvironmentSchema, { id: "e", name: "e", project: "p" }),
       ],
     });

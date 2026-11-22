@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -34,7 +35,7 @@ func TestUsageMeter_RecordsTheServingAccount(t *testing.T) {
 		Account: &routedAccount{Config: models.AccountConfig{DriverConfig: models.DriverConfig{AccountID: "acct-served"}}}}
 	unrouted := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
 	exec := func(ctx context.Context, _ string) (string, error) {
-		meter := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title")
+		meter := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "title")
 		_, err := meter.streamAndAccumulate(ctx, routed, nil, nil, nil)
 		require.NoError(t, err)
 		_, err = meter.streamAndAccumulate(ctx, unrouted, nil, nil, nil)
@@ -92,7 +93,7 @@ func TestUsageMeter_RecordsFundingAndTheOrgRollup(t *testing.T) {
 				DriverConfig: models.DriverConfig{AccountID: id, AccountOrgID: org}}}}
 	}
 	exec := func(ctx context.Context, _ string) (string, error) {
-		meter := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title")
+		meter := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "title")
 		// The org-less managed key bills the person's default org, which is not
 		// necessarily the chat's: it never lands in the chat org's rollup.
 		managed := served("managed", "", models.FundingOrgWallet)

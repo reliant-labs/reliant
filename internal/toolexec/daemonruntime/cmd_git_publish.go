@@ -18,6 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
 	"github.com/reliant-labs/reliant/internal/gitutil"
@@ -32,7 +33,7 @@ func init() {
 // daemonFeatures are the capabilities this daemon adds to its registration
 // beyond its tool names: behaviour of a command the server must not assume of
 // an older daemon, which would silently ignore the request field it needs.
-var daemonFeatures = []string{gitpublish.CapabilityForceWithLease}
+var daemonFeatures = []string{gitpublish.CapabilityForceWithLease, daemon.CapabilityRunStepEnv}
 
 // A git_publish node is two daemon commands so the credential exists for as
 // short a time as it can.

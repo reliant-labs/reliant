@@ -13,6 +13,49 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.29.0" description="November 22, 2026">
+### 2 new features, 5 fixes and 4 other changes
+
+Every pull request merged since v1.28.1, grouped by its conventional-commit type.
+
+#### Added
+
+- **cli: read RELIANT_DAEMON_TYPE through typed config in auth login/logout** [#3017](https://github.com/reliant-labs/reliant/pull/3017)
+- **web: Tests pages read control-plane's TestsService** [#3304](https://github.com/reliant-labs/reliant/pull/3304)
+
+#### Changed
+
+- **db: project org move ledger, commit and trigger resume leave the facade** [#3310](https://github.com/reliant-labs/reliant/pull/3310)
+- **pin: forge@08b7395a8 (RequireExpiry, devidp sign-in handoff, -trimpath builds)** [#3329](https://github.com/reliant-labs/reliant/pull/3329)
+- **kcl: declare -trimpath on reliant's GoBuilds; re-key v1.11.0 playbook records** [#3333](https://github.com/reliant-labs/reliant/pull/3333)
+- **db: plan, task and dependency tool calls leave the facade for internal/planning** [#3323](https://github.com/reliant-labs/reliant/pull/3323)
+
+#### Fixed
+
+- **web: follow control-plane#3095 (DeployEnvironment.kind, GetObservabilityUsage)** [#3270](https://github.com/reliant-labs/reliant/pull/3270)
+- **test: credsandbox's re-exec test ignores coverage warnings, so the -cover merge gate passes** [#3332](https://github.com/reliant-labs/reliant/pull/3332)
+- **worker: the tools factory supplies the row stores #3328's tools require** [#3334](https://github.com/reliant-labs/reliant/pull/3334)
+- **worktree: creating a worktree waits out another workspace's recovery finalization instead of failing** [#3235](https://github.com/reliant-labs/reliant/pull/3235)
+- **config: format auth config proto for release lint** [#3336](https://github.com/reliant-labs/reliant/pull/3336)
+
+</Update>
+
+<Update label="v1.28.1" description="November 22, 2026">
+### 1 fix and 2 other changes
+
+Every pull request merged since v1.28.0, grouped by its conventional-commit type.
+
+#### Changed
+
+- **run reliant's test lanes through forge test capture and its flake gate** [#3243](https://github.com/reliant-labs/reliant/pull/3243)
+- **db: open and pending questions leave the facade; runs and reconciliation take New(Deps)** [#3317](https://github.com/reliant-labs/reliant/pull/3317)
+
+#### Fixed
+
+- **telemetry: org and conversation ids on run and node spans; no error text on agent spans** [#3307](https://github.com/reliant-labs/reliant/pull/3307)
+
+</Update>
+
 <Update label="v1.28.0" description="November 22, 2026">
 ### 11 new features, 13 fixes and 17 other changes
 
