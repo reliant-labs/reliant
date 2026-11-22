@@ -37,6 +37,9 @@ type Deps struct {
 	// Repo stores settings, provider credentials and privacy choices
 	// (deps.go).
 	Repo Repository
+	// Accounts holds the person's provider accounts, their limits and usage poll
+	// (credentials/provideraccounts); the secrets stay inside it.
+	Accounts Accounts
 	// Privacy keeps the user's analytics and crash-reporting choices.
 	Privacy Privacy
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
@@ -84,6 +87,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("settings: Deps.Repo is required")
+	}
+	if d.Accounts == nil {
+		return fmt.Errorf("settings: Deps.Accounts is required")
 	}
 	if d.Privacy == nil {
 		return fmt.Errorf("settings: Deps.Privacy is required")

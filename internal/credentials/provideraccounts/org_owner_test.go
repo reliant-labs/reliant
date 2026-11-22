@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package provideraccounts_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/credentials/accountseal"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -33,8 +34,7 @@ func apiKeyUpsert(user, label, key string) core.AccountUpsert {
 
 func TestOrgAccountIsKeyedByItsOwnerAndRecordsItsCreator(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 
 	mine := mustUpsert(t, repo, apiKeyUpsert("admin", "mine", "sk-ant-personal-0001"))
@@ -66,23 +66,22 @@ func TestOrgAccountIsKeyedByItsOwnerAndRecordsItsCreator(t *testing.T) {
 // creator's, never a person's tenant whose id is the owner key, never another org's.
 func TestOrgAccountSealsUnderTheOrgTenantOnly(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	org := mustUpsert(t, repo, orgKeyUpsert("org-1", "admin", "acme", "sk-ant-org-key-0002"))
 
 	var sealed []byte
 	require.NoError(t, raw.QueryRowContext(ctx, `SELECT secret_sealed FROM provider_accounts WHERE id=$1`, org.ID).Scan(&sealed))
 	assert.NotContains(t, string(sealed), "sk-ant-org-key-0002")
-	aad := ProviderAccountAAD(org.ID, accountColSecret)
+	aad := accountseal.AAD(org.ID, accountseal.ColSecret)
 
-	plain, err := repo.accounts.sealer.Open(ctx, vault.OrgTenant("org-1"), sealed, aad)
+	plain, err := repo.vault.Open(ctx, vault.OrgTenant("org-1"), sealed, aad)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-org-key-0002", string(plain))
 	for _, wrong := range []vault.Tenant{
 		vault.UserTenant("admin"), vault.UserTenant("org:org-1"), vault.UserTenant("org-1"), vault.OrgTenant("org-2"),
 	} {
-		_, err := repo.accounts.sealer.Open(ctx, wrong, sealed, aad)
+		_, err := repo.vault.Open(ctx, wrong, sealed, aad)
 		assert.Error(t, err, "an org account's secret must not open under %+v", wrong)
 	}
 
@@ -115,8 +114,7 @@ func TestOrgAccountSealsUnderTheOrgTenantOnly(t *testing.T) {
 // key as a user id.
 func TestPersonalAccountMethodsNeverReachAnOrgAccount(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	mine := mustUpsert(t, repo, apiKeyUpsert("admin", "mine", "sk-ant-personal-0001"))
 	org := mustUpsert(t, repo, orgKeyUpsert("org-1", "admin", "acme", "sk-ant-org-key-0002"))
@@ -166,8 +164,7 @@ func TestPersonalAccountMethodsNeverReachAnOrgAccount(t *testing.T) {
 // benches it, for every member at once.
 func TestOwnerAwareWritesReachTheOrgsAccount(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	owner := core.OrgAccountOwner("org-1")
 	org := mustUpsert(t, repo, orgKeyUpsert("org-1", "admin", "acme", "sk-ant-org-key-0002"))
@@ -202,8 +199,7 @@ func TestOwnerAwareWritesReachTheOrgsAccount(t *testing.T) {
 
 func TestOrgAccountUpsertValidation(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 
 	cases := map[string]func(*core.AccountUpsert){
@@ -234,8 +230,7 @@ func TestOrgAccountUpsertValidation(t *testing.T) {
 // write (no owner columns) passes every one of them.
 func TestProviderAccountOwnerChecks(t *testing.T) {
 	t.Parallel()
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	_, raw := newEnv(t)
 	ctx := context.Background()
 	insert := func(id, cols, vals string) error {
 		_, err := raw.ExecContext(ctx, `INSERT INTO provider_accounts (id, provider, identity_key, priority, secret_sealed, `+cols+`)

@@ -35,7 +35,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 	prevClient := drivers.AccountAvailabilityClient
 	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
@@ -45,7 +45,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 
 	user := "user-" + uuid.NewString()
 	addKey := func(name string) core.ProviderAccount {
-		a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		a, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 			UserID: user, Provider: "anthropic", AuthKind: core.AuthKindAPIKey,
 			IdentityKey: core.APIKeyIdentityKey(user, "anthropic", "sk-ant-"+name),
 			Email:       name + "@acme.com", Secrets: core.AccountSecrets{Secret: "sk-ant-" + name},
@@ -66,7 +66,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 	}
 	t.Cleanup(func() { accountDriverFor = prevFor })
 
-	routing := accountRouting(repo, nil)
+	routing := accountRouting(db.TestAccounts(t, repo), repo, nil)
 	projectID, chatID := "project-"+uuid.NewString(), "chat-"+uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: user, Name: "p", Path: t.TempDir()}))
 	require.NoError(t, repo.CreateChat(ctx, &db.Chat{ID: chatID, ProjectID: projectID, UserID: user}))
@@ -77,7 +77,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "hello", nil, nil, nil)
 	require.NoError(t, err)
 
-	applied, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "anthropic", AccountID: revoked.ID, AssignedAt: time.Now(), Reason: "initial"}, "")
+	applied, err := db.TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "anthropic", AccountID: revoked.ID, AssignedAt: time.Now(), Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, applied)
 
@@ -98,7 +98,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, []string{revoked.ID}, servedBy)
 	assert.Contains(t, err.Error(), "RELIANT_PROVIDER_USAGE_LIMIT", "reported as a failover the workflow retries at once")
-	stored, err := repo.ListProviderAccounts(ctx, user)
+	stored, err := db.TestAccounts(t, repo).ListProviderAccounts(ctx, user)
 	require.NoError(t, err)
 	status := map[string]core.AccountStatus{}
 	for i := range stored {

@@ -4077,12 +4077,6 @@ func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.accounts.SetSealer(sealer)
 }
 
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
-// opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
-}
-
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
 // moving each one's next attempt lease on (store.ClaimDuePauseNotices).
 func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {

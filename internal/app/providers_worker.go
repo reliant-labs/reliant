@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -665,14 +666,14 @@ type AccountRecorder struct{ Recorder *accountlimits.Recorder }
 
 // AccountRecorderDeps is where account state is kept.
 type AccountRecorderDeps struct {
-	DB *db.Repo
+	Accounts provideraccounts.Service
 }
 
 // NewAccountRecorder builds the recorder.
 //
 //forge:root-only worker
 func NewAccountRecorder(d AccountRecorderDeps) (*AccountRecorder, error) {
-	return &AccountRecorder{Recorder: accountlimits.NewRecorder(d.DB, nil)}, nil
+	return &AccountRecorder{Recorder: accountlimits.NewRecorder(d.Accounts, nil)}, nil
 }
 
 // Close flushes the rate-limit state the activities recorded, after every
@@ -685,20 +686,21 @@ func (a *AccountRecorder) Close(context.Context) error {
 // TemporalWorkerDeps is everything the worker's workflows and activities
 // reach.
 type TemporalWorkerDeps struct {
-	DB             *db.Repo
-	Temporal       *TemporalClient
-	Streaming      *StreamingHub
-	Tools          *WorkerToolsFactory
-	Executor       *toolexec.RemoteExecutor
-	Router         *WorkerDaemonRouter
-	ConfigProvider *reliantconfig.StoredConfigProvider
-	Launcher       *launch.Launcher
-	Credentials    *WorkerIntegrationCredentials
-	WriteLedger    writeledger.Service
-	Pollers        *webhook.Registry
-	ControlPlane   *configv1.ControlPlaneConfig
-	Network        *configv1.NetworkConfig
-	Recorder       *AccountRecorder
+	DB               *db.Repo
+	ProviderAccounts provideraccounts.Service
+	Temporal         *TemporalClient
+	Streaming        *StreamingHub
+	Tools            *WorkerToolsFactory
+	Executor         *toolexec.RemoteExecutor
+	Router           *WorkerDaemonRouter
+	ConfigProvider   *reliantconfig.StoredConfigProvider
+	Launcher         *launch.Launcher
+	Credentials      *WorkerIntegrationCredentials
+	WriteLedger      writeledger.Service
+	Pollers          *webhook.Registry
+	ControlPlane     *configv1.ControlPlaneConfig
+	Network          *configv1.NetworkConfig
+	Recorder         *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
@@ -877,6 +879,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		OrgAdmins:              orgAdminNotifier(d),
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
+		ProviderAccounts:       d.ProviderAccounts,
 		StreamingHub:           d.Streaming.Hub,
 		ToolsFactory:           d.Tools.ToolsFactory,
 		ToolExecutor:           d.Executor,
@@ -1004,6 +1007,7 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 // account serves again.
 type AccountUsagePollerDeps struct {
 	DB       *db.Repo
+	Accounts provideraccounts.Service
 	Temporal *TemporalClient
 }
 
@@ -1018,10 +1022,10 @@ type AccountUsagePollerDeps struct {
 func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, error) {
 	repo := d.DB
 	return &accountlimits.Poller{
-		Store: repo,
+		Store: d.Accounts,
 		Fetcher: &accountlimits.Fetcher{
-			Store:  repo,
-			Tokens: drivers.RefreshingTokens{Store: repo},
+			Store:  d.Accounts,
+			Tokens: drivers.RefreshingTokens{Store: d.Accounts},
 			// A poll that lifts a bench wakes the user's blocked chats, so their
 			// threads re-route onto the account now rather than at a reset.
 			OnCapacity: func(ctx context.Context, userID, _ string) {
