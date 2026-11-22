@@ -157,7 +157,16 @@ func TestSandbox_InitRunsItsCommandWhileItsStarterLives(t *testing.T) {
 	requireSandbox(t)
 	out, code := run(t, Plan{}, `sleep 1; echo done; ls /proc/self/fd | tr '\n' ' '; echo; env | grep -c RELIANT_CRED_SANDBOX || true`)
 	require.Equal(t, 0, code, out)
-	lines := strings.Split(strings.TrimSpace(out), "\n")
+	// The sandbox helper is this test binary. Built with -cover, as the
+	// recorded merge-gate lane builds it, it ends with Go's own "GOCOVERDIR
+	// not set" notice on stderr; that line is the test build's, not the
+	// command's.
+	var lines []string
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		if !strings.HasPrefix(l, "warning: GOCOVERDIR not set") {
+			lines = append(lines, l)
+		}
+	}
 	require.Len(t, lines, 3, out)
 	assert.Equal(t, "done", lines[0])
 	assert.Equal(t, "0 1 2 3", strings.TrimSpace(lines[1]), "the command inherited a descriptor of the sandbox's (3 is ls's own)")
