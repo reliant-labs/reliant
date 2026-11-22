@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,7 +220,7 @@ func TestCreateWorkflow_DefaultsToDraftAndCompleteGates(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 
 	name := "created-" + uuid.NewString()[:8]
 	invalid := "name: " + name + "\nnodes:\n  - id: agent\n    type: call_llm\n"

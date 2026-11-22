@@ -125,7 +125,7 @@ type Request struct {
 	// the machine the checkouts live on.
 	OwnerDaemonID string
 	// IdempotencyKey, when set, is stored on the row (see
-	// db.Repo.GetWorktreeByIdempotencyKey; the caller checks it).
+	// store.GetWorktreeByIdempotencyKey; the caller checks it).
 	IdempotencyKey *string
 	// WorkspaceID, when set, is the workspace directory name under the
 	// worktrees root (see worktreepath.WorkspaceDirName). Adopt needs it up
@@ -311,6 +311,9 @@ func claimName(ctx context.Context, store Store, projectID, name, branch string)
 // (with no path) so the failure stays visible. A failed copy_files does not
 // fail the workspace. The returned error is the reason for FAILED.
 func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) error {
+	// Every command below, the rollback's included, waits out a machine
+	// refusing it while it finalizes another workspace's recovery.
+	m = recoveryPatientMachine{m}
 	project, repos := req.Project, req.Repos
 	checkout := req.Checkout
 	workspaceID := req.WorkspaceID

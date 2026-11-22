@@ -213,7 +213,7 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// is still there or deliberately gone, and either way not the heal's to
 	// make. Unreadable, nothing is healed — creating a directory is the
 	// irreversible direction.
-	detachments, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	detachments, err := s.deps.Detachments.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
 	if err != nil {
 		logging.Warn("project-dir-heal: failed to read the machine's detached projects", "error", err, "userID", userID, "daemonID", daemonID)
 		return nil

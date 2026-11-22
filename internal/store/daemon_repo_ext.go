@@ -178,6 +178,9 @@ func ApplyDaemonLifecycle(ctx context.Context, db orm.Context, lc core.DaemonLif
 
 // SetDaemonLocalModels replaces the daemon's stored local model inventory.
 func SetDaemonLocalModels(ctx context.Context, db orm.Context, daemonID, inventoryJSON string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	_, err := db.Bun().NewUpdate().Model((*Daemon)(nil)).
 		Set("local_models = ?", inventoryJSON).
 		Where("id = ?", daemonID).

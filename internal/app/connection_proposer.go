@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // connectionProposer is tools.ConnectionProposer for the worker, where
@@ -22,7 +23,7 @@ type connectionProposer struct {
 }
 
 type chatApprovals interface {
-	ListApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
+	ListApprovalsByChat(ctx context.Context, chatID string) ([]*core.Approval, error)
 }
 
 type ownedConnections interface {
@@ -34,7 +35,7 @@ type orgRoles interface {
 }
 
 func newConnectionProposer(repo *db.Repo, roles orgRoles) tools.ConnectionProposer {
-	return &connectionProposer{approvals: repo, connections: repo.Connections(), roles: roles}
+	return &connectionProposer{approvals: store.NewApprovalExtStore(repo.ORM()), connections: repo.Connections(), roles: roles}
 }
 
 // IsOrgAdmin is true only for a role control-plane names owner or admin; an

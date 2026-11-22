@@ -133,6 +133,9 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	inboxSvc, err := inbox.New(inbox.Deps{
 		Logger: logger, Config: config.Defaults(), Repo: repo,
+		Items:      store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:    store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:    store.NewTriggerExtStore(repo.ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      store.NewWorktreeExtStore(repo.ORM()),
 	})

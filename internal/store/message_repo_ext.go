@@ -205,6 +205,12 @@ func notTranscriptHidden(q *bun.SelectQuery) {
 // payload. Read DESC, against messages_chat_seq_key walked backward, so the
 // LIMIT keeps the newest rows.
 func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if mainThreadID == "" {
+		return nil, fmt.Errorf("main thread ID cannot be empty")
+	}
 	if limit <= 0 {
 		return []*core.Message{}, nil
 	}

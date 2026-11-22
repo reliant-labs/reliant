@@ -37,6 +37,18 @@ type Deps struct {
 	// their attachment leases, the projects and project configs they
 	// report (deps.go).
 	Repo Repository
+	// Attachments is the lease each connected daemon holds and what its
+	// heartbeats record on it (Attachments, deps.go). Without it no lease is
+	// written, renewed or released: the in-memory routing alone.
+	// forge:optional-dep
+	Attachments Attachments
+	// LocalModels stores the inventory a daemon publishes (LocalModels,
+	// deps.go). Without it inventories are not stored.
+	// forge:optional-dep
+	LocalModels LocalModels
+	// Checkouts is the machine's checkout lock and detachments
+	// (store.ProjectDaemonDetachmentExtStore).
+	Checkouts MachineCheckouts
 	// UserUpdateHub forwards daemon heartbeats, list changes and local-model
 	// inventories to the owner's web clients as ephemeral user updates.
 	// Without it they are not published.
@@ -105,6 +117,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("tools_daemon: Deps.Repo is required")
+	}
+	if d.Checkouts == nil {
+		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")
 	}
 	return nil
 }

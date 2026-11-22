@@ -18,8 +18,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 )
 
-// headsGateRepo holds the update-heads read until the window's content blocks
-// have been asked for, or until a deadline.
+// headsGateRepo notes when the window's content blocks have been asked for;
+// headsGate, over the same state, holds the update-heads read until then, or
+// until a deadline.
 type headsGateRepo struct {
 	Repository
 	blocksAsked chan struct{}
@@ -27,12 +28,18 @@ type headsGateRepo struct {
 	heldUp      bool
 }
 
+type headsGate struct {
+	Heads
+	gate *headsGateRepo
+}
+
 func (r *headsGateRepo) ListContentBlocksForMessages(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error) {
 	r.once.Do(func() { close(r.blocksAsked) })
 	return r.Repository.ListContentBlocksForMessages(ctx, ids)
 }
 
-func (r *headsGateRepo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error) {
+func (h headsGate) SnapshotUpdateHeads(ctx context.Context, chatID string) ([]db.ChatUpdate, string, error) {
+	r := h.gate
 	select {
 	case <-r.blocksAsked:
 	// The deadline only bounds how long a regression takes to report: a
@@ -42,9 +49,9 @@ func (r *headsGateRepo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context,
 	// before the blocks are asked for.
 	case <-time.After(30 * time.Second):
 		r.heldUp = true
-		return nil, errors.New("the content blocks were not read while the update heads were")
+		return nil, "", errors.New("the content blocks were not read while the update heads were")
 	}
-	return r.Repository.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	return h.Heads.SnapshotUpdateHeads(ctx, chatID)
 }
 
 // The update heads cost what the chat's whole entity history costs (prod:
@@ -65,7 +72,7 @@ func TestChatSnapshot_UpdateHeadsDoNotHoldUpTheTranscript(t *testing.T) {
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
 	gate := &headsGateRepo{Repository: repo, blocksAsked: make(chan struct{})}
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: gate})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: gate, Heads: headsGate{Heads: store.NewChatUpdateExtStore(repo.ORM()), gate: gate}}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	require.False(t, gate.heldUp, "the window's content blocks waited for the update heads")
 	require.NotEmpty(t, snapshot.Messages)
@@ -85,7 +92,7 @@ func TestChatSnapshot_CarriesNoWorkflowState(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeWorkflowStatus, "run-1", `{"status":"completed"}`))
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeApproval, "approval-1", `{"id":"approval-1","status":"pending"}`))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	approvals := 0
 	for _, u := range snapshot.OtherUpdates {

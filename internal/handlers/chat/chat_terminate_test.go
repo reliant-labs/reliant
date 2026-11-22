@@ -128,7 +128,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	newWorkflow(spawnID, &rootID, db.Active())
 	newWorkflow(nestedSpawnID, &spawnID, db.Active())
 	newWorkflow(pausedSpawnID, &rootID, db.Paused())
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &db.WorkflowCheckpoint{
 		WorkflowID: rootID,
 		ChatID:     chatID,
 		NodeID:     "implement",

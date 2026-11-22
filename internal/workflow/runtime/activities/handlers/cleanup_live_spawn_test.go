@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -91,7 +92,7 @@ func TestCleanup_DoesNotRepairRunningSpawn(t *testing.T) {
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
 		core.ToolCallStatusExecuting, core.Active())
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled,
 		"a spawn that is still executing must not be declared orphaned")
@@ -118,7 +119,7 @@ func TestCleanup_RepairsSpawnWhoseChildWorkflowEnded(t *testing.T) {
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
 		core.ToolCallStatusExecuting, core.Failed())
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled,
 		"a spawn whose child workflow has ended with no result is a real orphan")
@@ -141,7 +142,7 @@ func TestCleanup_DoesNotRepairPausedSpawn(t *testing.T) {
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
 		core.ToolCallStatusExecuting, core.Paused())
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled, "a paused workflow will resume; its calls are not orphaned")
 
@@ -162,7 +163,7 @@ func TestCleanup_RepairsTerminalCallWithNoResult(t *testing.T) {
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
 		core.ToolCallStatusCancelled, core.Cancelled())
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled)
 
@@ -205,7 +206,7 @@ func TestCleanup_DoesNotRepairExecutingRegularTool(t *testing.T) {
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled)
 }
@@ -239,7 +240,7 @@ func TestCleanup_RepairsCallWithNoDurableRow(t *testing.T) {
 		CreatedAt:  now, UpdatedAt: now,
 	}))
 
-	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
+	output, err := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo)).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled,
 		"with no durable row there is nothing asserting the call is live")

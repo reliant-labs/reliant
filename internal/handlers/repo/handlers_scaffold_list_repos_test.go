@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -33,7 +35,7 @@ func TestListRepos_Generated(t *testing.T) {
 			{RepoID: "r-1", Subpath: "frontends/site", Name: "svc-site"},
 		}, nil
 	}
-	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
+	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListReposRequest, pb.ListReposResponse]{
 		{

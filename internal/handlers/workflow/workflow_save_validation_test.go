@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -35,7 +37,7 @@ func saveTestSetup(t *testing.T) (context.Context, *db.Repo, *Service, string) {
 		ID: projectID, UserID: "test-user", Name: "Save Validation Project",
 		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo})), projectID
+	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)})), projectID
 }
 
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {

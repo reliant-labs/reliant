@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
@@ -77,13 +79,12 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 			// answers an unset method with an error, and the recorder below
 			// fails the row if anything tried.
 			installs := forgeTestProjects("/daemon/workspace/control-plane")
-			repo := &MockRepository{
-				GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-					return &db.Project{ID: id, Path: "/daemon/workspace/control-plane"}, nil
-				},
+			repo := projectaccesstest.Bound(&MockRepository{
 				ListProjectDaemonsForProjectFunc: installs.ListProjectDaemonsForProjectFunc,
 				GetDaemonFunc:                    installs.GetDaemonFunc,
-			}
+			}, func(_ context.Context, id, _ string) (*db.Project, error) {
+				return &db.Project{ID: id, Path: "/daemon/workspace/control-plane"}, nil
+			})
 
 			if err := call(newForgeService(router, repo)); err != nil {
 				t.Fatalf("%s: %v", name, err)

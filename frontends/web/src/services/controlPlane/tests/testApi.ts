@@ -9,29 +9,23 @@
  *   GetTestRun       one run's failures, retry passes, slowest tests
  *   GetCoverage      one path's coverage and its children
  *   GetFileCoverage  one file line by line (hits, never source)
- *   GetReleaseTests  a release commit's report and what changed since the previous
+ *   GetReleaseTests  a release commit's report and what changed since the previous release
  *   ListFlakyTests   tests that are, or were, flaky; paged
  *   GetTest          one test's outcomes, events and failure signatures
  *
- * NOT WIRED YET. This build's control-plane client (proto-vendor/controlplane)
- * has no TestsService: control-plane withholds it from its public contract
- * until it is mounted (control-plane#3286 adds the proto; C4 mounts it). Until
- * the re-vendor (W0), every read answers Unimplemented — what a control plane
- * without the service answers too — and the pages say "this control plane
- * doesn't store test runs yet", never "no test runs".
- *
- * After `task contract:controlplane:sync` brings it in, each function here is
- * one line over the generated client, e.g.
- *
- *   const client = () => getControlPlaneClient(TestsService);
- *   export const getTestSummary = async (req, opts) =>
- *     summaryOf(await client().getTestSummary(summaryRequest(req), opts));
- *
- * with the mapping and the request shapes already in wire.ts.
+ * Each is one call over the generated client (proto-vendor/controlplane,
+ * services/tests/v1), mapped by wire.ts. A control plane that does not serve
+ * TestsService yet answers Unimplemented, as does this client with no control
+ * plane configured: the pages read that as "this control plane doesn't store
+ * test runs yet" (errors.ts isTestsServiceMissing), never as "no test runs".
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Client } from "@connectrpc/connect";
 
+import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
+
+import { getControlPlaneClient } from "../client";
+import { CONTROL_PLANE_API_URL } from "../config";
 import type {
   CallOptions,
   CoverageRequest,
@@ -51,39 +45,59 @@ import type {
   TestRunPage,
   TestSummary,
 } from "./types";
+import {
+  coverageRequest,
+  coverageTreeOf,
+  fileCoverageOf,
+  fileCoverageRequest,
+  flakePageOf,
+  flakyRequest,
+  releaseTestsOf,
+  releaseTestsRequest,
+  runDetailOf,
+  runPageOf,
+  runRequest,
+  runsRequest,
+  summaryOf,
+  summaryRequest,
+  testDetailOf,
+  testRequest,
+} from "./wire";
 
-function notInThisClient(): Promise<never> {
-  return Promise.reject(new ConnectError("test runs are not in this build's control-plane client yet", Code.Unimplemented));
+function client(): Client<typeof TestsService> {
+  // Without a control plane there is no service to ask: the same answer as one without it.
+  if (!CONTROL_PLANE_API_URL) throw new ConnectError("no control plane is configured", Code.Unimplemented);
+  return getControlPlaneClient(TestsService);
 }
 
-export function getTestSummary(_req: SummaryRequest, _opts?: CallOptions): Promise<TestSummary> {
-  return notInThisClient();
+export async function getTestSummary(req: SummaryRequest, opts?: CallOptions): Promise<TestSummary> {
+  return summaryOf(await client().getTestSummary(summaryRequest(req), opts));
 }
 
-export function listTestRuns(_req: RunsRequest, _opts?: CallOptions): Promise<TestRunPage> {
-  return notInThisClient();
+export async function listTestRuns(req: RunsRequest, opts?: CallOptions): Promise<TestRunPage> {
+  return runPageOf(await client().listTestRuns(runsRequest(req), opts));
 }
 
-export function getTestRun(_req: RunRequest, _opts?: CallOptions): Promise<TestRunDetail> {
-  return notInThisClient();
+export async function getTestRun(req: RunRequest, opts?: CallOptions): Promise<TestRunDetail> {
+  return runDetailOf(await client().getTestRun(runRequest(req), opts));
 }
 
-export function getCoverage(_req: CoverageRequest, _opts?: CallOptions): Promise<CoverageTree> {
-  return notInThisClient();
+export async function getCoverage(req: CoverageRequest, opts?: CallOptions): Promise<CoverageTree> {
+  return coverageTreeOf(await client().getCoverage(coverageRequest(req), opts));
 }
 
-export function getFileCoverage(_req: FileCoverageRequest, _opts?: CallOptions): Promise<FileCoverage> {
-  return notInThisClient();
+export async function getFileCoverage(req: FileCoverageRequest, opts?: CallOptions): Promise<FileCoverage> {
+  return fileCoverageOf(await client().getFileCoverage(fileCoverageRequest(req), opts));
 }
 
-export function getReleaseTests(_req: ReleaseTestsRequest, _opts?: CallOptions): Promise<ReleaseTests> {
-  return notInThisClient();
+export async function getReleaseTests(req: ReleaseTestsRequest, opts?: CallOptions): Promise<ReleaseTests> {
+  return releaseTestsOf(await client().getReleaseTests(releaseTestsRequest(req), opts));
 }
 
-export function listFlakyTests(_req: FlakyRequest, _opts?: CallOptions): Promise<TestFlakePage> {
-  return notInThisClient();
+export async function listFlakyTests(req: FlakyRequest, opts?: CallOptions): Promise<TestFlakePage> {
+  return flakePageOf(await client().listFlakyTests(flakyRequest(req), opts));
 }
 
-export function getTest(_req: TestRequest, _opts?: CallOptions): Promise<TestDetail> {
-  return notInThisClient();
+export async function getTest(req: TestRequest, opts?: CallOptions): Promise<TestDetail> {
+  return testDetailOf(await client().getTest(testRequest(req), opts));
 }

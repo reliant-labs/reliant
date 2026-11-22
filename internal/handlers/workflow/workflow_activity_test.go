@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +68,7 @@ func TestDeleteWorkflow_RecordsADeleteEventForTheSlug(t *testing.T) {
 	t.Parallel()
 	slug := workflowref.Slug("pr-review")
 	store := newAutomationsStore(slug)
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Automations: &retirer{}}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Projects: projectaccesstest.For(store), Automations: &retirer{}}))
 	client, events := activityClient(t, svc)
 
 	resp, err := client.DeleteWorkflow(context.Background(), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "pr-review"}))
@@ -87,7 +89,7 @@ func TestImportWorkflow_ConflictRecordsNoEvent(t *testing.T) {
 	t.Parallel()
 	slug := workflowref.Slug("pr-review")
 	store := newAutomationsStore(slug)
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 	client, events := activityClient(t, svc)
 
 	resp, err := client.ImportWorkflow(context.Background(), connect.NewRequest(&pb.ImportWorkflowRequest{
