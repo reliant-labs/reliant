@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -165,7 +166,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	rig.natsURL = srv.ClientURL()
 	gatewayNATS := rig.connectNATS(t)
 	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{
-		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()),
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()),
 		ResultPublisher: toolexec.NewToolResultPublisher(gatewayNATS),
 	})
 	require.NoError(t, err)

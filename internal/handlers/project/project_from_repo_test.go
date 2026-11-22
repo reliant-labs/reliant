@@ -14,7 +14,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -366,13 +365,15 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
-		Logger:    slog.New(slog.DiscardHandler),
-		Config:    &typedconfig.Config{},
-		Repo:      repo,
-		Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.(interface{ ORM() *orm.Client }).ORM()),
+		Logger:      slog.New(slog.DiscardHandler),
+		Config:      &typedconfig.Config{},
+		Repo:        repo,
+		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
+		LocalModels: store.NewDaemonExtStore(repo.ORM()),
+		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)
