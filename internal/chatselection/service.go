@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 )
@@ -155,4 +156,33 @@ func sameParams(a, b map[string]any) bool {
 		return reflect.DeepEqual(a, b)
 	}
 	return string(ja) == string(jb)
+}
+
+// RootModelPick reads the root model of a chat's selection params ("model",
+// a {id, providers} selector or a legacy "<model>@<driver>" string) as a
+// comparable key and the one provider it names, "" when it names none or
+// several.
+func RootModelPick(params map[string]any) (key, driver string) {
+	var id string
+	var providers []any
+	switch v := params["model"].(type) {
+	case string:
+		id = v
+	case map[string]any:
+		id, _ = v["id"].(string)
+		providers, _ = v["providers"].([]any)
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", ""
+	}
+	if at := strings.LastIndex(id, "@"); at > 0 && at < len(id)-1 {
+		return id, id[at+1:]
+	}
+	if len(providers) == 1 {
+		if p, ok := providers[0].(string); ok && p != "" {
+			return id + "@" + p, p
+		}
+	}
+	return id, ""
 }

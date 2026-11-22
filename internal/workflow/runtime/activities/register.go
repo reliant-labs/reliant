@@ -177,8 +177,12 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		reviver = store.NewWorktreeExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	var runFunding handlers.RunFundingStore
+	if deps.Repo != nil {
+		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
+	}
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================

@@ -1325,6 +1325,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{
 			Store:  g.Database(),
