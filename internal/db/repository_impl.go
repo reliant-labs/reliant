@@ -1770,17 +1770,6 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
-func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return store.ListWorktreesForReclaim(ctx, r.ORM())
-}
-
-func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
-}
-
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
 // cleanup_metadata under SELECT ... FOR UPDATE.
 func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error {
@@ -1790,27 +1779,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
-// archived row that still has no machine on record.
-func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
-}
-
+// AdoptWorktreeDaemon records the daemon that found a workspace's directory.
+//
+// Deprecated: use store.WorktreeExtStore.AdoptWorktreeDaemon; the sweep reads
+// it there, and only a test of the activities still calls this.
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
 		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
-}
-
-func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {

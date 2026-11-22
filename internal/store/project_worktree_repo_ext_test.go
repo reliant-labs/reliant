@@ -534,10 +534,6 @@ func TestWorktreeQueries(t *testing.T) {
 		reclaim[0].OwnerUserID != storetest.SeedUserID || reclaim[0].ProjectPath != "" || reclaim[0].Worktree.CleanupMetadata == nil {
 		t.Fatalf("ListWorktreesForReclaim = %+v, %v", reclaim, err)
 	}
-	twinReclaim, err := env.Repo.ListWorktreesForReclaim(ctx)
-	if err != nil || len(twinReclaim) != len(reclaim) || twinReclaim[0].Worktree.ID != reclaim[0].Worktree.ID {
-		t.Fatalf("Repo.ListWorktreesForReclaim = %+v, %v", twinReclaim, err)
-	}
 	held, err := store.ListHeldWorktreesForUser(ctx, env.ORM, storetest.SeedUserID)
 	if err != nil || len(held) != 1 || held[0].Worktree.ID != "wt-b" || held[0].ProjectName == "" {
 		t.Fatalf("ListHeldWorktreesForUser = %+v, %v", held, err)
@@ -680,5 +676,27 @@ func TestReclaimListsOnlyTheOwnersInstalledCheckout(t *testing.T) {
 		if p, ok := paths[id]; !ok || p != path {
 			t.Errorf("%s: project path = %q (listed %v), want %q", id, p, ok, path)
 		}
+	}
+}
+
+// The sweep's reads of a user or a row with no id answer an error, never every
+// user's or every row's.
+func TestWorktreeSweepReads_EmptyIDsFailClosed(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	if _, err := store.ListLiveWorktreePathsForUser(ctx, env.ORM, ""); err == nil {
+		t.Error("ListLiveWorktreePathsForUser with no user succeeded")
+	}
+	if _, err := store.ListHeldWorktreesForUser(ctx, env.ORM, ""); err == nil {
+		t.Error("ListHeldWorktreesForUser with no user succeeded")
+	}
+	if _, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "", "d"); err == nil {
+		t.Error("AdoptWorktreeDaemon with no worktree succeeded")
+	}
+	if _, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "w", ""); err == nil {
+		t.Error("AdoptWorktreeDaemon with no daemon succeeded")
+	}
+	if _, err := store.MergeUnownedWorktreeCleanupMetadata(ctx, env.ORM, "", func(*core.CleanupMetadata) bool { return true }); err == nil {
+		t.Error("MergeUnownedWorktreeCleanupMetadata with no worktree succeeded")
 	}
 }

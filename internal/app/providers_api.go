@@ -1064,7 +1064,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	o := database.ORM()
 	worktrees := store.NewWorktreeExtStore(o)
 	chats := store.NewChatExtStore(o)
-	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+	return worktreesweep.New(worktreesweep.NewStores(database, worktrees), d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
 		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
