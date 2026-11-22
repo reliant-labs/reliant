@@ -83,6 +83,7 @@ type spawnStatusTool struct {
 	repo      spawnStatusStore
 	questions SpawnQuestions
 	tree      SpawnTree
+	backoff   providerBackoffReader
 	threads   *threads.Service
 }
 
@@ -153,7 +154,7 @@ Use spawn_send to message an agent that is still running.`
 
 // NewSpawnStatusTool builds the spawn_status tool.
 func NewSpawnStatusTool(deps SpawnStatusDeps) Tool {
-	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, tree: deps.Tree, threads: threads.NewService(deps.Store)})
+	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, tree: deps.Tree, backoff: deps.Backoff, threads: threads.NewService(deps.Store)})
 }
 
 func (s *spawnStatusTool) Name() string {
@@ -338,7 +339,7 @@ type spawnSignals struct {
 	approvalSignalAvailable bool
 	lastActivity            map[string]time.Time
 	// usageWaits holds the threads parked on a provider usage limit.
-	usageWaits map[string]db.ProviderBackoff
+	usageWaits map[string]core.ProviderBackoff
 }
 
 // loadSignals reads the gating and activity signals for one chat. Neither
@@ -364,8 +365,11 @@ func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *sp
 	if lastActivity, laErr := s.repo.LastThreadActivityByChat(rctx.Context, chatID); laErr == nil {
 		signals.lastActivity = lastActivity
 	}
-	if backoffs, bErr := s.repo.ProviderBackoffByChat(rctx.Context, chatID); bErr == nil {
-		signals.usageWaits = map[string]db.ProviderBackoff{}
+	if s.backoff == nil {
+		return signals
+	}
+	if backoffs, bErr := s.backoff.ProviderBackoffByChat(rctx.Context, chatID); bErr == nil {
+		signals.usageWaits = map[string]core.ProviderBackoff{}
 		for thread, b := range backoffs {
 			if b.Waiting() && b.IsUsageLimit() {
 				signals.usageWaits[thread] = b
@@ -430,7 +434,7 @@ func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *core.Spaw
 			info.Status = "waiting for usage limit"
 			info.WaitingUntil = wait.ResumeAt.UTC().Format(time.RFC3339)
 			info.WaitingFor = wait.Provider
-			info.WaitingProbing = wait.Reason == db.ReasonUsageLimitProbe
+			info.WaitingProbing = wait.Reason == core.ReasonUsageLimitProbe
 		}
 		if q, ok := signals.pendingQuestions[info.AgentID]; ok && q != nil {
 			info.GatedOnAgent = true
@@ -665,7 +669,7 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	// the same persisted wait/activity signals as listing mode, including a
 	// provider wait before the first model response.
 	signals := s.loadSignals(rctx, thread.ChatID)
-	var wait db.ProviderBackoff
+	var wait core.ProviderBackoff
 	waiting := false
 	if !metadata.HasExited {
 		wait, waiting = signals.usageWaits[params.AgentID]
@@ -676,7 +680,7 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "=== %s: %s ===\n\n", params.AgentID, metadata.Status)
 	if waiting {
-		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == db.ReasonUsageLimitProbe))
+		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == core.ReasonUsageLimitProbe))
 	}
 	if last := signals.lastActivity[params.AgentID]; !last.IsZero() {
 		fmt.Fprintf(&sb, "Last activity: %s\n", last.UTC().Format(time.RFC3339))

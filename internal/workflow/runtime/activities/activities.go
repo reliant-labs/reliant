@@ -29,17 +29,20 @@ type Activities struct {
 	Repo *db.Repo
 	// LLMUsage records every model request in the usage ledger. Optional: nil
 	// records nothing.
-	LLMUsage       handlers.LLMUsageRecorder
-	StreamingHub   streaming.StreamingHub
-	Threads        *threads.Service
-	ToolsFactory   *tools.ToolsFactory
-	ToolExecutor   toolexec.ToolExecutor
-	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (required for cloud worktree ops)
-	MCPBinder      toolexec.MCPContextBinder
-	ConfigProvider config.ConfigProvider
-	RunExecutor    handlers.RunExecutor   // Optional: for testing shell command execution
-	DriverResolver drivers.DriverResolver // Optional: custom LLM driver resolver (nil = use drivers.GetDriver)
-	TemporalClient client.Client
+	LLMUsage handlers.LLMUsageRecorder
+	// ProviderBackoff marks a thread parked on a provider (the driver's retry
+	// ladder, a usage-limit wait). Required with Repo.
+	ProviderBackoff handlers.ProviderBackoffMarkers
+	StreamingHub    streaming.StreamingHub
+	Threads         *threads.Service
+	ToolsFactory    *tools.ToolsFactory
+	ToolExecutor    toolexec.ToolExecutor
+	DaemonRouter    toolexec.DaemonRouter // Routes commands to user's daemon (required for cloud worktree ops)
+	MCPBinder       toolexec.MCPContextBinder
+	ConfigProvider  config.ConfigProvider
+	RunExecutor     handlers.RunExecutor   // Optional: for testing shell command execution
+	DriverResolver  drivers.DriverResolver // Optional: custom LLM driver resolver (nil = use drivers.GetDriver)
+	TemporalClient  client.Client
 	// Connections resolves a run's saved connection for integration actions.
 	// Optional: nil makes an action that names a connection fail rather than
 	// run unauthenticated.

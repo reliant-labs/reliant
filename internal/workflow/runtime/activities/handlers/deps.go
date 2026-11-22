@@ -204,8 +204,6 @@ type CallLLMStore interface {
 	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
-	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	// GetDaemon and ListDaemonsByUserID are daemonPlatformReader
 	// (resolveShellPlatform).
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -498,9 +496,17 @@ type ThreadStatusStore interface {
 // UsageLimitWaitStore is what UsageLimitWaitActivity writes; its notice goes
 // through threads.Service (postNotice).
 type UsageLimitWaitStore interface {
+	threads.Repository
+}
+
+// ProviderBackoffMarkers writes the markers of a thread parked on a provider:
+// the driver's retry ladder and a usage-limit wait. providerbackoff.Service
+// satisfies it.
+type ProviderBackoffMarkers interface {
+	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
+	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error
-	threads.Repository
 }
 
 // TriggerCapacitySlotStore is what TriggerCapacitySlotActivity writes.

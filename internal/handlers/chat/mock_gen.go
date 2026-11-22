@@ -224,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=df0e7767231a78773760a83e08214e039b7e7e6b8b7cd5505618d00eeff5d5cc
+// forge:hash=1d5bbc2f3e116fcc61efcdf5c821980f8d61d4d6fad29cb64d58efa94ec30c37
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -250,7 +250,6 @@ type MockRepository struct {
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	MoveChatToProjectFunc                                    func(context.Context, db.ChatMove) (bool, error)
-	ListCapacityWakeTargetsFunc                              func(context.Context, string) ([]string, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
@@ -347,7 +346,6 @@ type MockRepository struct {
 	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
-	ClearUsageLimitWaitFunc                                  func(context.Context, string, string, time.Time) error
 	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -525,15 +523,6 @@ func (m *MockRepository) MoveChatToProject(ctx context.Context, p1 db.ChatMove) 
 		return m.MoveChatToProjectFunc(ctx, p1)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "MoveChatToProject")
-}
-
-// ListCapacityWakeTargets records the call and delegates to ListCapacityWakeTargetsFunc when set.
-func (m *MockRepository) ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error) {
-	m.Recorder.Record("ListCapacityWakeTargets", ctx, userID)
-	if m.ListCapacityWakeTargetsFunc != nil {
-		return m.ListCapacityWakeTargetsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListCapacityWakeTargets")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.
@@ -1398,15 +1387,6 @@ func (m *MockRepository) LockChatRunControl(ctx context.Context, chatID string) 
 		return m.LockChatRunControlFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "LockChatRunControl")
-}
-
-// ClearUsageLimitWait records the call and delegates to ClearUsageLimitWaitFunc when set.
-func (m *MockRepository) ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error {
-	m.Recorder.Record("ClearUsageLimitWait", ctx, chatID, threadID, now)
-	if m.ClearUsageLimitWaitFunc != nil {
-		return m.ClearUsageLimitWaitFunc(ctx, chatID, threadID, now)
-	}
-	return contractkit.MockNotSet("MockRepository", "ClearUsageLimitWait")
 }
 
 // ClaimPendingTriggerEvent records the call and delegates to ClaimPendingTriggerEventFunc when set.

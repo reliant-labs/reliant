@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -298,6 +299,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
 		}
 		activityDeps.LLMUsage = usage
+		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)
+		}
+		activityDeps.ProviderBackoff = backoff
 	}
 	if cfg.ProviderAccounts != nil && cfg.Database != nil {
 		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))

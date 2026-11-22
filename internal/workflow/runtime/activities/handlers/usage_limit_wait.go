@@ -45,14 +45,15 @@ type UsageLimitWaitOutput struct {
 //
 // The workflow calls it BEFORE it parks on its timer: a marker written after
 // the park cannot tell a run that is waiting from one that is wedged, which is
-// the whole reason provider_backoff exists. See db.ProviderBackoff.
+// the whole reason provider_backoff exists. See core.ProviderBackoff.
 type UsageLimitWaitActivity struct {
-	repo UsageLimitWaitStore
+	repo  UsageLimitWaitStore
+	waits ProviderBackoffMarkers
 }
 
 // NewUsageLimitWaitActivity creates a new UsageLimitWaitActivity.
-func NewUsageLimitWaitActivity(repo UsageLimitWaitStore) *UsageLimitWaitActivity {
-	return &UsageLimitWaitActivity{repo: repo}
+func NewUsageLimitWaitActivity(repo UsageLimitWaitStore, waits ProviderBackoffMarkers) *UsageLimitWaitActivity {
+	return &UsageLimitWaitActivity{repo: repo, waits: waits}
 }
 
 // Name returns the activity name for registration.
@@ -73,7 +74,7 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 		return UsageLimitWaitOutput{Success: true}, nil
 	}
 	if input.Clear {
-		if err := a.repo.ClearUsageLimitWait(ctx, input.ChatID, input.Thread, time.Now()); err != nil {
+		if err := a.waits.ClearUsageLimitWait(ctx, input.ChatID, input.Thread, time.Now()); err != nil {
 			return UsageLimitWaitOutput{}, err
 		}
 		return UsageLimitWaitOutput{Success: true}, nil
@@ -82,7 +83,7 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 	if err != nil {
 		return UsageLimitWaitOutput{}, fmt.Errorf("invalid resume_at %q: %w", input.ResumeAt, err)
 	}
-	if err := a.repo.RecordUsageLimitWait(ctx, input.ChatID, input.Thread, input.Provider, input.Probing, resumeAt, time.Now()); err != nil {
+	if err := a.waits.RecordUsageLimitWait(ctx, input.ChatID, input.Thread, input.Provider, input.Probing, resumeAt, time.Now()); err != nil {
 		return UsageLimitWaitOutput{}, err
 	}
 	return UsageLimitWaitOutput{Success: true}, nil
