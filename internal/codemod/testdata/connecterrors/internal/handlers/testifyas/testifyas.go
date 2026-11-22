@@ -1,0 +1,18 @@
+// Package testifyas is a handler package whose TEST reads a *connect.Error
+// through an As-style helper rather than errors.As itself — testify's
+// require.ErrorAs(t, err, &ce) (reliant's approval tests do). The helper takes
+// the target as interface{}, so only the argument's type (**connect.Error)
+// names the reader; a bare kind would fail it, so this package's rewrites stay
+// *connect.Error.
+package testifyas
+
+import (
+	"errors"
+
+	"connectrpc.com/connect"
+)
+
+// Approve is what the rpc returns for an approval that was already resolved.
+func Approve() error {
+	return connect.NewError(connect.CodeFailedPrecondition, errors.New("approval already processed"))
+}

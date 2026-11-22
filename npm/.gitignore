@@ -1,0 +1,5 @@
+# npm/bin/forge.js is the package entry point; the repo-wide bin/ rule is for build output.
+!bin/
+# Written by .github/workflows/release-npm.yml at publish time, from the
+# release's signed checksums; a checkout never carries one.
+lib/release-checksums.txt
