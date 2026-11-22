@@ -279,6 +279,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
     updateShortcut,
     resetShortcut,
     getEffectiveBinding,
+    getEffectiveAliases,
     findConflict,
     getReservationFor,
     getUnavailableOverride,
@@ -290,6 +291,11 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
   if (!shortcut) return null;
 
   const effective = getEffectiveBinding(shortcutId);
+  // The desktop app's older chords for this action (New Chat's Cmd+T), minus
+  // any another shortcut's binding has taken: an alias yields to a binding.
+  const aliases = getEffectiveAliases(shortcutId).filter(
+    (alias) => !findConflict(alias, shortcutId),
+  );
   // A desktop remap the browser will not release: the web default stands in.
   const unavailableOverride = getUnavailableOverride(shortcutId);
   const isEditingThis = isEditing === shortcutId;
@@ -430,6 +436,13 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
           <div className="text-xs text-destructive-ink flex items-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {conflictWarning}
+          </div>
+        )}
+
+        {aliases.length > 0 && !isEditingThis && (
+          <div className="text-xs text-muted-foreground">
+            Also {aliases.map(formatAuthored).join(", ")} in the desktop app,
+            until you change this shortcut.
           </div>
         )}
 
