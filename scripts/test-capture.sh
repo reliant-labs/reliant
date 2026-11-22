@@ -31,9 +31,10 @@
 #           coverage (coverage-final.json) into the lane directory.
 #
 # FORGE_TEST_COVERAGE=off records results only (no cover flags; Vitest's
-# coverage off). FORGE_TESTS=off, or a pinned forge without `forge test`
-# (one that cannot begin a run), runs the command exactly as it would run
-# unrecorded: plain `go test` (with -json under --raw), or the vitest command.
+# coverage off). FORGE_TESTS=off, or a forge that cannot begin a run (a
+# `go run` of the pin with no module proxy, an unwritable checkout), runs the
+# command exactly as it would run unrecorded (plain `go test`, with -json
+# under --raw, or the vitest command): recording never breaks a lane.
 #
 # The run is $FORGE_TEST_RUN when set (an outer gate began one, so its lanes
 # form one run), else a new one. Lane names: letters, digits, '-' and '_',
@@ -63,7 +64,7 @@ plain() {
 # begin prints the run directory (joining $FORGE_TEST_RUN), and a scratch
 # directory when it cannot record; a forge that has no `test begin` fails.
 run=$("$root/scripts/forge.sh" test begin 2>/dev/null) && [ -n "$run" ] && [ -d "$run" ] || {
-  echo "test-capture: the pinned forge cannot begin a test run (no \`forge test\`?); lane $lane runs unrecorded" >&2
+  echo "test-capture: forge could not begin a test run; lane $lane runs unrecorded" >&2
   plain "$@"
 }
 dir="$run/$lane"

@@ -214,7 +214,7 @@ rows=() notes=() fail=0
 # (scripts/test-capture.sh, via tools/test-affected run -capture): lane short
 # (the affected Go tests, with coverage) and lane web-affected (the selected
 # vitest files). The record never changes a verdict, and FORGE_TESTS=off (or
-# a pinned forge without `forge test`) runs every lane unrecorded. Begun here
+# a forge that cannot begin a run) runs every lane unrecorded. Begun here
 # so the run carries this gate's diff base; .forge/ is gitignored, so it is
 # not a change the generators' no-op judgment or the plan sees.
 if [ "${FORGE_TESTS:-}" != off ] && test_run=$("${forge[@]}" test begin --base "$base" 2>/dev/null) && [ -d "$test_run" ]; then

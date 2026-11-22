@@ -1079,7 +1079,7 @@ tasks:
       - '{{.FORGE}} ui sourcemaps push {{.DIST}} --frontend desktop --build-id {{.BUILD_ID}} --env desktop --project {{.PROJECT}} --org {{.ORG}} {{.CLI_ARGS}}'
 
   flake:report:test:
-    desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
+    desc: Self-test of scripts/flake-report.sh (what it hands forge test flakes confirm/--issues, and its own --sweep) against a fake forge and gh
     cmds:
       - ./scripts/test-flake-report.sh
 

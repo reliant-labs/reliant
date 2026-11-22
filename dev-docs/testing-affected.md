@@ -288,10 +288,11 @@ so it cannot disagree with a local run:
   `ci-lanes.sh`, `Taskfile.yml`) runs every lane.
 - **New and changed tests run three times.** `task test:flake`
   (`scripts/test-flake.sh`) runs every Test function the diff adds or edits
-  with `-short -count=3`: through forge's flake gate (`forge test flakes
-  gate`, which records the run) when the pinned forge has it, else
-  `tools/test-affected changed-tests` names them (by function, in files that
-  build without tags). A test that fails on a repeat is a flake: delete it
+  with `-short -count=3`, through forge's flake gate (`forge test flakes
+  gate`, which records the run; forge.yaml grades `flake-check: error`). The
+  nested sdk/go module's tests, outside the root module forge's gate reads,
+  are named by `tools/test-affected changed-tests` and run from that module.
+  A test that fails on a repeat is a flake: delete it
   (rewrite it as a new deterministic test if it is worth having), never
   re-run it.
 - **The gates' test lanes are recorded.** The merge gate's affected Go tests

@@ -16,8 +16,6 @@
 #     and kept as a secret of the `tests-upload` environment, which only
 #     main's pushes reach; reliant is public, and a fork's pull request never
 #     gets it): a warning, nothing sent.
-#   - A pinned forge without `forge test report --upload` (before v1.10.0):
-#     a warning, nothing sent.
 #   - A failed upload, or a control plane that does not record test runs yet:
 #     forge's own warning.
 # The report itself (text: results, merged coverage, diff coverage) is printed
@@ -40,14 +38,10 @@ if ! ls .forge/tests/runs/*/run.json >/dev/null 2>&1; then
 fi
 
 upload=--upload
-if ! scripts/forge.sh test report --help 2>/dev/null | grep -q -- '--upload'; then
-  warn "the pinned forge has no \`forge test report --upload\` (it ships in forge v1.10.0): reporting locally only"
-  upload=""
-elif [ -z "${FORGE_CONTROL_PLANE_TOKEN:-}" ]; then
+if [ -z "${FORGE_CONTROL_PLANE_TOKEN:-}" ]; then
   warn "FORGE_CONTROL_PLANE_TOKEN is not set (the tests-upload environment's secret, an owner step): reporting locally only"
   upload=--upload=false
 fi
 
-# shellcheck disable=SC2086 # upload is one flag or none
-scripts/forge.sh test report --commit "$sha" $upload || echo "test-upload: forge test report exited $? (no verdict changes)"
+scripts/forge.sh test report --commit "$sha" "$upload" || echo "test-upload: forge test report exited $? (no verdict changes)"
 exit 0

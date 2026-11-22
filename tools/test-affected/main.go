@@ -9,8 +9,9 @@
 //	go run ./tools/test-affected run -lanes go,web
 //	go run ./tools/test-affected -base origin/main~3 -json
 //
-// The new-flake check (scripts/test-flake.sh, `task test:flake`) uses one
-// more (changedtests.go):
+// The new-flake check (scripts/test-flake.sh, `task test:flake`) is forge's
+// flake gate; for the nested sdk/go module, outside the root module that gate
+// reads, it uses one more (changedtests.go):
 //
 //	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
 //
