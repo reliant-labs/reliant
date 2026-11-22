@@ -743,6 +743,10 @@ function closeCodeFrom(code) {
 /**
  * The open terminal relays: sockets this process holds for renderer windows.
  */
+// A renderer-chosen terminal id: "c" and a random UUID (or 32 hex digits).
+// Never the shape of the ids this module mints itself (t1, t2, …).
+const TERMINAL_CLIENT_ID = /^c[0-9a-f-]{32,36}$/i;
+
 class TerminalRelays {
   /**
    * @param {{ auth: ForgeAuth, WebSocketImpl?: typeof WebSocket, logger?: object }} opts
@@ -758,9 +762,17 @@ class TerminalRelays {
   /**
    * Open a terminal for owner (a window's webContents id). emit receives
    * {id, type: 'open'|'message'|'error'|'close', data?, code?, reason?,
-   * wasClean?}. Throws when signed out or over the per-window limit.
+   * wasClean?}. Throws when signed out, over the per-window limit, or when
+   * requestedId is already in use.
+   *
+   * requestedId is the renderer's own id for the socket (TERMINAL_CLIENT_ID):
+   * every event carries it from the first, so the renderer can tell its
+   * socket's events from another terminal's before this call has answered
+   * (the upstream socket opens, and may send, before the invoke reply
+   * reaches it). A renderer that names none, or a malformed one, gets an id
+   * from here, as before.
    */
-  open(owner, query, emit) {
+  open(owner, query, emit, requestedId) {
     const cookie = this.auth.cookie.header();
     if (!cookie) throw new Error('not signed in');
     let held = 0;
@@ -768,7 +780,13 @@ class TerminalRelays {
     if (held >= MAX_TERMINALS_PER_OWNER) throw new Error('too many open terminals');
     if (typeof this.WebSocketImpl !== 'function') throw new Error('this build has no WebSocket client');
 
-    const id = `t${this.nextId++}`;
+    let id;
+    if (typeof requestedId === 'string' && TERMINAL_CLIENT_ID.test(requestedId)) {
+      if (this.sockets.has(requestedId)) throw new Error('terminal id in use');
+      id = requestedId;
+    } else {
+      id = `t${this.nextId++}`;
+    }
     // No Origin: the server admits a cookie-authenticated upgrade from a
     // non-browser (internal/handlers/terminal sameOriginUpgrade).
     const ws = new this.WebSocketImpl(terminalUpstreamUrl(this.auth.apiUrl, query), { headers: { Cookie: cookie } });

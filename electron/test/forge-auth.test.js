@@ -718,6 +718,30 @@ test('a terminal belongs to the window that opened it, and the session ending cl
   assert.equal(relays.size, 0);
 });
 
+test('a terminal takes the id its renderer chose, so every event carries it from the first', async () => {
+  const { auth } = await signedInAuth();
+  const { FakeWS, made } = fakeWebSocketClass();
+  const relays = new TerminalRelays({ auth, WebSocketImpl: FakeWS, logger: quiet });
+  const events = [];
+  const chosen = 'c0b1d2e3f-4a5b-4c6d-8e7f-a0b1c2d3e4f5';
+  const id = relays.open(1, '', (e) => events.push(e), chosen);
+  assert.equal(id, chosen);
+  made[0].serverOpen();
+  made[0].serverMessage('{"type":"init"}');
+  assert.deepEqual(events.map((e) => e.id), [chosen, chosen]);
+  assert.equal(relays.send(1, chosen, 'x'), true);
+
+  assert.throws(() => relays.open(2, '', () => {}, chosen), /in use/, 'a live id is never reused, by any window');
+  assert.equal(relays.size, 1);
+
+  // A renderer that names no id, or a malformed one (one of ours included),
+  // gets an id of the relay's own.
+  for (const requested of [undefined, '', 't1', 'c-short', 'x'.repeat(40), 42]) {
+    const minted = relays.open(1, '', () => {}, requested);
+    assert.match(minted, /^t\d+$/, `requested ${String(requested)}`);
+  }
+});
+
 test('signed out there is no terminal relay, and a window cannot hold unbounded terminals', async () => {
   const { FakeWS } = fakeWebSocketClass();
   const out = new ForgeAuth({ apiUrl: API, cookies: fakeCookies(), logger: quiet, openExternal() {}, fetch: async () => json(200, {}) });

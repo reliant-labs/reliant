@@ -266,7 +266,8 @@ export interface ElectronAPI {
     onChanged?: (callback: (payload: { signedIn: boolean }) => void) => () => void;
     // The terminal websocket, relayed by the main process (lib/desktop-terminal-socket.ts).
     terminal?: {
-      open: (query: string) => Promise<{ success: boolean; id?: string; error?: string }>;
+      // id: the renderer's own id for the socket, which every event carries.
+      open: (query: string, id?: string) => Promise<{ success: boolean; id?: string; error?: string }>;
       send: (id: string, data: string) => void;
       close: (id: string, code?: number, reason?: string) => Promise<{ success: boolean }>;
       onEvent: (

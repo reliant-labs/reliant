@@ -2,11 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DesktopTerminalSocket, desktopTerminalSocket } from "../desktop-terminal-socket";
 
 type Ev = { id: string; type: "open" | "message" | "error" | "close"; data?: string; code?: number; reason?: string; wasClean?: boolean };
+type OpenResult = { success: boolean; id?: string; error?: string };
 
-function fakeBridge(openResult: { success: boolean; id?: string; error?: string } = { success: true, id: "t1" }) {
+/**
+ * A preload bridge. By default main answers with the id the socket sent
+ * (today's main process); `reply` replaces that answer. With `hold`, the
+ * answer waits until release() — events sent meanwhile are the race the
+ * socket must survive.
+ */
+function fakeBridge(opts: { reply?: (requested?: string) => OpenResult; hold?: boolean } = {}) {
   let listener: ((e: Ev) => void) | null = null;
+  let release: () => void = () => {};
+  const held = opts.hold ? new Promise<void>((r) => (release = r)) : Promise.resolve();
   const bridge = {
-    open: vi.fn(async (_q: string) => openResult),
+    open: vi.fn(async (_q: string, id?: string): Promise<OpenResult> => {
+      await held;
+      return opts.reply ? opts.reply(id) : { success: true, id };
+    }),
     send: vi.fn(),
     close: vi.fn(async () => ({ success: true })),
     onEvent: vi.fn((cb: (e: Ev) => void) => {
@@ -16,21 +28,38 @@ function fakeBridge(openResult: { success: boolean; id?: string; error?: string 
       };
     }),
   };
-  return { bridge, emit: (e: Ev) => listener?.(e), subscribed: () => listener !== null };
+  return {
+    bridge,
+    emit: (e: Ev) => listener?.(e),
+    subscribed: () => listener !== null,
+    release: () => release(),
+    /** The id the socket sent with open(). */
+    sentId: () => bridge.open.mock.calls[0]?.[1] as string,
+  };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+/** Another terminal's traffic: renderer-named and main-named ids alike. */
+function emitForeign(emit: (e: Ev) => void, n: number) {
+  for (let i = 0; i < n; i++) {
+    const id = i % 2 ? `c${String(i).padStart(32, "0")}` : `t${i + 100}`;
+    emit({ id, type: i % 7 === 0 ? "open" : "message", data: i % 5 === 0 ? '{"type":"init"}' : `output ${i}` });
+  }
+}
+
 describe("DesktopTerminalSocket", () => {
   it("behaves like the WebSocket Terminal drives: open, messages, send, close", async () => {
-    const { bridge, emit, subscribed } = fakeBridge();
+    const { bridge, emit, subscribed, sentId } = fakeBridge();
     const ws = new DesktopTerminalSocket(bridge, "workingDir=%2Ftmp");
     const seen: string[] = [];
     ws.onopen = () => seen.push("open");
     ws.onmessage = (e) => seen.push(`msg:${e.data}`);
     ws.onclose = (e) => seen.push(`close:${e.code}:${e.reason}`);
     await flush();
-    expect(bridge.open).toHaveBeenCalledWith("workingDir=%2Ftmp");
+    const id = sentId();
+    expect(id).toMatch(/^c[0-9a-f-]{32,36}$/i);
+    expect(bridge.open).toHaveBeenCalledWith("workingDir=%2Ftmp", id);
     expect(ws.readyState).toBe(WebSocket.CONNECTING);
 
     ws.send("too early");
@@ -38,22 +67,31 @@ describe("DesktopTerminalSocket", () => {
 
     emit({ id: "other", type: "open" });
     expect(ws.readyState).toBe(WebSocket.CONNECTING);
-    emit({ id: "t1", type: "open" });
+    emit({ id, type: "open" });
     expect(ws.readyState).toBe(WebSocket.OPEN);
-    emit({ id: "t1", type: "message", data: '{"type":"init"}' });
+    emit({ id, type: "message", data: '{"type":"init"}' });
     ws.send('{"type":"input","data":"ls"}');
-    expect(bridge.send).toHaveBeenCalledWith("t1", '{"type":"input","data":"ls"}');
+    expect(bridge.send).toHaveBeenCalledWith(id, '{"type":"input","data":"ls"}');
 
     ws.close(1000);
-    expect(bridge.close).toHaveBeenCalledWith("t1", 1000, undefined);
-    emit({ id: "t1", type: "close", code: 1000, reason: "", wasClean: true });
+    expect(bridge.close).toHaveBeenCalledWith(id, 1000, undefined);
+    emit({ id, type: "close", code: 1000, reason: "", wasClean: true });
     expect(ws.readyState).toBe(WebSocket.CLOSED);
     expect(subscribed()).toBe(false);
     expect(seen).toEqual(["open", 'msg:{"type":"init"}', "close:1000:"]);
   });
 
+  it("each socket sends an id of its own", async () => {
+    const a = fakeBridge();
+    const b = fakeBridge();
+    new DesktopTerminalSocket(a.bridge, "");
+    new DesktopTerminalSocket(b.bridge, "");
+    await flush();
+    expect(a.sentId()).not.toEqual(b.sentId());
+  });
+
   it("reports a relay that could not open as an error then a 1006 close", async () => {
-    const { bridge } = fakeBridge({ success: false, error: "not signed in" });
+    const { bridge } = fakeBridge({ reply: () => ({ success: false, error: "not signed in" }) });
     const ws = new DesktopTerminalSocket(bridge, "");
     const seen: string[] = [];
     ws.onerror = () => seen.push("error");
@@ -63,52 +101,100 @@ describe("DesktopTerminalSocket", () => {
     expect(ws.readyState).toBe(WebSocket.CLOSED);
   });
 
-  it("replays the events that arrived before the relay's open() reply", async () => {
-    const { bridge, emit } = fakeBridge();
-    let reply!: (r: { success: boolean; id?: string }) => void;
-    bridge.open.mockImplementation(() => new Promise((r) => (reply = r)));
+  it("takes its open and init before the open() reply, however much foreign traffic came first", async () => {
+    const { bridge, emit, release, sentId } = fakeBridge({ hold: true });
     const ws = new DesktopTerminalSocket(bridge, "");
     const seen: string[] = [];
     ws.onopen = () => seen.push("open");
     ws.onmessage = (e) => seen.push(`msg:${e.data}`);
-    ws.onclose = (e) => seen.push(`close:${e.code}`);
-    // Main opened the upstream socket and relayed its first frames before
-    // the invoke reply reached the renderer.
-    emit({ id: "t1", type: "open" });
-    emit({ id: "other", type: "message", data: "not ours" });
-    emit({ id: "t1", type: "message", data: '{"type":"init"}' });
-    expect(seen).toEqual([]);
-    reply({ success: true, id: "t1" });
     await flush();
+    const id = sentId();
+    // Main opened the upstream socket and relayed frames while other
+    // terminals of this window were busy, all before the invoke reply.
+    emitForeign(emit, 5000);
+    emit({ id, type: "open" });
+    emitForeign(emit, 5000);
+    emit({ id, type: "message", data: '{"type":"init"}' });
     expect(ws.readyState).toBe(WebSocket.OPEN);
     expect(seen).toEqual(["open", 'msg:{"type":"init"}']);
-    emit({ id: "t1", type: "message", data: "later" });
+    release();
+    await flush();
+    emit({ id, type: "message", data: "later" });
     expect(seen).toEqual(["open", 'msg:{"type":"init"}', "msg:later"]);
   });
 
-  it("an early close is replayed too, and releases the subscription", async () => {
-    const { bridge, emit, subscribed } = fakeBridge();
-    let reply!: (r: { success: boolean; id?: string }) => void;
-    bridge.open.mockImplementation(() => new Promise((r) => (reply = r)));
+  it("an upstream close before the open() reply ends it and releases the subscription", async () => {
+    const { bridge, emit, subscribed, release, sentId } = fakeBridge({ hold: true });
     const ws = new DesktopTerminalSocket(bridge, "");
     const seen: string[] = [];
     ws.onclose = (e) => seen.push(`close:${e.code}:${e.reason}`);
-    emit({ id: "t1", type: "open" });
-    emit({ id: "t1", type: "close", code: 1011, reason: "upstream gone", wasClean: false });
-    reply({ success: true, id: "t1" });
     await flush();
+    const id = sentId();
+    emitForeign(emit, 5000);
+    emit({ id, type: "open" });
+    emit({ id, type: "close", code: 1011, reason: "upstream gone", wasClean: false });
+    emitForeign(emit, 5000);
     expect(seen).toEqual(["close:1011:upstream gone"]);
     expect(ws.readyState).toBe(WebSocket.CLOSED);
     expect(subscribed()).toBe(false);
+    release();
+    await flush();
     expect(bridge.close).not.toHaveBeenCalled();
   });
 
-  it("a close before the relay answered closes it once it does", async () => {
-    const { bridge } = fakeBridge();
+  it("a close() before the open() reply closes it once main answers", async () => {
+    const { bridge, emit, release, sentId } = fakeBridge({ hold: true });
     const ws = new DesktopTerminalSocket(bridge, "");
-    ws.close(4000, "unmounted");
     await flush();
-    expect(bridge.close).toHaveBeenCalledWith("t1", 4000, "unmounted");
+    ws.close(4000, "unmounted");
+    expect(ws.readyState).toBe(WebSocket.CLOSING);
+    emit({ id: sentId(), type: "open" });
+    expect(ws.readyState, "an open after close() does not reopen it").toBe(WebSocket.CLOSING);
+    expect(bridge.close).not.toHaveBeenCalled();
+    release();
+    await flush();
+    expect(bridge.close).toHaveBeenCalledWith(sentId(), 4000, "unmounted");
+  });
+
+  describe("a main process that names the socket itself", () => {
+    const named = { reply: () => ({ success: true, id: "t9" }), hold: true };
+
+    it("replays its open and init after the reply, past any foreign traffic, and drops output", async () => {
+      const { bridge, emit, release } = fakeBridge(named);
+      const ws = new DesktopTerminalSocket(bridge, "");
+      const seen: string[] = [];
+      ws.onopen = () => seen.push("open");
+      ws.onmessage = (e) => seen.push(`msg:${e.data}`);
+      await flush();
+      emitForeign(emit, 5000);
+      emit({ id: "t9", type: "open" });
+      emitForeign(emit, 5000);
+      emit({ id: "t9", type: "message", data: '{"type":"init"}' });
+      emit({ id: "t9", type: "message", data: "early output" });
+      expect(seen).toEqual([]);
+      release();
+      await flush();
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect(seen).toEqual(["open", 'msg:{"type":"init"}']);
+      ws.send("x");
+      expect(bridge.send).toHaveBeenCalledWith("t9", "x");
+    });
+
+    it("replays a close that came before the reply", async () => {
+      const { bridge, emit, subscribed, release } = fakeBridge(named);
+      const ws = new DesktopTerminalSocket(bridge, "");
+      const seen: string[] = [];
+      ws.onclose = (e) => seen.push(`close:${e.code}`);
+      await flush();
+      emit({ id: "t9", type: "open" });
+      emitForeign(emit, 5000);
+      emit({ id: "t9", type: "close", code: 1011, reason: "", wasClean: false });
+      release();
+      await flush();
+      expect(seen).toEqual(["close:1011"]);
+      expect(subscribed()).toBe(false);
+      expect(bridge.close).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -137,7 +223,7 @@ describe("desktopTerminalSocket", () => {
     const ws = desktopTerminalSocket(new URLSearchParams({ workingDir: "/x", token: "jwt" }), PACKAGED);
     expect(ws).not.toBeNull();
     await flush();
-    expect(bridge.open).toHaveBeenCalledWith("workingDir=%2Fx");
+    expect(bridge.open).toHaveBeenCalledWith("workingDir=%2Fx", expect.stringMatching(/^c/));
   });
 
   it("is null on the web, under Supabase, and in a desktop build without the bridge", () => {

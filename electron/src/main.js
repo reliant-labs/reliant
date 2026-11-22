@@ -2495,14 +2495,14 @@ ipcMain.handle("forge-auth:session-changed", async (event) => {
 // opened it (forge-auth.js TerminalRelays, for why a relay and not a proxied
 // upgrade). The renderer names only the terminal's query parameters.
 const forgeTerminalOwners = new Set();
-ipcMain.handle("forge-auth:terminal-open", async (event, query) => {
+ipcMain.handle("forge-auth:terminal-open", async (event, query, requestedId) => {
   if (!forgeTerminals) return { success: false, error: "Forge sign-in is not enabled in this build" };
   if (!isAppSender(event)) return { success: false, error: "not allowed" };
   const sender = event.sender;
   try {
     const id = forgeTerminals.open(sender.id, query, (payload) => {
       if (!sender.isDestroyed()) sender.send("forge-auth:terminal-event", payload);
-    });
+    }, requestedId);
     if (!forgeTerminalOwners.has(sender.id)) {
       forgeTerminalOwners.add(sender.id);
       const owner = sender.id;

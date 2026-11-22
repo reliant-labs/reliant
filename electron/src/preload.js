@@ -230,9 +230,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     // The terminal websocket, relayed by the main process (it holds the
     // socket and the session; frames cross IPC). The renderer passes only
-    // the terminal's query string. frontends/web lib/desktop-terminal-socket.ts.
+    // the terminal's query string, and its own id for the socket, which every
+    // event then carries. frontends/web lib/desktop-terminal-socket.ts.
     terminal: {
-      open: (query) => ipcRenderer.invoke('forge-auth:terminal-open', String(query || '')),
+      open: (query, id) =>
+        ipcRenderer.invoke('forge-auth:terminal-open', String(query || ''), typeof id === 'string' ? id : undefined),
       send: (id, data) => ipcRenderer.send('forge-auth:terminal-send', id, data),
       close: (id, code, reason) => ipcRenderer.invoke('forge-auth:terminal-close', id, code, reason),
       onEvent: (callback) => {
