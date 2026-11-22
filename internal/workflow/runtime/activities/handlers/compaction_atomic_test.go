@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -79,7 +80,7 @@ func TestCompactionAtomicSeams_WholeUnitSurvives(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			history, unit := atomicSeamHistory(kind)
 			d := &fitSummarizer{limit: 9000}
-			compact := NewCompactActivity(nil, d.resolver())
+			compact := NewCompactActivity(CompactDeps{DriverResolver: d.resolver()})
 			summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat", UserID: "user"}, "thread", "", types.FailoverPolicy{}, history, nil)
 			require.NoError(t, err)
 			require.Greater(t, d.refused, 2)
@@ -122,7 +123,7 @@ func TestCompactionAtomicSeams_SaveReloadThenSecondCompaction(t *testing.T) {
 			input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 			for pass := range 2 {
 				d := &fitSummarizer{limit: 9000}
-				compact := NewCompactActivity(h.Repo(), d.resolver())
+				compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: d.resolver()})
 				var out CompactOutput
 				require.NoError(t, h.ExecuteActivity(compact.Execute, input, &out))
 				after, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)

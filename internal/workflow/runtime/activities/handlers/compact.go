@@ -64,7 +64,7 @@ type GenerateTitleOutput struct {
 // 4. Return success - workflow continues with updated context
 type CompactActivity struct {
 	repo           CompactStore
-	threads        *threads.Service
+	threads        MessageSaver
 	driverResolver drivers.DriverResolver
 	// skips reports windows the activity declined to compact (see
 	// compaction_guard.go). Process-wide, so a window is reported once no
@@ -83,11 +83,11 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 }
 
 // NewCompactActivity creates a new CompactActivity
-func NewCompactActivity(repo CompactStore, resolver drivers.DriverResolver) *CompactActivity {
+func NewCompactActivity(deps CompactDeps) *CompactActivity {
 	return &CompactActivity{
-		repo:           repo,
-		threads:        threads.New(threads.Deps{Repo: repo}),
-		driverResolver: resolver,
+		repo:           deps.Store,
+		threads:        deps.Threads,
+		driverResolver: deps.DriverResolver,
 		skips:          compactionSkips,
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	core "github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -423,7 +424,6 @@ type QuestionResolveStore interface {
 // threads.Service and its attachments.
 type SaveMessageStore interface {
 	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
-	threads.Repository
 }
 
 // ThreadStatusStore is what ThreadStatusActivity writes.
@@ -438,7 +438,6 @@ type ThreadStatusStore interface {
 type UsageLimitWaitStore interface {
 	RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error
-	threads.Repository
 }
 
 // TriggerCapacitySlotStore is what TriggerCapacitySlotActivity writes.
@@ -498,4 +497,37 @@ type WorkflowStatusStore interface {
 	runevents.Store
 	ChatTransitioner
 	TransitionMessageWriter
+}
+
+// MessageSaver writes a message through the threads service: the allocation
+// of its order, its content blocks and the idempotency checks of a retried
+// activity. *threads.Service satisfies it.
+type MessageSaver interface {
+	SaveMessage(ctx context.Context, opts threads.SaveMessageOpts) (*threads.SaveMessageResult, error)
+}
+
+// SaveMessageDeps is what a SaveMessageActivity is built from.
+type SaveMessageDeps struct {
+	// Store is what the activity reads and writes besides the message.
+	Store SaveMessageStore
+	// Threads saves the message.
+	Threads MessageSaver
+}
+
+// CompactDeps is what a CompactActivity is built from.
+type CompactDeps struct {
+	// Store is what the activity reads and writes.
+	Store CompactStore
+	// Threads saves the compaction summary message.
+	Threads MessageSaver
+	// DriverResolver picks the model driver that writes the summary.
+	DriverResolver drivers.DriverResolver
+}
+
+// UsageLimitWaitDeps is what a UsageLimitWaitActivity is built from.
+type UsageLimitWaitDeps struct {
+	// Store records and clears the wait marker.
+	Store UsageLimitWaitStore
+	// Threads saves the notice the wait posts to the transcript.
+	Threads MessageSaver
 }

@@ -89,7 +89,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 		deps: Deps{
 			Repo:   e.repo,
 			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
-		}, threads: threads.New(threads.Deps{Repo: e.repo}),
+		}, threads: threads.New(threads.Deps{Repo: e.repo, Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
 		runs: runs.New(runs.Deps{Repo: e.repo, Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 

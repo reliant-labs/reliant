@@ -22,6 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -45,7 +46,7 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo *db.Repo) (chatID, workfl
 	chatID = createTestChatForConversation(t, repo)
 	workflowID = chatID // Root workflow ID = chat ID (standard pattern)
 
-	svc = threads.New(threads.Deps{Repo: repo})
+	svc = threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	// Mimics StartChat: CreateWorkflowWithThread before any messages
 	wf := &db.Workflow{
@@ -528,7 +529,7 @@ func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testin
 	thread := workflowID
 
 	// Verify: CW exists (created by CreateWorkflowWithThread)
-	svc := threads.New(threads.Deps{Repo: repo})
+	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	cw, err := svc.GetLatestContextWindow(ctx, thread)
 	require.NoError(t, err)
 	require.NotNil(t, cw, "Context window should exist from CreateWorkflowWithThread")
@@ -569,7 +570,7 @@ func TestUserMessageRoundTrip_ContextWindowIDConsistency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Save another message via threads.Service.SaveMessage
-	svc := threads.New(threads.Deps{Repo: repo})
+	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	result, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  thread,
