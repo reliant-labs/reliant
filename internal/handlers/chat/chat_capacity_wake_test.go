@@ -101,7 +101,7 @@ func TestResumeChat_LiveRunIsWokenNotResumed(t *testing.T) {
 	chatID := seedWaitingRun(t, repo, ctx)
 
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil, Waits: providerbackofftest.New(t, repo)})}
+	svc := &Service{deps: Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil, Waits: providerbackofftest.New(t, repo)})}
 
 	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestResumeChat_PausedRunResumesThenWakesEveryThread(t *testing.T) {
 	chatID := seedChatRun(t, repo, ctx, "test-user", db.Paused())
 
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}, Waits: providerbackofftest.New(t, repo)})}
+	svc := &Service{deps: Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}, Waits: providerbackofftest.New(t, repo)})}
 
 	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
 	require.NoError(t, err)

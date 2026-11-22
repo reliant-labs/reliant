@@ -1030,7 +1030,6 @@ type AccountUsagePollerDeps struct {
 //
 //forge:root-only worker
 func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, error) {
-	repo := d.DB
 	return &accountlimits.Poller{
 		Store: d.Accounts,
 		Fetcher: &accountlimits.Fetcher{

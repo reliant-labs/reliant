@@ -24,7 +24,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=f7b30d0bfd2b48e7db3c459a812575aef33cd97ff14c5aca6ece8f8560312beb
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockQuestions
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=7b9363788c6bce7ad85ce7b778f6e92573acc04e8f12608a607983e62143d652
 
 // MockQuestions is a test mock for the Questions interface.
 //
@@ -106,7 +106,7 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockMessages
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=e538e6cd1aaecf6b2a3928c5d327dee1754d7f777e4873819637480758889ee8
 
 // MockMessages is a test mock for the Messages interface.
 //
@@ -142,7 +142,7 @@ func (m *MockMessages) LatestTurnInThread(ctx context.Context, threadID string) 
 var _ Messages = (*MockMessages)(nil)
 
 // forge:section MockToolBlocks
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=1a3e1a2808c127b60d8073f54e217258115193b01b973afc64a73ba02ab42a8a
 
 // MockToolBlocks is a test mock for the ToolBlocks interface.
 //
@@ -178,7 +178,7 @@ func (m *MockToolBlocks) ListToolBlocks(ctx context.Context, toolCallID string, 
 var _ ToolBlocks = (*MockToolBlocks)(nil)
 
 // forge:section MockSpawns
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=e8af4c3c3a8dce6fe8e78da7341174f420adce76e694e4e2b04114098ceab40f
 
 // MockSpawns is a test mock for the Spawns interface.
 //
@@ -224,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=1d5bbc2f3e116fcc61efcdf5c821980f8d61d4d6fad29cb64d58efa94ec30c37
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -1690,7 +1690,7 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockSenders
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9
 
 // MockSenders is a test mock for the Senders interface.
 //
@@ -1716,7 +1716,7 @@ func (m *MockSenders) SenderTitlesByThreadIDs(ctx context.Context, threadIDs []s
 var _ Senders = (*MockSenders)(nil)
 
 // forge:section MockDirectory
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=83876a76b6d6a4cf6e2fbb6be01be521691ea4b970ac0f00e255c8f96d481f76
 
 // MockDirectory is a test mock for the local.Directory interface.
 //
@@ -1742,7 +1742,7 @@ func (m *MockDirectory) LocalDaemons(ctx context.Context, userID string) ([]loca
 var _ local.Directory = (*MockDirectory)(nil)
 
 // forge:section MockPauseController
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=88aa76b2a5e7f94ee2347eba56f282808032a597d444fe8c585da00361b90aa5
 
 // MockPauseController is a test mock for the runs.PauseController interface.
 //
@@ -1798,7 +1798,7 @@ func (m *MockPauseController) SignalWithRecovery(ctx context.Context, workflowID
 var _ runs.PauseController = (*MockPauseController)(nil)
 
 // forge:section MockStore
-// forge:hash=96255b9f01bec67fd8b6d3fab38b6f147233e63f18cf381f264296d806e9f369
+// forge:hash=4d6d7e4dfa89bb5896b438f60b55bbdde1c90d024013636923213c3860032b0d
 
 // MockStore is a test mock for the chatselection.Store interface.
 //
