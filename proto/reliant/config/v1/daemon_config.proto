@@ -343,6 +343,23 @@ message DaemonConfig {
   }];
 }
 
+// MachineLoginConfig is `reliant machine login`'s config. Its instance names
+// the daemon data directory whose daemon is "this computer's" (beside every
+// instance under ~/.reliant/instances): a sign-in for that machine runs here,
+// on this terminal, with no server in between. A workspace pod's DAEMON_DATA_DIR
+// is what makes a cloud machine's own terminal count as local.
+message MachineLoginConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: [
+      "machine",
+      "login"
+    ]
+  };
+
+  DaemonInstanceConfig instance = 1;
+}
+
 // DaemonStatusConfig is `reliant daemon status`'s config.
 message DaemonStatusConfig {
   option (forge.v1.binary_config) = {

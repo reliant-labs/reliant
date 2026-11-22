@@ -454,6 +454,55 @@ func (x *DaemonConfig) GetLabels() []string {
 	return nil
 }
 
+// MachineLoginConfig is `reliant machine login`'s config. Its instance names
+// the daemon data directory whose daemon is "this computer's" (beside every
+// instance under ~/.reliant/instances): a sign-in for that machine runs here,
+// on this terminal, with no server in between. A workspace pod's DAEMON_DATA_DIR
+// is what makes a cloud machine's own terminal count as local.
+type MachineLoginConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Instance      *DaemonInstanceConfig  `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MachineLoginConfig) Reset() {
+	*x = MachineLoginConfig{}
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MachineLoginConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MachineLoginConfig) ProtoMessage() {}
+
+func (x *MachineLoginConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MachineLoginConfig.ProtoReflect.Descriptor instead.
+func (*MachineLoginConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MachineLoginConfig) GetInstance() *DaemonInstanceConfig {
+	if x != nil {
+		return x.Instance
+	}
+	return nil
+}
+
 // DaemonStatusConfig is `reliant daemon status`'s config.
 type DaemonStatusConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -464,7 +513,7 @@ type DaemonStatusConfig struct {
 
 func (x *DaemonStatusConfig) Reset() {
 	*x = DaemonStatusConfig{}
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -476,7 +525,7 @@ func (x *DaemonStatusConfig) String() string {
 func (*DaemonStatusConfig) ProtoMessage() {}
 
 func (x *DaemonStatusConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -489,7 +538,7 @@ func (x *DaemonStatusConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStatusConfig.ProtoReflect.Descriptor instead.
 func (*DaemonStatusConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{2}
+	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DaemonStatusConfig) GetInstance() *DaemonInstanceConfig {
@@ -509,7 +558,7 @@ type DaemonStopConfig struct {
 
 func (x *DaemonStopConfig) Reset() {
 	*x = DaemonStopConfig{}
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -521,7 +570,7 @@ func (x *DaemonStopConfig) String() string {
 func (*DaemonStopConfig) ProtoMessage() {}
 
 func (x *DaemonStopConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -534,7 +583,7 @@ func (x *DaemonStopConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStopConfig.ProtoReflect.Descriptor instead.
 func (*DaemonStopConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{3}
+	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DaemonStopConfig) GetInstance() *DaemonInstanceConfig {
@@ -554,7 +603,7 @@ type DaemonLogsConfig struct {
 
 func (x *DaemonLogsConfig) Reset() {
 	*x = DaemonLogsConfig{}
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -566,7 +615,7 @@ func (x *DaemonLogsConfig) String() string {
 func (*DaemonLogsConfig) ProtoMessage() {}
 
 func (x *DaemonLogsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -579,7 +628,7 @@ func (x *DaemonLogsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonLogsConfig.ProtoReflect.Descriptor instead.
 func (*DaemonLogsConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{4}
+	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DaemonLogsConfig) GetInstance() *DaemonInstanceConfig {
@@ -600,7 +649,7 @@ type DaemonRegisterConfig struct {
 
 func (x *DaemonRegisterConfig) Reset() {
 	*x = DaemonRegisterConfig{}
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[5]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +661,7 @@ func (x *DaemonRegisterConfig) String() string {
 func (*DaemonRegisterConfig) ProtoMessage() {}
 
 func (x *DaemonRegisterConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[5]
+	mi := &file_reliant_config_v1_daemon_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +674,7 @@ func (x *DaemonRegisterConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonRegisterConfig.ProtoReflect.Descriptor instead.
 func (*DaemonRegisterConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{5}
+	return file_reliant_config_v1_daemon_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DaemonRegisterConfig) GetAccount() string {
@@ -714,6 +763,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x06labels\x18\x1f \x03(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
 	"\x15RELIANT_DAEMON_LABELS*hComma-separated key=value durable labels this machine declares (merged into its labels on every connect)R\x06labels:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
+	"\x12MachineLoginConfig\x12C\n" +
+	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +
+	"\areliant\x12\amachine\x12\x05login\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06daemon\x12\x06status\"t\n" +
@@ -740,27 +792,29 @@ func file_reliant_config_v1_daemon_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_daemon_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_daemon_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_reliant_config_v1_daemon_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_reliant_config_v1_daemon_config_proto_goTypes = []any{
 	(*DaemonInstanceConfig)(nil), // 0: reliant.config.v1.DaemonInstanceConfig
 	(*DaemonConfig)(nil),         // 1: reliant.config.v1.DaemonConfig
-	(*DaemonStatusConfig)(nil),   // 2: reliant.config.v1.DaemonStatusConfig
-	(*DaemonStopConfig)(nil),     // 3: reliant.config.v1.DaemonStopConfig
-	(*DaemonLogsConfig)(nil),     // 4: reliant.config.v1.DaemonLogsConfig
-	(*DaemonRegisterConfig)(nil), // 5: reliant.config.v1.DaemonRegisterConfig
-	(*durationpb.Duration)(nil),  // 6: google.protobuf.Duration
+	(*MachineLoginConfig)(nil),   // 2: reliant.config.v1.MachineLoginConfig
+	(*DaemonStatusConfig)(nil),   // 3: reliant.config.v1.DaemonStatusConfig
+	(*DaemonStopConfig)(nil),     // 4: reliant.config.v1.DaemonStopConfig
+	(*DaemonLogsConfig)(nil),     // 5: reliant.config.v1.DaemonLogsConfig
+	(*DaemonRegisterConfig)(nil), // 6: reliant.config.v1.DaemonRegisterConfig
+	(*durationpb.Duration)(nil),  // 7: google.protobuf.Duration
 }
 var file_reliant_config_v1_daemon_config_proto_depIdxs = []int32{
 	0, // 0: reliant.config.v1.DaemonConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	6, // 1: reliant.config.v1.DaemonConfig.background_idle_reap:type_name -> google.protobuf.Duration
-	0, // 2: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 3: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 4: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	7, // 1: reliant.config.v1.DaemonConfig.background_idle_reap:type_name -> google.protobuf.Duration
+	0, // 2: reliant.config.v1.MachineLoginConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 3: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 4: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 5: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_daemon_config_proto_init() }
@@ -774,7 +828,7 @@ func file_reliant_config_v1_daemon_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_daemon_config_proto_rawDesc), len(file_reliant_config_v1_daemon_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

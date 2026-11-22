@@ -80,6 +80,28 @@ type SessionOptions struct {
 // CreateSessionWith is CreateSession with opts. A credentials-none shell the
 // sandbox refuses to start is an error, never a shell with credentials.
 func (m *Manager) CreateSessionWith(workingDir string, userID string, opts SessionOptions) (*Session, error) {
+	shell, args := GetDefaultShell()
+	return m.createSession(workingDir, userID, shell, args, opts, 80, 24)
+}
+
+// CreateCommandSession starts one program on a PTY instead of the user's login
+// shell: the session ends when the program does. It streams, resizes and
+// closes like any other session. The daemon uses it for an interactive vendor
+// CLI sign-in (`reliant machine login`), whose argv it builds itself.
+//
+// cols and rows are the PTY's first size (0: 80x24), so a program that draws
+// at once (a device code, a URL) draws at the size the user's terminal has.
+func (m *Manager) CreateCommandSession(workingDir, name string, args []string, cols, rows uint16) (*Session, error) {
+	if name == "" {
+		return nil, fmt.Errorf("create command session: no program")
+	}
+	if cols == 0 || rows == 0 {
+		cols, rows = 80, 24
+	}
+	return m.createSession(workingDir, "", name, args, SessionOptions{}, cols, rows)
+}
+
+func (m *Manager) createSession(workingDir, userID, shell string, args []string, opts SessionOptions, cols, rows uint16) (*Session, error) {
 	// Before anything else: a request that is going to be refused must not
 	// evict a live session to make room for itself.
 	workingDir, err := resolveWorkingDir(workingDir)
@@ -96,9 +118,6 @@ func (m *Manager) CreateSessionWith(workingDir string, userID string, opts Sessi
 
 	sessionID := uuid.New().String()
 
-	// Get default shell for the OS
-	shell, args := GetDefaultShell()
-
 	// Create PTY
 	ptty, err := pty.New()
 	if err != nil {
@@ -108,8 +127,8 @@ func (m *Manager) CreateSessionWith(workingDir string, userID string, opts Sessi
 	// DON'T configure termios - go-pty already sets it up correctly
 	// The default PTY configuration works properly with shells
 
-	// Set initial terminal size (default to 80x24)
-	if err := ptty.Resize(80, 24); err != nil {
+	// Set the initial terminal size
+	if err := ptty.Resize(int(cols), int(rows)); err != nil {
 		logging.Warn("[Terminal] Failed to set initial terminal size", "error", err)
 	}
 

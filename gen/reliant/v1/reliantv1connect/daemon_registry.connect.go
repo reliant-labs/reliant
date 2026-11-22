@@ -71,6 +71,9 @@ const (
 	// DaemonRegistryServicePutMachinePoolProcedure is the fully-qualified name of the
 	// DaemonRegistryService's PutMachinePool RPC.
 	DaemonRegistryServicePutMachinePoolProcedure = "/reliant.v1.DaemonRegistryService/PutMachinePool"
+	// DaemonRegistryServiceCheckMachineCLILoginsProcedure is the fully-qualified name of the
+	// DaemonRegistryService's CheckMachineCLILogins RPC.
+	DaemonRegistryServiceCheckMachineCLILoginsProcedure = "/reliant.v1.DaemonRegistryService/CheckMachineCLILogins"
 	// DaemonRegistryServiceDeleteMachinePoolProcedure is the fully-qualified name of the
 	// DaemonRegistryService's DeleteMachinePool RPC.
 	DaemonRegistryServiceDeleteMachinePoolProcedure = "/reliant.v1.DaemonRegistryService/DeleteMachinePool"
@@ -141,6 +144,15 @@ type DaemonRegistryServiceClient interface {
 	// definition. Members are not listed: they are the caller's machines whose
 	// labels match the selector.
 	PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error)
+	// CheckMachineCLILogins reports, for each vendor agent CLI named (Claude
+	// Code, Codex, Gemini CLI, Cursor Agent, GitHub Copilot CLI), whether it is
+	// installed and signed in on one of the caller's online machines
+	// (`reliant machine login --status`). The machine runs a fixed read-only
+	// probe built here from the vendor table, never a command the caller sends;
+	// only each vendor's verdict comes back, never anything the vendor CLI
+	// printed. NotFound for a machine the caller does not own, Unavailable when
+	// it is offline, InvalidArgument for a vendor this server does not know.
+	CheckMachineCLILogins(context.Context, *connect.Request[v1.CheckMachineCLILoginsRequest]) (*connect.Response[v1.CheckMachineCLILoginsResponse], error)
 	// forge:custom — by the caller's pool name, refused while a trigger runs
 	// on the pool.
 	//
@@ -235,6 +247,13 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("PutMachinePool")),
 			connect.WithClientOptions(opts...),
 		),
+		checkMachineCLILogins: connect.NewClient[v1.CheckMachineCLILoginsRequest, v1.CheckMachineCLILoginsResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceCheckMachineCLILoginsProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("CheckMachineCLILogins")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		deleteMachinePool: connect.NewClient[v1.DeleteMachinePoolRequest, v1.DeleteMachinePoolResponse](
 			httpClient,
 			baseURL+DaemonRegistryServiceDeleteMachinePoolProcedure,
@@ -258,6 +277,7 @@ type daemonRegistryServiceClient struct {
 	renameMachine          *connect.Client[v1.RenameMachineRequest, v1.RenameMachineResponse]
 	listMachinePools       *connect.Client[v1.ListMachinePoolsRequest, v1.ListMachinePoolsResponse]
 	putMachinePool         *connect.Client[v1.PutMachinePoolRequest, v1.PutMachinePoolResponse]
+	checkMachineCLILogins  *connect.Client[v1.CheckMachineCLILoginsRequest, v1.CheckMachineCLILoginsResponse]
 	deleteMachinePool      *connect.Client[v1.DeleteMachinePoolRequest, v1.DeleteMachinePoolResponse]
 }
 
@@ -319,6 +339,11 @@ func (c *daemonRegistryServiceClient) ListMachinePools(ctx context.Context, req 
 // PutMachinePool calls reliant.v1.DaemonRegistryService.PutMachinePool.
 func (c *daemonRegistryServiceClient) PutMachinePool(ctx context.Context, req *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error) {
 	return c.putMachinePool.CallUnary(ctx, req)
+}
+
+// CheckMachineCLILogins calls reliant.v1.DaemonRegistryService.CheckMachineCLILogins.
+func (c *daemonRegistryServiceClient) CheckMachineCLILogins(ctx context.Context, req *connect.Request[v1.CheckMachineCLILoginsRequest]) (*connect.Response[v1.CheckMachineCLILoginsResponse], error) {
+	return c.checkMachineCLILogins.CallUnary(ctx, req)
 }
 
 // DeleteMachinePool calls reliant.v1.DaemonRegistryService.DeleteMachinePool.
@@ -392,6 +417,15 @@ type DaemonRegistryServiceHandler interface {
 	// definition. Members are not listed: they are the caller's machines whose
 	// labels match the selector.
 	PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error)
+	// CheckMachineCLILogins reports, for each vendor agent CLI named (Claude
+	// Code, Codex, Gemini CLI, Cursor Agent, GitHub Copilot CLI), whether it is
+	// installed and signed in on one of the caller's online machines
+	// (`reliant machine login --status`). The machine runs a fixed read-only
+	// probe built here from the vendor table, never a command the caller sends;
+	// only each vendor's verdict comes back, never anything the vendor CLI
+	// printed. NotFound for a machine the caller does not own, Unavailable when
+	// it is offline, InvalidArgument for a vendor this server does not know.
+	CheckMachineCLILogins(context.Context, *connect.Request[v1.CheckMachineCLILoginsRequest]) (*connect.Response[v1.CheckMachineCLILoginsResponse], error)
 	// forge:custom — by the caller's pool name, refused while a trigger runs
 	// on the pool.
 	//
@@ -482,6 +516,13 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("PutMachinePool")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonRegistryServiceCheckMachineCLILoginsHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceCheckMachineCLILoginsProcedure,
+		svc.CheckMachineCLILogins,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("CheckMachineCLILogins")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	daemonRegistryServiceDeleteMachinePoolHandler := connect.NewUnaryHandler(
 		DaemonRegistryServiceDeleteMachinePoolProcedure,
 		svc.DeleteMachinePool,
@@ -514,6 +555,8 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 			daemonRegistryServiceListMachinePoolsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServicePutMachinePoolProcedure:
 			daemonRegistryServicePutMachinePoolHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceCheckMachineCLILoginsProcedure:
+			daemonRegistryServiceCheckMachineCLILoginsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceDeleteMachinePoolProcedure:
 			daemonRegistryServiceDeleteMachinePoolHandler.ServeHTTP(w, r)
 		default:
@@ -571,6 +614,10 @@ func (UnimplementedDaemonRegistryServiceHandler) ListMachinePools(context.Contex
 
 func (UnimplementedDaemonRegistryServiceHandler) PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.PutMachinePool is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) CheckMachineCLILogins(context.Context, *connect.Request[v1.CheckMachineCLILoginsRequest]) (*connect.Response[v1.CheckMachineCLILoginsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.CheckMachineCLILogins is not implemented"))
 }
 
 func (UnimplementedDaemonRegistryServiceHandler) DeleteMachinePool(context.Context, *connect.Request[v1.DeleteMachinePoolRequest]) (*connect.Response[v1.DeleteMachinePoolResponse], error) {

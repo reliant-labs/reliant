@@ -167,7 +167,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.DaemonRegistryService
-  // forge:hash=c33601f1078666afa3181e90c719570fb27ee8c6ee96422502a6ef24d5780bb5
+  // forge:hash=50a30f6b360142945d64aa557c8fa755e3342b769b68a8c3b9c756310096ceed
   & {
     "reliant.v1.DaemonRegistryService/ListDaemons"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").ListDaemonsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").ListDaemonsResponseSchema>>;
     "reliant.v1.DaemonRegistryService/GetDaemon"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").GetDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").GetDaemonResponseSchema>>;
@@ -181,6 +181,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.DaemonRegistryService/RenameMachine"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").RenameMachineRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").RenameMachineResponseSchema>>;
     "reliant.v1.DaemonRegistryService/ListMachinePools"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").ListMachinePoolsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").ListMachinePoolsResponseSchema>>;
     "reliant.v1.DaemonRegistryService/PutMachinePool"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").PutMachinePoolRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").PutMachinePoolResponseSchema>>;
+    "reliant.v1.DaemonRegistryService/CheckMachineCLILogins"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").CheckMachineCLILoginsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").CheckMachineCLILoginsResponseSchema>>;
     "reliant.v1.DaemonRegistryService/DeleteMachinePool"?: (req: import("@/gen/reliant/v1/daemon_registry_pb").DeleteMachinePoolRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/daemon_registry_pb").DeleteMachinePoolResponseSchema>>;
   }
 

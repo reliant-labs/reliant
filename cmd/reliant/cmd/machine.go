@@ -199,7 +199,7 @@ agent's shell. A machine's own credential is never accepted.`,
 	}
 	cmd.AddCommand(newMachineListCmd(), newMachineStartCmd(), newMachineStopCmd(), newMachineResizeCmd(), newMachineRenameCmd(),
 		newMachineCreateCmd(), newMachineDeleteCmd(), newMachineGrowDiskCmd(),
-		newMachineLabelCmd(), newMachinePoolCmd())
+		newMachineLabelCmd(), newMachinePoolCmd(), newMachineLoginCmd())
 	return cmd
 }
 

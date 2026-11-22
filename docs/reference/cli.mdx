@@ -539,6 +539,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant machine grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
+| [`reliant machine login`](#reliant-machine-login) | Sign a vendor agent CLI (Claude Code, Codex, Gemini, Cursor, Copilot) in on a machine |
 | [`reliant machine pool`](#reliant-machine-pool) | List, define and delete machine pools |
 | [`reliant machine pool ls`](#reliant-machine-pool-ls) | List your machine pools and their members |
 | [`reliant machine pool put`](#reliant-machine-pool-put) | Define a machine pool, or change one |
@@ -23496,6 +23497,7 @@ reliant machine
 | [`grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`list`](#reliant-machine-list) | List your machines |
+| [`login`](#reliant-machine-login) | Sign a vendor agent CLI (Claude Code, Codex, Gemini, Cursor, Copilot) in on a machine |
 | [`pool`](#reliant-machine-pool) | List, define and delete machine pools |
 | [`rename`](#reliant-machine-rename) | Rename a machine |
 | [`resize`](#reliant-machine-resize) | Change a suspended machine's size |
@@ -23614,6 +23616,53 @@ List your machines
 ```
 reliant machine list
 ```
+
+---
+
+### reliant machine login
+
+Sign a vendor agent CLI (Claude Code, Codex, Gemini, Cursor, Copilot) in on a machine
+
+Sign a vendor's agent CLI in on one of your machines, so the workflows that
+run it there (requires: `{cli_login: [...]}`) run signed in. The vendor is one
+of: claude, codex, gemini, cursor, copilot.
+
+It installs the CLI under the machine's home directory when it is missing,
+then runs the vendor's own sign-in: open the URL it prints (or enter its
+code), finish signing in, and come back. Reliant never sees the credential:
+the vendor's CLI writes it to its own file on that machine, and Reliant
+reads back only whether it is signed in.
+
+The machine is this computer's own Reliant machine unless --machine names
+another (an id or name; 'reliant machine list' shows yours). On this
+computer the sign-in runs right here; on another machine it runs there,
+through Reliant, in this terminal.
+
+--status reports each vendor's CLI on the machine as signed in, signed out,
+sign-in expired or not installed (--json for a script), and changes nothing.
+
+A machine whose disk is ephemeral forgets the sign-in when it stops. On a
+machine other people can use, your personal sign-in is usable by everyone
+with a shell there: for shared or team use, use your organization's API keys.
+
+  reliant machine login claude
+  reliant machine login codex --machine build-box
+  reliant machine login --status --machine build-box
+
+```
+reliant machine login <vendor> | --status [vendor...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
+| `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
+| `--json` | `bool` | - | With --status: print the report as JSON |
+| `--machine` | `string` | - | The machine to sign in on, by id or name (default: this computer's) |
+| `--status` | `bool` | - | Report which vendor CLIs are signed in on the machine, and change nothing |
+| `--workspace` | `string` | - | Workspace this daemon serves (defaults to the git worktree root of the current directory) [env: RELIANT_INSTANCE_WORKSPACE] |
 
 ---
 

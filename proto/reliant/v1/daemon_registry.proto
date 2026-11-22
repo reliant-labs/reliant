@@ -159,6 +159,18 @@ service DaemonRegistryService {
     };
   }
 
+  // CheckMachineCLILogins reports, for each vendor agent CLI named (Claude
+  // Code, Codex, Gemini CLI, Cursor Agent, GitHub Copilot CLI), whether it is
+  // installed and signed in on one of the caller's online machines
+  // (`reliant machine login --status`). The machine runs a fixed read-only
+  // probe built here from the vendor table, never a command the caller sends;
+  // only each vendor's verdict comes back, never anything the vendor CLI
+  // printed. NotFound for a machine the caller does not own, Unavailable when
+  // it is offline, InvalidArgument for a vendor this server does not know.
+  rpc CheckMachineCLILogins(CheckMachineCLILoginsRequest) returns (CheckMachineCLILoginsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // forge:custom — by the caller's pool name, refused while a trigger runs
   // on the pool.
   //
@@ -176,6 +188,48 @@ service DaemonRegistryService {
       }
     };
   }
+}
+
+message CheckMachineCLILoginsRequest {
+  string daemon_id = 1;
+  // Vendor ids ("claude", "codex", "gemini", "cursor", "copilot"); empty
+  // checks every vendor.
+  repeated string vendors = 2;
+}
+
+message CheckMachineCLILoginsResponse {
+  // One per vendor checked, in the vendor table's order.
+  repeated MachineCLILogin logins = 1;
+}
+
+// MachineCLILogin is one vendor agent CLI's state on a machine.
+message MachineCLILogin {
+  // The vendor id ("claude").
+  string vendor = 1;
+  // What to call it ("Claude Code").
+  string name = 2;
+  CLILoginState state = 3;
+  // The CLI was found only in ~/.local/bin (where `reliant machine login`
+  // installs it), which is not on the PATH the machine's daemon gives
+  // commands: a workflow's run step cannot call it by name until Reliant on
+  // that machine is updated.
+  bool off_path = 4;
+}
+
+// CLILoginState is a vendor agent CLI's sign-in state on a machine, as the
+// vendor's own status check reports it.
+enum CLILoginState {
+  CLI_LOGIN_STATE_UNSPECIFIED = 0;
+  CLI_LOGIN_STATE_SIGNED_IN = 1;
+  CLI_LOGIN_STATE_SIGNED_OUT = 2;
+  // Signed in once, and the vendor says the sign-in has expired. Only where
+  // the vendor's status tells the two apart.
+  CLI_LOGIN_STATE_EXPIRED = 3;
+  // The CLI is not installed on the machine.
+  CLI_LOGIN_STATE_NOT_INSTALLED = 4;
+  // The check did not give a verdict (it timed out, or the CLI answered
+  // something unrecognized).
+  CLI_LOGIN_STATE_UNKNOWN = 5;
 }
 
 message RenameMachineRequest {

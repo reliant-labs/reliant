@@ -668,6 +668,78 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
     } | {_k: _sensitive[_k] for _k in _sensitive if _k in config_secrets}
 }
 
+# forge:section schema MachineLoginConfigInstance
+# forge:hash=b4552a379a4a00b5a01b198b0f30e027e1b48f18f32b7c66cc96a728ffab1cdc
+# MachineLoginConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
+schema MachineLoginConfigInstance:
+    # Data directory (default: this instance's directory under ~/.reliant/instances)
+    data_dir: str = ""
+    # Account (user id) this daemon runs as; selects among several accounts on one server
+    account: str = ""
+    # Workspace this daemon serves (defaults to the git worktree root of the current directory)
+    workspace: str = ""
+
+# forge:section schema MachineLoginConfig
+# forge:hash=755f3d02c003494aae0cf32a0bb1a6a9a0e28e13a7f2d655c3ee5298eda43f86
+schema MachineLoginConfig:
+    # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
+    instance: MachineLoginConfigInstance = MachineLoginConfigInstance {}
+
+# forge:section env-map machineLoginConfigEnvMap
+# forge:hash=0bc46a06ed0f3e9a8ab28c54df888f52233b933bdba10104405eaada93b7de81
+# Every ENV_VAR MachineLoginConfig declares `sensitive: true` for. Used by forge's
+# host-mode config probe, which resolves the whole config for `forge env up`
+# and the parity report. A WORKLOAD must not use it: naming every
+# credential is the broadcast that put one feature's secretKeyRef on
+# every pod. Declare what a workload reads in its `config_secrets` instead.
+MACHINE_LOGIN_CONFIG_SENSITIVE_ENV: [str] = [
+    # forge:section MACHINE_LOGIN_CONFIG_SENSITIVE_ENV (end)
+    # forge:hash=2b8448f1199b0d4284e02816703cf9858291e22772b0c01437c68e3f1a1e0f87
+]
+
+# Every ENV_VAR MachineLoginConfig declares BOTH `sensitive: true` and
+# `optional: true` for. The secret pre-flight skips these: a declared
+# secret with no value is an error by default, and this is the author
+# stating that THIS one's absence is intended (a tier's off-switch, a
+# credential only some environments own).
+MACHINE_LOGIN_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
+    # forge:section MACHINE_LOGIN_CONFIG_OPTIONAL_SECRET_ENV (end)
+    # forge:hash=57bc875d1181fdeff885825dc29439761352603e8456f579465911772fad3f35
+]
+
+# machineLoginConfigEnvMap projects a typed MachineLoginConfig into a workload's env MAP (fw.Workload.env):
+# one entry per field that declares an env_var, keyed by ENV_VAR name — a
+# string for an ordinary field, a forge.SecretRef for a sensitive one.
+#
+# Non-sensitive fields are projected for EVERY caller: they are inline
+# values, so they carry no credential and no start-time dependency.
+# Sensitive fields are projected ONLY when `config_secrets` NAMES them, so a
+# workload's manifest carries the secretKeyRefs it declared and no others.
+# A pod whose secretKeyRef names a missing key does not start — it stalls
+# in CreateContainerConfigError with no application log — so a credential
+# broadcast to workloads that never read it turns one feature's missing
+# secret into a whole namespace outage.
+#
+#     env = machineLoginConfigEnvMap(cfg, config_secrets) | {EXTRA = "value"}
+machineLoginConfigEnvMap = lambda c: MachineLoginConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
+    _sensitive: {str: forge.SecretRef} = {
+        # forge:section machineLoginConfigEnvMap secrets (end)
+        # forge:hash=578cca853383c8d742c7cf1832e583a05096c0bd509ce83dbf86276c27bb720a
+    }
+    assert all _n in config_secrets { _n in _sensitive }, \
+        "machineLoginConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of MachineLoginConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
+    {
+        # forge:section machineLoginConfigEnvMap values instance
+        # forge:hash=22e2c1daa53a71fd1f49615f8b7301e8c7c4b092618f2f1cbdf2bd0fe36e4b63
+        "DAEMON_DATA_DIR" = c.instance.data_dir
+        "RELIANT_INSTANCE_ACCOUNT" = c.instance.account
+        "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
+
+        # forge:section machineLoginConfigEnvMap values (end)
+        # forge:hash=09e05420196e1ee34ed02e09fd0493f71bda9c635cfbc3208c3e76a61c9420bd
+    } | {_k: _sensitive[_k] for _k in _sensitive if _k in config_secrets}
+}
+
 # forge:section schema DaemonStatusConfigInstance
 # forge:hash=e8073c824822f45350fec9e2d1ef5be25c9e608ff0a79adaff863241a1f60160
 # DaemonStatusConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
@@ -1839,7 +1911,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=60481bc19e66cdc79b2686475e59586b2abaf78955a7d61ecf14c627665776f9
+# forge:hash=93f25b94dfb46aaddcf9f1487499d4751ae414288b41f5a7c757c6dad8024ac0
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1859,6 +1931,8 @@ schema ReliantProcess:
     api_server_config?: ApiServerConfig
     # `reliant daemon start`
     daemon_config?: DaemonConfig
+    # `reliant machine login`
+    machine_login_config?: MachineLoginConfig
     # `reliant daemon status`
     daemon_status_config?: DaemonStatusConfig
     # `reliant daemon stop`
@@ -1895,14 +1969,14 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _rest = argv[_at[0] + 1:] if _at else argv
     _flags = [_i for _i, _a in _rest if _a.startswith("-")]
     _path = _rest[:_flags[0]] if _flags else _rest
-    _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
+    _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "machine_login_config" if _path[:2] == ["machine", "login"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
     _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
     _sub_sensitive: [str] = [] + (C_L_I_CONFIG_SENSITIVE_ENV if _in_cli_config else []) + (DATABASE_CONFIG_SENSITIVE_ENV if _in_database_config else []) + (SERVER_PROCESS_CONFIG_SENSITIVE_ENV if _in_server_process_config else []) + (VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV if _in_vault_maintenance_config else [])
-    _cmd_sensitive: [str] = API_SERVER_CONFIG_SENSITIVE_ENV if _cmd == "api_server_config" else DAEMON_CONFIG_SENSITIVE_ENV if _cmd == "daemon_config" else DAEMON_STATUS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_status_config" else DAEMON_STOP_CONFIG_SENSITIVE_ENV if _cmd == "daemon_stop_config" else DAEMON_LOGS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_logs_config" else DAEMON_REGISTER_CONFIG_SENSITIVE_ENV if _cmd == "daemon_register_config" else GATEWAY_CONFIG_SENSITIVE_ENV if _cmd == "gateway_config" else WORKER_CONFIG_SENSITIVE_ENV if _cmd == "worker_config" else PREVIEW_U_R_L_CONFIG_SENSITIVE_ENV if _cmd == "preview_url_config" else []
+    _cmd_sensitive: [str] = API_SERVER_CONFIG_SENSITIVE_ENV if _cmd == "api_server_config" else DAEMON_CONFIG_SENSITIVE_ENV if _cmd == "daemon_config" else MACHINE_LOGIN_CONFIG_SENSITIVE_ENV if _cmd == "machine_login_config" else DAEMON_STATUS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_status_config" else DAEMON_STOP_CONFIG_SENSITIVE_ENV if _cmd == "daemon_stop_config" else DAEMON_LOGS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_logs_config" else DAEMON_REGISTER_CONFIG_SENSITIVE_ENV if _cmd == "daemon_register_config" else GATEWAY_CONFIG_SENSITIVE_ENV if _cmd == "gateway_config" else WORKER_CONFIG_SENSITIVE_ENV if _cmd == "worker_config" else PREVIEW_U_R_L_CONFIG_SENSITIVE_ENV if _cmd == "preview_url_config" else []
     assert all _n in config_secrets { _n in _root_sensitive or _n in _sub_sensitive or _n in _cmd_sensitive }, \
         "reliantProcessEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _root_sensitive and _n not in _sub_sensitive and _n not in _cmd_sensitive]}, which is not a `sensitive` field of the config(s) a `reliant` process running ${_path} loads. Sensitive fields: ${sorted(_root_sensitive + _sub_sensitive + _cmd_sensitive)}."
     assert p.reliant_config not in [None, Undefined], "reliantProcessEnvMap: every `reliant` process loads ReliantConfig — set `reliant_config` on the ReliantProcess."
@@ -1912,6 +1986,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     assert not _in_vault_maintenance_config or p.vault_maintenance_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant db vault`, which loads VaultMaintenanceConfig — set `vault_maintenance_config` on the ReliantProcess."
     assert _cmd != "api_server_config" or p.api_server_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant server api`, which loads ApiServerConfig — set `api_server_config` on the ReliantProcess."
     assert _cmd != "daemon_config" or p.daemon_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon start`, which loads DaemonConfig — set `daemon_config` on the ReliantProcess."
+    assert _cmd != "machine_login_config" or p.machine_login_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant machine login`, which loads MachineLoginConfig — set `machine_login_config` on the ReliantProcess."
     assert _cmd != "daemon_status_config" or p.daemon_status_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon status`, which loads DaemonStatusConfig — set `daemon_status_config` on the ReliantProcess."
     assert _cmd != "daemon_stop_config" or p.daemon_stop_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon stop`, which loads DaemonStopConfig — set `daemon_stop_config` on the ReliantProcess."
     assert _cmd != "daemon_logs_config" or p.daemon_logs_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon logs`, which loads DaemonLogsConfig — set `daemon_logs_config` on the ReliantProcess."
@@ -1921,7 +1996,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     assert _cmd != "preview_url_config" or p.preview_url_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant preview-url`, which loads PreviewURLConfig — set `preview_url_config` on the ReliantProcess."
     _root_env = reliantConfigEnvMap(p.reliant_config, [_n for _n in config_secrets if _n in _root_sensitive])
     _sub_env = {} | (cLIConfigEnvMap(p.cli_config, [_n for _n in config_secrets if _n in C_L_I_CONFIG_SENSITIVE_ENV]) if _in_cli_config else {}) | (databaseConfigEnvMap(p.database_config, [_n for _n in config_secrets if _n in DATABASE_CONFIG_SENSITIVE_ENV]) if _in_database_config else {}) | (serverProcessConfigEnvMap(p.server_process_config, [_n for _n in config_secrets if _n in SERVER_PROCESS_CONFIG_SENSITIVE_ENV]) if _in_server_process_config else {}) | (vaultMaintenanceConfigEnvMap(p.vault_maintenance_config, [_n for _n in config_secrets if _n in VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV]) if _in_vault_maintenance_config else {})
-    _cmd_env = apiServerConfigEnvMap(p.api_server_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "api_server_config" else daemonConfigEnvMap(p.daemon_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_config" else daemonStatusConfigEnvMap(p.daemon_status_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_status_config" else daemonStopConfigEnvMap(p.daemon_stop_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_stop_config" else daemonLogsConfigEnvMap(p.daemon_logs_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_logs_config" else daemonRegisterConfigEnvMap(p.daemon_register_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_register_config" else gatewayConfigEnvMap(p.gateway_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "gateway_config" else workerConfigEnvMap(p.worker_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "worker_config" else previewURLConfigEnvMap(p.preview_url_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "preview_url_config" else {}
+    _cmd_env = apiServerConfigEnvMap(p.api_server_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "api_server_config" else daemonConfigEnvMap(p.daemon_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_config" else machineLoginConfigEnvMap(p.machine_login_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "machine_login_config" else daemonStatusConfigEnvMap(p.daemon_status_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_status_config" else daemonStopConfigEnvMap(p.daemon_stop_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_stop_config" else daemonLogsConfigEnvMap(p.daemon_logs_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_logs_config" else daemonRegisterConfigEnvMap(p.daemon_register_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_register_config" else gatewayConfigEnvMap(p.gateway_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "gateway_config" else workerConfigEnvMap(p.worker_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "worker_config" else previewURLConfigEnvMap(p.preview_url_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "preview_url_config" else {}
     _root_env | _sub_env | _cmd_env
 }
 

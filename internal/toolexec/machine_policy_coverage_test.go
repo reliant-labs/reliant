@@ -52,6 +52,12 @@ var commandSites = map[string]string{
 	// agent's; org policy does not govern a person at the keyboard (§4.6).
 	"internal/handlers/package_commands/rpc_run_command.go:RunCommand:request":  "person-driven Commands panel",
 	"internal/handlers/package_commands/rpc_run_command.go:RunCommand:dispatch": "person-driven Commands panel",
+	// `reliant machine login --status` for another machine: a person asks, and
+	// the command is the vendor table's fixed read-only probe
+	// (vendorcli.StatusScript), never an agent's or a run's. Under
+	// `credentials: none` it would read every vendor as signed out.
+	"internal/handlers/daemon_registry/rpc_check_machine_cli_logins.go:CheckMachineCLILogins:request":  "person-driven sign-in status probe",
+	"internal/handlers/daemon_registry/rpc_check_machine_cli_logins.go:CheckMachineCLILogins:dispatch": "person-driven sign-in status probe",
 	// The machine's side: it receives and classifies commands, it builds none.
 	"internal/toolexec/daemonruntime/cmd_exec.go:init:dispatch":                         "the machine's handler registration",
 	"internal/toolexec/daemonruntime/worktree_activity.go:selfAdmittedCommand:dispatch": "classifies a received command",

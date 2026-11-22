@@ -160,6 +160,12 @@ var ErrDaemonReconnecting = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailabl
 // unknown-command failure, which proves the round trip all the same.
 const LinkProbeCommand = "daemon.ping"
 
+// TerminalCreateCLILoginCommand opens a terminal session on a daemon that runs
+// one vendor agent CLI's own sign-in (`reliant machine login`), from the
+// daemon's own recipe table: the request names only the vendor. A daemon built
+// before it answers with an unknown-command failure, never a shell.
+const TerminalCreateCLILoginCommand = "terminal.create_cli_login"
+
 // IsDaemonReconnecting reports whether err is ErrDaemonReconnecting.
 func IsDaemonReconnecting(err error) bool {
 	return errors.Is(err, ErrDaemonReconnecting)

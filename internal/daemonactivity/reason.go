@@ -122,6 +122,10 @@ var userActionCommands = map[string]bool{
 	"exec.bg_start": true,
 	"exec.run":      true,
 
+	// A person ran `reliant machine login <vendor> --machine <this one>`:
+	// unlike terminal.create, never a tab reconnecting.
+	"terminal.create_cli_login": true,
+
 	"forge.deploy_plan_start": true,
 	"forge.deploy_start":      true,
 	"forge.promote_apply":     true,

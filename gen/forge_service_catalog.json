@@ -12404,6 +12404,16 @@
       "proto_file": "reliant/v1/daemon_registry.proto",
       "methods": [
         {
+          "id": "reliant.v1.DaemonRegistryService/CheckMachineCLILogins",
+          "name": "CheckMachineCLILogins",
+          "input": "reliant.v1.CheckMachineCLILoginsRequest",
+          "output": "reliant.v1.CheckMachineCLILoginsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.DaemonRegistryService/ClearMachineCaches",
           "name": "ClearMachineCaches",
           "input": "reliant.v1.ClearMachineCachesRequest",
@@ -12776,6 +12786,24 @@
             }
           },
           {
+            "Name": "CheckMachineCLILogins",
+            "InputType": "CheckMachineCLILoginsRequest",
+            "OutputType": "CheckMachineCLILoginsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.CheckMachineCLILoginsRequest",
+            "OutputTypeFQ": "reliant.v1.CheckMachineCLILoginsResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
             "Name": "DeleteMachinePool",
             "InputType": "DeleteMachinePoolRequest",
             "OutputType": "DeleteMachinePoolResponse",
@@ -12801,6 +12829,26 @@
         "ProtoFile": "reliant/v1/daemon_registry.proto",
         "ModulePath": "github.com/reliant-labs/reliant",
         "Messages": {
+          "CheckMachineCLILoginsRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "vendors",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "CheckMachineCLILoginsResponse": [
+            {
+              "Name": "logins",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.MachineCLILogin"
+            }
+          ],
           "ClearMachineCachesRequest": [
             {
               "Name": "daemon_id",
@@ -13023,6 +13071,25 @@
         },
         "Audience": "user",
         "Schemas": {
+          "reliant.v1.CheckMachineCLILoginsRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "vendors",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.CheckMachineCLILoginsResponse": [
+            {
+              "name": "logins",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineCLILogin",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ClearMachineCachesRequest": [
             {
               "name": "daemon_id",
@@ -13460,6 +13527,25 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.MachineCLILogin": [
+            {
+              "name": "vendor",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.CLILoginState"
+            },
+            {
+              "name": "off_path",
+              "kind": "bool"
+            }
+          ],
           "reliant.v1.MachineHealth": [
             {
               "name": "state",
@@ -13842,6 +13928,8 @@
           ]
         },
         "SchemaFiles": {
+          "reliant.v1.CheckMachineCLILoginsRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.CheckMachineCLILoginsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
@@ -13861,6 +13949,7 @@
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineCLILogin": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
@@ -13887,6 +13976,14 @@
           "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
+          "reliant.v1.CLILoginState": [
+            "CLI_LOGIN_STATE_UNSPECIFIED",
+            "CLI_LOGIN_STATE_SIGNED_IN",
+            "CLI_LOGIN_STATE_SIGNED_OUT",
+            "CLI_LOGIN_STATE_EXPIRED",
+            "CLI_LOGIN_STATE_NOT_INSTALLED",
+            "CLI_LOGIN_STATE_UNKNOWN"
+          ],
           "reliant.v1.DaemonLifecyclePhase": [
             "DAEMON_LIFECYCLE_PHASE_UNSPECIFIED",
             "DAEMON_LIFECYCLE_PHASE_PROVISIONING",
@@ -13917,6 +14014,14 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.CLILoginState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
           "reliant.v1.DaemonLifecyclePhase": [
             0,
             1,
@@ -13947,6 +14052,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.CLILoginState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "CLILoginState"
+          },
           "reliant.v1.DaemonLifecyclePhase": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DaemonLifecyclePhase"
