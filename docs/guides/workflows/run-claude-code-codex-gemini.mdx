@@ -1,0 +1,271 @@
+---
+title: "Run Claude Code, Codex or Gemini in your workflows"
+sidebarTitle: "Run Claude Code, Codex or Gemini"
+description: "Sign Claude Code, Codex, Gemini CLI, Cursor Agent or GitHub Copilot CLI in once on a machine with reliant machine login, then run them from workflow steps and automations."
+keywords: ["run claude code in workflow", "codex cli in automation", "gemini cli workflow step", "reliant machine login", "requires cli_login", "vendor cli sign in cloud machine", "claude code subscription automation"]
+---
+
+By the end of this guide a workflow step runs `claude`, `codex` or `gemini` on one of your machines, already signed in, on a schedule or a trigger with nobody at the keyboard. You sign each CLI in once, in a terminal, with the vendor's own sign-in. The workflow declares that it needs the sign-in, so a run on a machine that lost it stops before its first step and says how to fix it.
+
+This is about the vendors' own command-line agents, called from a `run` step. It is not how Reliant's built-in agents get their models. For that, see [Use your Claude or ChatGPT subscription with Reliant](/guides/machines/use-claude-or-chatgpt-subscription), which connects a plan to Reliant's own agents and works without any of this. [How the two differ](#how-this-differs-from-connecting-a-plan-to-reliant) is below.
+
+## Who this is for
+
+Use this guide when you want a vendor CLI inside a workflow, for example a nightly Claude Code review of your repository, a Codex second opinion on a pull request, or a Gemini CLI summary, and you already pay for that vendor's plan. The machine is yours, and so are the workflows. Read [Terms: personal or organization](#terms-personal-or-organization) before you use it for a team.
+
+## Before you begin
+
+- The `reliant` CLI, signed in ([Sign in and tokens](/cli/sign-in)), on a computer with a terminal. Signing in is something a person does: the command refuses to run from an agent's shell.
+- A machine to run the steps on: your own computer connected as a machine ([Connect your computer](/guides/machines/connect-computer-as-machine)), or a [cloud machine](/machines/cloud). `reliant machine list` shows yours.
+- A plan with each vendor you want to use, such as Claude Pro or Max, a ChatGPT plan with Codex, or a Google AI plan.
+- A workflow in your project's `.reliant/workflows/` ([Create a workflow](/guides/create-a-workflow)).
+
+<Steps>
+  <Step title="Sign each CLI in on the machine">
+    Run `reliant machine login` with the vendor's id. With no `--machine` it means this computer's own Reliant machine. To sign in on another machine, such as a cloud machine, name it. The machine has to be running.
+
+    ```bash terminal
+    reliant machine login claude --machine build-box
+    ```
+
+    The vendor ids are `claude`, `codex`, `gemini`, `cursor` and `copilot`. What happens next is the vendor's own sign-in, run on the machine:
+
+    1. If the CLI isn't installed there, it is installed first, at a version Reliant pins, under the machine's home directory. This needs `npm` on the machine (Node.js), and for Cursor Agent and the GitHub CLI a way to download files.
+    2. The vendor's login starts. On a machine with no browser it prints a URL or a short device code. Open the URL on any computer, approve, and paste back the one-time code if it asks for one.
+    3. When the vendor says you are signed in, the command checks the result and prints it.
+
+    From a laptop to another machine, your terminal is a window onto the machine's login prompt, like SSH. Reliant carries what you type and what the vendor prints, and nothing else. It never reads, stores or relays the sign-in: the vendor's CLI writes it to its own file on the machine, and Reliant only ever asks the CLI whether it is signed in.
+
+    Each vendor's flow differs a little (the table below). Codex's device-code sign-in has to be turned on first in your ChatGPT security settings, or by your workspace admin for a workspace account, and the command tells you so. Gemini CLI opens its own session: sign in, then type `/quit`.
+  </Step>
+
+  <Step title="Check the sign-ins">
+    `--status` reports each CLI on the machine as signed in, signed out, sign-in expired or not installed. It changes nothing and can run from a script (`--json`).
+
+    ```bash terminal
+    reliant machine login --status --machine build-box
+    ```
+
+    ```text terminal
+    Agent CLIs on build-box:
+      Claude Code (claude)          signed in
+      Codex (codex)                 signed out
+      Gemini CLI (gemini)           not installed
+      Cursor Agent (cursor)         not installed
+      GitHub Copilot CLI (copilot)  not installed
+    ```
+
+    Name vendors to check only those: `reliant machine login --status claude codex`. The check never makes a model call, so it costs nothing and uses none of your plan.
+  </Step>
+
+  <Step title="Declare the sign-ins the workflow needs">
+    `requires:` is checked on the machine before a run's first step ([Declare what a run needs](/automations/overview#declare-what-a-run-needs-requires)). `cli_login` lists the vendor CLIs that must be installed and signed in. Each step that calls one takes `credentials: inherit`, which is the default; the next section says why it matters.
+
+    This workflow asks Claude Code and then Codex for a read-only review of the repository every weekday morning, and saves both answers:
+
+    ```yaml .reliant/workflows/two-reviews.yaml
+    name: two-reviews
+    title: Two reviews of the repository
+    description: Every weekday morning, ask Claude Code and Codex for a read-only review of the repository and save both answers.
+
+    requires:
+      cli_login: [claude, codex]
+
+    triggers:
+      - name: weekday-morning
+        schedule:
+          cron: ["0 7 * * 1-5"]
+          timezone: America/New_York
+          overlap: skip
+        prompt: Review the repository.
+
+    entry: [claude_review]
+
+    nodes:
+      - id: claude_review
+        type: run
+        credentials: inherit
+        timeout: 20m
+        command: |
+          claude -p "Review the code in this repository for bugs and risky changes made in the last day. Do not change any files."
+
+      - id: codex_review
+        type: run
+        credentials: inherit
+        timeout: 20m
+        command: |
+          codex exec --sandbox read-only "Review the code in this repository for bugs and risky changes made in the last day. Do not change any files."
+
+      - id: report
+        type: save_message
+        args:
+          role: assistant
+          content: |
+            Claude Code:
+            {{nodes.claude_review.stdout}}
+
+            Codex:
+            {{nodes.codex_review.stdout}}
+
+      - id: failed
+        type: save_message
+        outcome: failure
+        args:
+          role: assistant
+          display_style: warning
+          content: "A review failed. Claude Code exited {{nodes.claude_review.exit_code}}; Codex did not run or did not finish."
+
+    edges:
+      - from: claude_review
+        cases:
+          - to: codex_review
+            condition: nodes.claude_review.exit_code == 0
+        default: failed
+      - from: codex_review
+        cases:
+          - to: report
+            condition: nodes.codex_review.exit_code == 0
+        default: failed
+
+    on_failure:
+      entry: [tell]
+      nodes:
+        - id: tell
+          type: save_message
+          args:
+            role: assistant
+            display_style: warning
+            content: "two-reviews failed at {{failure.node_id}}: {{failure.error}}"
+    ```
+
+    A non-zero exit doesn't fail a `run` step by itself, so each step's exit code is routed, and `on_failure:` tells someone when the run itself fails, as it does when the sign-in check stops it. Both prompts say not to change files and Codex's sandbox is read-only, because nobody can answer a permission prompt in an unattended run. Pin the workflow to the machine you signed in with `daemon:` ([Choose which machine runs each step](/guides/machines/pin-workflow-to-machine)); a machine where you never signed in is a machine where the run stops at the check below.
+  </Step>
+
+  <Step title="Validate, lint and run it">
+    ```bash terminal
+    reliant workflow validate .reliant/workflows/two-reviews.yaml
+    reliant workflow lint .reliant/workflows/two-reviews.yaml
+    ```
+
+    `validate` rejects a vendor id it doesn't know and lists the valid ones. [Lint](/workflows/lint) warns about missing scenarios until you add some (see the last card below), and also warns when a step calls a vendor CLI that `cli_login` doesn't list, and when a step that calls `claude` or `codex` sets `credentials: none`. Then start a run to see it work:
+
+    ```bash terminal
+    reliant workflow run two-reviews --project-id <project-id> --follow
+    ```
+  </Step>
+</Steps>
+
+## Why the steps use `credentials: inherit`
+
+A run step takes `credentials: inherit` by default: the command is a child of the machine's daemon, running as the user who signed the CLIs in, so it sees that user's home directory and the CLI finds its own login there.
+
+`credentials: none` is the opposite. It is for steps that read text a stranger wrote, and it takes the machine's logins away: on Linux, which every cloud machine is, the command runs in a sandbox where `~/.claude` and `~/.codex` do not exist, and so does `~/.config/gh`, the login GitHub Copilot CLI uses ([What `credentials: none` hides](/deep-dives/daemon-security-model#6-credentials-none)). A `claude` or `codex` started there finds no sign-in and runs signed out, even though `reliant machine login --status` says it is signed in. Its environment is scrubbed of anything that looks like an API key too.
+
+That is the right behavior for a step that must not hold your logins, and the wrong one for a step whose whole job is to use one. So give the vendor CLI's step `credentials: inherit`, and keep `credentials: none` for the steps around it that handle untrusted input ([Run AI agent commands without access to your credentials](/guides/machines/sandbox-agent-commands-credentials-none)). A vendor CLI that can read a pull request's text and also holds your logins is the combination that guide exists to prevent, so a workflow that points one at untrusted text should limit what that CLI may do.
+
+## What a run that isn't signed in reports
+
+A run checks `requires:` once its machine is up and before any step runs. When a CLI isn't ready, the run fails at once, before any side effect. Its error names the CLI and the machine and gives the fix, along with anything else `requires:` found missing:
+
+```text
+Claude Code isn't signed in on machine build-box
+Fix: run `reliant machine login claude --machine build-box`
+```
+
+A CLI that isn't installed on the machine is reported as `Claude Code (claude) isn't installed on machine build-box`, with the same fix, because `machine login` installs it. One whose sign-in stopped working says `Claude Code's sign-in on machine build-box has expired`. Only a vendor whose own status can tell an expired sign-in from a signed-out one reports it (see [the table](#the-five-vendor-clis)). A check that could not tell is retried and reported as such if it still cannot. Run the fix, then start the run again.
+
+A sign-in can also lapse after the check, between the check and the step: the vendor expires it, or you sign out. Then the step itself fails with whatever the vendor CLI prints, and your exit-code route is what carries it to a message.
+
+## Cloud machines keep the sign-ins
+
+A cloud machine's home directory is on the machine's own disk. Suspending and resuming it, resizing it, moving it to another host and upgrading the daemon all keep the home directory, so the vendor CLIs and their sign-ins are still there when the machine wakes for a scheduled run. `reliant machine login` installs under the home directory for the same reason: a CLI installed anywhere else on a cloud machine, such as `/usr/bin` or `/opt`, is lost when the machine's container is recreated.
+
+Two kinds of machine are the exception. A machine created with an **ephemeral disk**, as pool and CI machines can be, loses its disk every time it stops, installs and sign-ins with it. `machine login` warns when the machine is one, and a sign-in there lasts only until it stops. And `/tmp` is emptied on every boot everywhere, so nothing a vendor keeps there survives.
+
+A sign-in belongs to one machine. Signing in on a laptop doesn't sign in a cloud machine, and each machine you run steps on needs its own `reliant machine login`.
+
+## The five vendor CLIs
+
+| Vendor id | CLI | Plan | How it signs in | Where it keeps the sign-in |
+|---|---|---|---|---|
+| `claude` | Claude Code (`claude`) | Claude Pro, Max or Team/Enterprise seat | `claude auth login`: a URL to open, then a code to paste back | `~/.claude/.credentials.json` on Linux (the macOS Keychain on a Mac) |
+| `codex` | Codex (`codex`) | A ChatGPT plan with Codex | `codex login --device-auth`: a URL and a one-time code. Turn on device-code sign-in in ChatGPT security settings first | `~/.codex/auth.json` |
+| `gemini` | Gemini CLI (`gemini`) | A Google account: Code Assist for individuals, AI Pro or Ultra | An interactive session with a Google sign-in URL; paste the code back and type `/quit` | `~/.gemini/oauth_creds.json` |
+| `cursor` | Cursor Agent (`cursor-agent`) | Cursor Pro or Ultra | `cursor-agent login`: a URL to open in any browser | Under `~/.cursor` and `~/.config/cursor` |
+| `copilot` | GitHub Copilot CLI (`copilot`) | A Copilot plan | The GitHub CLI's device code (`gh auth login`), which `machine login` installs if needed | `~/.config/gh/hosts.yml` (the GitHub CLI's login) |
+
+Only Cursor Agent and the GitHub CLI (for Copilot) can say that a sign-in has expired; Claude Code and Codex report signed in or signed out. Gemini CLI has no status command: Reliant checks only that its sign-in file is there and not empty, and never reads it. Every status check is the vendor's own command or that file test, with the vendor's output kept on the machine. No check makes a model call.
+
+## Terms: personal or organization
+
+A plan you pay for yourself is yours. Sign it in on a machine of your own, run your own automations with it, and you are using the vendor's CLI the way its plan is meant to be used.
+
+It stops being yours when someone else can use it. The consumer plans of Anthropic, OpenAI and Google are for one person: [Anthropic's consumer terms](https://www.anthropic.com/legal/consumer-terms) say you may not share your login or make your account available to anyone else, and [OpenAI's terms of use](https://openai.com/policies/row-terms-of-use/) say the same. So treat a sign-in as personal and don't use it for any of these:
+
+- **A machine other people can run commands on.** Anyone with a shell on the machine can use your signed-in CLI. That includes an organization's cloud machine shared with teammates and a pool member that other people's runs are placed on. `reliant machine login` warns when the machine is shared through your organization or belongs to a pool.
+- **A team's workflows.** If a workflow your teammates trigger runs on your signed-in machine, their runs spend your plan.
+- **Anything that routes other people's requests through your account.** [Anthropic's Claude Code terms](https://code.claude.com/docs/en/legal-and-compliance) say a third party may not route requests through plan credentials on behalf of its users, or collect, store or relay Claude credentials; signing in to the unmodified Claude Code through Anthropic's own flow, including on a platform that hosts it, is the allowed way. That is how `reliant machine login` works, and why Reliant never sees the sign-in. [Google's Gemini CLI terms](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md) likewise treat using its sign-in through other software as a violation.
+
+For org-wide or shared use, use credentials the vendor issues for automation instead: an API key or service account owned by your organization, such as an Anthropic Console API key, an OpenAI platform API key, a Google API key or Vertex service account, a Cursor team service-account key, or the enterprise access tokens a vendor offers for automation. The vendors say so themselves: OpenAI's [Codex documentation](https://developers.openai.com/codex/auth) says to use API key authentication for programmatic workflows such as CI/CD jobs, and [Cursor's CLI documentation](https://cursor.com/docs/cli/reference/authentication) says the same for automation. [GitHub's Copilot CLI documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli) is the one without an organization-owned token: Copilot is always one seat's.
+
+A `run` step can't take a secret today, and a key doesn't belong in a workflow file, a step's command or a prompt. So keep shared and team workflows off the vendor CLIs signed in with a person's plan, and let them use Reliant's own agents on your organization's AI accounts ([AI providers](/settings/api-keys)). Terms change, and these links are the vendors' current pages; read the terms of the plan you hold.
+
+## How this differs from connecting a plan to Reliant
+
+| | [Connecting a plan](/guides/machines/use-claude-or-chatgpt-subscription) | This guide |
+|---|---|---|
+| What runs on the plan | Reliant's own agents: chats, built-in workflows and `call_llm` steps | The vendor's CLI, called by a `run` step |
+| Where the model calls are made | Reliant's servers, under your account with the provider | The machine, by the vendor's own CLI |
+| What Reliant holds | The account's login, with your account, so its agents can use it | Nothing. The vendor's CLI holds its own sign-in on the machine |
+| Where you sign in | **Settings → AI providers**, in the app | `reliant machine login`, in a terminal |
+| Unattended runs | In an organization, an automation spends only the organization's accounts | The step uses whichever plan was signed in on the machine |
+
+Either one can sit beside the other. A workflow can have a Reliant agent plan a change on a connected plan and a `run` step hand the diff to `claude -p` on the machine.
+
+## What this does not do
+
+- **It doesn't lift your plan's limits.** The CLI's usage counts against the plan it is signed in to, under that vendor's terms. When the plan is limited, the step fails with the vendor's message and your exit-code route reports it. Reliant doesn't retry or switch to another account.
+- **It doesn't make the sign-in shareable.** It is one person's, on one machine. See [Terms](#terms-personal-or-organization).
+- **It doesn't keep a sign-in alive.** The vendor's CLI refreshes its own login. If a vendor expires it, or you revoke it, `--status` shows it and the next run says so before its first step.
+- **It doesn't use API keys.** A key in a CLI's environment is a different credential, with its own billing; `reliant machine login` signs in with the vendor's plan login only.
+- **An agent can't do it for you.** `machine login` refuses to run from an agent's shell. `--status` is allowed there.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Claude Code isn't signed in on machine build-box">
+    The machine has no sign-in, or lost it. Run the command in the error, `reliant machine login claude --machine build-box`, and start the run again. If the machine has an ephemeral disk, it loses the sign-in every time it stops.
+  </Accordion>
+  <Accordion title="machine build-box runs a Reliant too old for 'reliant machine login'">
+    A machine signs in remotely only when its daemon is new enough. Update Reliant on it, or run `reliant machine login` in a terminal on the machine itself, which needs nothing from the daemon.
+  </Accordion>
+  <Accordion title="machine build-box is not running or not connected">
+    Start it with `reliant machine start build-box` and try again. A suspended cloud machine keeps its sign-ins on its disk.
+  </Accordion>
+  <Accordion title="The CLI is signed in, but my step runs signed out">
+    The step has `credentials: none`, which hides `~/.claude`, `~/.codex` and `~/.config/gh` from the command. Give the step `credentials: inherit`, and keep `none` for steps that read untrusted text. Lint flags the combination.
+  </Accordion>
+  <Accordion title="Gemini CLI says it is signed in, but a step can't use it">
+    Reliant checks only that Gemini CLI's sign-in file exists. A sign-in the vendor has since revoked still passes. Run `reliant machine login gemini` again.
+  </Accordion>
+  <Accordion title="npm (Node.js) is not installed on this machine">
+    The login installs Claude Code, Codex, Gemini CLI and Copilot CLI with `npm`. Install Node.js on the machine, then run `reliant machine login` again. Cursor Agent and the GitHub CLI need `curl` or `wget` instead.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Use your Claude or ChatGPT subscription with Reliant" icon="key" href="/guides/machines/use-claude-or-chatgpt-subscription">
+    Connect a plan to Reliant's own agents, the other way to use a subscription.
+  </Card>
+  <Card title="Run AI agent commands without access to your credentials" icon="shield" href="/guides/machines/sandbox-agent-commands-credentials-none">
+    Keep a vendor CLI's neighbours in the workflow away from your logins.
+  </Card>
+  <Card title="Choose which machine runs each workflow step" icon="server" href="/guides/machines/pin-workflow-to-machine">
+    Send the steps to the machine you signed in on.
+  </Card>
+  <Card title="Test AI agent workflows with scenarios before you ship" icon="workflow" href="/guides/workflows/test-workflows-with-scenarios">
+    Mock the CLI steps so a test run uses no plan.
+  </Card>
+</CardGroup>

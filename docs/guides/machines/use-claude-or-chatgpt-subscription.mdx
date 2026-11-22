@@ -81,6 +81,7 @@ Reliant's servers make the model calls under your account with the provider. Sig
 - **It doesn't run model calls on your computer.** Reliant's servers call the provider; your computer is only needed to sign in.
 - **In an organization, it isn't spent without you.** A chat in an organization asks before it moves from the organization's AI accounts to your own; `reliant workflow funding <execution-id>` shows the question, and only a person in the app can answer it. An automation turned on from the CLI spends only the organization's accounts.
 - **The CLI can't connect a provider.** Accounts are added in the app; `reliant providers` only lists them.
+- **It doesn't sign in the vendors' own command-line agents.** Claude Code, Codex and Gemini CLI run by a `run` step keep their own sign-in on the machine, made with `reliant machine login` ([Run Claude Code, Codex or Gemini in your workflows](/guides/workflows/run-claude-code-codex-gemini)).
 
 ## Troubleshooting
 
@@ -110,6 +111,9 @@ Reliant's servers make the model calls under your account with the provider. Sig
   </Card>
   <Card title="Write your first multi-agent workflow" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Put the subscription to work on a planner, an implementer and a reviewer.
+  </Card>
+  <Card title="Run Claude Code, Codex or Gemini in your workflows" icon="terminal" href="/guides/workflows/run-claude-code-codex-gemini">
+    The other way to use a plan: the vendor's own CLI, signed in on a machine, called from a workflow step.
   </Card>
   <Card title="AI providers" icon="key" href="/settings/api-keys">
     API keys, Reliant AI and every source side by side.

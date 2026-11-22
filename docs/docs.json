@@ -338,6 +338,7 @@
                   "guides/workflows/choose-model-per-step",
                   "guides/workflows/test-workflows-with-scenarios",
                   "guides/workflows/give-agents-tools-mcp-server",
+                  "guides/workflows/run-claude-code-codex-gemini",
                   "guides/workflows/lint-unattended-workflows",
                   "guides/workflows/pause-and-steer-a-run"
                 ]
