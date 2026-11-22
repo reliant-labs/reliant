@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -367,9 +369,10 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
-		Logger: slog.New(slog.DiscardHandler),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:    slog.New(slog.DiscardHandler),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.(interface{ ORM() *orm.Client }).ORM()),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)

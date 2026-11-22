@@ -56574,6 +56574,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Detachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Detachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveLedger",
       "methods": [],
@@ -57318,6 +57327,17 @@
     },
     {
       "consumer": "ToolsDaemon",
+      "field": "Checkouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.MachineCheckouts",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Repository",
       "methods": [],
@@ -57948,6 +57968,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.ControlPlane",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Detachments",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

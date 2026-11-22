@@ -136,7 +136,7 @@ func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection,
 				"userID", conn.userID, "daemonID", conn.daemonID, "orgID", conn.orgID)
 		}
 	}
-	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, scope, detachFor, check)
+	missing, added, err := reconcileProjectDaemons(ctx, reconcileStore{s.deps.Repo, s.deps.Checkouts}, conn.daemonID, conn.userID, scope, detachFor, check)
 	for _, path := range added {
 		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to start the project config watcher for a recorded checkout",

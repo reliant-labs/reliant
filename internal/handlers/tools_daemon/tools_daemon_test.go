@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -24,8 +25,17 @@ import (
 // newTestService builds the gateway service over repo as the daemon-gateway
 // does, with no publishers; a test that needs one sets it in svc.deps. A nil
 // repo exercises the in-memory routing alone.
-func newTestService(repo Repository) *Service {
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo})
+func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
+	var co MachineCheckouts = &MockMachineCheckouts{}
+	switch {
+	case len(checkouts) > 0:
+		co = checkouts[0]
+	default:
+		if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+			co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
+		}
+	}
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Checkouts: co})
 }
 
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {

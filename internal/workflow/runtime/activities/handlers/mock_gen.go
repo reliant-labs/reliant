@@ -1835,7 +1835,7 @@ func (m *MockCallLLMStore) GetToolCallResultForMessage(ctx context.Context, tool
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
 // forge:section MockCleanupStore
-// forge:hash=b48e07579223d2d954610c02d29053c15ec51033c99d5c1ed2a2549f46425d55
+// forge:hash=d2b9b83ec74318ff3bcb70002e3586ab2f2d01d79dbbd9dd9a4c1db575bcfb56
 
 // MockCleanupStore is a test mock for the CleanupStore interface.
 //
@@ -1848,7 +1848,6 @@ type MockCleanupStore struct {
 	RunTxFunc                       func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	GetWorkflowFunc                 func(context.Context, string) (*db.Workflow, error)
 	ListPendingApprovalsByChatFunc  func(context.Context, string) ([]*db.Approval, error)
-	ResolvePendingApprovalFunc      func(context.Context, string, int32, string, string) (bool, error)
 	CreateChatUpdateFunc            func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	ListMessagesFunc                func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksFunc           func(context.Context, string) ([]*db.MessageContentBlock, error)
@@ -1887,15 +1886,6 @@ func (m *MockCleanupStore) ListPendingApprovalsByChat(ctx context.Context, chatI
 		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockCleanupStore", "ListPendingApprovalsByChat")
-}
-
-// ResolvePendingApproval records the call and delegates to ResolvePendingApprovalFunc when set.
-func (m *MockCleanupStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason string, actionTaken string) (bool, error) {
-	m.Recorder.Record("ResolvePendingApproval", ctx, id, status, reason, actionTaken)
-	if m.ResolvePendingApprovalFunc != nil {
-		return m.ResolvePendingApprovalFunc(ctx, id, status, reason, actionTaken)
-	}
-	return false, contractkit.MockNotSet("MockCleanupStore", "ResolvePendingApproval")
 }
 
 // CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.

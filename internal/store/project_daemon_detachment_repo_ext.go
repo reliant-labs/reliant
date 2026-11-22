@@ -40,9 +40,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -142,4 +144,174 @@ func ListProjectDaemonDetachmentsForDaemon(ctx context.Context, db orm.Context, 
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ProjectDaemonDetachmentExtra struct {
+}
+
+// detachTx is the transaction every checkout lock writer runs in: READ COMMITTED, because the
+// advisory locks taken inside are what serialize the writers, re-run on a deadlock between them
+// and on the conflicts a body that creates rows can hit (a unique violation from a racing
+// create, a swallowed statement error, a commit that rolled back).
+var detachTx = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts).WithRetryOn(func(err error) bool {
+	return orm.RetryOnSQLState("40002", "25P02", "23505")(err) || orm.RetryOnCommitRollback(err)
+})
+
+// DetachProjectFromDaemon deletes the project's checkout record on the
+// machine and that machine's synced config of the project, and records the
+// detachment at path (the checkout path it had there), in one transaction.
+// The project's config union is rewritten without the machine's catalog,
+// under the same advisory lock every catalog writer takes
+// (SyncProjectConfigSnapshot) and every checkout writer takes
+// (UpsertProjectDaemon, RecordObservedProjectDaemonInScope). Nothing is sent to the
+// machine.
+//
+// guard, when not nil, runs first inside that transaction, after the lock:
+// the caller's preconditions (another checkout remains, no workspaces live
+// there) are judged against every detach and checkout write that committed
+// before it, so two concurrent detaches cannot each see the other's checkout
+// and leave none. A guard error aborts the detach and is returned as is;
+// core.ErrNothingToDetach aborts it as a success.
+func DetachProjectFromDaemon(ctx context.Context, db orm.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	err := db.RunTx(ctx, detachTx, func(txCtx context.Context) error {
+		if err := lockCheckoutForDetach(txCtx, db, projectID, daemonID); err != nil {
+			return err
+		}
+		if guard != nil {
+			if err := guard(txCtx); err != nil {
+				return err
+			}
+		}
+		if err := RecordProjectDaemonDetachment(txCtx, db, projectID, daemonID, path); err != nil {
+			return err
+		}
+		return removeCheckoutLocked(txCtx, db, projectID, daemonID)
+	})
+	if errors.Is(err, core.ErrNothingToDetach) {
+		return nil
+	}
+	return err
+}
+
+// DetachProjectDaemonOfOtherOrg is the machine-org cleanup of one checkout:
+// when the project is in ANOTHER org than machineOrg, the machine's, right
+// now, it detaches the project from the machine as DetachProjectFromDaemon
+// does — the project_daemons row, the machine's synced config of the project
+// (project_machine_catalogs, which the project's config union is rewritten
+// without), under the same locks, through the same removal
+// (removeCheckoutLocked) — after recording both rows whole in
+// project_daemon_org_cleanups, so dev-docs/machine-org-rollout.md can put
+// them back. It reports whether a checkout went.
+//
+// Two things differ from a user's detach, on purpose. It records no
+// detachment: the platform, not the user, removed the record, and a project
+// moved back into the machine's org is the machine's to find again. And the
+// org is decided here, not from the caller's earlier read: the project row is
+// locked FOR SHARE (a project's org move takes it FOR NO KEY UPDATE, and none
+// of the detach's advisory locks, so the order cannot deadlock it) and its
+// org re-read. A project now in the machine's org keeps its checkout, and so
+// does one with no org yet (it is its owner's default org's, lazily; only a
+// stamped org is authoritative enough to delete over). False (gone already,
+// or no longer of another org) is not an error, so the cleanup is idempotent.
+func DetachProjectDaemonOfOtherOrg(ctx context.Context, db orm.Context, projectID, daemonID, userID, machineOrg string) (bool, error) {
+	if projectID == "" || daemonID == "" || machineOrg == "" {
+		return false, fmt.Errorf("project, daemon and machine org are required")
+	}
+	detached := false
+	err := db.RunTx(ctx, detachTx, func(txCtx context.Context) error {
+		detached = false
+		if err := lockCheckoutForDetach(txCtx, db, projectID, daemonID); err != nil {
+			return err
+		}
+		// A project scheduled for deletion is detached all the same: the
+		// cleanup removes, never adds, and the audit keeps what it removed
+		// for a restore of either.
+		org, _, found, err := LockProjectOrgForShare(txCtx, db, projectID)
+		if err != nil || !found || org == nil || *org == machineOrg {
+			return err
+		}
+		recorded, err := RecordProjectDaemonOrgCleanup(txCtx, db, projectID, daemonID, userID, machineOrg, org)
+		if err != nil || !recorded {
+			return err
+		}
+		if err := removeCheckoutLocked(txCtx, db, projectID, daemonID); err != nil {
+			return err
+		}
+		detached = true
+		return nil
+	})
+	return detached, err
+}
+
+// lockCheckoutForDetach takes, in order, every lock a detach of the
+// project's checkout on the machine holds. ctx must carry the transaction.
+func lockCheckoutForDetach(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	if err := LockProjectCatalog(ctx, db, projectID); err != nil {
+		return err
+	}
+	// Then the machine's: a path the machine reports is resolved under it
+	// (WithMachineCheckoutsLocked), so that resolution sees this detach
+	// whole or not at all. Always taken second, after the catalog lock; the
+	// resolution takes no catalog lock while it holds this one.
+	if err := LockMachineCheckouts(ctx, db, daemonID); err != nil {
+		return err
+	}
+	// Then the checkout's, exclusive: a branch workspace of it is inserted
+	// under the shared side (CreateWorktree), so a guard sees every one that
+	// committed and none lands until the detach has.
+	return LockProjectCheckout(ctx, db, projectID, daemonID, false)
+}
+
+// removeCheckoutLocked is what detaching a project from a machine removes:
+// the checkout record, the machine's synced config of the project, and that
+// config's share of the project's config union, which is rewritten from the
+// machines left. ctx must carry the transaction holding
+// lockCheckoutForDetach's locks.
+func removeCheckoutLocked(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	if err := RemoveProjectDaemon(ctx, db, projectID, daemonID); err != nil {
+		return err
+	}
+	if err := DeleteProjectMachineCatalog(ctx, db, projectID, daemonID); err != nil {
+		return err
+	}
+	return rewriteProjectCatalogUnion(ctx, db, projectID)
+}
+
+// rewriteProjectCatalogUnion recomputes the union columns of the project's
+// config record from the machines' catalogs as they are now. ctx must carry
+// the transaction holding LockProjectCatalog.
+func rewriteProjectCatalogUnion(ctx context.Context, db orm.Context, projectID string) error {
+	catalogs, err := ProjectMachineCatalogs(ctx, db, projectID)
+	if err != nil {
+		return err
+	}
+	union, err := ProjectFilesUnion(ctx, db, projectID)
+	if err != nil {
+		return err
+	}
+	if union.WorkflowsJSON, err = config.EncodeCatalogJSON(config.UnionWorkflows(catalogs)); err != nil {
+		return err
+	}
+	if union.PresetsJSON, err = config.EncodeCatalogJSON(config.UnionPresets(catalogs)); err != nil {
+		return err
+	}
+	return SetProjectConfigCatalogUnion(ctx, db, projectID, union, time.Now().UTC())
+}
+
+// WithMachineCheckoutsLocked runs fn in a transaction holding the machine's
+// checkout lock, the one DetachProjectFromDaemon takes: every read and write
+// fn makes with the ctx it is handed joins that transaction, so a detach from
+// the machine commits wholly before fn's reads or after its writes. fn must
+// not take a project's catalog lock (the detach takes that one first). It may
+// run more than once, on a deadlock retry.
+func WithMachineCheckoutsLocked(ctx context.Context, db orm.Context, daemonID string, fn func(ctx context.Context) error) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return db.RunTx(ctx, detachTx, func(txCtx context.Context) error {
+		if err := LockMachineCheckouts(txCtx, db, daemonID); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
 }

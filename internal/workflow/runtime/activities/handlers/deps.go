@@ -120,7 +120,9 @@ type ApprovalCreateStore interface {
 	runevents.Store
 }
 
-// ApprovalResolveStore is what ApprovalResolveActivity writes.
+// ApprovalResolveStore is what ApprovalResolveActivity writes, and what
+// CleanupActivity closes a run's approvals through. approvalclose.Closer
+// implements it.
 type ApprovalResolveStore interface {
 	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 }
@@ -167,7 +169,6 @@ type CleanupStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
