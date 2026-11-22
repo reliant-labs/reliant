@@ -108,10 +108,8 @@ var userScopedReads = map[string]string{
 	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"ListChatsForWorktree":  readParentAuthorized,
 	"RecentTriggerFirings":  readParentAuthorized,
 	"RecentTriggerOutcomes": readParentAuthorized,
-	"WorkflowSlugExists":    readParentAuthorized,
 
 	"GetAnalyticsEnabled":         readPersonal,
 	"GetAutomationToken":          readPersonal,
@@ -147,7 +145,6 @@ var userScopedReads = map[string]string{
 	"ListHeldWorktreesForUser":          readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountLiveLaunchedRuns":            readBackground,
 	"CountTriggerCapacityHeldByMember": readBackground,
 	"HasEnabledTriggerOfKind":          readBackground,
 	"ListCapacityWakeTargets":          readBackground,
