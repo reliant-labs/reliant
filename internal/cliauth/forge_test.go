@@ -40,6 +40,9 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// grant, audience-bound, issued to a third-party client and never
 		// bound to a daemon.
 		fat.ScopeMCPOAuth,
+		// The hosted Reliant Forge MCP server's OAuth token (forge #2706):
+		// the same shape as mcp:oauth, for another resource.
+		fat.ScopeMCPForge,
 	)
 	requested, err := fat.NewSet(ForgeScopes())
 	if err != nil {

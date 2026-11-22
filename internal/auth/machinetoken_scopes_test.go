@@ -34,6 +34,9 @@ func TestClaimsForAccessTokenAdmitsNarrowTokensButClaimsForAPITokenDoesNot(t *te
 		// An MCP client's OAuth token acts only at the MCP connector it was
 		// issued for (internal/mcpserver), never on the reliant API.
 		{"mcp:oauth", []fat.Scope{fat.ScopeMCPOAuth}, "u1", false, false},
+		// The Reliant Forge connector's token acts only at /forge/mcp and,
+		// through it, the control plane's forge procedures; never here.
+		{"mcp:forge", []fat.Scope{fat.ScopeMCPForge}, "u1", false, false},
 		{"no acting user", []fat.Scope{fat.ScopeReliantAPI}, "", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

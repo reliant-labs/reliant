@@ -246,6 +246,13 @@ func TestOtherAccessTokensAreRefusedAtTheWorkspaceConnector(t *testing.T) {
 			ActingUserID: "user-1", Scopes: fat.SetOf(fat.ScopeMCPOAuth),
 			Resource: &fat.Resource{Kind: fat.ResourceConnector, ID: "phone"},
 		}),
+		// The forge connector's token, for this endpoint's audience or its
+		// own: neither connector accepts the other's.
+		"mcp:forge for this endpoint": withClient(&fat.Principal{OrgID: "org-1", ActingUserID: "user-1", Scopes: fat.SetOf(fat.ScopeMCPForge)}),
+		"mcp:forge for the forge connector": {
+			OrgID: "org-1", ActingUserID: "user-1", Scopes: fat.SetOf(fat.ScopeMCPForge),
+			ClientID: mcpOAuthClient, Audience: mcpForgeResource,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := newMemStore()
@@ -325,26 +332,41 @@ func TestDiscoveryAdvertisesTheConfiguredServersAndScopes(t *testing.T) {
 	require.Contains(t, cfg.challengeHeader(), `scope="openid mcp:oauth"`)
 }
 
-// The forge connector refuses every `rlat_` in this release, an mcp:oauth
-// token issued for it included: the forge tools act at the control plane
-// with authority such a token does not carry (follow-up R9b).
+// The forge connector refuses the workspace connector's mcp:oauth token with
+// acceptance on, whatever its audience, even for a client bound to a live
+// forge grant: it accepts only its own mcp:forge token (forge_access_token_test.go),
+// so a token issued for one connector never rides the other.
 func TestForgeConnectorRefusesMCPOAuthTokens(t *testing.T) {
-	store := newMemStore()
-	h, err := NewForgeHTTPHandler(ForgeHTTPDeps{
-		Store:           store,
-		TokenValidator:  &stubClientTokenValidator{userID: "user-1", clientID: mcpOAuthClient},
-		Bindings:        store,
-		OAuth:           mcpOAuthConfig(),
-		ControlPlaneURL: "https://cp.internal",
-		ConsentBaseURL:  "https://app.example.com",
-		Logger:          slog.Default(),
-	})
-	require.NoError(t, err)
+	for name, aud := range map[string]string{
+		"forge audience":     mcpForgeResource,
+		"workspace audience": mcpOAuthResource,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newMemStore()
+			require.NoError(t, store.CreateGrant(context.Background(), forgeGrant("g-forge", nil, []string{"envs_list"})))
+			bindForge(t, store, mcpOAuthClient, "g-forge")
+			p := mcpOAuthPrincipal()
+			p.Audience = aud
+			token := rlatToken(6)
 
-	req := httptest.NewRequest(http.MethodPost, ForgeMountPath, nil)
-	req.Header.Set("Authorization", "Bearer "+rlatToken(6))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	require.Contains(t, rec.Header().Get("WWW-Authenticate"), `realm="reliant-forge"`)
+			h, err := NewForgeHTTPHandler(ForgeHTTPDeps{
+				Store:           store,
+				TokenValidator:  &stubClientTokenValidator{userID: "user-1", clientID: mcpOAuthClient},
+				Credentials:     principalIntrospector{principals: map[string]*fat.Principal{token: p}},
+				Bindings:        store,
+				OAuth:           mcpOAuthConfig(),
+				ControlPlaneURL: "https://cp.internal",
+				ConsentBaseURL:  "https://app.example.com",
+				Logger:          slog.Default(),
+			})
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, ForgeMountPath, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Header().Get("WWW-Authenticate"), `realm="reliant-forge"`)
+		})
+	}
 }
