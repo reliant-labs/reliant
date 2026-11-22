@@ -34,7 +34,12 @@ import forge
 import forge.workloads as fw
 import config_gen
 
-_build = forge.GoBuild {cmd = "./cmd/reliant", output_name = "reliant"}
+# -trimpath is declared here because forge (#2690) passes a GoBuild's flags,
+# and only those, to every go build it runs from it: `forge build`, go-run (the
+# dev migrate job, `-D host_runner=go-run`) and air's $FORGE_GO_BUILD_FLAGS.
+# The Taskfile's GOFLAGS does not reach a process forge launches.
+# scripts/air-build.sh passes -trimpath on its own as well.
+_build = forge.GoBuild {cmd = "./cmd/reliant", output_name = "reliant", flags = ["-trimpath"]}
 
 # ── Facts true of every reliant pod ─────────────────────────────────────────
 
@@ -380,7 +385,9 @@ reliant_cli = fw.Workload {
     name = "reliant-cli"
     kind = "tool"
     runtime = forge.BuildOnly {build_variants = reliant_cli_variants({})}
-    build = forge.GoBuild {cmd = "./cmd/reliant"}
+    # -trimpath reaches each BuildOnly variant from here (forge #2690), as the
+    # Dockerfile's build passes it.
+    build = forge.GoBuild {cmd = "./cmd/reliant", flags = ["-trimpath"]}
 }
 
 # ── The desktop app ─────────────────────────────────────────────────────────
