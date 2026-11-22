@@ -1,32 +1,42 @@
+/**
+ * The Setup Guide, docked in the shell's nav footer: a "Get started · n/9" row
+ * that opens its checklist in place, so nothing floats over the page.
+ *
+ * It floated in the window's bottom-right corner before the one shell, where
+ * it covered the composer's Send button and sat over every page's content
+ * (the forge console, Projects). In the nav it competes with nothing.
+ *
+ * Open or closed is the store's `panelState` ("expanded" / "collapsed"), so it
+ * is remembered across reloads and devices. ✕ dismisses it ("dismissed"); the
+ * Help row's "Show setup guide" brings it back (store `revive`). A finished
+ * guide (every required item done) retires itself.
+ *
+ * Reliant only: the checklist's state lives in Reliant's settings rows, so the
+ * forge shell (local tour storage, no settings service) never shows it.
+ */
+
 import { useState } from "react";
-import {
-  X,
-  ChevronDown,
-  ChevronRight,
-  CheckCircle2,
-  Circle,
-  Calendar,
-} from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { ArrowUpRight, Calendar, CheckCircle2, ChevronRight, Circle, X } from "lucide-react";
+
 import { cn } from "../../lib/utils";
-import ProgressBar from "../forge-ui/progress_bar";
+import { trackEvent } from "../../lib/analytics";
+import { homePath, newWorkflowPath, settingsPath, workflowLibraryPath } from "@/lib/paths";
+import { DOCS_ORIGIN } from "@/lib/learnLinks";
+import { useAuthStore } from "../../store/authStore";
+import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
-import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
-import { trackEvent } from "../../lib/analytics";
-import { useTourNavigation } from "./useTourNavigation";
-import { homePath, settingsPath, workflowLibraryPath } from "@/lib/paths";
+import { getTourStorage } from "./tourShell";
 import { requestChatInputFocus, requestCreateWorktree } from "./checklistRequests";
 
 // ─── Action Handlers ──────────────────────────────────────────────────────────
 
-// Navigation lives in the component (useNavigate hook); this helper accepts
-// the navigate / tour callbacks so it stays a pure switch and the Onboarding
-// directory has zero direct router references.
+// Navigation comes in as the nav's own `onNavigate` (a drawer closes on it, as
+// on any other row), so this stays a pure switch with no router references.
 interface ItemActionDeps {
-  navigate: ReturnType<typeof useNavigate>;
+  navigate: (href: string) => void;
   startTour: () => void;
 }
 
@@ -37,81 +47,88 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       break;
     case "start-chat":
       // Off the chat (an app's console, Projects), the chat home's composer.
-      if (!requestChatInputFocus()) void deps.navigate({ to: homePath() });
+      if (!requestChatInputFocus()) deps.navigate(homePath());
       break;
     case "use-custom-workflow":
-      void deps.navigate({ to: workflowLibraryPath(), search: {} });
+      deps.navigate(workflowLibraryPath());
       break;
     case "create-workflow":
-      void deps.navigate({ to: workflowLibraryPath(), search: {} });
+      // The builder's New workflow dialog, not the library: each item has its own place.
+      deps.navigate(newWorkflowPath());
       break;
     case "take-product-tour":
       deps.startTour();
       break;
     case "create-workspace":
       // The modal is the chat home's; from any other page, open it there.
-      if (!requestCreateWorktree()) void deps.navigate({ to: homePath() });
+      if (!requestCreateWorktree()) deps.navigate(homePath());
       break;
     case "create-preset":
-      void deps.navigate({ to: workflowLibraryPath(), search: {} });
+      // Settings › Presets lists them and says where one is made (the composer).
+      deps.navigate(settingsPath("presets"));
       break;
     case "install-mcp":
-      void deps.navigate({ to: settingsPath("mcp") });
+      deps.navigate(settingsPath("mcp"));
       break;
     case "read-docs":
-      window.open("https://docs.reliantlabs.io/", "_blank");
-      useOnboardingChecklistStore.getState().markComplete("read-docs");
+      window.open(`${DOCS_ORIGIN}/`, "_blank", "noopener,noreferrer");
+      void useOnboardingChecklistStore.getState().markComplete("read-docs");
       break;
   }
 }
 
+// ─── Visibility ───────────────────────────────────────────────────────────────
+
+/**
+ * Whether the guide shows: signed in, Reliant's settings storage, its state
+ * loaded, not dismissed, and required work left. Onboarding is per-user state,
+ * so it never renders to a signed-out visitor.
+ */
+export function useSetupGuideVisible(): boolean {
+  const user = useAuthStore((state) => state.user);
+  const isInitialized = useOnboardingChecklistStore((state) => state.isInitialized);
+  const panelState = useOnboardingChecklistStore((state) => state.panelState);
+  const completedItems = useOnboardingChecklistStore((state) => state.completedItems);
+  if (!user || !isInitialized || getTourStorage().kind !== "settings") return false;
+  if (panelState === "dismissed") return false;
+  // A finished guide retires itself: bonus items are optional, so clearing the
+  // required set is what "done" means.
+  return !REQUIRED_ITEMS.every((item) => completedItems.has(item.id));
+}
+
+/**
+ * Whether a dismissed guide can come back (the Help row's "Show setup guide"):
+ * the same gates, dismissed, with required work still left.
+ */
+export function useSetupGuideRevivable(): boolean {
+  const user = useAuthStore((state) => state.user);
+  const isInitialized = useOnboardingChecklistStore((state) => state.isInitialized);
+  const panelState = useOnboardingChecklistStore((state) => state.panelState);
+  const completedItems = useOnboardingChecklistStore((state) => state.completedItems);
+  if (!user || !isInitialized || getTourStorage().kind !== "settings") return false;
+  return panelState === "dismissed" && !REQUIRED_ITEMS.every((item) => completedItems.has(item.id));
+}
+
 // ─── Progress Ring (SVG) ──────────────────────────────────────────────────────
 
-function ProgressRing({
-  percentage,
-  size = 28,
-  strokeWidth = 3,
-  variant = "default",
-}: {
-  percentage: number;
-  size?: number;
-  strokeWidth?: number;
-  /** "default" uses theme colors, "inverted" uses white on primary bg */
-  variant?: "default" | "inverted";
-}) {
+function ProgressRing({ percentage, size = 16, strokeWidth = 2 }: { percentage: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percentage / 100) * circumference;
-
-  const trackColor = variant === "inverted" ? "rgba(255,255,255,0.3)" : "hsl(var(--muted))";
-  const progressColor = variant === "inverted" ? "white" : "hsl(var(--primary))";
-
   return (
-    <svg
-      width={size}
-      height={size}
-      className="shrink-0 -rotate-90"
-      viewBox={`0 0 ${size} ${size}`}
-    >
+    <svg width={size} height={size} className="shrink-0 -rotate-90" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="hsl(var(--border))" strokeWidth={strokeWidth} />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
         fill="none"
-        stroke={trackColor}
-        strokeWidth={strokeWidth}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={progressColor}
+        stroke="hsl(var(--primary))"
         strokeWidth={strokeWidth}
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         strokeLinecap="round"
-        className="transition-all duration-500 ease-out"
+        className="transition-all duration-500 ease-out motion-reduce:transition-none"
       />
     </svg>
   );
@@ -119,265 +136,179 @@ function ProgressRing({
 
 // ─── Checklist Item Row ───────────────────────────────────────────────────────
 
+const FOCUS_INSET = "focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
 function ChecklistItemRow({
   item,
   isComplete,
-  actionDeps,
+  isNext,
+  onAction,
 }: {
   item: ChecklistItem;
   isComplete: boolean;
-  actionDeps: ItemActionDeps;
+  /** The first item left: it carries its description; the others keep it as a tooltip. */
+  isNext: boolean;
+  onAction: (item: ChecklistItem) => void;
 }) {
-  return (
-    <div className="flex items-start gap-3 py-2 px-1 group">
-      {/* Checkbox icon */}
-      <div className="mt-0.5 shrink-0">
-        {isComplete ? (
-          <CheckCircle2 className="size-5 text-success-ink" />
-        ) : (
-          <Circle className="size-5 text-muted-foreground/50" />
-        )}
-      </div>
-
-      {/* Text */}
-      <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            "text-sm font-medium leading-tight",
-            isComplete && "line-through text-muted-foreground",
-          )}
-        >
+  if (isComplete) {
+    return (
+      <li className="flex min-h-[var(--row-h)] items-center gap-2 rounded-md pl-2 pr-2 text-ui text-muted-foreground" data-testid={`setup-guide-item-${item.id}`} data-complete="true">
+        <CheckCircle2 className="size-4 shrink-0 text-success-ink" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">
           {item.title}
-        </p>
-        <p
-          className={cn(
-            "text-xs text-muted-foreground mt-0.5 leading-snug",
-            isComplete && "line-through",
-          )}
-        >
-          {item.description}
-        </p>
-      </div>
-
-      {/* Action button */}
-      {!isComplete && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            trackEvent("checklist_step_completed", {
-              stepId: item.id,
-              stepName: item.title,
-              stepsCompleted: 0,
-              totalSteps: CHECKLIST_ITEMS.length,
-            });
-            executeItemAction(item, actionDeps);
-          }}
-          className="shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary-ink hover:bg-primary/20 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-        >
-          {item.actionLabel}
-        </button>
-      )}
-    </div>
+          <span className="sr-only"> (done)</span>
+        </span>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onAction(item)}
+        title={isNext ? undefined : item.description}
+        data-testid={`setup-guide-item-${item.id}`}
+        className={cn(
+          "group/item flex min-h-[var(--row-h)] w-full items-start gap-2 rounded-md py-1.5 pl-2 pr-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5",
+          FOCUS_INSET,
+        )}
+      >
+        <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1">
+            <span className="min-w-0 truncate">{item.title}</span>
+            {item.action === "external-link" && <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          </span>
+          {isNext && <span className="mt-0.5 block text-meta text-muted-foreground">{item.description}</span>}
+        </span>
+      </button>
+    </li>
   );
 }
 
-/**
- * Where the guide sits: bottom right, lifted clear of the composer. At
- * bottom-4 it covered the composer's Send button, pill and panel alike, and a
- * click on Send opened the panel's "Book a demo" link instead.
- */
-const GUIDE_CORNER = "fixed bottom-28 right-4 z-40";
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function OnboardingChecklist() {
-  const {
-    completedItems,
-    panelState,
-    setPanelState,
-    totalCompleted,
-    completionPercentage,
-    allRequiredComplete,
-  } = useOnboardingChecklistStore();
-
-  const navigate = useNavigate();
-  const { openPicker } = useTourNavigation();
-  // Starting the tour from the checklist: reset any prior tour state and open
-  // the journey picker via the URL, on whatever route we're currently on.
-  const startTour = () => {
-    void useTourStore.getState().resetTourProgress();
-    openPicker("menu");
-  };
-  const actionDeps: ItemActionDeps = { navigate, startTour };
-
+export function OnboardingChecklist({
+  onNavigate,
+  onOpenTours,
+}: {
+  /** The nav's navigate (a drawer closes on it). */
+  onNavigate: (href: string) => void;
+  /** Opens the journey picker on the page on screen (`?tour=pick:menu`). */
+  onOpenTours?: () => void;
+}) {
+  const visible = useSetupGuideVisible();
+  const { completedItems, panelState, setPanelState } = useOnboardingChecklistStore();
   const [bonusExpanded, setBonusExpanded] = useState(false);
 
-  if (panelState === "dismissed") return null;
+  if (!visible) return null;
 
-  // A finished guide retires itself. Bonus items are genuinely optional, so
-  // clearing the required set is what "done" means — otherwise the panel sat
-  // in the corner at full progress with nothing left to act on.
-  if (allRequiredComplete()) return null;
+  // Starting the tour from the guide: reset any prior tour state and open the
+  // journey picker, on whatever route we're on.
+  const startTour = () => {
+    void useTourStore.getState().resetTourProgress();
+    onOpenTours?.();
+  };
+  const deps: ItemActionDeps = { navigate: onNavigate, startTour };
 
-  const completed = totalCompleted();
+  const completed = completedItems.size;
   const total = CHECKLIST_ITEMS.length;
-  const percentage = completionPercentage();
+  const percentage = total === 0 ? 100 : Math.round((completed / total) * 100);
+  const expanded = panelState === "expanded";
+  const next = CHECKLIST_ITEMS.find((item) => !completedItems.has(item.id));
+  const bonusDone = BONUS_ITEMS.filter((item) => completedItems.has(item.id)).length;
 
-  // ─── Collapsed pill ───────────────────────────────────────────────────
+  const onAction = (item: ChecklistItem) => {
+    trackEvent("checklist_step_completed", {
+      stepId: item.id,
+      stepName: item.title,
+      stepsCompleted: completed,
+      totalSteps: total,
+    });
+    executeItemAction(item, deps);
+  };
 
-  if (panelState === "collapsed") {
-    // The pill carries its own dismiss. Without one, collapsing was a
-    // one-way door: the only way back out was to expand the panel again and
-    // hunt for the footer link.
-    return (
-      <div
-        className={cn(
-          GUIDE_CORNER,
-          "flex items-center gap-1.5 pl-5 pr-2 py-2.5 font-sans",
-          "bg-primary text-primary-foreground rounded-full",
-          "shadow-lg shadow-primary/25",
-        )}
-      >
-        <button
-          onClick={() => setPanelState("expanded")}
-          className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
-        >
-          <ProgressRing percentage={percentage} size={24} strokeWidth={2.5} variant="inverted" />
-          <span className="text-sm font-medium">
-            Setup Guide
-          </span>
-          <span className="text-xs text-primary-foreground/70 tabular-nums">
-            {completed}/{total}
-          </span>
-        </button>
-        <button
-          onClick={() => setPanelState("dismissed")}
-          className="p-1 rounded-full text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15 transition-colors"
-          aria-label="Dismiss setup guide"
-        >
-          <X className="size-3.5" />
-        </button>
-      </div>
-    );
-  }
-
-  // ─── Expanded panel ───────────────────────────────────────────────────
+  const row = (item: ChecklistItem) => (
+    <ChecklistItemRow key={item.id} item={item} isComplete={completedItems.has(item.id)} isNext={item.id === next?.id} onAction={onAction} />
+  );
 
   return (
-    <div
-      className={cn(
-        GUIDE_CORNER,
-        "w-80 max-h-[min(480px,calc(100dvh-9rem))]",
-        "flex flex-col font-sans",
-        "bg-[hsl(var(--surface-modal))] border border-border/50 rounded-xl",
-        "elevation-4",
-        "animate-in fade-in slide-in-from-bottom-2 duration-200",
-      )}
-    >
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-border/30">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-foreground">
-            Setup Guide
-          </h3>
-          {/* Two distinct affordances. ✕ means "go away" — the gesture users
-              already expect — and the chevron minimises to the pill. Wiring ✕
-              to collapse made the guide impossible to get rid of by the one
-              control people actually reach for. */}
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => setPanelState("collapsed")}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              aria-label="Collapse setup guide"
-            >
-              <ChevronDown className="size-4" />
-            </button>
-            <button
-              onClick={() => setPanelState("dismissed")}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              aria-label="Dismiss setup guide"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-        {/* .forge-ui on the bar itself: its fill is forge's `accent`, which is
-            the action color only inside that scope (index.css). An explicit
-            variant, because the default turns the bar red past 80%. */}
-        <ProgressBar
-          value={percentage}
-          variant="default"
-          size="sm"
-          ariaLabel="Setup progress"
-          className="forge-ui mb-1.5"
-        />
-        <p className="text-xs text-muted-foreground">
-          {completed} of {total} completed
-        </p>
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-        {/* Required items */}
-        <div className="space-y-0.5">
-          {REQUIRED_ITEMS.map((item) => (
-            <ChecklistItemRow
-              key={item.id}
-              item={item}
-              isComplete={completedItems.has(item.id)}
-              actionDeps={actionDeps}
-            />
-          ))}
-        </div>
-
-        {/* Bonus section */}
-        {BONUS_ITEMS.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border/30">
-            <button
-              onClick={() => setBonusExpanded((prev) => !prev)}
-              className="flex items-center gap-1.5 w-full py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {bonusExpanded ? (
-                <ChevronDown className="size-3.5" />
-              ) : (
-                <ChevronRight className="size-3.5" />
-              )}
-              Bonus
-              <span className="text-muted-foreground/60 ml-auto tabular-nums">
-                {BONUS_ITEMS.filter((i) => completedItems.has(i.id)).length}/
-                {BONUS_ITEMS.length}
-              </span>
-            </button>
-
-            {bonusExpanded && (
-              <div className="space-y-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                {BONUS_ITEMS.map((item) => (
-                  <ChecklistItemRow
-                    key={item.id}
-                    item={item}
-                    isComplete={completedItems.has(item.id)}
-                    actionDeps={actionDeps}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Footer. Dismissal now lives on the header ✕ where users look for it,
-          so the old grey "Dismiss guide" text link is gone. */}
-      <div className="px-4 py-3 border-t border-border/30 flex items-center justify-end">
-        <a
-          href="https://cal.com/team/reliant/onboarding"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="no-color text-sm font-medium text-primary-foreground visited:text-primary-foreground hover:text-primary-foreground inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 transition-colors"
+    <div data-testid="setup-guide" data-tour="setup-guide" data-state={expanded ? "expanded" : "collapsed"}>
+      <div className="group/guide flex h-[var(--row-h)] min-w-0 items-center rounded-md text-ui text-foreground transition-colors hover:bg-foreground/5">
+        <button
+          type="button"
+          onClick={() => void setPanelState(expanded ? "collapsed" : "expanded")}
+          aria-expanded={expanded}
+          aria-controls="setup-guide-items"
+          aria-label={`Get started, ${completed} of ${total} done`}
+          data-testid="setup-guide-toggle"
+          className={cn("flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left", FOCUS_INSET)}
         >
-          <Calendar className="size-3.5" />
-          Book a demo
-        </a>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <ProgressRing percentage={percentage} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">Get started</span>
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">
+            <span className="tabular-nums">
+              {completed}/{total}
+            </span>
+            <ChevronRight className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} aria-hidden="true" />
+          </span>
+        </button>
+        {/* ✕ is "go away"; the Help row's "Show setup guide" brings it back. */}
+        <button
+          type="button"
+          onClick={() => void setPanelState("dismissed")}
+          aria-label="Dismiss setup guide"
+          title="Dismiss setup guide (Help › Show setup guide brings it back)"
+          className={cn(
+            "mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            !expanded && "opacity-0 focus-visible:opacity-100 group-hover/guide:opacity-100",
+          )}
+        >
+          <X className="size-3.5" aria-hidden="true" />
+        </button>
       </div>
+
+      {expanded && (
+        // In place, under its row; it scrolls inside itself so the nav above keeps its room.
+        <div id="setup-guide-items" role="group" aria-label="Setup guide" className="max-h-[40dvh] overflow-y-auto overscroll-contain pb-1 pl-2">
+          <ul className="space-y-0.5">{REQUIRED_ITEMS.map(row)}</ul>
+          {BONUS_ITEMS.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setBonusExpanded((open) => !open)}
+                aria-expanded={bonusExpanded}
+                className={cn(
+                  "mt-1 flex h-7 w-full items-center gap-1.5 rounded-md pl-2 pr-2 text-meta font-medium text-muted-foreground transition-colors hover:text-foreground",
+                  FOCUS_INSET,
+                )}
+              >
+                <ChevronRight className={cn("size-3.5 transition-transform motion-reduce:transition-none", bonusExpanded && "rotate-90")} aria-hidden="true" />
+                Bonus
+                <span className="ml-auto tabular-nums">
+                  {bonusDone}/{BONUS_ITEMS.length}
+                </span>
+              </button>
+              {bonusExpanded && <ul className="space-y-0.5">{BONUS_ITEMS.map(row)}</ul>}
+            </>
+          )}
+          <a
+            href="https://cal.com/team/reliant/onboarding"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "no-color mt-1 flex h-7 items-center gap-2 rounded-md pl-2 pr-2 text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
+              FOCUS_INSET,
+            )}
+          >
+            <Calendar className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">Book a demo</span>
+            <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+          </a>
+        </div>
+      )}
     </div>
   );
 }

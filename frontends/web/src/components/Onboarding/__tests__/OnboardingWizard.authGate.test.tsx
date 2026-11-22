@@ -1,18 +1,19 @@
 /**
  * The onboarding wizard must not render to a signed-out user.
  *
- * THE BUG THIS CLOSES (2026-08-26, packaged desktop): "the activation
+ * THE BUG THIS CLOSED (2026-08-26, packaged desktop): "the activation
  * checklist is still showing on the login screen." A forced sign-out (see
  * api/transport.ts's 401 handler) dropped the user to /auth without
  * unmounting this globally-mounted wizard, so the Setup Guide floater stayed
  * painted over the login form.
  *
- * The wizard suppressed itself on /onboarding but had NO authentication gate.
- * Route is the wrong gate for this: onboarding state is per-USER, the sign-in
- * screen is reachable at more than one path, and the wizard is mounted on the
- * root route so it outlives any particular page.
+ * The Setup Guide now lives in the shell's nav (OnboardingChecklist, which
+ * has its own signed-in gate: OnboardingChecklist.nav.test.tsx), so the wizard
+ * draws no guide at all. What remains here: a stale `?tour=` must not run a
+ * tour over the login form. Route is the wrong gate for this: onboarding state
+ * is per-USER, the sign-in screen is reachable at more than one path, and the
+ * wizard is mounted on the root route so it outlives any particular page.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -163,13 +164,6 @@ vi.mock("../../../store/projectStore", () => {
 
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 
-// Render a recognizable stand-in so "did the checklist paint?" is a direct
-// query rather than a heuristic over the real component's markup.
-vi.mock("../OnboardingChecklist", () => ({
-  OnboardingChecklist: () =>
-    React.createElement("div", { "data-testid": "setup-guide" }, "Setup Guide"),
-}));
-
 
 import { OnboardingWizard } from "../OnboardingWizard";
 
@@ -215,38 +209,17 @@ describe("OnboardingWizard — authentication gate", () => {
     authState.current = { user: null };
   });
 
-  it("renders no checklist on the login screen when signed out", async () => {
-    // The exact reported state: forced sign-out landed the user on /auth
-    // while the checklist store still says "expanded, nothing complete".
-    const router = makeRouter(["/auth"]);
-    render(React.createElement(RouterProvider as any, { router }));
-
-    await waitFor(() =>
-      expect(screen.getByTestId("login")).toBeInTheDocument(),
-    );
-    expect(screen.queryByTestId("setup-guide")).toBeNull();
-  });
-
-  it("renders no checklist anywhere while signed out", async () => {
-    // Route is not the gate — signing out on the main page must hide it too.
+  it("draws no Setup Guide of its own, signed in or not: the guide is the nav's", async () => {
+    // The store says "expanded, nothing complete": the floater would have painted here.
+    authState.current = { user: { id: "user-1" } };
     const router = makeRouter(["/"]);
     render(React.createElement(RouterProvider as any, { router }));
 
     await waitFor(() =>
       expect(screen.getByTestId("index")).toBeInTheDocument(),
     );
+    expect(screen.queryByText(/setup guide/i)).toBeNull();
     expect(screen.queryByTestId("setup-guide")).toBeNull();
-  });
-
-  it("renders the checklist once a user is signed in", async () => {
-    // The gate must not suppress the feature for its actual audience.
-    authState.current = { user: { id: "user-1" } };
-    const router = makeRouter(["/"]);
-    render(React.createElement(RouterProvider as any, { router }));
-
-    await waitFor(() =>
-      expect(screen.getByTestId("setup-guide")).toBeInTheDocument(),
-    );
   });
 
   it("does not run the guided tour for a signed-out user", async () => {

@@ -2,17 +2,17 @@
  * Onboarding Wizard (Reliant shell)
  *
  * Reliant's onboarding layer: the journeys (JourneyTour, the shell-neutral
- * engine UI) behind Reliant's gates, the version-bump re-offer, and after
- * them the checklist. The forge shell mounts JourneyTour directly instead.
+ * engine UI) behind Reliant's gates, the version-bump re-offer, and the
+ * checklist's state (loaded and kept current here). The checklist itself is
+ * drawn by the shell's nav (OnboardingChecklist, in the nav footer), never
+ * over the page. The forge shell mounts JourneyTour directly instead.
  *
  * The tour is URL-driven: `?tour=` (tourParam.ts) says what is open. The
  * user owns the URL; the wizard reacts. The one effect that navigates is the
  * version-bump re-offer below, which runs at most once per page load.
  *
- * Phases:
- * 1. `?tour=…` open: JourneyTour (the picker, or a journey step).
- * 2. No tour, checklist not dismissed: the floating OnboardingChecklist.
- * 3. Otherwise nothing.
+ * It renders JourneyTour while `?tour=…` is open (the picker, or a journey
+ * step), and nothing otherwise.
  */
 
 import { useEffect } from "react";
@@ -25,9 +25,7 @@ import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStor
 import { useTourStore } from "../../store/tourStore";
 import { useSurface } from "../../lib/surfaceContext";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
-import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 
-import { OnboardingChecklist } from "./OnboardingChecklist";
 import { JourneyTour } from "./JourneyTour";
 import { JOURNEYS, firstStepId, isJourneyAvailable } from "./journeys/registry";
 import "./journeys/catalog";
@@ -56,8 +54,6 @@ export function OnboardingWizard() {
   const {
     isInitialized: checklistInitialized,
     loadState: loadChecklistState,
-    panelState,
-    allRequiredComplete,
     detectCompletedItems,
     subscribeToStoreChanges,
   } = useOnboardingChecklistStore();
@@ -65,13 +61,10 @@ export function OnboardingWizard() {
   const isInitialized = tourInitialized && checklistInitialized;
 
   const location = useLocation();
-  const isSettingsMode = location.pathname.startsWith("/settings");
-  const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
-  // The dedicated /onboarding route IS the onboarding experience — showing
-  // the post-onboarding "Setup Guide" floating panel on top of it is a
-  // bad-UX dupe of the same information. /claim owns the screen for the same
-  // reason: someone is mid-way through taking over a site; /accept-invite,
-  // mid-way through joining an org.
+  // The dedicated /onboarding route IS the onboarding experience: a re-offered
+  // journey must not open over it. /claim owns the screen for the same reason
+  // (someone is mid-way through taking over a site); /accept-invite, mid-way
+  // through joining an org.
   const isOnboardingRoute =
     location.pathname.startsWith("/onboarding") ||
     isClaimPath(location.pathname) ||
@@ -131,31 +124,11 @@ export function OnboardingWizard() {
     return phoneTour && user && tourInitialized ? <JourneyTour /> : null;
   }
 
-  // Signed out — neither the tour nor the checklist belongs on screen.
+  // Signed out: no tour belongs on screen.
   if (!user) return null;
 
   // Not ready yet
   if (!isInitialized) return null;
 
-  // Phase 1: a tour is open
-  if (tourOpen) return <JourneyTour />;
-
-  // The floating checklist would sit over a phone-sized page.
-  if (isPhoneViewport()) return null;
-
-  // Phase 2: Show checklist after setup if not dismissed (only on main chat page).
-  // allRequiredComplete gate: a guide with nothing left to do is clutter, so it
-  // retires itself rather than sitting at full progress forever.
-  if (
-    panelState !== "dismissed" &&
-    !allRequiredComplete() &&
-    !isWorkflowMode &&
-    !isSettingsMode &&
-    !isOnboardingRoute
-  ) {
-    return <OnboardingChecklist />;
-  }
-
-  // Phase 3: Everything done
-  return null;
+  return tourOpen ? <JourneyTour /> : null;
 }

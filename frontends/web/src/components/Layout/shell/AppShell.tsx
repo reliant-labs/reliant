@@ -44,6 +44,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
+import { pickerParam } from "../../Onboarding/tourParam";
 import { ResizableSidebar } from "../ResizableSidebar";
 import type { NavigateOptions } from "../sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
@@ -172,6 +173,12 @@ function ShellNav() {
     [navigate],
   );
   const onOpenChatSearch = useCallback(() => void shortcutHost?.run("onChatSearch"), [shortcutHost]);
+  // The journey picker opens over the page on screen: `?tour=` on its own search (Onboarding/JOURNEYS.md).
+  const onOpenTours = useCallback(() => {
+    releaseNavDrawerHold();
+    useNavDrawer.getState().setOpen(false);
+    void navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, tour: pickerParam("menu") })) as never });
+  }, [navigate]);
 
   return (
     <>
@@ -202,6 +209,7 @@ function ShellNav() {
         onNavigate={onNavigate}
         onOpenRuns={(search) => void navigate({ to: runsPath(), search: search ?? {} })}
         onOpenChatSearch={onOpenChatSearch}
+        onOpenTours={onOpenTours}
       />
     </>
   );

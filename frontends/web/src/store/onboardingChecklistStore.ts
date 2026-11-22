@@ -83,7 +83,7 @@ interface OnboardingChecklistState {
   /** Whether the welcome modal has been shown */
   welcomeShown: boolean;
 
-  /** Current state of the floating checklist panel */
+  /** The Setup Guide in the nav footer: open, closed to its row, or dismissed */
   panelState: ChecklistPanelState;
 
   /** Whether the initial state has been loaded from DB */

@@ -36,7 +36,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: "Run a chat using a ready-made workflow instead of the default",
     category: "required",
     action: "navigate",
-    actionTarget: "workflow-hub",
+    actionTarget: "workflow-library",
     actionLabel: "Browse workflows",
   },
   {
@@ -45,8 +45,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: "Put together a multi-step process in the visual builder",
     category: "required",
     action: "navigate",
-    actionTarget: "workflow-builder",
-    actionLabel: "Open builder",
+    actionTarget: "new-workflow",
+    actionLabel: "New workflow",
   },
   {
     id: "take-product-tour",
@@ -74,8 +74,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: "Save your favorite agent settings so you can reuse them later",
     category: "bonus",
     action: "navigate",
-    actionTarget: "workflow-hub-presets",
-    actionLabel: "Create",
+    actionTarget: "settings-presets",
+    actionLabel: "Open presets",
   },
   {
     id: "install-mcp",

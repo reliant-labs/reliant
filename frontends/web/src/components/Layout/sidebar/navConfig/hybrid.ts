@@ -9,7 +9,7 @@
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Auth ·
  *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
- *   footer: Usage & billing · Settings
+ *   footer: (Get started) · Usage & billing · Help · Settings
  *
  * Only Agents and Observability drill in (their rows replace the nav, under a
  * "‹ Area" header, on their routes). Everything else is an accordion or a
