@@ -5,7 +5,7 @@ import {
   Activity,
   PanelBottom,
   PanelRight,
-  PanelLeft,
+  Menu,
   FolderGit2,
   Settings,
 } from "lucide-react";
@@ -190,7 +190,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             </Tooltip>
           )}
 
-          {/* Toggle Chat Sidebar button */}
+          {/* Toggle Chat Sidebar button. A plain hamburger (owner, 2026-11-22):
+              the one glyph every app uses for "show the navigation", the same
+              one the mobile shell's MobileMenuButton draws. */}
           {onToggleChatSidebar && (
             <Tooltip
               content={`Toggle Chat Sidebar (${formatShortcut(
@@ -205,7 +207,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 aria-label="Toggle Chat Sidebar"
                 style={noDragRegionStyle}
               >
-                <PanelLeft className="w-4 h-4" />
+                <Menu className="w-4 h-4" />
               </button>
             </Tooltip>
           )}

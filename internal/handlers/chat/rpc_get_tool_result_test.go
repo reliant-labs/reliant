@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // toolResultFixture writes a chat for userID with one thread, one context
@@ -64,7 +65,7 @@ func TestGetToolResult(t *testing.T) {
 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	as := func(userID string) context.Context {
 		return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	}

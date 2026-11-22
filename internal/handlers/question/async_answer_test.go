@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
@@ -110,7 +112,7 @@ func newAsyncAnswerFixture(t *testing.T) *asyncAnswerFixture {
 	}))
 
 	messages := &recordingMessenger{}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Messages: messages, Signals: noSignals{t}}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Messages: messages, Signals: noSignals{t}}))
 	return &asyncAnswerFixture{
 		repo: repo, chatID: chatID, mainID: chatID, spawnID: "spawn-" + uuid.NewString(),
 		svc: svc, messages: messages,

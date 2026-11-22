@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/runs"
+	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -151,7 +152,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue)
+		runs.New(runs.Deps{Repo: repo, Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), taskQueue)
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(
@@ -290,7 +291,11 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 	// The Inbox says so too, as one item that stays the same item across
 	// polls (so a dismissal holds).
-	inboxService, err := inbox.New(inbox.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	inboxService, err := inbox.New(inbox.Deps{
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		Recoveries: extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:      extstore.NewWorktreeExtStore(repo.ORM()),
+	})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
 		resp, err := inboxService.ListInbox(context.WithValue(ctx, auth.UserIDContextKey, userID), connect.NewRequest(&reliantv1.ListInboxRequest{}))

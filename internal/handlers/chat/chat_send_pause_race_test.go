@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -138,10 +139,11 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 	pause := newGatedPauseController(repo)
 	service := &Service{
 		deps: Deps{
-			Repo:     repo,
-			Temporal: temporal,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Temporal:  temporal,
 		},
-		runs:    runs.NewService(repo, temporal, pause),
+		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 		threads: threads.NewService(repo, threads.WithToolCanceler(&toolexectest.Recorder{})),
 	}
 

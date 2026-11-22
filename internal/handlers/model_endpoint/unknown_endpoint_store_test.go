@@ -3,7 +3,7 @@ package model_endpoint_test
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	core "github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
 )
 
@@ -14,6 +14,6 @@ import (
 // one a panic, never a silent pass.
 type unknownEndpointStore struct{ modelendpoints.Store }
 
-func (unknownEndpointStore) GetModelEndpoint(context.Context, string, string) (*db.ModelEndpoint, error) {
-	return nil, db.ErrModelEndpointNotFound
+func (unknownEndpointStore) GetModelEndpoint(context.Context, string, string) (*core.ModelEndpoint, error) {
+	return nil, core.ErrModelEndpointNotFound
 }

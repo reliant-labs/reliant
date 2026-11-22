@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -99,7 +100,7 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 	require.NotNil(t, fromSnapshot)
 
 	recent := int32(50)
-	resp, err := (&Service{deps: Deps{Repo: repo}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := (&Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
 	}))
 	require.NoError(t, err)

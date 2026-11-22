@@ -52,14 +52,13 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
-	"ListAnswerablePendingQuestionsByUser": readCallersFilter,
-	"ListArchivedChats":                    readCallersFilter,
-	"ListChats":                            readCallersFilter,
-	"ListInboxPending":                     readCallersFilter,
-	"ListMainWorktreesForUser":             readCallersFilter,
-	"ListProjects":                         readCallersFilter,
-	"ListRuns":                             readCallersFilter,
-	"ListTriggers":                         readCallersFilter,
+	"ListArchivedChats":        readCallersFilter,
+	"ListChats":                readCallersFilter,
+	"ListInboxPending":         readCallersFilter,
+	"ListMainWorktreesForUser": readCallersFilter,
+	"ListProjects":             readCallersFilter,
+	"ListRuns":                 readCallersFilter,
+	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
@@ -81,7 +80,6 @@ var userScopedReads = map[string]string{
 	"ListDeletedProjects":         readCallersFilter,
 	"FindProjectOrgMoveByRequest": readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
-	"ListWorktreeRecoveries":      readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
@@ -97,13 +95,11 @@ var userScopedReads = map[string]string{
 	// The shared lists read OTHER users' rows of one org; SharingService
 	// passes each through authz.SharedChatsFor / SharedProjectsFor,
 	// which is where a viewer is decided.
-	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,
 
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
 	"GetPresetBySlugAndProject":        readParentAuthorized,
-	"GetWorktreeRecovery":              readParentAuthorized,
 	"ListPresetsByTag":                 readParentAuthorized,
 	"ListTriggerChanges":               readParentAuthorized,
 	"ListTriggerRegistrations":         readParentAuthorized,
@@ -124,7 +120,6 @@ var userScopedReads = map[string]string{
 	"GetLatestUserUpdateSequence":     readPersonal,
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,
-	"GetModelEndpoint":                readPersonal,
 	"GetPresetBySlug":                 readPersonal,
 	"GetPrivacySettings":              readPersonal,
 	"GetProviderAccountWithSecrets":   readPersonal,
@@ -135,7 +130,6 @@ var userScopedReads = map[string]string{
 	"ListLLMUsageDaily":               readPersonal,
 	"ListLLMUsageDetail":              readPersonal,
 	"ListMachinePoolsForUser":         readPersonal,
-	"ListModelEndpoints":              readPersonal,
 	"ListProviderAccounts":            readPersonal,
 	"ListProviderAccountsWithSecrets": readPersonal,
 	"ListSettings":                    readPersonal,
@@ -149,7 +143,6 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListHeldWorktreesForUser":          readOrgless,
-	"ListMarkedWorktreesForUser":        readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
 	"CountLiveLaunchedRuns":            readBackground,

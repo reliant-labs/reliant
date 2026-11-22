@@ -102,7 +102,7 @@ func TestStreamOrgUpdates_FollowsAndReplaysAnOrgsShares(t *testing.T) {
 	assert.EqualValues(t, 2, working.GetActivity())
 	assert.Equal(t, renamed.GetSequenceNumber()+1, working.GetSequenceNumber(), "the config change wrote no row")
 
-	changed, err := f.Repo.ApplyShareChange(ctx, core.ShareChange{
+	changed, err := applyShareChange(ctx, f.Repo, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: f.ChatID, OrgID: viewertest.OrgID, OwnerUserID: f.OwnerID,
 		ActorUserID: f.OwnerID, Action: core.ShareActionUnshare, At: time.Now(),
 	})

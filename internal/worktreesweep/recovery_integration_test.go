@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/stretchr/testify/require"
 )
@@ -78,13 +79,13 @@ func TestRecoveryPipelineReceiptClaimAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	sender := &pipelineSender{t: t, now: now}
 	e.sweeper.sender = sender
-	e.sweeper.WithGitRecovery(e.repo, pipelineCredentials{}, true)
+	e.sweeper.WithGitRecovery(store.NewWorktreeRecoveryExtStore(e.repo.ORM()), pipelineCredentials{}, true)
 	e.sweeper.now = func() time.Time { return now }
 	current := e.get(t, wt.ID)
 	w := worktreereclaim.Worktree{ID: wt.ID, Path: p, State: worktreereclaim.StateArchived, Fence: Fence(current), Checkouts: []worktreereclaim.Checkout{{RepoPath: filepath.Clean(e.project.Path), Rel: ""}}}
 	require.True(t, e.sweeper.recoverHeld(e.ctx, target{e.userID, e.daemon}, &core.ReclaimCandidate{Worktree: current, OwnerUserID: e.userID, ProjectPath: e.project.Path}, w))
 	require.True(t, sender.finalized, "verified receipt followed by claim must reach finalizer")
-	rows, err := e.repo.ListWorktreeRecoveries(e.ctx, e.userID, e.project.ID)
+	rows, err := store.ListWorktreeRecoveries(e.ctx, e.repo.ORM(), e.userID, e.project.ID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "removed", rows[0].Phase)

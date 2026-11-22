@@ -231,7 +231,11 @@ export interface ElectronAPI {
    * Push effective keyboard bindings (shortcut id -> authored binding string)
    * so the native menu's accelerators match the user's remaps.
    */
-  updateShortcutBindings?: (bindings: Record<string, string>) => Promise<{ success: boolean }>;
+  updateShortcutBindings?: (
+    bindings: Record<string, string>,
+    /** Each shortcut's live desktop aliases, by id; absent ids have none. */
+    aliases?: Record<string, string[]>,
+  ) => Promise<{ success: boolean }>;
   /**
    * The desktop find bar (electron/src/find-bar.js): shown over the calling
    * window, focused, searching that window's page. See src/findBar/protocol.ts.

@@ -104,6 +104,9 @@ func TestChatUpdatesHaveOnlyTheKnownWriters(t *testing.T) {
 		".git": true, "node_modules": true, "testdata": true, "vendor": true,
 		"tmp": true, "data": true, "dist": true, ".reliant": true,
 		"gen": true, "web": true, "electron": true, "proto-vendor": true,
+		// forge's per-checkout state (a recorded test run adds a directory
+		// under .forge/tests/runs/ that would key this test's cache entry).
+		".forge": true,
 	}
 	found := map[string]map[string]bool{}
 	note := func(rel, what string) {

@@ -275,6 +275,12 @@ func ptrValue(s *string) string {
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
 	toolExecutor toolexec.ToolExecutor
+	// funding reads what a chat's person said about spending their own
+	// accounts (runFunding). Set by WithRunFunding; nil is org_only.
+	funding RunFundingStore
+	// reviver brings an archived worktree back when its chat works in it
+	// again. Set by WithWorktreeReviver; nil revives nothing.
+	reviver WorktreeReviver
 	// configProvider resolves the project's skills for the skill tool. Set by
 	// WithConfigProvider; nil means the skill tool sees none.
 	configProvider cfgpkg.ConfigProvider
@@ -285,6 +291,20 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+}
+
+// WithRunFunding gives the tool-execution path what a chat's person said about
+// spending their own accounts; without it a run spends only the org's.
+func (a *ExecuteToolsActivity) WithRunFunding(s RunFundingStore) *ExecuteToolsActivity {
+	a.funding = s
+	return a
+}
+
+// WithWorktreeReviver lets a chat that works in its archived worktree bring it
+// back (see WorktreeReviver).
+func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteToolsActivity {
+	a.reviver = r
+	return a
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
@@ -870,7 +890,7 @@ func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func
 			return scope, drivers.RunFunding{}
 		}
 		runOrder, _ := ctx.Value(runFundingOrderKey{}).(string)
-		return scope, runFunding(ctx, a.repo, chat, who, runOrder)
+		return scope, runFunding(ctx, a.funding, chat, who, runOrder)
 	}
 }
 

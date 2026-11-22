@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package store_test
 
 import (
 	"context"
@@ -7,23 +7,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
 
-func sp(s string) *string { return &s }
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
+)
 
 func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
+	env := storetest.New(t)
+	repo := store.NewModelEndpointExtStore(env.ORM)
 	ctx := context.Background()
 
-	mine := &ModelEndpoint{ID: "ep-1", UserID: "user-a", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: ModelEndpointRouteDirect, HeaderNames: []string{"X-Org"}, ModelsJSON: `[{"name":"m"}]`}
-	require.NoError(t, repo.CreateModelEndpoint(ctx, mine))
+	mine := &core.ModelEndpoint{ID: "ep-1", UserID: "user-a", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: core.ModelEndpointRouteDirect, HeaderNames: []string{"X-Org"}, ModelsJSON: `[{"name":"m"}]`}
+	require.NoError(t, repo.InsertModelEndpoint(ctx, mine))
 	assert.False(t, mine.CreatedAt.IsZero())
 
-	viaDaemon := &ModelEndpoint{ID: "ep-2", UserID: "user-a", Name: "Home vLLM", BaseURL: "http://10.0.0.5:8000/v1", Route: ModelEndpointRouteViaDaemon, DaemonID: sp("d-1")}
-	require.NoError(t, repo.CreateModelEndpoint(ctx, viaDaemon))
+	viaDaemon := &core.ModelEndpoint{ID: "ep-2", UserID: "user-a", Name: "Home vLLM", BaseURL: "http://10.0.0.5:8000/v1", Route: core.ModelEndpointRouteViaDaemon, DaemonID: sp("d-1")}
+	require.NoError(t, repo.InsertModelEndpoint(ctx, viaDaemon))
 
 	t.Run("get round-trips every column", func(t *testing.T) {
 		got, err := repo.GetModelEndpoint(ctx, "user-a", "ep-1")
@@ -42,7 +44,7 @@ func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
 
 	t.Run("another user sees nothing and changes nothing", func(t *testing.T) {
 		_, err := repo.GetModelEndpoint(ctx, "user-b", "ep-1")
-		assert.ErrorIs(t, err, ErrModelEndpointNotFound)
+		assert.ErrorIs(t, err, core.ErrModelEndpointNotFound)
 
 		list, err := repo.ListModelEndpoints(ctx, "user-b")
 		require.NoError(t, err)
@@ -50,8 +52,8 @@ func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
 
 		hijack := *mine
 		hijack.UserID, hijack.Name = "user-b", "pwned"
-		assert.ErrorIs(t, repo.UpdateModelEndpoint(ctx, &hijack), ErrModelEndpointNotFound)
-		assert.ErrorIs(t, repo.DeleteModelEndpoint(ctx, "user-b", "ep-1"), ErrModelEndpointNotFound)
+		assert.ErrorIs(t, repo.ReplaceModelEndpoint(ctx, &hijack), core.ErrModelEndpointNotFound)
+		assert.ErrorIs(t, repo.RemoveModelEndpoint(ctx, "user-b", "ep-1"), core.ErrModelEndpointNotFound)
 		require.NoError(t, repo.SetModelEndpointProbe(ctx, "user-b", "ep-1", "tampered"))
 
 		still, err := repo.GetModelEndpoint(ctx, "user-a", "ep-1")
@@ -69,21 +71,21 @@ func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
 	})
 
 	t.Run("names are unique per user, not globally", func(t *testing.T) {
-		dup := &ModelEndpoint{ID: "ep-3", UserID: "user-a", Name: "Lab GPU", BaseURL: "https://x.example.com", Route: ModelEndpointRouteDirect}
-		assert.ErrorIs(t, repo.CreateModelEndpoint(ctx, dup), ErrModelEndpointNameTaken)
+		dup := &core.ModelEndpoint{ID: "ep-3", UserID: "user-a", Name: "Lab GPU", BaseURL: "https://x.example.com", Route: core.ModelEndpointRouteDirect}
+		assert.ErrorIs(t, repo.InsertModelEndpoint(ctx, dup), core.ErrModelEndpointNameTaken)
 
-		other := &ModelEndpoint{ID: "ep-4", UserID: "user-b", Name: "Lab GPU", BaseURL: "https://x.example.com", Route: ModelEndpointRouteDirect}
-		require.NoError(t, repo.CreateModelEndpoint(ctx, other))
+		other := &core.ModelEndpoint{ID: "ep-4", UserID: "user-b", Name: "Lab GPU", BaseURL: "https://x.example.com", Route: core.ModelEndpointRouteDirect}
+		require.NoError(t, repo.InsertModelEndpoint(ctx, other))
 
 		rename := *mine
 		rename.Name = "Home vLLM"
-		assert.ErrorIs(t, repo.UpdateModelEndpoint(ctx, &rename), ErrModelEndpointNameTaken)
+		assert.ErrorIs(t, repo.ReplaceModelEndpoint(ctx, &rename), core.ErrModelEndpointNameTaken)
 	})
 
 	t.Run("update and probe", func(t *testing.T) {
 		upd := *mine
 		upd.Name, upd.CredentialConnectionID, upd.HeaderNames = "Lab GPU 2", sp("conn-9"), []string{"A", "B"}
-		require.NoError(t, repo.UpdateModelEndpoint(ctx, &upd))
+		require.NoError(t, repo.ReplaceModelEndpoint(ctx, &upd))
 		require.NoError(t, repo.SetModelEndpointProbe(ctx, "user-a", "ep-1", `{"id":"x"}`))
 
 		got, err := repo.GetModelEndpoint(ctx, "user-a", "ep-1")
@@ -96,14 +98,14 @@ func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
 	})
 
 	t.Run("route and daemon_id must agree (schema CHECK)", func(t *testing.T) {
-		bad := &ModelEndpoint{ID: "ep-5", UserID: "user-a", Name: "bad", BaseURL: "https://x.example.com", Route: ModelEndpointRouteViaDaemon}
-		assert.Error(t, repo.CreateModelEndpoint(ctx, bad))
+		bad := &core.ModelEndpoint{ID: "ep-5", UserID: "user-a", Name: "bad", BaseURL: "https://x.example.com", Route: core.ModelEndpointRouteViaDaemon}
+		assert.Error(t, repo.InsertModelEndpoint(ctx, bad))
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		require.NoError(t, repo.DeleteModelEndpoint(ctx, "user-a", "ep-2"))
-		assert.ErrorIs(t, repo.DeleteModelEndpoint(ctx, "user-a", "ep-2"), ErrModelEndpointNotFound)
+		require.NoError(t, repo.RemoveModelEndpoint(ctx, "user-a", "ep-2"))
+		assert.ErrorIs(t, repo.RemoveModelEndpoint(ctx, "user-a", "ep-2"), core.ErrModelEndpointNotFound)
 		_, err := repo.GetModelEndpoint(ctx, "user-a", "ep-2")
-		assert.ErrorIs(t, err, ErrModelEndpointNotFound)
+		assert.ErrorIs(t, err, core.ErrModelEndpointNotFound)
 	})
 }

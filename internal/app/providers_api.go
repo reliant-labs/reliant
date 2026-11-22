@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -157,6 +158,20 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
 			DevJWTSecret:              api.GetAuthDevJwtSecret(),
+			SupabaseIssuer:            api.GetSupabaseJwtIssuer(),
+			SupabaseAudience:          api.GetSupabaseJwtAudience(),
+			Identity: auth.IdentitySettings{
+				Issuer:        api.GetJwtIssuer(),
+				Audience:      api.GetJwtAudience(),
+				JWKSURL:       api.GetJwtJwksUrl(),
+				SigningMethod: api.GetJwtSigningMethod(),
+				RolesClaim:    api.GetJwtRolesClaim(),
+				Snapshot: forgeauth.JWKSSnapshot{
+					File:   api.GetJwtJwksSnapshotFile(),
+					Inline: api.GetJwtJwksSnapshot(),
+					MaxAge: api.GetJwtJwksSnapshotMaxAge().AsDuration(),
+				},
+			},
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -175,6 +190,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
 		"auth_mode", s.Auth.ModeName(),
+		"managed_identity", s.Auth.Identity.Issuer,
 	)
 	return s, nil
 }
@@ -406,6 +422,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
+		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -576,7 +593,7 @@ type optionsChecker struct{ svc inputoptions.Service }
 func (c optionsChecker) CheckValues(ctx context.Context, check trigger.ValueCheck) (trigger.ValueCheckResult, error) {
 	res, err := c.svc.Resolve(ctx, inputoptions.ResolveRequest{
 		UserID: check.UserID, Type: check.Type, ConnectionID: check.ConnectionID, Scope: check.Scope,
-		Values: check.Values, ActingIdentity: string(check.ActingIdentity),
+		Values: check.Values, ActingIdentity: string(check.ActingIdentity), OrgID: check.OrgID,
 	})
 	if err != nil {
 		var upstream *inputoptions.UpstreamError
@@ -977,9 +994,38 @@ type WorktreeSweepDeps struct {
 // The sweep records the use a daemon reports through the optional UseStore;
 // a Repo that lost the method would silently stop recording it.
 var (
-	_ worktreesweep.UseStore  = (*db.Repo)(nil)
-	_ worktreesweep.MarkStore = (*db.Repo)(nil)
+	_ worktreesweep.UseStore  = store.WorktreeExtStore(nil)
+	_ worktreesweep.MarkStore = store.WorktreeExtStore(nil)
 )
+
+// worktreeSweepStore is what the sweep's auto-archive reads and writes: the
+// worktree queries and the one chat query that says whether a chat is bound.
+// Only the methods AutoArchiveStore names are called through it.
+type worktreeSweepStore struct {
+	store.WorktreeExtStore
+	chats interface {
+		GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	}
+}
+
+func (s worktreeSweepStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return s.chats.GetLiveChatIDForWorktree(ctx, worktreeID)
+}
+
+// idleRetirementStore is what idle retirement reads (which worktrees a chat
+// is running in) and writes (the archive).
+type idleRetirementStore struct {
+	store.ChatExtStore
+	store.WorktreeExtStore
+}
+
+func (s idleRetirementStore) ListWorktreeIDsWithRunningChat(ctx context.Context, ids []string) (map[string]bool, error) {
+	return s.ChatExtStore.ListWorktreeIDsWithRunningChat(ctx, ids)
+}
+
+func (s idleRetirementStore) ArchiveRecoverableIdleWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {
+	return s.WorktreeExtStore.ArchiveRecoverableIdleWorktree(ctx, id, quietSince)
+}
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
@@ -1003,20 +1049,24 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	if err != nil {
 		return nil, err
 	}
+	o := database.ORM()
+	worktrees := store.NewWorktreeExtStore(o)
+	chats := store.NewChatExtStore(o)
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
-		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
+		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
-		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, database).
-		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
+		WithUseStore(worktrees).
+		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
+		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
 		WithLandedIdle(d.Settings.WorktreeLandedIdle).
-		WithReclaimMarks(database, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
+		WithReclaimMarks(worktrees, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its
@@ -1200,7 +1250,12 @@ type WorkflowReconcilerDeps struct {
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
-	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
+	r := reconciliation.New(reconciliation.Deps{
+		Store:     d.DB,
+		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Temporal:  d.Temporal.Client,
+		Config:    cfg,
+	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})

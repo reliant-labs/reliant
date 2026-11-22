@@ -30,6 +30,40 @@ type ExecutorCall struct {
 	// Client goes through the SSRF guard and never follows a redirect off the
 	// integration's hosts.
 	Runner *Runner
+	// subs collects what Do's requests said about themselves, so the call's
+	// result reports them when the executor's own result does not.
+	subs *subRequests
+}
+
+// subRequests is what an executor's declarative sub-requests read: how many
+// responses, and the last one's host and rate limit. Do may be called from
+// several goroutines.
+type subRequests struct {
+	mu    sync.Mutex
+	pages int
+	last  *Result
+}
+
+func (s *subRequests) add(res *Result) {
+	if s == nil || res == nil || res.Pages == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pages += res.Pages
+	s.last = res
+}
+
+// fill gives res the sub-requests' pages, host and rate limit when the
+// executor reported none of its own.
+func (s *subRequests) fill(res *Result) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if res.Pages != 0 || s.pages == 0 {
+		return
+	}
+	res.Pages = s.pages
+	res.Host, res.RateLimit = s.last.Host, s.last.RateLimit
 }
 
 // Do sends one declarative request, sub, under this call's manifest and
@@ -44,7 +78,9 @@ func (c ExecutorCall) Do(ctx context.Context, sub *reliantv1.ActionSpec, params 
 	if c.Runner == nil {
 		return nil, fmt.Errorf("%s: no runner", sub.GetId())
 	}
-	return c.Runner.run(ctx, c.Manifest, sub, params, c.Credential)
+	res, err := c.Runner.run(ctx, c.Manifest, sub, params, c.Credential)
+	c.subs.add(res)
+	return res, err
 }
 
 // ExecutorFunc implements an action whose manifest says `executor: go:<name>`.
@@ -145,13 +181,15 @@ func (r *Runner) runExecutor(ctx context.Context, m *reliantv1.IntegrationManife
 	if !ok {
 		return nil, fmt.Errorf("%s/%s: executor %q is not registered in this process", m.GetId(), a.GetId(), name)
 	}
-	res, err := fn(ctx, ExecutorCall{Manifest: m, Action: a, Params: params, Credential: cred, Runner: r})
+	subs := &subRequests{}
+	res, err := fn(ctx, ExecutorCall{Manifest: m, Action: a, Params: params, Credential: cred, Runner: r, subs: subs})
 	if err != nil {
 		return nil, err
 	}
 	if res == nil {
 		return nil, fmt.Errorf("%s/%s: executor %q returned no result", m.GetId(), a.GetId(), name)
 	}
+	subs.fill(res)
 	if res.Content == "" && res.Data != nil {
 		content, _ := json.Marshal(res.Data)
 		res.Content = truncate(string(content))
