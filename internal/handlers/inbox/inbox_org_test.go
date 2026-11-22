@@ -62,7 +62,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 				{Kind: core.InboxPendingApproval, ItemKey: "run-home", ProjectID: "p-home", WaitingSince: now},
 			}, nil
 		}
-		repo.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
+		repo.rec.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
 			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.WorktreeRecovery{
 				{ID: "acme", ProjectID: "p-acme", Phase: "held", CreatedAt: now},
@@ -70,7 +70,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 				{ID: "gone", ProjectID: "p-gone", Phase: "held", CreatedAt: now},
 			}, nil
 		}
-		return NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+		return NewTestInbox(t, WithInboxDeps(repo.deps()))
 	}
 	itemIDs := func(ctx context.Context) []string {
 		t.Helper()
@@ -130,7 +130,7 @@ func TestListInbox_LeavesOutAttentionIncidentsOfAnOrgTheCallerMayNotRead(t *test
 			}
 			return []*core.AttentionIncident{incident("acme"), incident("home")}, nil
 		}
-		return NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+		return NewTestInbox(t, WithInboxDeps(repo.deps()))
 	}
 	itemIDs := func(ctx context.Context) []string {
 		t.Helper()
@@ -199,11 +199,11 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 				{Kind: core.InboxPendingApproval, ItemKey: "trigger-only", TriggerID: "unlisted", ProjectID: "p-acme", WaitingSince: now},
 			}, nil
 		}
-		repo.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
+		repo.rec.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
 			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.WorktreeRecovery{{ID: "gone", ProjectID: "p-gone", Phase: "held", CreatedAt: now}}, nil
 		}
-		return NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Orgs: resolver}))
+		return NewTestInbox(t, WithInboxDeps(withOrgs(repo.deps(), resolver)))
 	}
 	ctx := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
 	itemIDs := func(orgID *string) []string {
@@ -294,7 +294,7 @@ func TestInboxReads_InScopeKeepsMachineItemsInEveryOrg(t *testing.T) {
 // caller's default (home), and with no org named, as before.
 func TestListInbox_BrokenDefinitionListsUnderItsProjectsOrg(t *testing.T) {
 	f := newInboxFixture(t)
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Orgs: orgs.New(acmeAndHome{})}))
+	f.inbox = NewTestInbox(t, WithInboxDeps(withOrgs(realDeps(f.repo), orgs.New(acmeAndHome{}))))
 	ctx := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
 	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, f.project()).Exec(ctx)
 	require.NoError(t, err)
@@ -350,7 +350,7 @@ func TestInboxReads_AFailedOrgReadFailsClosed(t *testing.T) {
 		}
 		return &db.Project{ID: id, UserID: "user-1"}, nil // no org yet
 	}
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(mockDeps(repo)))
 	ctx := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
 	reads := svc.readableItem()
 	failed := &reliantv1.InboxItem{ItemId: "failed", Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN, ProjectId: "p-broken"}

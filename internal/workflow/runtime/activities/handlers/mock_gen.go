@@ -3154,8 +3154,34 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 // Compile-time check.
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
+// forge:section MockWorktreeReviver
+// forge:hash=9366bfb4c64d85f7d5cbf08815826e439aa157b2669f8cd8e4d7588a908c3fef
+
+// MockWorktreeReviver is a test mock for the WorktreeReviver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorktreeReviver.<Method>Func not set" error.
+type MockWorktreeReviver struct {
+	contractkit.Recorder
+	ReviveArchivedWorktreeFunc func(context.Context, string) (string, error)
+}
+
+// ReviveArchivedWorktree records the call and delegates to ReviveArchivedWorktreeFunc when set.
+func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id string) (string, error) {
+	m.Recorder.Record("ReviveArchivedWorktree", ctx, id)
+	if m.ReviveArchivedWorktreeFunc != nil {
+		return m.ReviveArchivedWorktreeFunc(ctx, id)
+	}
+	return "", contractkit.MockNotSet("MockWorktreeReviver", "ReviveArchivedWorktree")
+}
+
+// Compile-time check.
+var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
+
 // forge:section MockExecuteToolsStore
-// forge:hash=09c9fc7f7e6726b637ff14789676bc7c626e091a4035e4be4abd73dac16c7245
+// forge:hash=96df78698e45010af9a09cd4acbe2692bfe27b038ff3a70e15a5060d26cdf89f
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3169,7 +3195,6 @@ type MockExecuteToolsStore struct {
 	GetChatFunc                           func(context.Context, string) (*db.Chat, error)
 	GetProjectFunc                        func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                       func(context.Context, string) (*db.Worktree, error)
-	ReviveArchivedWorktreeFunc            func(context.Context, string) (string, error)
 	ListReposByProjectFunc                func(context.Context, string) ([]*core.Repo, error)
 	GetContextUsageFunc                   func(context.Context, string, string) (*db.ContextUsage, error)
 	GetToolCallFunc                       func(context.Context, string) (*db.ToolCall, error)
@@ -3229,15 +3254,6 @@ func (m *MockExecuteToolsStore) GetWorktree(ctx context.Context, id string) (*db
 		return m.GetWorktreeFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetWorktree")
-}
-
-// ReviveArchivedWorktree records the call and delegates to ReviveArchivedWorktreeFunc when set.
-func (m *MockExecuteToolsStore) ReviveArchivedWorktree(ctx context.Context, id string) (string, error) {
-	m.Recorder.Record("ReviveArchivedWorktree", ctx, id)
-	if m.ReviveArchivedWorktreeFunc != nil {
-		return m.ReviveArchivedWorktreeFunc(ctx, id)
-	}
-	return "", contractkit.MockNotSet("MockExecuteToolsStore", "ReviveArchivedWorktree")
 }
 
 // ListReposByProject records the call and delegates to ListReposByProjectFunc when set.

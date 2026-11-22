@@ -51,6 +51,13 @@ func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExe
 	}
 }
 
+// WithWorktreeReviver gives the tool-execution path the archived-worktree
+// reviver; see ExecuteToolsActivity.WithWorktreeReviver.
+func (a *InvokeToolActivity) WithWorktreeReviver(r WorktreeReviver) *InvokeToolActivity {
+	a.executeTools.WithWorktreeReviver(r)
+	return a
+}
+
 // WithConfigProvider gives the tool-execution path the worker's project
 // config provider; see ExecuteToolsActivity.WithConfigProvider.
 func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) *InvokeToolActivity {

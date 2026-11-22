@@ -82,7 +82,6 @@ var userScopedReads = map[string]string{
 	"ListDeletedProjects":         readCallersFilter,
 	"FindProjectOrgMoveByRequest": readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
-	"ListWorktreeRecoveries":      readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
@@ -98,13 +97,11 @@ var userScopedReads = map[string]string{
 	// The shared lists read OTHER users' rows of one org; SharingService
 	// passes each through authz.SharedChatsFor / SharedProjectsFor,
 	// which is where a viewer is decided.
-	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,
 
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
 	"GetPresetBySlugAndProject":        readParentAuthorized,
-	"GetWorktreeRecovery":              readParentAuthorized,
 	"ListPresetsByTag":                 readParentAuthorized,
 	"ListTriggerChanges":               readParentAuthorized,
 	"ListTriggerRegistrations":         readParentAuthorized,
@@ -151,7 +148,6 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListHeldWorktreesForUser":          readOrgless,
-	"ListMarkedWorktreesForUser":        readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
 	"CountLiveLaunchedRuns":            readBackground,
