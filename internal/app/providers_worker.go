@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -111,6 +112,8 @@ type WorkerDaemonRouterDeps struct {
 	NATS         *NATSConn
 	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
+	// AutomationTokens holds the trigger's delegated daemon:resume tokens.
+	AutomationTokens automationtokens.Service
 }
 
 // NewWorkerDaemonRouter builds the worker's router. Hosted, the control plane
@@ -135,7 +138,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 			toolexec.WithDaemonResumer(cpAdapter),
 			// The worker alone may fall back to a trigger's delegated
 			// token: an unattended fire has no user JWT.
-			toolexec.WithControlPlaneCredentials(automationcred.NewInstrumented(automationcred.Deps{Keys: repo})))
+			toolexec.WithControlPlaneCredentials(automationcred.NewInstrumented(automationcred.Deps{Keys: d.AutomationTokens})))
 		// A run that resumes after a hold wakes its machine as the worker
 		// (the owner's session token may have expired meanwhile); see
 		// toolexec.RunWaker. That needs the worker's internal-service
@@ -600,7 +603,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		MachineObserver: runMachine,
 		// delete archives here and asks for one immediate settle, as the UI's
 		// archive does; the api-server's periodic sweep catches the rest.
-		WorktreeSettler: worktreesweep.New(repo, d.Router.NATSDaemonRouter).
+		WorktreeSettler: worktreesweep.New(worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())), d.Router.NATSDaemonRouter).
 			WithKeepFiles(worktreesweep.KeepSetting{R: repo}),
 	})}, nil
 }

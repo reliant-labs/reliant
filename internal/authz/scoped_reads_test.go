@@ -83,10 +83,6 @@ var userScopedReads = map[string]string{
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
-	// The same lookups kept to one org (a request's or a machine's): its
-	// callers decide the row exactly as they do the unscoped ones.
-	"GetProjectByPathAndUserInScope":      readCallersFilter,
-	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
@@ -100,7 +96,6 @@ var userScopedReads = map[string]string{
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"RecentTriggerFirings": readParentAuthorized,
 
-	"GetAutomationToken":          readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":       readPersonal,
@@ -128,7 +123,6 @@ var userScopedReads = map[string]string{
 	"ListDaemonStorageState":            readOrgless,
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
-	"ListHeldWorktreesForUser":          readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
 	"CountTriggerCapacityHeldByMember": readBackground,
@@ -137,7 +131,6 @@ var userScopedReads = map[string]string{
 	"ListChatsPausedForMachine":        readBackground,
 	"ListChatsQueuedForMachine":        readBackground,
 	"ListChatsWaitingForMachine":       readBackground,
-	"ListLiveWorktreePathsForUser":     readBackground,
 }
 
 var (

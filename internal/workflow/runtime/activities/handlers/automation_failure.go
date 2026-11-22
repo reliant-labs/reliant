@@ -21,7 +21,7 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 	if err != nil || chat == nil {
 		return
 	}
-	rows, err := a.repo.ListRunNodeExecutions(ctx, input.WorkflowID, rundiagnostics.RecordLimit)
+	rows, err := a.workflows.ListRunNodeExecutions(ctx, input.WorkflowID, rundiagnostics.RecordLimit)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read failed automation nodes", "chat_id", input.ChatID, "error", err)
 	}

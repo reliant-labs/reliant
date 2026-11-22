@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -113,6 +114,7 @@ type triggerTestEnv struct {
 	deps      Deps
 	backend   *fakeTriggerBackend
 	repo      *db.Repo
+	tokens    automationtokens.Service
 	userID    string
 	projectID string
 	daemonID  string
@@ -141,8 +143,11 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID}))
 
-	deps := Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}
+	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	deps := Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
+		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
 		deps:      deps,
 		daemonID:  daemonID,
@@ -373,8 +378,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 
 	for name, deps := range map[string]Deps{
-		"nil Syncer and Fires":             {Repo: env.repo},
-		"TemporalBackend without a client": {Repo: env.repo, Syncer: syncer, Fires: fires},
+		"nil Syncer and Fires":             {Repo: env.repo, Projects: projectaccesstest.For(env.repo)},
+		"TemporalBackend without a client": {Repo: env.repo, Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires},
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Stored while Temporal was available; served without it.

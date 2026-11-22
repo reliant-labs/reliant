@@ -25,7 +25,7 @@ func (e *triggerTestEnv) createNamed(t *testing.T, name string) string {
 }
 
 func (e *triggerTestEnv) stored(t *testing.T) (string, error) {
-	return e.repo.GetAutomationToken(e.ctx, e.userID, e.daemonID)
+	return e.tokens.GetAutomationToken(e.ctx, e.userID, e.daemonID)
 }
 
 func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {

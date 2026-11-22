@@ -340,6 +340,9 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 // first leaves nothing to merge, and fn sees the stored value of a row nobody
 // can claim until it commits. It reports whether fn's change was written.
 func MergeUnownedWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("worktree ID cannot be empty")
+	}
 	wrote := false
 	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		wrote = false
@@ -427,6 +430,9 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 // declined to remove on its own (a held_reason, directory still there),
 // oldest archive first, for the storage inbox item.
 func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string) ([]*core.HeldWorktree, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	var rows []worktreeWithProject
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
@@ -476,6 +482,9 @@ type worktreeWithProject struct {
 // it sees a concurrent winner that committed while the UPDATE waited on the
 // row. "" means the row is gone.
 func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) (string, error) {
+	if id == "" || daemonID == "" {
+		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
+	}
 	var adopted []string
 	err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("daemon_id = ?", daemonID).
@@ -507,6 +516,9 @@ func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID strin
 // sit. Scoped by user because another tenant's rows say nothing about this
 // user's directories.
 func ListLiveWorktreePathsForUser(ctx context.Context, db orm.Context, userID string) ([]core.WorktreePath, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	var rows []*Worktree
 	err := db.Bun().NewSelect().Model(&rows).
 		Column(WorktreeFieldID, WorktreeFieldPath, WorktreeFieldProjectID).

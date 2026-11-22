@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -103,7 +104,11 @@ type KeepFilesSetting interface {
 	KeepFiles(ctx context.Context, userID string) bool
 }
 
-// Store is what the sweep needs from the database.
+// Store is what the sweep needs from the database. store.WorktreeExtStore
+// answers the worktree-row reads (ListWorktreesForReclaim,
+// ListLiveWorktreePathsForUser, AdoptWorktreeDaemon, and StorageStore's
+// ListHeldWorktreesForUser and MergeUnownedWorktreeCleanupMetadata); the rest
+// are reads other areas make too, which the repository facade still answers.
 type Store interface {
 	ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error)
 	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error)
@@ -1557,4 +1562,26 @@ func ptrString(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// facade is the sweep's reads that only the repository facade answers.
+type facade interface {
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
+	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
+}
+
+// Stores is the sweep's Store (and StorageStore): the worktree rows through
+// store.WorktreeExtStore, and the reads other areas share through the
+// repository facade (*db.Repo).
+type Stores struct {
+	facade
+	store.WorktreeExtStore
+}
+
+// NewStores joins the repository facade's shared reads with the worktree rows.
+func NewStores(shared facade, rows store.WorktreeExtStore) Stores {
+	return Stores{facade: shared, WorktreeExtStore: rows}
 }

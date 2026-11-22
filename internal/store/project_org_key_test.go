@@ -62,18 +62,18 @@ func TestProjectKeys_ArePerOrg(t *testing.T) {
 
 	// A lookup in one org finds that org's project; with no scope, the
 	// oldest of them, deterministically.
-	got, err := env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "globex"})
+	got, err := store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "globex"})
 	if err != nil || got.ID != "p-globex" {
 		t.Fatalf("in globex: %v, %v; want p-globex", got, err)
 	}
-	got, err = env.Repo.GetProjectByRemoteURLAndUserInScope(ctx, remote, user, &core.OrgScope{OrgID: "acme"})
+	got, err = store.GetProjectByRemoteURLAndUserInScope(ctx, env.Repo.ORM(), remote, user, &core.OrgScope{OrgID: "acme"})
 	if err != nil || got.ID != "p-acme" {
 		t.Fatalf("acme's repository: %v, %v; want p-acme", got, err)
 	}
-	if _, err := env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech"}); err == nil {
+	if _, err := store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech"}); err == nil {
 		t.Fatal("found a project in an org that has none at the path")
 	}
-	got, err = env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech", IncludeUnassigned: true})
+	got, err = store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech", IncludeUnassigned: true})
 	if err != nil || got.ID != "p-none" {
 		t.Fatalf("the default org's scope includes the unassigned row: %v, %v; want p-none", got, err)
 	}

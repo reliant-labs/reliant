@@ -85,6 +85,12 @@ type introspectResponse struct {
 	// machine (control-plane's daemons.org_id). Absent for any other token,
 	// a machine with no recorded org, and from an older control plane.
 	DaemonOrgID string `json:"daemonOrgId"`
+	// ClientID and Audience are an mcp:oauth token's OAuth client and the
+	// RFC 8707 resource it was issued for. Empty for every other token, and
+	// from an older control plane, so such a token is never accepted as an
+	// MCP client's (fat.Principal.IsMCPOAuthFor needs both).
+	ClientID string `json:"clientId"`
+	Audience string `json:"audience"`
 }
 
 // wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
@@ -170,6 +176,8 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		AllScopes:    out.AllScopes, // a daemon's wildcard: auth.MachineBound refuses it
 		Ephemeral:    out.Ephemeral,
 		ExpiresAt:    out.ExpiresAt,
+		ClientID:     out.ClientID,
+		Audience:     out.Audience,
 	}
 	if out.Resource != nil && out.Resource.Kind != "" {
 		p.Resource = &fat.Resource{Kind: fat.ResourceKind(out.Resource.Kind), ID: out.Resource.ID}

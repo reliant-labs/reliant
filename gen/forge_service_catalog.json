@@ -21,6 +21,7 @@
         "Approval",
         "Attachment",
         "AutomationTakeover",
+        "AutomationTokens",
         "Background",
         "Catalog",
         "Chat",
@@ -491,6 +492,7 @@
         "AccountRecorder",
         "AccountUsagePoller",
         "AgentRuns",
+        "AutomationTokens",
         "ChatUpdateHub",
         "DBRepo",
         "Database",
@@ -53896,6 +53898,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "AutomationTokens",
+      "name": "AutomationTokens",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewAutomationTokens"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Background",
       "name": "Background",
       "kind": "component",
@@ -55618,6 +55632,19 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "AutomationTokens",
+      "field": "Vault",
+      "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Background",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/background.ProcessRouter",
@@ -56245,6 +56272,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Storage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Storage",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Sweeper",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Sweeper",
       "methods": [],
@@ -56734,8 +56772,26 @@
     },
     {
       "consumer": "Project",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.DaemonInstalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveLedger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Lookups",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectLookups",
       "methods": [],
       "candidates": [],
       "providers": [],
@@ -57605,8 +57661,30 @@
     },
     {
       "consumer": "ToolsDaemon",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectDaemons",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.LocalModels",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectLookups",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -57676,6 +57754,19 @@
       ],
       "providers": [
         "TriggerAlerting"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationKeyStore",
+      "methods": [],
+      "candidates": [
+        "AutomationTokens"
+      ],
+      "providers": [
+        "AutomationTokens"
       ],
       "resolution": "composition_expression"
     },
@@ -57880,6 +57971,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "WorkerDaemonRouter",
+      "field": "AutomationTokens",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "AutomationTokens"
+      ],
+      "providers": [
+        "AutomationTokens"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "WorkerIntegrationCredentials",
@@ -58287,7 +58391,23 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Project.Installs",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Ledger",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Lookups",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

@@ -69,12 +69,8 @@ func TestQuestionQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQuestionsByWorkflowStepIteration: %v", err)
 	}
-	twinByStep, err := env.Repo.GetQuestionsByWorkflowStepIteration(ctx, "wf-q", "ask", 2)
-	if err != nil {
-		t.Fatalf("Repo.GetQuestionsByWorkflowStepIteration: %v", err)
-	}
-	if !reflect.DeepEqual(convQuestionIDs(byStep), convQuestionIDs(twinByStep)) || len(byStep) != 3 {
-		t.Fatalf("ListQuestionsByWorkflowStepIteration = %v, Repo = %v; want q-1, q-3, q-x", convQuestionIDs(byStep), convQuestionIDs(twinByStep))
+	if len(byStep) != 3 {
+		t.Fatalf("ListQuestionsByWorkflowStepIteration = %v; want q-1, q-3, q-x", convQuestionIDs(byStep))
 	}
 
 	// Resolve, then the per-chat reads: the history keeps every question,

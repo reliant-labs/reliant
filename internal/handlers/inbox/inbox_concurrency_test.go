@@ -31,12 +31,13 @@ type inflightRepo struct {
 	items     *MockItems
 	firings   *MockFirings
 	notices   *MockNotices
+	storage   *MockStorage
 	now, peak atomic.Int32
 }
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, Items: r.items, Firings: r.firings, Notices: r.notices, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -55,7 +56,7 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
@@ -95,12 +96,12 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListHeldWorktreesForUserFunc = func(ctx context.Context, _ string) ([]*core.HeldWorktree, error) {
+	r.storage.ListHeldWorktreesForUserFunc = func(ctx context.Context, _ string) ([]*core.HeldWorktree, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListDaemonStorageStateFunc = func(ctx context.Context, _ string) (map[string]string, error) { return nil, nil }
-	m.ListAttachedDaemonIDsForUserFunc = func(ctx context.Context, _ string, _ time.Duration) ([]string, error) {
+	r.storage.ListDaemonStorageStateFunc = func(ctx context.Context, _ string) (map[string]string, error) { return nil, nil }
+	r.storage.ListAttachedDaemonIDsForUserFunc = func(ctx context.Context, _ string, _ time.Duration) ([]string, error) {
 		return nil, nil
 	}
 	m.ListDaemonsByUserIDFunc = func(ctx context.Context, _ string) ([]*db.Daemon, error) { return nil, nil }
@@ -253,7 +254,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 
 func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 	repo := newInflightRepo(0)
-	repo.ListHeldWorktreesForUserFunc = func(context.Context, string) ([]*core.HeldWorktree, error) {
+	repo.storage.ListHeldWorktreesForUserFunc = func(context.Context, string) ([]*core.HeldWorktree, error) {
 		return nil, errors.New("storage down")
 	}
 	repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {

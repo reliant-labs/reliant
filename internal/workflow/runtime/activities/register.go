@@ -158,6 +158,13 @@ func registerNodeTypeActivities() {
 // Activity types and metadata are registered in init() for static analysis.
 // This function registers activity instances with their runtime dependencies.
 func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
+	var workflowRuns handlers.WorkflowRuns
+	var questionsByStep handlers.QuestionsByStep
+	if deps.Repo != nil {
+		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
+		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
+	}
+
 	// ========================================================================
 	// MESSAGE PROCESSING ACTIVITIES
 	// ========================================================================
@@ -223,7 +230,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// QUESTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionsByStep))
 	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo))
 
 	// ========================================================================
@@ -264,7 +271,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
@@ -274,9 +281,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		toolBlocks = store.NewMessageContentBlockExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(handlers.CleanupDeps{Store: deps.Repo, ToolBlocks: toolBlocks, Approvals: approvals}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(handlers.CleanupDeps{Store: deps.Repo, ToolBlocks: toolBlocks, Approvals: approvals, Workflows: workflowRuns}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo, workflowRuns))
 
 	// ========================================================================
 	// UTILITY ACTIVITIES

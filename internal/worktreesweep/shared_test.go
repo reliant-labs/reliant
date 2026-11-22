@@ -71,7 +71,7 @@ func TestSweep_ALiveRowStillShieldsItsOwnCheckout(t *testing.T) {
 	assert.False(t, worktreereclaim.ReasonSharedWithLive.Removable(), "Clean up never removes a live row's checkout")
 
 	// The confirmed Clean up skips it with the same reason.
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, CleanupSkipped, results[0].Outcome)

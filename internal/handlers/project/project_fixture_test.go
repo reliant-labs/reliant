@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -14,11 +15,26 @@ import (
 // (which fills Logger and Config).
 func newProjectService(t *testing.T, repo Repository, router Router) *Service {
 	t.Helper()
-	d := Deps{Repo: repo, Projects: projectaccesstest.For(repo), Router: router}
-	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+	return NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Router: router})))
+}
+
+// withStores wires the stores over d.Repo's database when it has one, as the
+// composition root does; a fake repository leaves the roles as mocks.
+func withStores(d Deps) Deps {
+	r, ok := d.Repo.(interface{ ORM() *orm.Client })
+	if !ok {
+		return d
+	}
+	if d.Detachments == nil {
 		d.Detachments = store.NewProjectDaemonDetachmentExtStore(r.ORM())
 	}
-	return NewTestProject(t, WithProjectDeps(d))
+	if d.Lookups == nil {
+		d.Lookups = store.NewProjectExtStore(r.ORM())
+	}
+	if d.Installs == nil {
+		d.Installs = store.NewProjectDaemonExtStore(r.ORM())
+	}
+	return d
 }
 
 // placesAsNamed gives a test router the placement the project handlers rank

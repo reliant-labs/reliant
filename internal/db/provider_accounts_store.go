@@ -681,3 +681,10 @@ func (s *accountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []
 func (s *accountStore) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return store.ListUserIDsWithProviderAccount(ctx, s.db, provider)
 }
+
+// CredentialSealer is the slice of the credential vault the provider-account store seals and
+// opens with. Declared here, where it is consumed.
+type CredentialSealer interface {
+	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
+	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
+}

@@ -10,6 +10,13 @@ func workflowStatusDeps(repo WorkflowStatusStore) WorkflowStatusDeps {
 	d := WorkflowStatusDeps{Repo: repo}
 	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
 		d.Runs = NewRunRecords(o.ORM())
+		d.Workflows = NewWorkflowRuns(o.ORM())
 	}
 	return d
+}
+
+// workflowRunsOf is the workflow roles over repo's ORM handle: a *db.Repo, or a
+// fake embedding one.
+func workflowRunsOf(repo interface{ ORM() *orm.Client }) WorkflowRuns {
+	return NewWorkflowRuns(repo.ORM())
 }
