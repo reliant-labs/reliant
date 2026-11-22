@@ -181,7 +181,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
