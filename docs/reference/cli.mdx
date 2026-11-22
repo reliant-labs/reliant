@@ -270,6 +270,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge env verify`](#reliant-forge-env-verify) | Prove, without deploying anything, that what forge would ship is what is running |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge fix build-images-vuln-scan`](#reliant-forge-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -296,6 +297,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`reliant forge lint fix`](#reliant-forge-lint-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge lint fix build-images-vuln-scan`](#reliant-forge-lint-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`reliant forge lint fix composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge lint fix config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge lint fix connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -500,6 +502,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge test quarantine remove`](#reliant-forge-test-quarantine-remove) | Remove a test's quarantine entry |
 | [`reliant forge test quarantine skip-regex`](#reliant-forge-test-quarantine-skip-regex) | Print the -skip pattern that skips every quarantined test (go) |
 | [`reliant forge test report`](#reliant-forge-test-report) | Summarise a commit's recorded test runs: results, merged coverage, diff coverage (runs nothing) |
+| [`reliant forge test run`](#reliant-forge-test-run) | Run the project's own Taskfile lanes (`task <lane>`) as one recorded run; never runs `go test` itself |
 | [`reliant forge test runs`](#reliant-forge-test-runs) | List the recorded test runs, newest first (runs nothing) |
 | [`reliant forge tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf, syft, grype) |
@@ -5113,6 +5116,10 @@ rollback). A widening adds the CHECK NOT VALID, so its ACCESS EXCLUSIVE lock is
 never held for a scan of the table, and writes a second migration,
 `<name>`_validate, that validates the existing rows under a lock that blocks
 neither reads nor writes. The name defaults to `<constraint>`_closed_set.
+`<constraint>` is the CHECK's name exactly as the migrations write it (prefix
+included); an unknown name is refused with the out-of-step constraints listed.
+The pair sets no lock_timeout of its own: forge db migrate up runs every
+migration under one (default 5s, -- forge:lock-timeout to override).
 
 ```
 reliant forge db migration new [name] [flags]
@@ -10596,6 +10603,7 @@ reliant forge fix [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`build-images-vuln-scan`](#reliant-forge-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -10611,6 +10619,37 @@ reliant forge fix [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge fix build-images-vuln-scan
+
+Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan
+
+Re-render .github/workflows/build-images.yml as forge writes it for a project
+pinned to v1.10.0 or later: no anchore/sbom-action steps (every release cut
+records an SBOM per artifact itself), and the Trivy step replaced by a cached
+grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
+
+It rewrites the file only while it is still forge's: byte for byte what an
+older forge scaffolded for this project. A file you edited is left alone, and
+the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
+later, since CI runs the forge it pins; `forge project upgrade --to v1.10.0`
+moves the pin and then runs this. Re-running it changes nothing.
+
+The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
+migration skill: `forge skill load migrations/v1.10.0/sbom-vulnerabilities`.
+
+```
+reliant forge fix build-images-vuln-scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -11999,6 +12038,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules (proto, Go tree, frontend env, hook-test rows that contradict their regenerated hook, and identity sign-in methods the login broker does not serve) |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create`<Entity>`Request — the flattened request drops write presence silently |
+| `--crud-ownership` | `bool` | - | Flag a table served by forge-generated CRUD on an authenticated rpc that declares no owner — no COMMENT ON TABLE forge:owner=`<column>`, no forge:owner column, no forge:public or forge:unscoped with a reason — so every signed-in caller can read and write every row (warns first; gates from the release after the one that ships it) |
 | `--db-grants` | `bool` | - | Fail on a credential-shaped column (token, password, key, ciphertext, hash…) that carries neither forge:secret nor forge:readable `<reason>`: the read-only forge_ro role is refused it until someone decides |
 | `--fix` | `bool` | - | Apply the mechanical fixes in place (Go formatting, the tracing log rewrite, frontend prettier, eslint --fix), each Go rewrite type-checked and taken back if it breaks its package. Never golangci-lint fixes. Off by default: lint is a gate and reports |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
@@ -12049,6 +12089,7 @@ reliant forge lint fix [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`build-images-vuln-scan`](#reliant-forge-lint-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -12064,6 +12105,37 @@ reliant forge lint fix [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge lint fix build-images-vuln-scan
+
+Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan
+
+Re-render .github/workflows/build-images.yml as forge writes it for a project
+pinned to v1.10.0 or later: no anchore/sbom-action steps (every release cut
+records an SBOM per artifact itself), and the Trivy step replaced by a cached
+grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
+
+It rewrites the file only while it is still forge's: byte for byte what an
+older forge scaffolded for this project. A file you edited is left alone, and
+the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
+later, since CI runs the forge it pins; `forge project upgrade --to v1.10.0`
+moves the pin and then runs this. Re-running it changes nothing.
+
+The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
+migration skill: `forge skill load migrations/v1.10.0/sbom-vulnerabilities`.
+
+```
+reliant forge lint fix build-images-vuln-scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -18688,6 +18760,9 @@ Print one of forge's published JSON Schemas (draft 2020-12).
         forge.test.coverage-view/v1, forge.test.runs/v1: what `forge test
         coverage --json` and `forge test runs --json` print.
 
+  test-run-result
+        forge.test.run-result/v1: what `forge test run --json` prints.
+
   vuln-patch  forge.dev/vuln-patch/v1: the document `forge vuln patch --json` prints —
         what was bumped per finding, the verification, and the exit code the
         vuln-patch workflow branches on.
@@ -21906,6 +21981,7 @@ reliant forge test [flags]
 | [`ingest`](#reliant-forge-test-ingest) | Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run |
 | [`quarantine`](#reliant-forge-test-quarantine) | Manage the flaky-test quarantine list (ci/quarantine/) |
 | [`report`](#reliant-forge-test-report) | Summarise a commit's recorded test runs: results, merged coverage, diff coverage (runs nothing) |
+| [`run`](#reliant-forge-test-run) | Run the project's own Taskfile lanes (`task <lane>`) as one recorded run; never runs `go test` itself |
 | [`runs`](#reliant-forge-test-runs) | List the recorded test runs, newest first (runs nothing) |
 
 **Flags:**
@@ -22372,6 +22448,14 @@ Exit codes (coverage never decides one):
      skipped (verify-test-run's zero-evidence rule), or runs from different trees
   4  --upload=required and the report could not be uploaded
 
+Upload records each clean-tree lane run on the project's control plane: its
+results file, its coverage (repo paths, git blob ids and counts, never
+source) and the diff's changed lines. It is on in CI, never for a dirty tree,
+and on a clean local tree only with --upload or forge.yaml's
+tests.upload: always (tests.upload: never turns it off). A control plane that
+does not record test runs yet, or an upload that fails, is one line on stderr
+and changes no exit code, unless --upload=required.
+
 --gate-json writes the same gate document `forge ci verify-test-run --gate-json`
 writes, with its zero-evidence and mass-skip checks, so a deploy's tests gate
 keeps its meaning.
@@ -22390,7 +22474,46 @@ reliant forge test report [<run>...] [flags]
 | `--format` | `string` | `text` | Output: text, json (forge.test.report/v1), lcov, cobertura or html |
 | `--gate-json` | `string` | - | Also write the verdict to `FILE` as a gate document (verify-test-run's shape), for `forge gate record` or `forge env deploy --gate` |
 | `--json` | `bool` | - | Same as --format json |
-| `--upload` | `bool` | - | Upload the report to the control plane (--upload=required: exit 4 when it cannot be uploaded) |
+| `--upload` | `bool` | - | Record the report's clean-tree lane runs on the control plane (default: in CI, or with tests.upload: always; --upload=required: exit 4 when they cannot be recorded; --upload=false: never) |
+
+---
+
+#### reliant forge test run
+
+Run the project's own Taskfile lanes (`task <lane>`) as one recorded run; never runs `go test` itself
+
+Runs the project's own Taskfile lanes (`task <lane>`) as one recorded run; it never runs `go test` itself.
+
+The Taskfile decides how each lane runs. forge allocates one run with
+`forge test begin` and runs every lane with FORGE_TEST_RUN set to it, so the
+lanes' own `forge test capture` steps all record into that one run. A lane that
+does not capture still runs; it just records nothing.
+
+Lanes are Taskfile task names. With none named, it runs `test`, then
+`test:integration` when the Taskfile has it. Every lane runs even after one fails,
+so a failing unit lane does not hide the integration lane's result.
+
+Exit codes:
+  0  every lane exited 0
+  1  a lane failed (each lane's own exit code is in --json)
+  2  interrupted before every lane finished: the run proves nothing either
+     way (--json lists every requested lane; the ones cut short or never
+     started are canceled)
+  4  refused, nothing run: the Taskfile has no such lane, or `task` is not
+     installed
+
+Then `forge test report <run>` summarises what the lanes recorded.
+
+```
+reliant forge test run [<lane>...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print a forge.test.run-result/v1 document (the lanes' own output goes to stderr) |
 
 ---
 
@@ -23029,6 +23152,13 @@ its major version, with the ecosystem's own tool so lockfiles stay consistent:
   npm    npm install `<pkg>`@`<fix>` (direct), or an "overrides" entry (transitive)
   pnpm   pnpm update `<pkg>`@`<fix>`, or "pnpm.overrides"
   yarn   yarn up `<pkg>`@`<fix>` (yarn upgrade on yarn 1), or "resolutions"
+  pip    the `<pkg>`==`<fix>` pin rewritten in requirements*.txt; a compiled file
+         (a pip-compile or uv pip compile header, or a sibling .in) is
+         recompiled with --upgrade-package `<pkg>`==`<fix>`, its .in pin raised
+         first when it pins `<pkg>` directly
+  poetry poetry update `<pkg>` when pyproject.toml's range admits the fix (or
+         `<pkg>` is transitive), else poetry add `<pkg>`@^`<fix>`
+  uv     uv lock --upgrade-package `<pkg>`==`<fix>`
   docker an OS package (deb, apk, rpm): the FROM of the Dockerfile whose final
          stage built the image moves to the newest tag of its minor
          (alpine:3.19.1 -> alpine:3.19.4), else to its tag's newest digest
@@ -23042,14 +23172,18 @@ a fix that no exemption covers is patched; named ids (a CVE finds its GHSA) are
 patched whatever their exemption.
 
 Nothing is guessed. A finding the tree cannot be tied to one manifest (or to
-one Dockerfile), a Python package, or a fix only in a new major is reported as
-skipped with the reason: the vuln-patch workflow's agent picks those up.
---allow-major takes a major bump; for a base image or the Go toolchain, a new
-minor (alpine 3.20, Go 1.23) already counts as one.
+one Dockerfile), a range in pyproject.toml or a .in the fix lies outside, or a
+fix only in a new major is reported as skipped with the reason: the
+vuln-patch workflow's agent picks those up. --allow-major takes a major bump;
+for a base image or the Go toolchain, a new minor (alpine 3.20, Go 1.23)
+already counts as one.
 
 --verify runs the project's gate after the bump (vuln.patch.verify in
 forge.yaml, else `task test:short` when the Taskfile has it, else go build and go test
--short, else the package manager's test script; --verify=`<cmd>` runs `<cmd>`),
+-short, else the package manager's test script, else uv run or poetry run
+pytest -q for a uv or poetry project that uses pytest; --verify=`<cmd>` runs
+`<cmd>`; a project pinned only by requirements files has no default, so name
+its gate in vuln.patch.verify or with --verify=`<cmd>`),
 then rescans each changed manifest's directory, and rebuilds each changed
 Dockerfile (docker build --pull --no-cache, the project as context) and rescans
 its image: a finding still reported is still_present. With no docker, a
@@ -23075,7 +23209,7 @@ reliant forge vuln patch <env | dir> [<advisory-id>...] [flags]
 | `--allow-major` | `bool` | - | take a fix in a new major version when no fix is in the installed one |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--branch` | `string` | - | with --pr, the branch to commit on (default forge/vuln-patch/`<date>`-`<commit>`) |
-| `--ecosystem` | `stringSlice` | `[]` | patch only these ecosystems: go, npm, pnpm, yarn, docker (repeatable, or comma-separated) |
+| `--ecosystem` | `stringSlice` | `[]` | patch only these ecosystems: go, npm, pnpm, yarn, pip, poetry, uv, docker (repeatable, or comma-separated) |
 | `--json` | `bool` | - | print the forge.dev/vuln-patch/v1 document (forge project schema vuln-patch) |
 | `--no-pr` | `bool` | - | leave the tree changed and open nothing (the default) |
 | `--pr` | `bool` | - | commit on a new branch, push, and open a pull request with gh (refuses a dirty tree) |
