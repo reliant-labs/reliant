@@ -100,7 +100,6 @@ var userScopedReads = map[string]string{
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"RecentTriggerFirings": readParentAuthorized,
 
-	"GetAutomationToken":          readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":       readPersonal,

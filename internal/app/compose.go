@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -446,6 +447,13 @@ func (g *Graph) newVault() (vault.Service, error) {
 	})
 }
 
+func (g *Graph) newAutomationTokens() (automationtokens.Service, error) {
+	return NewAutomationTokens(AutomationTokensDeps{
+		DB:    g.Database(),
+		Vault: g.Vault(),
+	})
+}
+
 func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
@@ -461,9 +469,10 @@ func (g *Graph) newTriggerPollers() (*webhook.Registry, error) {
 
 func (g *Graph) newWorkerDaemonRouter() (*WorkerDaemonRouter, error) {
 	return NewWorkerDaemonRouter(WorkerDaemonRouterDeps{
-		NATS:         g.NATSConn(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		NATS:             g.NATSConn(),
+		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
+		DB:               g.Database(),
+		AutomationTokens: g.AutomationTokens(),
 	})
 }
 
@@ -1119,24 +1128,25 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		return nil, err
 	}
 	return trigger.New(trigger.Deps{
-		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		OrgMoves:     store.NewProjectOrgMoveExtStore(g.Database().ORM()),
-		Syncer:       syncer,
-		Fires:        fires,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Integrations: g.IntegrationSettings().Config,
-		Sealer:       in.Vault,
-		Catalog:      in.Registry,
-		Intake:       in.Intake,
-		Access:       triggerAccess(in),
-		Senders:      g.TriggerSenders(),
-		Options:      optionsChecker{svc: g.InputOptions()},
-		Alerting:     alertingProvisioner(g.TriggerAlerting()),
-		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
-		Orgs:         g.OrgResolver(),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
+		Syncer:         syncer,
+		Fires:          fires,
+		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		AutomationKeys: g.AutomationTokens(),
+		Integrations:   g.IntegrationSettings().Config,
+		Sealer:         in.Vault,
+		Catalog:        in.Registry,
+		Intake:         in.Intake,
+		Access:         triggerAccess(in),
+		Senders:        g.TriggerSenders(),
+		Options:        optionsChecker{svc: g.InputOptions()},
+		Alerting:       alertingProvisioner(g.TriggerAlerting()),
+		Drafter:        automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
+		Orgs:           g.OrgResolver(),
 		// A nil gitcredentialclient.Service converts to a nil interface.
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
