@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 )
 
@@ -82,7 +83,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	agentThread := chatID + "-agent"
 	_, err = repo.CreateThread(ctx, &db.Thread{ID: agentThread, ChatID: chatID})
 	require.NoError(t, err)
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, agentThread, "Claude", false, now.Add(3*time.Hour), now))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, agentThread, "Claude", false, now.Add(3*time.Hour), now))
 
 	// The provider refused alice on its 5-hour window, and benched it until
 	// the reset. The agent's thread is pinned to alice.
@@ -114,7 +115,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, nil
 		}),
 		OnCapacity: func(ctx context.Context, userID, _ string) {
-			capacitywake.WakeUser(ctx, repo, signals, userID, "test")
+			capacitywake.WakeUser(ctx, providerbackofftest.New(t, repo), signals, userID, "test")
 		},
 	}
 	res, err := fetcher.RefreshUsage(ctx, user, alice.ID)

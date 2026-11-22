@@ -235,7 +235,7 @@ func fixture(t *testing.T) (*fakeRepo, *fakeTemporal, *fakePause, *Service) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Paused()}
 	temporal := &fakeTemporal{status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runID: "run-old"}
 	pause := &fakePause{}
-	return repo, temporal, pause, New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
+	return repo, temporal, pause, New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause, Waits: repo})
 }
 
 // =========================================================================
@@ -688,7 +688,7 @@ func TestResumeViaSignal_UndeliverableFallsBackToRestart(t *testing.T) {
 func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 	repo, temporal, pause, _ := fixture(t)
 	repo.chat = &db.Chat{ID: "chat-1"} // never started a root workflow
-	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
+	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause, Waits: repo})
 
 	_, resumeErr := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, resumeErr, ErrNoWorkflow)
@@ -699,7 +699,7 @@ func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 func TestLifecycleCalls_RejectMissingChat(t *testing.T) {
 	repo, temporal, pause, _ := fixture(t)
 	repo.chatErr = core.ErrChatNotFound
-	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
+	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause, Waits: repo})
 
 	_, err := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, err, core.ErrChatNotFound)

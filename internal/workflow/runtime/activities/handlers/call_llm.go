@@ -194,6 +194,16 @@ type CallLLMActivity struct {
 	// usage records each model request in the usage ledger; nil records
 	// nothing.
 	usage LLMUsageRecorder
+	// backoff marks a thread parked in the driver's retry ladder; nil marks
+	// nothing.
+	backoff ProviderBackoffMarkers
+}
+
+// WithProviderBackoff wires the marker a thread parked in a driver's retry
+// ladder leaves behind.
+func (a *CallLLMActivity) WithProviderBackoff(m ProviderBackoffMarkers) *CallLLMActivity {
+	a.backoff = m
+	return a
 }
 
 // WithUsageRecorder wires the usage ledger into the turn's requests.
@@ -3412,7 +3422,10 @@ func (a *CallLLMActivity) recordProviderBackoff(ctx context.Context, chatID, thr
 		"statusCode", wait.StatusCode,
 		"reason", wait.Reason)
 
-	if err := a.repo.RecordProviderBackoff(ctx, chatID, thread,
+	if a.backoff == nil {
+		return
+	}
+	if err := a.backoff.RecordProviderBackoff(ctx, chatID, thread,
 		wait.Attempt, wait.MaxAttempts, wait.StatusCode, wait.Reason, wait.Delay, time.Now()); err != nil {
 		log.Error("[CallLLM] Failed to record provider backoff marker",
 			"chatID", chatID, "thread", thread, "error", err)
@@ -3429,7 +3442,10 @@ func (a *CallLLMActivity) releaseProviderBackoff(ctx context.Context, thread str
 		return
 	}
 	state.inProviderBackoff = false
-	if err := a.repo.ClearProviderBackoff(ctx, thread, time.Now()); err != nil {
+	if a.backoff == nil {
+		return
+	}
+	if err := a.backoff.ClearProviderBackoff(ctx, thread, time.Now()); err != nil {
 		providerBackoffLogger(ctx).Error("[CallLLM] Failed to clear provider backoff marker",
 			"thread", thread, "error", err)
 	}

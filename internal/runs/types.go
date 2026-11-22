@@ -40,12 +40,17 @@ type Repository interface {
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
-	// ClearUsageLimitWait releases a chat's usage-limit wait markers; an empty
-	// thread releases every thread of the chat.
-	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 	// RunTx runs f in one transaction; a terminal status and its cascade
 	// commit together.
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
+}
+
+// UsageLimitWaits releases a chat's usage-limit wait markers.
+// providerbackoff.Service satisfies it.
+type UsageLimitWaits interface {
+	// ClearUsageLimitWait releases the chat's markers; an empty thread
+	// releases every thread of the chat.
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 }
 
 // TemporalClient is the subset of the Temporal SDK client this service needs.
