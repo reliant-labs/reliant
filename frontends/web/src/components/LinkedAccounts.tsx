@@ -2,10 +2,18 @@ import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { connectGitHub } from '@/lib/github-connect'
 import { SocialProviderIcon, type SocialProvider } from './icons/SocialProviderIcon'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { ForgeLinkedAccounts } from './Settings/forge/ForgeLinkedAccounts'
 
 type Provider = SocialProvider
 
+// forge's login broker (AUTH_PROVIDER "forge") connects GitHub and Google
+// itself (/auth/account/links/*); Supabase mode is unchanged below.
 export function LinkedAccounts() {
+  return isForgeAuth() ? <ForgeLinkedAccounts /> : <SupabaseLinkedAccounts />
+}
+
+function SupabaseLinkedAccounts() {
   const { linkGoogleAccount, linkAppleAccount, unlinkIdentity, user } = useAuthStore()
   const [linkingProvider, setLinkingProvider] = useState<Provider | null>(null)
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null)

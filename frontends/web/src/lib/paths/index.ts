@@ -220,6 +220,45 @@ export function resetPasswordPath(): string {
   return "/reset-password";
 }
 
+// Forge sign-in's own pages (AUTH_PROVIDER "forge"). reliant-api's login
+// broker mails links to, and returns Google/GitHub sign-ins to, these exact
+// paths (forge pkg/devidp; internal/app/login_broker.go), so they are fixed.
+
+/** forge's sign-in path: where the broker sends a failed provider round trip (`?social=failed`). */
+export function forgeSignInPath(): string {
+  return "/auth/sign-in";
+}
+
+/** Ask for a password-reset link (forge sign-in). */
+export function forgeForgotPasswordPath(): string {
+  return "/auth/forgot";
+}
+
+/** A password-reset link's page (`?userID=…&code=…`, forge sign-in). */
+export function forgeResetPasswordPath(): string {
+  return "/auth/reset";
+}
+
+/** An address-confirmation link's page (`?userID=…&code=…`, forge sign-in). */
+export function forgeVerifyEmailPath(): string {
+  return "/auth/verify";
+}
+
+/** An emailed sign-in link's page (`?code=…`, forge sign-in). */
+export function forgeMagicLinkPath(): string {
+  return "/auth/magic";
+}
+
+/** Where Google or GitHub return (`?id=…&token=…`, forge sign-in). */
+export function forgeSocialCallbackPath(): string {
+  return "/auth/social/callback";
+}
+
+/** A changed address's confirmation link (forge account settings, `?code=…`). */
+export function confirmEmailChangePath(): string {
+  return "/auth/account/email/confirm";
+}
+
 /** The workspace proxy's sign-in hop (`?return=` is the proxied URL to go back to). */
 export function proxyAuthPath(): string {
   return "/auth/proxy";
