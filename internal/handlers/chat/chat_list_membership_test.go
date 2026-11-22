@@ -30,7 +30,7 @@ func TestChatCollections_LeaveOutARemovedMembersOrgChats(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	resolver := orgs.New(orgSource{}) // alice is a live member of home only
-	service := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Orgs: resolver}))
+	service := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Orgs: resolver}))
 	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, "alice"), resolver)
 	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // a fixture, not the wall clock
 	projectID := "member-project-" + uuid.NewString()
@@ -142,7 +142,7 @@ func TestListChats_MainWorkspacesFollowTheProjectsAuthz(t *testing.T) {
 
 	// A removed member of acme (a member of home only).
 	removed := orgs.New(orgSource{})
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Orgs: removed}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Orgs: removed}))
 	ctx := authz.WithMembership(bg, removed)
 	require.Equal(t, sorted(ids["p-home"], ids["p-legacy"]), mains(svc, ctx, ""), "a removed member, no project_id")
 	require.Empty(t, mains(svc, ctx, ids["p-acme"]), "a removed member, the left org's project_id")
@@ -150,7 +150,7 @@ func TestListChats_MainWorkspacesFollowTheProjectsAuthz(t *testing.T) {
 
 	// A member of both, through a credential bound to home.
 	both := orgs.New(memberOfBoth{})
-	svc = NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Orgs: both}))
+	svc = NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Orgs: both}))
 	machine := auth.WithMachineToken(authz.WithMembership(bg, both), &fat.Principal{OrgID: "home", ActingUserID: "alice"})
 	require.Equal(t, sorted(ids["p-home"], ids["p-legacy"]), mains(svc, machine, ""), "a home credential, no project_id")
 	require.Empty(t, mains(svc, machine, ids["p-acme"]), "a home credential, acme's project_id")

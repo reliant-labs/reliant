@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestDaemonAttachmentHealth: a heartbeat's machine health is stored on the
@@ -31,7 +33,7 @@ func TestDaemonAttachmentHealth(t *testing.T) {
 		Reason: "This machine cannot start new processes",
 		Since:  time.Date(2026, 10, 30, 17, 57, 0, 0, time.UTC),
 	}
-	if err := repo.UpdateDaemonAttachmentHealth(ctx, daemonID, degraded); err != nil {
+	if err := store.SetDaemonAttachmentHealth(ctx, repo.ORM(), daemonID, degraded); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentHealth without a lease: %v", err)
 	}
 
@@ -58,7 +60,7 @@ func TestDaemonAttachmentHealth(t *testing.T) {
 		t.Fatalf("health of a new lease = %+v, want unreported", got)
 	}
 
-	if err := repo.UpdateDaemonAttachmentHealth(ctx, daemonID, degraded); err != nil {
+	if err := store.SetDaemonAttachmentHealth(ctx, repo.ORM(), daemonID, degraded); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentHealth: %v", err)
 	}
 	got := read()

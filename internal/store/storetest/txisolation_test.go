@@ -119,7 +119,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// the loser's snapshot predates the wait and it fails with 40001
 		// (TestChatSelectionConcurrentWritersLoseNothing).
 		{"Repo.MutateChatSelection", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
+			_, err := store.NewChatSelectionExtStore(p.Repo.ORM()).MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
 			return err
 		}},
 		{"Repo.MergeWorktreeCleanupMetadata", readCommitted, func(ctx context.Context) error {

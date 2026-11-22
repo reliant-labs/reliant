@@ -37,7 +37,7 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 
 	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
@@ -89,7 +89,7 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 
 	_, err := service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
 		ChatId: chatID,
@@ -140,7 +140,7 @@ func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpda
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 
 	_, err := service.UpdateWorkflowParams(ctx, connect.NewRequest(&reliantv1.UpdateWorkflowParamsRequest{
 		ChatId: chatID,

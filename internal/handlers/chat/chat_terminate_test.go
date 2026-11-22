@@ -128,7 +128,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	newWorkflow(spawnID, &rootID, db.Active())
 	newWorkflow(nestedSpawnID, &spawnID, db.Active())
 	newWorkflow(pausedSpawnID, &rootID, db.Paused())
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &db.WorkflowCheckpoint{
 		WorkflowID: rootID,
 		ChatID:     chatID,
 		NodeID:     "implement",
@@ -139,8 +139,8 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
 		// TerminateChat delegates execution state and reconciliation to the
 		// run-lifecycle service. No pause controller: terminate never signals or

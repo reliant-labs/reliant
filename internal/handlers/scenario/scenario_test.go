@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -36,7 +38,7 @@ func setupTestScenarioService(t *testing.T) (*Service, *db.Repo, string, string,
 		LastActive: now,
 	}))
 
-	return NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo})), repo, userID, projectID, ctx
+	return NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)})), repo, userID, projectID, ctx
 }
 
 func TestScenarioService_RunScenario_LoadsReferencedProjectWorkflowInternals(t *testing.T) {

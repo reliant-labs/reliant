@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
@@ -26,7 +27,7 @@ func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 			return core.AttentionResult{}, wantErr
 		},
 	}
-	a := NewWorkflowStatusActivity(store)
+	a := NewWorkflowStatusActivity(workflowStatusDeps(store))
 	in := WorkflowStatusInput{ChatID: "actual", Status: "failed", LaunchRun: true, Attention: &core.AttentionUpdate{ChatID: "forged", Phase: "start"}}
 	_, err := a.recordAttention(context.Background(), in)
 	require.ErrorIs(t, err, wantErr)
@@ -42,7 +43,7 @@ func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 	require.Equal(t, 1, calls)
 }
 
-type unavailableReceiptStore struct{ *db.Repo }
+type unavailableReceiptStore struct{ RunRecords }
 
 func (s unavailableReceiptStore) SetLaunchEventRunStatus(context.Context, string, string) error {
 	return errors.New("receipt unavailable")
@@ -55,7 +56,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: chatID,
 		Attention: &core.AttentionUpdate{RunID: uuid.NewString(), StartedAt: time.Now().UTC(), Key: "incident", Phase: "finish", State: "action_required"}}
 	var out WorkflowStatusOutput
-	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(unavailableReceiptStore{f.h.Repo()}).Execute, in, &out)
+	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: f.h.Repo(), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
 	require.Error(t, err)
 	wf, err := f.h.Repo().GetWorkflow(ctx, chatID)
 	require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
 				store = unavailableAttentionStore{f.h.Repo()}
 			}
 			var out WorkflowStatusOutput
-			err := f.h.ExecuteActivity(NewWorkflowStatusActivity(store).Execute, in, &out)
+			err := f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(store)).Execute, in, &out)
 			wf, getErr := f.h.Repo().GetWorkflow(ctx, chatID)
 			require.NoError(t, getErr)
 			incidents, listErr := f.h.Repo().ListAttentionIncidents(ctx, f.userID)
@@ -114,7 +115,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: chatID,
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "observer", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
-	err = f.h.ExecuteActivity(NewWorkflowStatusActivity(unavailableAttentionStore{f.h.Repo()}).Execute, in, &out)
+	err = f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(unavailableAttentionStore{f.h.Repo()})).Execute, in, &out)
 	require.Error(t, err, "terminal activity retries rather than acknowledge a lost transition")
 	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
 	require.NoError(t, err)
@@ -147,7 +148,7 @@ func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
 	in := WorkflowStatusInput{ChatID: observer, WorkflowID: observer, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: observer,
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "repo:one:pr:12", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, in, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
 	chat, err := f.h.Repo().GetChat(ctx, observer)
 	require.NoError(t, err)
 	require.False(t, chat.Unread)

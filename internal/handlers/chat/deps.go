@@ -13,7 +13,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -38,6 +37,25 @@ type OrgResolver interface {
 type Questions interface {
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+}
+
+// Spawns reads the spawn tree a branch inherits and a resumed run is rebuilt
+// from: the sub-agents a branch's chat inherits, the background spawns still
+// open in a root execution, and a sub-agent that stopped on a failure.
+// store.ToolCallExtStore satisfies it. Each takes the chat, thread or workflow
+// id the handler already authorized.
+type Spawns interface {
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
+	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error)
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error)
+}
+
+// durableState is what a resumed run is rebuilt from: the repository's durable
+// rows and the spawn tree. It is the one value handed to the runtime's
+// *FromDurableState helpers, which declare their own roles over it.
+type durableState struct {
+	Repository
+	Spawns
 }
 
 // Repository is everything the chat handlers read and write.
@@ -74,7 +92,6 @@ type Repository interface {
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
 	ReviveThread(ctx context.Context, threadID string) (int64, error)
 	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
-	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error)
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
@@ -138,9 +155,7 @@ type Repository interface {
 	// runtime.StoppedSpawnFromDurableState, launch.LoadChatTrigger) declare
 	// unexported or anonymous roles, so their methods are written out here.
 	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*db.WorkflowCheckpoint, error)
-	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*db.LiveBackgroundSpawn, error)
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
-	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	// CreateNumberedMessage appends a message the handler builds itself (the
 	// branch repair), numbered from the counters.
@@ -152,7 +167,6 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
-	chatselection.Store
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore

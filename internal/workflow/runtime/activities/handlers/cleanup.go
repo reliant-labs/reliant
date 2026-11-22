@@ -42,13 +42,18 @@ type CleanupOutput struct {
 // - Cleaning up any pending tool execution requests
 // - Notifying the UI of the cancelled state
 type CleanupActivity struct {
-	repo CleanupStore
+	repo      CleanupStore
+	approvals ApprovalResolveStore
+	workflows WorkflowLoader
 }
 
-// NewCleanupActivity creates a new CleanupActivity
-func NewCleanupActivity(repo CleanupStore) *CleanupActivity {
+// NewCleanupActivity creates a new CleanupActivity; approvals closes the run's
+// pending approvals and workflows reads a spawn's child run.
+func NewCleanupActivity(repo CleanupStore, approvals ApprovalResolveStore, workflows WorkflowLoader) *CleanupActivity {
 	return &CleanupActivity{
-		repo: repo,
+		repo:      repo,
+		approvals: approvals,
+		workflows: workflows,
 	}
 }
 
@@ -74,6 +79,9 @@ func (a *CleanupActivity) Category() schema.ActivityCategory {
 
 // Execute cancels pending approvals and notifies UI
 func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
+	if a.approvals == nil {
+		return CleanupOutput{}, fmt.Errorf("approval resolution store is not configured")
+	}
 	logging.DebugContext(ctx, "[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
 
 	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)
@@ -98,7 +106,7 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 	// announces the close on the chat feed.
 	cancelledCount := 0
 	for _, approval := range pendingApprovals {
-		closed, err := a.repo.ResolvePendingApproval(ctx, approval.ID,
+		closed, err := a.approvals.ResolvePendingApproval(ctx, approval.ID,
 			int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED),
 			"The run waiting on this request ended; nothing was approved.", "run_ended")
 		if err == nil && !closed {
@@ -303,7 +311,7 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 		// A spawn is the case that matters, and it can be checked exactly:
 		// ask the workflow that is executing it.
 		if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
-			if wf, err := a.repo.GetWorkflow(ctx, *call.ChildWorkflowID); err == nil && wf != nil {
+			if wf, err := a.workflows.LoadWorkflow(ctx, *call.ChildWorkflowID); err == nil && wf != nil {
 				if workflowStatusIsTerminal(wf.Status) {
 					// The child is over and still wrote no result: a real orphan.
 					return false

@@ -125,7 +125,7 @@ type Request struct {
 	// the machine the checkouts live on.
 	OwnerDaemonID string
 	// IdempotencyKey, when set, is stored on the row (see
-	// db.Repo.GetWorktreeByIdempotencyKey; the caller checks it).
+	// store.GetWorktreeByIdempotencyKey; the caller checks it).
 	IdempotencyKey *string
 	// WorkspaceID, when set, is the workspace directory name under the
 	// worktrees root (see worktreepath.WorkspaceDirName). Adopt needs it up

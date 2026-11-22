@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,7 +43,7 @@ func TestLaunchPinsANewChatThatNamesNoMachine(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
 	pinner := &stubPinner{repo: repo, target: "vm"}
-	launcher := NewLauncher(repo, threads.NewService(repo), starter, &recordingRunRecorder{repo: repo}, "q", WithChatPinner(pinner))
+	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "q", Pinner: pinner})
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -64,8 +66,7 @@ func TestLaunchPinnerNeverOverridesAChoiceOrNoMachine(t *testing.T) {
 
 	t.Run("a chosen daemon", func(t *testing.T) {
 		starter := &fakeStarter{}
-		launcher := NewLauncher(repo, threads.NewService(repo), starter, &recordingRunRecorder{repo: repo}, "q",
-			WithChatPinner(&stubPinner{repo: repo, target: "vm"}))
+		launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "q", Pinner: &stubPinner{repo: repo, target: "vm"}})
 		result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 			OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
 			Params: mockModelParams(t), Messages: userSeed("hi"), DaemonID: "chosen",
@@ -79,7 +80,7 @@ func TestLaunchPinnerNeverOverridesAChoiceOrNoMachine(t *testing.T) {
 	t.Run("no machine", func(t *testing.T) {
 		starter := &fakeStarter{}
 		pinner := &stubPinner{repo: repo, target: "vm"}
-		launcher := NewLauncher(repo, threads.NewService(repo), starter, &recordingRunRecorder{repo: repo}, "q", WithChatPinner(pinner))
+		launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "q", Pinner: pinner})
 		result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 			OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
 			Params: mockModelParams(t), Messages: userSeed("hi"), NoMachine: true,

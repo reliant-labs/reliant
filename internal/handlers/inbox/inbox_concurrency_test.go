@@ -28,12 +28,16 @@ import (
 type inflightRepo struct {
 	*MockRepository
 	rec       *MockRecoveries
+	items     *MockItems
+	firings   *MockFirings
+	notices   *MockNotices
+	storage   *MockStorage
 	now, peak atomic.Int32
 }
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -52,24 +56,24 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
-	m.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
-	m.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return nil, nil }
+	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
+	r.notices.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return nil, nil }
 	trg := &core.Trigger{ID: "trg-1", UserID: "user-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
 	m.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
 		return &db.Project{ID: id, UserID: "user-1"}, nil
 	}
-	m.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
+	r.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListAttentionIncidentsFunc = func(ctx context.Context, _ string) ([]*core.AttentionIncident, error) {
+	r.items.ListAttentionIncidentsFunc = func(ctx context.Context, _ string) ([]*core.AttentionIncident, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.AttentionManagedChatsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
+	r.items.AttentionManagedChatsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
@@ -85,23 +89,23 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.RecentTriggerOutcomesFunc = firings
-	m.FiringsSinceLastSuccessFunc = firings
-	m.FiringsSinceLastUnmanagedSuccessFunc = firings
+	r.firings.RecentTriggerOutcomesFunc = firings
+	r.firings.FiringsSinceLastSuccessFunc = firings
+	r.firings.FiringsSinceLastUnmanagedSuccessFunc = firings
 	m.ListTriggerRegistrationsFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListHeldWorktreesForUserFunc = func(ctx context.Context, _ string) ([]*core.HeldWorktree, error) {
+	r.storage.ListHeldWorktreesForUserFunc = func(ctx context.Context, _ string) ([]*core.HeldWorktree, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListDaemonStorageStateFunc = func(ctx context.Context, _ string) (map[string]string, error) { return nil, nil }
-	m.ListAttachedDaemonIDsForUserFunc = func(ctx context.Context, _ string, _ time.Duration) ([]string, error) {
+	r.storage.ListDaemonStorageStateFunc = func(ctx context.Context, _ string) (map[string]string, error) { return nil, nil }
+	r.storage.ListAttachedDaemonIDsForUserFunc = func(ctx context.Context, _ string, _ time.Duration) ([]string, error) {
 		return nil, nil
 	}
 	m.ListDaemonsByUserIDFunc = func(ctx context.Context, _ string) ([]*db.Daemon, error) { return nil, nil }
-	m.ListDismissedInboxItemIDsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
+	r.items.ListDismissedInboxItemIDsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
@@ -157,9 +161,9 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 		waitForBoth(ctx)
 		return nil, nil
 	}
-	repo.RecentTriggerOutcomesFunc = firing
-	repo.FiringsSinceLastSuccessFunc = firing
-	repo.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
+	repo.firings.RecentTriggerOutcomesFunc = firing
+	repo.firings.FiringsSinceLastSuccessFunc = firing
+	repo.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		waitForBoth(ctx)
 		return nil, nil
 	}
@@ -204,7 +208,7 @@ func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
-	assert.Len(t, repo.Calls("ListInboxPending"), 1, "%d concurrent calls read the inbox once", callers)
+	assert.Len(t, repo.items.Calls("ListInboxPending"), 1, "%d concurrent calls read the inbox once", callers)
 }
 
 // One caller giving up does not fail the others sharing its read.
@@ -227,20 +231,20 @@ func TestListInbox_ACancelledCallerDoesNotFailASharedRead(t *testing.T) {
 func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		breakIt func(m *MockRepository)
+		breakIt func(r *inflightRepo)
 	}{
-		{"pending", func(m *MockRepository) {
-			m.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
+		{"pending", func(r *inflightRepo) {
+			r.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
-		{"automation health", func(m *MockRepository) {
-			m.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+		{"automation health", func(r *inflightRepo) {
+			r.firings.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newInflightRepo(0)
-			tc.breakIt(repo.MockRepository)
+			tc.breakIt(repo)
 			svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 			_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
@@ -250,10 +254,10 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 
 func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 	repo := newInflightRepo(0)
-	repo.ListHeldWorktreesForUserFunc = func(context.Context, string) ([]*core.HeldWorktree, error) {
+	repo.storage.ListHeldWorktreesForUserFunc = func(context.Context, string) ([]*core.HeldWorktree, error) {
 		return nil, errors.New("storage down")
 	}
-	repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+	repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
 		return []*core.InboxPending{{Kind: core.InboxPendingApproval, ItemKey: "a1", ProjectID: "p1", WaitingSince: time.Now()}}, nil
 	}
 	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))

@@ -27,6 +27,8 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// Rows looks up a create's prior row and deletes a worktree (deps.go).
+	Rows Rows
 	// Recoveries is the recovery journal (deps.go).
 	Recoveries Recoveries
 	// GitCredentials resolves the owner's current credential only at call time.
@@ -81,6 +83,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.Rows == nil {
+		return fmt.Errorf("worktree: Deps.Rows is required")
 	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("worktree: Deps.Recoveries is required")

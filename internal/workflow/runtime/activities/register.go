@@ -4,7 +4,11 @@ package activities
 import (
 	"reflect"
 
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -14,8 +18,6 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // nodeTypeActivityDef maps a node type to its Temporal activity name and Go types.
@@ -156,6 +158,13 @@ func registerNodeTypeActivities() {
 // Activity types and metadata are registered in init() for static analysis.
 // This function registers activity instances with their runtime dependencies.
 func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
+	var workflowRuns handlers.WorkflowRuns
+	var questionsByStep handlers.QuestionsByStep
+	if deps.Repo != nil {
+		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
+		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
+	}
+
 	// ========================================================================
 	// MESSAGE PROCESSING ACTIVITIES
 	// ========================================================================
@@ -166,10 +175,16 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
 	var modelEndpoints local.EndpointSource
+	var spawnTree handlers.SpawnTree
 	if deps.Repo != nil {
 		modelEndpoints = store.NewModelEndpointExtStore(deps.Repo.ORM())
+		spawnTree = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
+	var stoppedAgents handlers.StoppedSubAgentReader
+	if deps.Repo != nil {
+		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
+	}
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -194,23 +209,28 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithProviderPreferences(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.Repo).WithProviderPreferences(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES
 	// ========================================================================
 
+	var approvals handlers.ApprovalResolveStore
+	if deps.Repo != nil {
+		approvals = approvalclose.NewFromRepo(deps.Repo)
+	}
+
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(approvals))
 
 	// ========================================================================
 	// QUESTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionsByStep))
 	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo))
 
 	// ========================================================================
@@ -218,6 +238,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
+	if deps.StepKeys != nil {
+		runStep = runStep.WithStepKeys(deps.StepKeys)
+	}
 	if deps.DaemonRouter != nil {
 		// A command that never reached its machine watches the machine while
 		// it waits, as wait_for_machine does.
@@ -237,20 +260,26 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// WORKFLOW MANAGEMENT ACTIVITIES
 	// ========================================================================
 
+	var runRecords handlers.RunRecords
+	var checkpoints handlers.WorkflowCheckpointStore
+	if deps.Repo != nil {
+		runRecords = handlers.NewRunRecords(deps.Repo.ORM())
+		checkpoints = store.NewWorkflowCheckpointExtStore(deps.Repo.ORM())
+	}
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo, approvals, workflowRuns))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo, workflowRuns))
 
 	// ========================================================================
 	// UTILITY ACTIVITIES
@@ -266,7 +295,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterObservabilityActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(deps.Repo, deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(stoppedAgents))
 
 }
 

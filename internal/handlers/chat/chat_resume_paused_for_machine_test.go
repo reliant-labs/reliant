@@ -53,7 +53,7 @@ func newPausedFixture(t *testing.T) pausedFixture {
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Paused()))
 	pause := &countingPause{resetPause: resetPause{repo: f.repo, replays: true}}
 	f.temporal.status = 1 // RUNNING
-	f.svc = &Service{deps: Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal}, runs: runs.New(runs.Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal, Pause: pause})}
+	f.svc = &Service{deps: Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Spawns: store.NewToolCallExtStore(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Temporal: f.temporal}, runs: runs.New(runs.Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal, Pause: pause})}
 	return pausedFixture{continueFixture: f, pause: pause}
 }
 

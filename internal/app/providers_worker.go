@@ -332,8 +332,15 @@ type RunLauncherDeps struct {
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
-	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue,
-		launch.WithChatPinner(pinner)), nil
+	return launch.New(launch.Deps{
+		Store:      d.DB,
+		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:    threads.NewService(d.DB),
+		Temporal:   d.Temporal.Client,
+		Runs:       d.Runs,
+		TaskQueue:  v2workflow.SharedTaskQueue,
+		Pinner:     pinner,
+	}), nil
 }
 
 // WorkerChat is the chat service as the run tools reach it on the worker.
@@ -359,6 +366,8 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:      d.Config,
 		Repo:        d.DB,
 		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
@@ -533,6 +542,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -570,10 +580,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(repo, d.Router),
+		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),
@@ -592,7 +602,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		MachineObserver: runMachine,
 		// delete archives here and asks for one immediate settle, as the UI's
 		// archive does; the api-server's periodic sweep catches the rest.
-		WorktreeSettler: worktreesweep.New(repo, d.Router.NATSDaemonRouter).
+		WorktreeSettler: worktreesweep.New(worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())), d.Router.NATSDaemonRouter).
 			WithKeepFiles(worktreesweep.KeepSetting{R: repo}),
 	})}, nil
 }
@@ -714,6 +724,18 @@ type TemporalWorkerDeps struct {
 // orgAdminNotifier is the control plane as the worker's notifier of an org's
 // admins, nil without one (a nil interface, never a nil client in one).
 func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
+// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
+// step keys, nil without one (a nil interface, never a nil client in one):
+// every run node with llm_gateway is then refused. A control plane the worker
+// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
+// the same way.
+func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
 	if d.Router == nil || d.Router.ControlPlane == nil {
 		return nil
 	}
@@ -870,6 +892,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

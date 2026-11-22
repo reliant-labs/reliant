@@ -4,9 +4,10 @@ package chat
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/require"
 )
 
 // TestActiveWorkflowNameForResume covers the transition_to ghost-recovery bug:

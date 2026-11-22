@@ -160,8 +160,322 @@ func (m *MockRecoveries) ListWorktreeRecoveries(ctx context.Context, owner strin
 // Compile-time check.
 var _ Recoveries = (*MockRecoveries)(nil)
 
+// forge:section MockItems
+// forge:hash=c5c2718d9bd3e7ae11dbce9172ac713c3ebef60bece8206a2874fdbf3f9819bc
+
+// MockItems is a test mock for the Items interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockItems.<Method>Func not set" error.
+type MockItems struct {
+	contractkit.Recorder
+	ListInboxPendingFunc          func(context.Context, string) ([]*core.InboxPending, error)
+	ListDismissedInboxItemIDsFunc func(context.Context, string, []string) (map[string]bool, error)
+	DismissInboxItemsFunc         func(context.Context, string, []string, time.Time) error
+	RestoreInboxItemsFunc         func(context.Context, string, []string) error
+	ListAttentionIncidentsFunc    func(context.Context, string) ([]*core.AttentionIncident, error)
+	AttentionManagedChatsFunc     func(context.Context, string, []string) (map[string]bool, error)
+}
+
+// ListInboxPending records the call and delegates to ListInboxPendingFunc when set.
+func (m *MockItems) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
+	m.Recorder.Record("ListInboxPending", ctx, userID)
+	if m.ListInboxPendingFunc != nil {
+		return m.ListInboxPendingFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockItems", "ListInboxPending")
+}
+
+// ListDismissedInboxItemIDs records the call and delegates to ListDismissedInboxItemIDsFunc when set.
+func (m *MockItems) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
+	m.Recorder.Record("ListDismissedInboxItemIDs", ctx, userID, itemIDs)
+	if m.ListDismissedInboxItemIDsFunc != nil {
+		return m.ListDismissedInboxItemIDsFunc(ctx, userID, itemIDs)
+	}
+	return nil, contractkit.MockNotSet("MockItems", "ListDismissedInboxItemIDs")
+}
+
+// DismissInboxItems records the call and delegates to DismissInboxItemsFunc when set.
+func (m *MockItems) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
+	m.Recorder.Record("DismissInboxItems", ctx, userID, itemIDs, at)
+	if m.DismissInboxItemsFunc != nil {
+		return m.DismissInboxItemsFunc(ctx, userID, itemIDs, at)
+	}
+	return contractkit.MockNotSet("MockItems", "DismissInboxItems")
+}
+
+// RestoreInboxItems records the call and delegates to RestoreInboxItemsFunc when set.
+func (m *MockItems) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
+	m.Recorder.Record("RestoreInboxItems", ctx, userID, itemIDs)
+	if m.RestoreInboxItemsFunc != nil {
+		return m.RestoreInboxItemsFunc(ctx, userID, itemIDs)
+	}
+	return contractkit.MockNotSet("MockItems", "RestoreInboxItems")
+}
+
+// ListAttentionIncidents records the call and delegates to ListAttentionIncidentsFunc when set.
+func (m *MockItems) ListAttentionIncidents(ctx context.Context, userID string) ([]*core.AttentionIncident, error) {
+	m.Recorder.Record("ListAttentionIncidents", ctx, userID)
+	if m.ListAttentionIncidentsFunc != nil {
+		return m.ListAttentionIncidentsFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockItems", "ListAttentionIncidents")
+}
+
+// AttentionManagedChats records the call and delegates to AttentionManagedChatsFunc when set.
+func (m *MockItems) AttentionManagedChats(ctx context.Context, userID string, chatIDs []string) (map[string]bool, error) {
+	m.Recorder.Record("AttentionManagedChats", ctx, userID, chatIDs)
+	if m.AttentionManagedChatsFunc != nil {
+		return m.AttentionManagedChatsFunc(ctx, userID, chatIDs)
+	}
+	return nil, contractkit.MockNotSet("MockItems", "AttentionManagedChats")
+}
+
+// Compile-time check.
+var _ Items = (*MockItems)(nil)
+
+// forge:section MockFirings
+// forge:hash=a8d7095b26d05f683b802909cf1f575621d30df3a1e7b859c727e17146ea2c0d
+
+// MockFirings is a test mock for the Firings interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockFirings.<Method>Func not set" error.
+type MockFirings struct {
+	contractkit.Recorder
+	RecentTriggerOutcomesFunc            func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	FiringsSinceLastSuccessFunc          func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	FiringsSinceLastUnmanagedSuccessFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	GetLatestTriggerEventFunc            func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+}
+
+// RecentTriggerOutcomes records the call and delegates to RecentTriggerOutcomesFunc when set.
+func (m *MockFirings) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("RecentTriggerOutcomes", ctx, userID, triggerIDs, perTrigger)
+	if m.RecentTriggerOutcomesFunc != nil {
+		return m.RecentTriggerOutcomesFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "RecentTriggerOutcomes")
+}
+
+// FiringsSinceLastSuccess records the call and delegates to FiringsSinceLastSuccessFunc when set.
+func (m *MockFirings) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("FiringsSinceLastSuccess", ctx, userID, triggerIDs, perTrigger)
+	if m.FiringsSinceLastSuccessFunc != nil {
+		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "FiringsSinceLastSuccess")
+}
+
+// FiringsSinceLastUnmanagedSuccess records the call and delegates to FiringsSinceLastUnmanagedSuccessFunc when set.
+func (m *MockFirings) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("FiringsSinceLastUnmanagedSuccess", ctx, userID, triggerIDs, perTrigger)
+	if m.FiringsSinceLastUnmanagedSuccessFunc != nil {
+		return m.FiringsSinceLastUnmanagedSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "FiringsSinceLastUnmanagedSuccess")
+}
+
+// GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
+func (m *MockFirings) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetLatestTriggerEvent", ctx, triggerID, outcome)
+	if m.GetLatestTriggerEventFunc != nil {
+		return m.GetLatestTriggerEventFunc(ctx, triggerID, outcome)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "GetLatestTriggerEvent")
+}
+
+// Compile-time check.
+var _ Firings = (*MockFirings)(nil)
+
+// forge:section MockNotices
+// forge:hash=caf7dae38ec664c3b5ca534caed62d6988c9650037a6d156af7a08dc172e025e
+
+// MockNotices is a test mock for the Notices interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockNotices.<Method>Func not set" error.
+type MockNotices struct {
+	contractkit.Recorder
+	HasNoOrgAccountPausesFunc        func(context.Context) (bool, error)
+	ListNoOrgAccountPausesFunc       func(context.Context, string, []string) ([]*core.Trigger, error)
+	ListPersonallyFundedTriggersFunc func(context.Context, string) ([]*core.Trigger, error)
+}
+
+// HasNoOrgAccountPauses records the call and delegates to HasNoOrgAccountPausesFunc when set.
+func (m *MockNotices) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
+	m.Recorder.Record("HasNoOrgAccountPauses", ctx)
+	if m.HasNoOrgAccountPausesFunc != nil {
+		return m.HasNoOrgAccountPausesFunc(ctx)
+	}
+	return false, contractkit.MockNotSet("MockNotices", "HasNoOrgAccountPauses")
+}
+
+// ListNoOrgAccountPauses records the call and delegates to ListNoOrgAccountPausesFunc when set.
+func (m *MockNotices) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
+	m.Recorder.Record("ListNoOrgAccountPauses", ctx, userID, adminOrgIDs)
+	if m.ListNoOrgAccountPausesFunc != nil {
+		return m.ListNoOrgAccountPausesFunc(ctx, userID, adminOrgIDs)
+	}
+	return nil, contractkit.MockNotSet("MockNotices", "ListNoOrgAccountPauses")
+}
+
+// ListPersonallyFundedTriggers records the call and delegates to ListPersonallyFundedTriggersFunc when set.
+func (m *MockNotices) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
+	m.Recorder.Record("ListPersonallyFundedTriggers", ctx, userID)
+	if m.ListPersonallyFundedTriggersFunc != nil {
+		return m.ListPersonallyFundedTriggersFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockNotices", "ListPersonallyFundedTriggers")
+}
+
+// Compile-time check.
+var _ Notices = (*MockNotices)(nil)
+
+// forge:section MockStorage
+// forge:hash=a53eb5eec9e31f1e7542f9b63af81305822f498bfe5e52724501a41af38c57cc
+
+// MockStorage is a test mock for the Storage interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockStorage.<Method>Func not set" error.
+type MockStorage struct {
+	contractkit.Recorder
+	ListHeldWorktreesForUserFunc            func(context.Context, string) ([]*core.HeldWorktree, error)
+	MergeUnownedWorktreeCleanupMetadataFunc func(context.Context, string, func(m *core.CleanupMetadata) bool) (bool, error)
+	AdoptWorktreeDaemonFunc                 func(context.Context, string, string) (string, error)
+	GetWorktreeFunc                         func(context.Context, string) (*core.Worktree, error)
+	ListAttachedDaemonIDsForUserFunc        func(context.Context, string, time.Duration) ([]string, error)
+	ListDaemonStorageStateFunc              func(context.Context, string) (map[string]string, error)
+	ListLiveWorktreePathsForUserFunc        func(context.Context, string) ([]core.WorktreePath, error)
+	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
+	ListWorktreesForReclaimFunc             func(context.Context) ([]*core.ReclaimCandidate, error)
+	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
+	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
+	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
+}
+
+// ListHeldWorktreesForUser records the call and delegates to ListHeldWorktreesForUserFunc when set.
+func (m *MockStorage) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	m.Recorder.Record("ListHeldWorktreesForUser", ctx, userID)
+	if m.ListHeldWorktreesForUserFunc != nil {
+		return m.ListHeldWorktreesForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListHeldWorktreesForUser")
+}
+
+// MergeUnownedWorktreeCleanupMetadata records the call and delegates to MergeUnownedWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	m.Recorder.Record("MergeUnownedWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeUnownedWorktreeCleanupMetadataFunc != nil {
+		return m.MergeUnownedWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return false, contractkit.MockNotSet("MockStorage", "MergeUnownedWorktreeCleanupMetadata")
+}
+
+// AdoptWorktreeDaemon records the call and delegates to AdoptWorktreeDaemonFunc when set.
+func (m *MockStorage) AdoptWorktreeDaemon(ctx context.Context, id string, daemonID string) (string, error) {
+	m.Recorder.Record("AdoptWorktreeDaemon", ctx, id, daemonID)
+	if m.AdoptWorktreeDaemonFunc != nil {
+		return m.AdoptWorktreeDaemonFunc(ctx, id, daemonID)
+	}
+	return "", contractkit.MockNotSet("MockStorage", "AdoptWorktreeDaemon")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockStorage) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "GetWorktree")
+}
+
+// ListAttachedDaemonIDsForUser records the call and delegates to ListAttachedDaemonIDsForUserFunc when set.
+func (m *MockStorage) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
+	m.Recorder.Record("ListAttachedDaemonIDsForUser", ctx, userID, staleThreshold)
+	if m.ListAttachedDaemonIDsForUserFunc != nil {
+		return m.ListAttachedDaemonIDsForUserFunc(ctx, userID, staleThreshold)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListAttachedDaemonIDsForUser")
+}
+
+// ListDaemonStorageState records the call and delegates to ListDaemonStorageStateFunc when set.
+func (m *MockStorage) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {
+	m.Recorder.Record("ListDaemonStorageState", ctx, userID)
+	if m.ListDaemonStorageStateFunc != nil {
+		return m.ListDaemonStorageStateFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListDaemonStorageState")
+}
+
+// ListLiveWorktreePathsForUser records the call and delegates to ListLiveWorktreePathsForUserFunc when set.
+func (m *MockStorage) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
+	m.Recorder.Record("ListLiveWorktreePathsForUser", ctx, userID)
+	if m.ListLiveWorktreePathsForUserFunc != nil {
+		return m.ListLiveWorktreePathsForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListLiveWorktreePathsForUser")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockStorage) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListReposByProject")
+}
+
+// ListWorktreesForReclaim records the call and delegates to ListWorktreesForReclaimFunc when set.
+func (m *MockStorage) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
+	m.Recorder.Record("ListWorktreesForReclaim", ctx)
+	if m.ListWorktreesForReclaimFunc != nil {
+		return m.ListWorktreesForReclaimFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListWorktreesForReclaim")
+}
+
+// MergeWorktreeCleanupMetadata records the call and delegates to MergeWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
+	m.Recorder.Record("MergeWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeWorktreeCleanupMetadataFunc != nil {
+		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return contractkit.MockNotSet("MockStorage", "MergeWorktreeCleanupMetadata")
+}
+
+// TryAdvisoryLock records the call and delegates to TryAdvisoryLockFunc when set.
+func (m *MockStorage) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
+	m.Recorder.Record("TryAdvisoryLock", ctx, key)
+	if m.TryAdvisoryLockFunc != nil {
+		return m.TryAdvisoryLockFunc(ctx, key)
+	}
+	return nil, false, contractkit.MockNotSet("MockStorage", "TryAdvisoryLock")
+}
+
+// UpdateWorktreeCleanupMetadata records the call and delegates to UpdateWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error {
+	m.Recorder.Record("UpdateWorktreeCleanupMetadata", ctx, id, metadata)
+	if m.UpdateWorktreeCleanupMetadataFunc != nil {
+		return m.UpdateWorktreeCleanupMetadataFunc(ctx, id, metadata)
+	}
+	return contractkit.MockNotSet("MockStorage", "UpdateWorktreeCleanupMetadata")
+}
+
+// Compile-time check.
+var _ Storage = (*MockStorage)(nil)
+
 // forge:section MockRepository
-// forge:hash=094b3a584d5e1c0d07f675ecdabd6ac690e4e6c1beb04af8d82d0128ed0e9118
+// forge:hash=d3da8e9a99f6891efa99df7a733ba7d687921719a11c8beea353f51d875920f5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -171,155 +485,22 @@ var _ Recoveries = (*MockRecoveries)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	ListHeldWorktreesForUserFunc            func(context.Context, string) ([]*core.HeldWorktree, error)
-	ListDaemonStorageStateFunc              func(context.Context, string) (map[string]string, error)
-	MergeUnownedWorktreeCleanupMetadataFunc func(context.Context, string, func(m *core.CleanupMetadata) bool) (bool, error)
-	AdoptWorktreeDaemonFunc                 func(context.Context, string, string) (string, error)
-	GetWorktreeFunc                         func(context.Context, string) (*core.Worktree, error)
-	ListAttachedDaemonIDsForUserFunc        func(context.Context, string, time.Duration) ([]string, error)
-	ListLiveWorktreePathsForUserFunc        func(context.Context, string) ([]core.WorktreePath, error)
-	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
-	ListWorktreesForReclaimFunc             func(context.Context) ([]*core.ReclaimCandidate, error)
-	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
-	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
-	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
-	GetWorkflowDraftBySlugFunc              func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlugFunc             func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetPresetBySlugFunc                     func(context.Context, string, string) (*db.Preset, error)
-	GetPresetBySlugAndProjectFunc           func(context.Context, string, string, string) (*db.Preset, error)
-	GetProjectWorkflowsJSONFunc             func(context.Context, string) (*string, error)
-	GetProjectPresetsJSONFunc               func(context.Context, string) (*string, error)
-	GetProjectMachineWorkflowsJSONFunc      func(context.Context, string, string) (*string, bool, error)
-	GetProjectMachinePresetsJSONFunc        func(context.Context, string, string) (*string, bool, error)
-	WorkflowSourceDiagnosticFunc            func(context.Context, string, string, string) (string, error)
-	AssignUnassignedOrgFunc                 func(context.Context, string, string) error
-	ListInboxPendingFunc                    func(context.Context, string) ([]*core.InboxPending, error)
-	ListAttentionIncidentsFunc              func(context.Context, string) ([]*core.AttentionIncident, error)
-	AttentionManagedChatsFunc               func(context.Context, string, []string) (map[string]bool, error)
-	HasNoOrgAccountPausesFunc               func(context.Context) (bool, error)
-	ListNoOrgAccountPausesFunc              func(context.Context, string, []string) ([]*core.Trigger, error)
-	ListPersonallyFundedTriggersFunc        func(context.Context, string) ([]*core.Trigger, error)
-	GetLatestTriggerEventFunc               func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
-	ListDismissedInboxItemIDsFunc           func(context.Context, string, []string) (map[string]bool, error)
-	DismissInboxItemsFunc                   func(context.Context, string, []string, time.Time) error
-	RestoreInboxItemsFunc                   func(context.Context, string, []string) error
-	ListTriggersFunc                        func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	RecentTriggerOutcomesFunc               func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccessFunc             func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastUnmanagedSuccessFunc    func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	ListTriggerRegistrationsFunc            func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
-	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
-	ListDaemonsByUserIDFunc                 func(context.Context, string) ([]*db.Daemon, error)
-	GetChatFunc                             func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                          func(context.Context, string) (*db.Project, error)
-}
-
-// ListHeldWorktreesForUser records the call and delegates to ListHeldWorktreesForUserFunc when set.
-func (m *MockRepository) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	m.Recorder.Record("ListHeldWorktreesForUser", ctx, userID)
-	if m.ListHeldWorktreesForUserFunc != nil {
-		return m.ListHeldWorktreesForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListHeldWorktreesForUser")
-}
-
-// ListDaemonStorageState records the call and delegates to ListDaemonStorageStateFunc when set.
-func (m *MockRepository) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {
-	m.Recorder.Record("ListDaemonStorageState", ctx, userID)
-	if m.ListDaemonStorageStateFunc != nil {
-		return m.ListDaemonStorageStateFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonStorageState")
-}
-
-// MergeUnownedWorktreeCleanupMetadata records the call and delegates to MergeUnownedWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
-	m.Recorder.Record("MergeUnownedWorktreeCleanupMetadata", ctx, id, fn)
-	if m.MergeUnownedWorktreeCleanupMetadataFunc != nil {
-		return m.MergeUnownedWorktreeCleanupMetadataFunc(ctx, id, fn)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "MergeUnownedWorktreeCleanupMetadata")
-}
-
-// AdoptWorktreeDaemon records the call and delegates to AdoptWorktreeDaemonFunc when set.
-func (m *MockRepository) AdoptWorktreeDaemon(ctx context.Context, id string, daemonID string) (string, error) {
-	m.Recorder.Record("AdoptWorktreeDaemon", ctx, id, daemonID)
-	if m.AdoptWorktreeDaemonFunc != nil {
-		return m.AdoptWorktreeDaemonFunc(ctx, id, daemonID)
-	}
-	return "", contractkit.MockNotSet("MockRepository", "AdoptWorktreeDaemon")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockRepository) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorktree")
-}
-
-// ListAttachedDaemonIDsForUser records the call and delegates to ListAttachedDaemonIDsForUserFunc when set.
-func (m *MockRepository) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
-	m.Recorder.Record("ListAttachedDaemonIDsForUser", ctx, userID, staleThreshold)
-	if m.ListAttachedDaemonIDsForUserFunc != nil {
-		return m.ListAttachedDaemonIDsForUserFunc(ctx, userID, staleThreshold)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAttachedDaemonIDsForUser")
-}
-
-// ListLiveWorktreePathsForUser records the call and delegates to ListLiveWorktreePathsForUserFunc when set.
-func (m *MockRepository) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	m.Recorder.Record("ListLiveWorktreePathsForUser", ctx, userID)
-	if m.ListLiveWorktreePathsForUserFunc != nil {
-		return m.ListLiveWorktreePathsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListLiveWorktreePathsForUser")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
-}
-
-// ListWorktreesForReclaim records the call and delegates to ListWorktreesForReclaimFunc when set.
-func (m *MockRepository) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	m.Recorder.Record("ListWorktreesForReclaim", ctx)
-	if m.ListWorktreesForReclaimFunc != nil {
-		return m.ListWorktreesForReclaimFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListWorktreesForReclaim")
-}
-
-// MergeWorktreeCleanupMetadata records the call and delegates to MergeWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
-	m.Recorder.Record("MergeWorktreeCleanupMetadata", ctx, id, fn)
-	if m.MergeWorktreeCleanupMetadataFunc != nil {
-		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
-	}
-	return contractkit.MockNotSet("MockRepository", "MergeWorktreeCleanupMetadata")
-}
-
-// TryAdvisoryLock records the call and delegates to TryAdvisoryLockFunc when set.
-func (m *MockRepository) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	m.Recorder.Record("TryAdvisoryLock", ctx, key)
-	if m.TryAdvisoryLockFunc != nil {
-		return m.TryAdvisoryLockFunc(ctx, key)
-	}
-	return nil, false, contractkit.MockNotSet("MockRepository", "TryAdvisoryLock")
-}
-
-// UpdateWorktreeCleanupMetadata records the call and delegates to UpdateWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error {
-	m.Recorder.Record("UpdateWorktreeCleanupMetadata", ctx, id, metadata)
-	if m.UpdateWorktreeCleanupMetadataFunc != nil {
-		return m.UpdateWorktreeCleanupMetadataFunc(ctx, id, metadata)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateWorktreeCleanupMetadata")
+	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetPresetBySlugFunc                func(context.Context, string, string) (*db.Preset, error)
+	GetPresetBySlugAndProjectFunc      func(context.Context, string, string, string) (*db.Preset, error)
+	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
+	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
+	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
+	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
+	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
+	AssignUnassignedOrgFunc            func(context.Context, string, string) error
+	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
+	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
+	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
+	ListDaemonsByUserIDFunc            func(context.Context, string) ([]*db.Daemon, error)
+	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
+	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
 }
 
 // GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
@@ -412,96 +593,6 @@ func (m *MockRepository) AssignUnassignedOrg(ctx context.Context, userID string,
 	return contractkit.MockNotSet("MockRepository", "AssignUnassignedOrg")
 }
 
-// ListInboxPending records the call and delegates to ListInboxPendingFunc when set.
-func (m *MockRepository) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	m.Recorder.Record("ListInboxPending", ctx, userID)
-	if m.ListInboxPendingFunc != nil {
-		return m.ListInboxPendingFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListInboxPending")
-}
-
-// ListAttentionIncidents records the call and delegates to ListAttentionIncidentsFunc when set.
-func (m *MockRepository) ListAttentionIncidents(ctx context.Context, userID string) ([]*core.AttentionIncident, error) {
-	m.Recorder.Record("ListAttentionIncidents", ctx, userID)
-	if m.ListAttentionIncidentsFunc != nil {
-		return m.ListAttentionIncidentsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAttentionIncidents")
-}
-
-// AttentionManagedChats records the call and delegates to AttentionManagedChatsFunc when set.
-func (m *MockRepository) AttentionManagedChats(ctx context.Context, userID string, chatIDs []string) (map[string]bool, error) {
-	m.Recorder.Record("AttentionManagedChats", ctx, userID, chatIDs)
-	if m.AttentionManagedChatsFunc != nil {
-		return m.AttentionManagedChatsFunc(ctx, userID, chatIDs)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "AttentionManagedChats")
-}
-
-// HasNoOrgAccountPauses records the call and delegates to HasNoOrgAccountPausesFunc when set.
-func (m *MockRepository) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
-	m.Recorder.Record("HasNoOrgAccountPauses", ctx)
-	if m.HasNoOrgAccountPausesFunc != nil {
-		return m.HasNoOrgAccountPausesFunc(ctx)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "HasNoOrgAccountPauses")
-}
-
-// ListNoOrgAccountPauses records the call and delegates to ListNoOrgAccountPausesFunc when set.
-func (m *MockRepository) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
-	m.Recorder.Record("ListNoOrgAccountPauses", ctx, userID, adminOrgIDs)
-	if m.ListNoOrgAccountPausesFunc != nil {
-		return m.ListNoOrgAccountPausesFunc(ctx, userID, adminOrgIDs)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListNoOrgAccountPauses")
-}
-
-// ListPersonallyFundedTriggers records the call and delegates to ListPersonallyFundedTriggersFunc when set.
-func (m *MockRepository) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
-	m.Recorder.Record("ListPersonallyFundedTriggers", ctx, userID)
-	if m.ListPersonallyFundedTriggersFunc != nil {
-		return m.ListPersonallyFundedTriggersFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListPersonallyFundedTriggers")
-}
-
-// GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
-func (m *MockRepository) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	m.Recorder.Record("GetLatestTriggerEvent", ctx, triggerID, outcome)
-	if m.GetLatestTriggerEventFunc != nil {
-		return m.GetLatestTriggerEventFunc(ctx, triggerID, outcome)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetLatestTriggerEvent")
-}
-
-// ListDismissedInboxItemIDs records the call and delegates to ListDismissedInboxItemIDsFunc when set.
-func (m *MockRepository) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
-	m.Recorder.Record("ListDismissedInboxItemIDs", ctx, userID, itemIDs)
-	if m.ListDismissedInboxItemIDsFunc != nil {
-		return m.ListDismissedInboxItemIDsFunc(ctx, userID, itemIDs)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListDismissedInboxItemIDs")
-}
-
-// DismissInboxItems records the call and delegates to DismissInboxItemsFunc when set.
-func (m *MockRepository) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
-	m.Recorder.Record("DismissInboxItems", ctx, userID, itemIDs, at)
-	if m.DismissInboxItemsFunc != nil {
-		return m.DismissInboxItemsFunc(ctx, userID, itemIDs, at)
-	}
-	return contractkit.MockNotSet("MockRepository", "DismissInboxItems")
-}
-
-// RestoreInboxItems records the call and delegates to RestoreInboxItemsFunc when set.
-func (m *MockRepository) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
-	m.Recorder.Record("RestoreInboxItems", ctx, userID, itemIDs)
-	if m.RestoreInboxItemsFunc != nil {
-		return m.RestoreInboxItemsFunc(ctx, userID, itemIDs)
-	}
-	return contractkit.MockNotSet("MockRepository", "RestoreInboxItems")
-}
-
 // ListTriggers records the call and delegates to ListTriggersFunc when set.
 func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	m.Recorder.Record("ListTriggers", ctx, f)
@@ -509,33 +600,6 @@ func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters
 		return m.ListTriggersFunc(ctx, f)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListTriggers")
-}
-
-// RecentTriggerOutcomes records the call and delegates to RecentTriggerOutcomesFunc when set.
-func (m *MockRepository) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("RecentTriggerOutcomes", ctx, userID, triggerIDs, perTrigger)
-	if m.RecentTriggerOutcomesFunc != nil {
-		return m.RecentTriggerOutcomesFunc(ctx, userID, triggerIDs, perTrigger)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "RecentTriggerOutcomes")
-}
-
-// FiringsSinceLastSuccess records the call and delegates to FiringsSinceLastSuccessFunc when set.
-func (m *MockRepository) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("FiringsSinceLastSuccess", ctx, userID, triggerIDs, perTrigger)
-	if m.FiringsSinceLastSuccessFunc != nil {
-		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "FiringsSinceLastSuccess")
-}
-
-// FiringsSinceLastUnmanagedSuccess records the call and delegates to FiringsSinceLastUnmanagedSuccessFunc when set.
-func (m *MockRepository) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("FiringsSinceLastUnmanagedSuccess", ctx, userID, triggerIDs, perTrigger)
-	if m.FiringsSinceLastUnmanagedSuccessFunc != nil {
-		return m.FiringsSinceLastUnmanagedSuccessFunc(ctx, userID, triggerIDs, perTrigger)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "FiringsSinceLastUnmanagedSuccess")
 }
 
 // ListTriggerRegistrations records the call and delegates to ListTriggerRegistrationsFunc when set.

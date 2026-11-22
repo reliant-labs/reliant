@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -149,7 +151,7 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 		},
 	}
 	for who, caller := range callers {
-		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Orgs: caller.resolver}))
+		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Orgs: caller.resolver}))
 		for name, call := range calls {
 			before := snapshot()
 			err := call(caller.ctx)

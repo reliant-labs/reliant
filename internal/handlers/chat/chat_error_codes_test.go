@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -39,7 +40,7 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 
 func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
 	t.Helper()
-	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
+	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}}))
 }
 
 func ownedChat(_ context.Context, id string) (*db.Chat, error) {

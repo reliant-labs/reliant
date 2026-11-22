@@ -3,6 +3,8 @@ package mcp
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -14,6 +16,6 @@ func TestMCPServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestMCP(t, WithMCPDeps(Deps{Repo: repo}))
+	svc := NewTestMCP(t, WithMCPDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	viewertest.RunService(t, f, svc, "reliant.v1.MCPService", nil)
 }

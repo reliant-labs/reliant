@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // OrgKeyUsagePath is control-plane's read of an organization's org-key usage
@@ -19,9 +19,10 @@ const OrgKeyUsagePath = "/internal/org-llm-usage/org-keys"
 // orgKeyUsageMaxDays bounds one read: control-plane asks for one month.
 const orgKeyUsageMaxDays = 400
 
-// OrgKeyUsageStore sums an org's calls on its own API keys. *db.Repo is one.
+// OrgKeyUsageStore sums an org's calls on its own API keys.
+// store.LlmOrgUsageDailyExtStore is one.
 type OrgKeyUsageStore interface {
-	SumLLMOrgKeyUsage(ctx context.Context, orgID string, from, to time.Time) ([]db.OrgKeyModelUsage, error)
+	SumLLMOrgKeyUsage(ctx context.Context, orgID string, from, to time.Time) ([]store.OrgKeyModelUsage, error)
 }
 
 type orgKeyUsageRequest struct {
@@ -55,7 +56,7 @@ type orgKeyUsageResponse struct {
 //
 // It accepts only the short-lived internal-service JWT (the one
 // /internal/hosted-http/redeem accepts), never a user's credential.
-func NewOrgKeyUsageHandler(store OrgKeyUsageStore, secret string) http.Handler {
+func NewOrgKeyUsageHandler(usage OrgKeyUsageStore, secret string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost {
@@ -63,7 +64,7 @@ func NewOrgKeyUsageHandler(store OrgKeyUsageStore, secret string) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if secret == "" || store == nil || !validHostedRedeemBearer(r.Header.Get("Authorization"), secret) {
+		if secret == "" || usage == nil || !validHostedRedeemBearer(r.Header.Get("Authorization"), secret) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -82,7 +83,7 @@ func NewOrgKeyUsageHandler(store OrgKeyUsageStore, secret string) http.Handler {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		rows, err := store.SumLLMOrgKeyUsage(r.Context(), req.OrgID, from, to)
+		rows, err := usage.SumLLMOrgKeyUsage(r.Context(), req.OrgID, from, to)
 		if err != nil {
 			logging.WarnContext(r.Context(), "[org-key-usage] reading the org rollup failed", "org_id", req.OrgID, "error", err)
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)

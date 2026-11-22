@@ -56,7 +56,8 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*Service, *wakeRecordi
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}, err: wakeErr}
 	svc := &Service{
 		deps: Deps{
-			Repo: repo, Temporal: temporal, Router: router,
+			Repo:   repo,
+			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal, Router: router,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}

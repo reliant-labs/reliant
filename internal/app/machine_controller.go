@@ -9,6 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -16,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -31,6 +34,26 @@ type machineRegistry interface {
 	// The owner's machine pools, to show each machine's pools.
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
+}
+
+// machineStores is machineRegistry over the generated stores: each embedded
+// store answers the methods the registry names from it.
+type machineStores struct {
+	store.DaemonExtStore
+	store.TriggerEventExtStore
+	store.TriggerExtStore
+	store.ChatsWithActivityExtStore
+	store.MachinePoolExtStore
+}
+
+func newMachineRegistry(db orm.Context) machineRegistry {
+	return machineStores{
+		DaemonExtStore:            store.NewDaemonExtStore(db),
+		TriggerEventExtStore:      store.NewTriggerEventExtStore(db),
+		TriggerExtStore:           store.NewTriggerExtStore(db),
+		ChatsWithActivityExtStore: store.NewChatsWithActivityExtStore(db),
+		MachinePoolExtStore:       store.NewMachinePoolExtStore(db),
+	}
 }
 
 // machinePoolAdmin is the DaemonRegistryService rpcs the app labels machines

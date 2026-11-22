@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -152,7 +154,7 @@ func appLinks(p *reliantv1.ProjectWithApps) string {
 func TestListProjectsWithApps_Viewer(t *testing.T) {
 	f, repo := newWithAppsFixture(t)
 	apps := &fakeHostedApps{apps: f.Apps}
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps}))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps})))
 	org := viewertest.OrgID
 
 	resp, err := listWithApps(t, svc, f.Viewer, "viewer-token", &org)
@@ -221,7 +223,7 @@ func TestListProjectsWithApps_Viewer(t *testing.T) {
 func TestListProjectsWithApps_OwnerDefaultOrg(t *testing.T) {
 	f, repo := newWithAppsFixture(t)
 	apps := &fakeHostedApps{apps: f.Apps}
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps}))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps})))
 
 	resp, err := listWithApps(t, svc, f.Owner, "owner-token", nil)
 	if err != nil {
@@ -265,7 +267,7 @@ func TestListProjectsWithApps_OwnerDefaultOrg(t *testing.T) {
 func TestListProjectsWithApps_NotAMember(t *testing.T) {
 	f, repo := newWithAppsFixture(t)
 	apps := &fakeHostedApps{apps: f.Apps}
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps}))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: apps})))
 	acme, globex, forged := viewertest.OrgID, viewertest.OtherOrgID, "org-that-does-not-exist"
 
 	for name, call := range map[string]func() error{
@@ -303,7 +305,7 @@ func TestListProjectsWithApps_HostedAppsUnreadable(t *testing.T) {
 		{"no control plane", nil, reliantv1.HostedAppsState_HOSTED_APPS_STATE_UNAVAILABLE},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: tc.apps}))
+			svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Shared: store.NewShareEventExtStore(repo.ORM()), Orgs: f.Membership, Apps: tc.apps})))
 			resp, err := listWithApps(t, svc, f.Viewer, "viewer-token", &org)
 			if err != nil {
 				t.Fatal(err)

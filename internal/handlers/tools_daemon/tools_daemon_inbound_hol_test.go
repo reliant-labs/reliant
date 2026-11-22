@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/require"
 )
 
 // stallingRepo parks the database writes the gateway performs for a daemon's
@@ -37,16 +38,26 @@ func (r *stallingRepo) stall(name string) {
 	<-r.release
 }
 
-func (r *stallingRepo) RenewDaemonAttachment(context.Context, *db.DaemonAttachment) (bool, error) {
-	r.stall("RenewDaemonAttachment")
+// stallingLeases is the lease role over the same stall: a renewal parks.
+type stallingLeases struct {
+	Attachments
+	repo *stallingRepo
+}
+
+func (l stallingLeases) RenewDaemonAttachment(context.Context, *core.DaemonAttachment) (bool, error) {
+	l.repo.stall("RenewDaemonAttachment")
 	return false, nil
 }
 
-func (r *stallingRepo) UpdateDaemonAttachmentPorts(context.Context, string, []uint32) error {
-	return nil
+func (stallingLeases) SetDaemonAttachmentPorts(context.Context, string, []uint32) error { return nil }
+
+func (r *stallingRepo) GetProjectByRemoteURLAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
 }
 
-func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
+var _ ProjectLookups = (*stallingRepo)(nil)
+
+func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
 	r.stall("GetProjectByPathAndUserInScope")
 	return nil, nil
 }
@@ -88,7 +99,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 	for name, staller := range stallers {
 		t.Run(name, func(t *testing.T) {
 			repo := newStallingRepo()
-			svc := newTestService(repo)
+			svc := newTestServiceWithLeases(repo, stallingLeases{repo: repo}, nil)
 			stream := newParkedStream()
 			conn := newTestConn("user-1", "daemon-1", stream)
 
@@ -139,7 +150,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 // produces, so dropping it would leave the user with no trace of the failure.
 func TestInboundStateReceivedBeforeStreamEndIsStillApplied(t *testing.T) {
 	repo := newStallingRepo()
-	svc := newTestService(repo)
+	svc := newTestServiceWithLeases(repo, stallingLeases{repo: repo}, nil)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 

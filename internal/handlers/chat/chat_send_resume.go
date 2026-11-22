@@ -268,7 +268,7 @@ func (s *Service) resurrectGhostWorkflow(
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
-		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)),
+		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.durable(), req.Msg.ChatId, workflowID)),
 	}
 
 	// Step 5: Start fresh Temporal execution

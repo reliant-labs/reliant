@@ -9,6 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,12 +175,13 @@ func launchFixture(t *testing.T) (*db.Repo, context.Context, string, string) {
 type launchTestStore interface {
 	Store
 	threads.Repository
+	ORM() *orm.Client
 }
 
 func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
-	return NewLauncher(repo, threads.NewService(repo), starter, recorder, "test-task-queue"), recorder
+	return New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.

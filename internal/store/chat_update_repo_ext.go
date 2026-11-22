@@ -474,10 +474,33 @@ const SnapshotHeadsSQL = `
 // expression, so the two must not drift (TestSnapshotHeadsQueryMatchesPartialIndex).
 const SnapshotRekeyKeySQL = `CASE WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id))) ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id) END`
 
-// LatestNonMessageUpdatesPerEntity returns, for each entity of a chat, its
-// newest non-message update, in sequence order — the chat snapshot's update
-// heads. db.Repo.GetLatestNonMessageUpdatesPerEntity explains the shape: why
-// one row per entity, which types re-key, and which are excluded.
+// LatestNonMessageUpdatesPerEntity returns, for each entity in a chat, only
+// the newest non-message chat_update row.
+//
+// This replaces the pattern of reading GetUpdatesSince(chatID, 0, 10000) and
+// discarding message updates in Go, which was both slow and WRONG:
+//
+//   - Wrong: the LIMIT applied to a sequence-ASCENDING scan of ALL update
+//     types. Message updates dominate the table, so on a long-lived chat the
+//     cap was consumed by rows the caller then threw away, and genuinely
+//     needed non-message updates past the cap never reached the client. The
+//     OLDEST rows evicted the NEWEST — the opposite of what a snapshot wants.
+//     Because the snapshot's sequence high-water mark is computed separately,
+//     those dropped updates were never backfilled by gap detection either.
+//
+//   - Slow: it read (and JSON-unmarshalled) every message update's payload,
+//     and GetUpdatesSince enriches message updates with an N+1 per-row
+//     GetMessage + ListContentBlocks fan-out — all of it wasted, since the
+//     caller drops every message row.
+//
+// Filtering by type in SQL and keeping one row per entity makes the result
+// complete by construction: there is no cap to evict anything.
+//
+// STREAM_FINALIZED is excluded as well. Those markers exist only to retire
+// in-flight streaming placeholders ("any delta carrying this message_id is a
+// stale tail"), and a fresh snapshot has no in-flight deltas to retire — the
+// finalized messages are already present as persisted rows. They are pure
+// weight on the initial load, and on a long chat they are thousands of rows.
 func LatestNonMessageUpdatesPerEntity(ctx context.Context, db orm.Context, chatID string) ([]core.ChatUpdate, error) {
 	updates, err := scanChatUpdates(ctx, db, SnapshotHeadsSQL, chatID)
 	if err != nil {

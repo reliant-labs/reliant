@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -43,7 +45,26 @@ type AlertingStore interface {
 	GetProject(ctx context.Context, id string) (*core.Project, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error)
-	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
+}
+
+// AlertingLocker elects the one replica that sweeps at a time. *dblock.Locker
+// satisfies it.
+type AlertingLocker interface {
+	TryLock(ctx context.Context, key dblock.Key) (release func(), ok bool, err error)
+}
+
+// AlertingDeps is what an Alerting is built from. Plain Deps, built by hand by
+// the api server's NewTriggerAlerting provider.
+type AlertingDeps struct {
+	// Receivers is the control plane's receiver API.
+	Receivers AlertReceivers
+	// Store is what provisioning reads and writes.
+	Store AlertingStore
+	// Locker elects the replica that sweeps.
+	Locker AlertingLocker
+	// PublicURL is this server's externally reachable base, which the
+	// control plane's Alertmanager posts to.
+	PublicURL string
 }
 
 // AlertingGrace is how long Sweep leaves an enabled activation without a
@@ -52,25 +73,20 @@ type AlertingStore interface {
 // between would rotate the token under it.
 const AlertingGrace = 10 * time.Minute
 
-// alertingSweepLockKey makes one replica sweep at a time: two sweeps
-// provisioning one activation could each rotate its token and leave the
-// control plane holding the other's.
-const alertingSweepLockKey int64 = 0x7265_6c69_616e_7402 // "reliant\x02"
-
 // Alerting provisions and reconciles the control plane's alert receivers of
 // `source: alerting` webhook triggers. A nil *Alerting (a deployment with no
 // control plane) manages nothing: those triggers are plain webhooks.
 type Alerting struct {
 	receivers AlertReceivers
 	store     AlertingStore
+	locker    AlertingLocker
 	publicURL string
 	now       func() time.Time
 }
 
-// NewAlerting builds the provisioner. publicURL is this server's externally
-// reachable base, which the control plane's Alertmanager posts to.
-func NewAlerting(receivers AlertReceivers, store AlertingStore, publicURL string) *Alerting {
-	return &Alerting{receivers: receivers, store: store, publicURL: publicURL, now: time.Now}
+// NewAlerting builds the provisioner.
+func NewAlerting(deps AlertingDeps) *Alerting {
+	return &Alerting{receivers: deps.Receivers, store: deps.Store, locker: deps.Locker, publicURL: deps.PublicURL, now: time.Now}
 }
 
 // IsAlertingWebhook reports a webhook trigger declared `source: alerting`.
@@ -187,7 +203,7 @@ type AlertingReport struct {
 // orphaned and be removed.
 func (a *Alerting) Sweep(ctx context.Context) (AlertingReport, error) {
 	var report AlertingReport
-	release, ok, err := a.store.TryAdvisoryLock(ctx, alertingSweepLockKey)
+	release, ok, err := a.locker.TryLock(ctx, dblock.AlertReceivers)
 	if err != nil {
 		return report, fmt.Errorf("alert receiver sweep lock: %w", err)
 	}

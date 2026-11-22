@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -76,13 +78,7 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 		},
 	}
 	draft := &db.WorkflowDraft{ID: ownWorkflowDraft, UserID: "test-user", Slug: ownWorkflowSlug, Definition: fixtureWorkflow}
-	return &scenario.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == ownProjectID && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
+	return projectaccesstest.Bound(&scenario.MockRepository{
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == ownProjectID {
 				// projects.path is the creating machine's; the checkout this
@@ -126,7 +122,12 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 			f.deleted = append(f.deleted, id)
 			return nil
 		},
-	}
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == ownProjectID && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 }
 
 // placeAsNamed places every named machine as itself (daemonplacement.Machines).

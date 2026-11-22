@@ -36,6 +36,10 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// no other scope and is bound to nothing, so forge refuses it on a
 		// daemon binding, and a control plane refuses it on every RPC.
 		fat.ScopeSourcemapsWrite,
+		// An MCP client's OAuth token (forge #2705): the only scope of its
+		// grant, audience-bound, issued to a third-party client and never
+		// bound to a daemon.
+		fat.ScopeMCPOAuth,
 	)
 	requested, err := fat.NewSet(ForgeScopes())
 	if err != nil {

@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // oversizeParams is the (empty) parameter struct for the fixture tools below.
