@@ -25,6 +25,8 @@ type Deps struct {
 	// Repo reads what waits on the caller (pending rows, automation
 	// health, machines and their storage) and records dismissals.
 	Repo Repository
+	// OrgKeys lists the org keys a provider rejected (credentials/orgaccounts).
+	OrgKeys OrgKeys
 	// Recoveries lists the caller's worktree recoveries.
 	Recoveries Recoveries
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
@@ -62,6 +64,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("inbox: Deps.Repo is required")
+	}
+	if d.OrgKeys == nil {
+		return fmt.Errorf("inbox: Deps.OrgKeys is required")
 	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("inbox: Deps.Recoveries is required")

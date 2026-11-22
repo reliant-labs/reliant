@@ -123,7 +123,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 
 	recorder := accountlimits.NewRecorder(db.TestAccounts(t, repo), nil)
 	defer recorder.Close()
-	routing := accountRouting(db.TestAccounts(t, repo), repo, recorder)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, recorder)
 	require.NotNil(t, routing.DriverFor, "with GetDriverForAccount wired, routing is live")
 
 	// A chat with one user message, whose thread is already on alice.

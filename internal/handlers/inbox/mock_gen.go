@@ -98,6 +98,42 @@ func (m *MockOrgMemberCounter) LiveMembersFresh(ctx context.Context, userID stri
 // Compile-time check.
 var _ OrgMemberCounter = (*MockOrgMemberCounter)(nil)
 
+// forge:section MockOrgKeys
+// forge:hash=2bc8f899c2717edf40619c0f14986a10f3e723b5293d91c642aaaf301ec23ca2
+
+// MockOrgKeys is a test mock for the OrgKeys interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgKeys.<Method>Func not set" error.
+type MockOrgKeys struct {
+	contractkit.Recorder
+	HasRejectedOrgKeysFunc    func(context.Context) (bool, error)
+	ListRejectedOrgKeysInFunc func(context.Context, []string) ([]core.ProviderAccount, error)
+}
+
+// HasRejectedOrgKeys records the call and delegates to HasRejectedOrgKeysFunc when set.
+func (m *MockOrgKeys) HasRejectedOrgKeys(ctx context.Context) (bool, error) {
+	m.Recorder.Record("HasRejectedOrgKeys", ctx)
+	if m.HasRejectedOrgKeysFunc != nil {
+		return m.HasRejectedOrgKeysFunc(ctx)
+	}
+	return false, contractkit.MockNotSet("MockOrgKeys", "HasRejectedOrgKeys")
+}
+
+// ListRejectedOrgKeysIn records the call and delegates to ListRejectedOrgKeysInFunc when set.
+func (m *MockOrgKeys) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
+	m.Recorder.Record("ListRejectedOrgKeysIn", ctx, orgIDs)
+	if m.ListRejectedOrgKeysInFunc != nil {
+		return m.ListRejectedOrgKeysInFunc(ctx, orgIDs)
+	}
+	return nil, contractkit.MockNotSet("MockOrgKeys", "ListRejectedOrgKeysIn")
+}
+
+// Compile-time check.
+var _ OrgKeys = (*MockOrgKeys)(nil)
+
 // forge:section MockRecoveries
 // forge:hash=21ac076a58add8ae9a0b6095565d2ffc702bc2b587bc1c62a1a5876795ee60e3
 
@@ -125,7 +161,7 @@ func (m *MockRecoveries) ListWorktreeRecoveries(ctx context.Context, owner strin
 var _ Recoveries = (*MockRecoveries)(nil)
 
 // forge:section MockRepository
-// forge:hash=dfdc1f54e49baa8f2d037c22d09d4dac0e364dc39287ed6e98ad5cbc119fff18
+// forge:hash=094b3a584d5e1c0d07f675ecdabd6ac690e4e6c1beb04af8d82d0128ed0e9118
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -158,8 +194,6 @@ type MockRepository struct {
 	WorkflowSourceDiagnosticFunc            func(context.Context, string, string, string) (string, error)
 	AssignUnassignedOrgFunc                 func(context.Context, string, string) error
 	ListInboxPendingFunc                    func(context.Context, string) ([]*core.InboxPending, error)
-	HasRejectedOrgKeysFunc                  func(context.Context) (bool, error)
-	ListRejectedOrgKeysInFunc               func(context.Context, []string) ([]core.ProviderAccount, error)
 	ListAttentionIncidentsFunc              func(context.Context, string) ([]*core.AttentionIncident, error)
 	AttentionManagedChatsFunc               func(context.Context, string, []string) (map[string]bool, error)
 	HasNoOrgAccountPausesFunc               func(context.Context) (bool, error)
@@ -385,24 +419,6 @@ func (m *MockRepository) ListInboxPending(ctx context.Context, userID string) ([
 		return m.ListInboxPendingFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListInboxPending")
-}
-
-// HasRejectedOrgKeys records the call and delegates to HasRejectedOrgKeysFunc when set.
-func (m *MockRepository) HasRejectedOrgKeys(ctx context.Context) (bool, error) {
-	m.Recorder.Record("HasRejectedOrgKeys", ctx)
-	if m.HasRejectedOrgKeysFunc != nil {
-		return m.HasRejectedOrgKeysFunc(ctx)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "HasRejectedOrgKeys")
-}
-
-// ListRejectedOrgKeysIn records the call and delegates to ListRejectedOrgKeysInFunc when set.
-func (m *MockRepository) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
-	m.Recorder.Record("ListRejectedOrgKeysIn", ctx, orgIDs)
-	if m.ListRejectedOrgKeysInFunc != nil {
-		return m.ListRejectedOrgKeysInFunc(ctx, orgIDs)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListRejectedOrgKeysIn")
 }
 
 // ListAttentionIncidents records the call and delegates to ListAttentionIncidentsFunc when set.

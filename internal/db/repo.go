@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/vault"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
@@ -108,9 +109,13 @@ type UserUpdateNotifier func(update *UserUpdate)
 type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 
 type Repo struct {
-	DB       *WrappedDBTX
-	driver   DatabaseDriver
-	accounts *accountStore
+	DB     *WrappedDBTX
+	driver DatabaseDriver
+
+	// testVault is the throwaway credential vault a test Repo carries (EnableTestCredentialSealing),
+	// so the credential packages a test builds over it seal and open. Nil in production, where
+	// internal/app builds them over the booted vault.
+	testVault vault.Service
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
 	// Postgres session to itself. Nil means DB already has session
@@ -153,9 +158,8 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		return nil, fmt.Errorf("orm client: %w", err)
 	}
 	return &Repo{
-		DB:       &WrappedDBTX{db: db, orm: client},
-		driver:   driver,
-		accounts: newAccountStore(client),
+		DB:     &WrappedDBTX{db: db, orm: client},
+		driver: driver,
 	}, nil
 }
 

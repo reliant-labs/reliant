@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -679,6 +680,19 @@ type ProviderAccountsDeps struct {
 // drivers take the narrow slice of it each reads.
 func NewProviderAccounts(d ProviderAccountsDeps) (provideraccounts.Service, error) {
 	return provideraccounts.NewInstrumented(provideraccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
+}
+
+// OrgAccountsDeps is the database an organization's provider credentials live in and the vault
+// that seals a rotated key.
+type OrgAccountsDeps struct {
+	DB    *db.Repo
+	Vault vault.Service
+}
+
+// NewOrgAccounts is the only path to an organization's own accounts, their grants, seats and
+// workspace bindings, the rejected-key notices and the gone-org purge.
+func NewOrgAccounts(d OrgAccountsDeps) (orgaccounts.Service, error) {
+	return orgaccounts.NewInstrumented(orgaccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
 }
 
 // PauseServiceDeps is what pauses and resumes runs.

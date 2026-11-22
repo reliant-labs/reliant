@@ -33,6 +33,13 @@ type OrgMemberCounter interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
+// OrgKeys lists the org-owned API keys a provider rejected: the inbox shows them to the org's
+// owners and admins. credentials/orgaccounts.Service satisfies it.
+type OrgKeys interface {
+	HasRejectedOrgKeys(ctx context.Context) (bool, error)
+	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
+}
+
 // Recoveries lists a user's worktree recoveries. store.WorktreeRecoveryExtStore
 // satisfies it.
 type Recoveries interface {
@@ -55,8 +62,6 @@ type Repository interface {
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
 	// HasRejectedOrgKeys and ListRejectedOrgKeysIn are the rejected org-owned API keys the
 	// inbox lists to their orgs' owners and admins.
-	HasRejectedOrgKeys(ctx context.Context) (bool, error)
-	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
 	// Incidents and safe-to-suppress managed-chat membership are scoped by
 	// repository ownership, never YAML scope or a request project filter.
 	// An unfinished observer without an open incident is not suppressible.

@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -396,12 +397,12 @@ func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := isolationContext("oauth-claude-seat")
-	_, _, err := repo.BindOrgProviderWorkspace(context.Background(), core.OrgProviderWorkspace{
+	_, _, err := db.TestOrgAccounts(t, repo).BindOrgProviderWorkspace(context.Background(), core.OrgProviderWorkspace{
 		OrgID: "org-acme", Provider: "claude", ExternalOrgID: "ws-team", DisplayName: "Acme", BoundByUserID: "admin",
 	})
 	require.NoError(t, err)
 	matcher, err := seatmatch.New(seatmatch.Deps{
-		Store: seatStore{db.TestAccounts(t, repo), repo},
+		Store: seatStore{db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo)},
 		Members: &seatmatch.MockMembers{IsMemberFunc: func(_ context.Context, userID, orgID string) (bool, bool, error) {
 			return userID == "oauth-claude-seat" && orgID == "org-acme", true, nil
 		}},
@@ -448,6 +449,22 @@ func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) 
 
 // seatStore is the accounts joined with the org administration the facade still holds.
 type seatStore struct {
-	provideraccounts.Service
-	*db.Repo
+	accounts provideraccounts.Service
+	org      orgaccounts.Service
+}
+
+func (s seatStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+	return s.accounts.ListProviderAccounts(ctx, userID)
+}
+func (s seatStore) ProviderWorkspaceBinding(ctx context.Context, provider, ws string) (*core.OrgProviderWorkspace, error) {
+	return s.org.ProviderWorkspaceBinding(ctx, provider, ws)
+}
+func (s seatStore) ListWorkspaceSignIns(ctx context.Context, provider, ws string) ([]core.ProviderAccount, error) {
+	return s.org.ListWorkspaceSignIns(ctx, provider, ws)
+}
+func (s seatStore) AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWorkspace, id string) (bool, error) {
+	return s.org.AttributeWorkspaceSeat(ctx, w, id)
+}
+func (s seatStore) ClearWorkspaceSeat(ctx context.Context, orgID, id string) (bool, error) {
+	return s.org.ClearWorkspaceSeat(ctx, orgID, id)
 }

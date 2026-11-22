@@ -77,7 +77,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 		env := suite.NewTestActivityEnvironment()
 		activity := handlers.NewCallLLMActivity(repo, nil, nil, emptyConfig{}, nil, nil)
 		if routed {
-			activity = activity.WithAccountRouting(accountRouting(db.TestAccounts(t, repo), repo, nil))
+			activity = activity.WithAccountRouting(accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, nil))
 		}
 		env.RegisterActivity(activity.Execute)
 		_, err = env.ExecuteActivity(activity.Execute, types.ActivityInput{

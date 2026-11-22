@@ -4520,13 +4520,6 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// EnableCredentialSealing gives the provider_accounts store its vault; without
-// one, provider credentials cannot be read or written. Call once at boot,
-// before serving.
-func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
-	r.accounts.SetSealer(sealer)
-}
-
 // HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
 // (store.HasNoOrgAccountPauses).
 func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {

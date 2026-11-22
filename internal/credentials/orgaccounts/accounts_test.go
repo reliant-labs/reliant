@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package orgaccounts_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -31,9 +32,9 @@ func orgKeyRow(org, creator, key string) core.AccountUpsert {
 	}
 }
 
-func orgPriorities(t *testing.T, repo *Repo, org string) []string {
+func orgPriorities(t *testing.T, repo *env, org string) []string {
 	t.Helper()
-	all, err := TestAccounts(t, repo).ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
+	all, err := repo.accounts.ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
 	require.NoError(t, err)
 	var ids []string
 	for _, a := range all {
@@ -48,26 +49,25 @@ func orgPriorities(t *testing.T, repo *Repo, org string) []string {
 // cleared, and the new key (only) opens under the org's tenant.
 func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	owner := core.OrgAccountOwner("org-1")
 
 	first := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-first-key-0001"))
 	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-old-key-0002"))
 	label, paused, reason := "Acme prod", true, "the provider rejected the key"
-	_, err := TestAccounts(t, repo).PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &label, Paused: &paused, NeedsReauth: &reason})
+	_, err := repo.accounts.PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &label, Paused: &paused, NeedsReauth: &reason})
 	require.NoError(t, err)
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
 	grantsBefore, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
 	chat := createTestChat(t, repo)
-	insertTestThreadForWorkflow(t, repo, "th-rot", chat, "wf-rot", ThreadStatusRunning)
-	ok, err := TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-rot", Provider: "anthropic", AccountID: acct.ID, Reason: "initial"}, "")
+	insertTestThread(t, repo, "th-rot", chat, "wf-rot")
+	ok, err := repo.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-rot", Provider: "anthropic", AccountID: acct.ID, Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	until := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC) // a bench to carry over, not a clock
-	require.NoError(t, TestAccounts(t, repo).BenchAccount(ctx, owner, acct.ID, until, "minute", false))
+	require.NoError(t, repo.accounts.BenchAccount(ctx, owner, acct.ID, until, "minute", false))
 
 	got, err := repo.RotateOrgAPIKey(ctx, "org-1", acct.ID, orgKey("org-1", "sk-ant-new-key-0003"))
 	require.NoError(t, err)
@@ -81,15 +81,15 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	assert.Equal(t, core.OrgAccessSelected, got.OrgAccess)
 	assert.Equal(t, []string{first.ID, acct.ID}, orgPriorities(t, repo, "org-1"))
 
-	opened, err := TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
+	opened, err := repo.accounts.GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-new-key-0003", opened.Secrets.Secret)
 
-	a, err := TestAccounts(t, repo).GetThreadAssignment(ctx, "th-rot", "anthropic")
+	a, err := repo.accounts.GetThreadAssignment(ctx, "th-rot", "anthropic")
 	require.NoError(t, err)
 	require.NotNil(t, a)
 	assert.Equal(t, acct.ID, a.AccountID, "the thread stays on the rotated account")
-	limits, err := TestAccounts(t, repo).ListOwnedAccountLimits(ctx, owner)
+	limits, err := repo.accounts.ListOwnedAccountLimits(ctx, owner)
 	require.NoError(t, err)
 	require.Contains(t, limits, acct.ID, "limit state carries over")
 	grantsAfter, err := repo.ListOrgAccountGrants(ctx, "org-1")
@@ -99,7 +99,7 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	// A key the org already holds as another account is refused, and nothing changes.
 	_, err = repo.RotateOrgAPIKey(ctx, "org-1", acct.ID, orgKey("org-1", "sk-ant-first-key-0001"))
 	assert.ErrorIs(t, err, core.ErrOrgAPIKeyInUse)
-	opened, err = TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
+	opened, err = repo.accounts.GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-new-key-0003", opened.Secrets.Secret)
 
@@ -112,12 +112,11 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 // theirs; a delete takes every grant with the account.
 func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	t0 := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 	t1 := t0.Add(24 * time.Hour)
-	repo.accounts.SetClock(func() time.Time { return t0 })
+	orgaccounts.SetClock(repo.Service, func() time.Time { return t0 })
 	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-org-key-0001"))
 	other := mustUpsert(t, repo, orgKeyRow("org-2", "ben", "sk-ant-org-key-0002"))
 
@@ -129,7 +128,7 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 		assert.True(t, g.GrantedAt.Equal(t0), "%+v", g)
 	}
 
-	repo.accounts.SetClock(func() time.Time { return t1 })
+	orgaccounts.SetClock(repo.Service, func() time.Time { return t1 })
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"eve", "fay"}, "ben"))
 	after, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
@@ -151,7 +150,7 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	assert.Empty(t, none)
 
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
-	require.NoError(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-1"), acct.ID))
+	require.NoError(t, repo.accounts.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-1"), acct.ID))
 	var n int
 	require.NoError(t, raw.QueryRowContext(ctx, `SELECT count(*) FROM provider_account_grants WHERE account_id=$1`, acct.ID).Scan(&n))
 	assert.Zero(t, n, "grants cascade with the account")
@@ -162,11 +161,10 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 // renewed to the new membership, never left at its stale time.
 func TestRegrantAfterLeaveAndRejoinRenewsTheGrant(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	joined := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
-	repo.accounts.SetClock(func() time.Time { return joined.Add(time.Hour) })
+	orgaccounts.SetClock(repo.Service, func() time.Time { return joined.Add(time.Hour) })
 	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-org-key-0001"))
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
 
@@ -177,7 +175,7 @@ func TestRegrantAfterLeaveAndRejoinRenewsTheGrant(t *testing.T) {
 	require.Len(t, stale, 1)
 	require.True(t, stale[0].GrantedAt.Before(rejoined), "the old grant predates the new membership")
 
-	repo.accounts.SetClock(func() time.Time { return rejoined.Add(time.Minute) })
+	orgaccounts.SetClock(repo.Service, func() time.Time { return rejoined.Add(time.Minute) })
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "olga"))
 	renewed, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
@@ -197,8 +195,7 @@ func keys[V any](m map[string]V) []string {
 // Access, order and delete act on the org's own rows only.
 func TestOrgAccountAccessOrderAndDeleteAreScopedToTheOrg(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	owner := core.OrgAccountOwner("org-1")
 	a := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-org-key-0001"))
@@ -215,13 +212,13 @@ func TestOrgAccountAccessOrderAndDeleteAreScopedToTheOrg(t *testing.T) {
 	_, err = repo.SetOrgAccountAccess(ctx, "org-1", a.ID, "everyone")
 	assert.Error(t, err)
 
-	require.NoError(t, TestAccounts(t, repo).ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, a.ID}))
+	require.NoError(t, repo.accounts.ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, a.ID}))
 	assert.Equal(t, []string{b.ID, a.ID}, orgPriorities(t, repo, "org-1"))
-	assert.ErrorIs(t, TestAccounts(t, repo).ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, mine.ID}), core.ErrInvalidAccountOrder)
+	assert.ErrorIs(t, repo.accounts.ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, mine.ID}), core.ErrInvalidAccountOrder)
 
-	assert.ErrorIs(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-2"), a.ID), core.ErrProviderAccountNotFound)
-	assert.ErrorIs(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.UserAccountOwner("ada"), a.ID), core.ErrProviderAccountNotFound)
-	require.NoError(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, owner, b.ID))
+	assert.ErrorIs(t, repo.accounts.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-2"), a.ID), core.ErrProviderAccountNotFound)
+	assert.ErrorIs(t, repo.accounts.DeleteOwnedProviderAccount(ctx, core.UserAccountOwner("ada"), a.ID), core.ErrProviderAccountNotFound)
+	require.NoError(t, repo.accounts.DeleteOwnedProviderAccount(ctx, owner, b.ID))
 	assert.Equal(t, []string{a.ID}, orgPriorities(t, repo, "org-1"), "priorities re-densify")
 }
 
@@ -229,8 +226,7 @@ func TestOrgAccountAccessOrderAndDeleteAreScopedToTheOrg(t *testing.T) {
 // again is a no-op; to another org is refused without naming the holder.
 func TestOrgProviderWorkspacePaysForOneOrg(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	w := core.OrgProviderWorkspace{OrgID: "org-1", Provider: "claude", ExternalOrgID: "ws-uuid", DisplayName: "Acme Inc.", BoundByUserID: "ada"}
 
@@ -270,8 +266,7 @@ func TestOrgProviderWorkspacePaysForOneOrg(t *testing.T) {
 // clears that one account only, and never the managed key.
 func TestUnbindAndReleaseClearOnlyTheirSeats(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	attribute := func(id, org, source string) {
 		t.Helper()
@@ -297,7 +292,7 @@ func TestUnbindAndReleaseClearOnlyTheirSeats(t *testing.T) {
 	attribute(seatB.ID, "org-1", core.AttributionWorkspace)
 	attribute(approved.ID, "org-1", core.AttributionApproved)
 	attribute(otherOrg.ID, "org-2", core.AttributionWorkspace)
-	managed, _, err := TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
+	managed, _, err := repo.accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: "dana", Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
 		Secrets: core.AccountSecrets{Secret: "rk-managed-0001"},
 	})
