@@ -11,6 +11,8 @@ package observability
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+
+	"github.com/reliant-labs/reliant/internal/auth/authmetrics"
 )
 
 // ─── Egress limiter ─────────────────────────────────────────────────────────
@@ -594,6 +596,8 @@ func initMetrics() {
 		NATSSubscriptionRefusalsTotal,
 		// Egress
 		EgressLimitedTotal,
+		// Authentication
+		authmetrics.CredentialsTotal,
 		// Client versions
 		ClientVersionTotal,
 		// Daemon link liveness

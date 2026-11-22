@@ -18,13 +18,13 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/authn"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/orgs"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // sessionTracker tracks active user sessions to avoid duplicate session_start events
@@ -77,13 +77,15 @@ func (t *sessionTracker) cleanup() {
 	}
 }
 
-// AuthInterceptor provides authentication for gRPC requests. A session JWT (or
-// the self-host API key) goes to the configured validator; an `rlat_` access
-// token goes to the token authority, must carry reliant:api or a runs/triggers
-// slice of it (enforced per procedure: procedure_scopes.go), and resolves to
-// the same claims/identity object its acting user's session would.
+// AuthInterceptor provides authentication for gRPC requests. An `rlat_`
+// access token goes to the token authority, must carry reliant:api or a
+// runs/triggers slice of it (enforced per procedure: procedure_scopes.go), and
+// resolves to the same claims/identity object its acting user's session
+// would. Every other credential goes to the authenticator (auth.Authenticator):
+// forge's token-validator chain of the managed identity and Supabase (or the
+// self-host API key), behind forge's server-side session resolution.
 type AuthInterceptor struct {
-	validator      auth.TokenValidator
+	authenticator  *auth.Authenticator
 	accessTokens   auth.AccessTokenIntrospector // optional; nil disables access-token auth
 	sessionTracker *sessionTracker
 	// publicProcedures are the procedures this interceptor lets through with
@@ -99,65 +101,45 @@ func (i *AuthInterceptor) SetAccessTokenIntrospector(v auth.AccessTokenIntrospec
 	i.accessTokens = v
 }
 
+// Authenticator is the credential check behind the interceptor, for the
+// routes outside the chain that verify the same credentials.
+func (i *AuthInterceptor) Authenticator() *auth.Authenticator { return i.authenticator }
+
 // NewAuthInterceptor creates a new auth interceptor.
 // The auth mode is settings':
 //   - "apikey":   validate bearer tokens against settings.APIKey
-//   - "supabase": validate JWTs using settings.PublicKeyPEM or JWKSURL (default)
+//   - "supabase": validate Supabase JWTs using settings.PublicKeyPEM or
+//     JWKSURL and, when settings.Identity names one, the managed identity's
+//     tokens (default)
 //
 // publicProcedures skip authentication entirely; the server passes the
 // generated middleware.UnauthenticatedProcedures, which every rpc declaring
 // (forge.v1.method) auth_required: false projects into.
 func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]struct{}) (*AuthInterceptor, error) {
-	publicKeyPEM, jwksURL := settings.PublicKeyPEM, settings.JWKSURL
-	switch settings.ModeName() {
-	case auth.ModeAPIKey:
-		apiKey := settings.APIKey
-		if apiKey == "" {
-			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
-		}
-		validator, err := auth.NewAPIKeyValidator(apiKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create API key validator: %w", err)
-		}
+	if settings.ModeName() == auth.ModeAPIKey && settings.APIKey == "" {
+		return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
+	}
+	authenticator, err := auth.NewAuthenticator(context.Background(), settings)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case settings.ModeName() == auth.ModeAPIKey:
 		logging.Info("[gRPC Auth] API key auth mode enabled")
-		return &AuthInterceptor{
-			validator:        validator,
-			sessionTracker:   newSessionTracker(),
-			publicProcedures: publicProcedures,
-		}, nil
-
-	default: // "supabase"
-		var validator auth.TokenValidator
-		switch {
-		case publicKeyPEM != "":
-			var err error
-			validator, err = auth.NewJWTValidator(publicKeyPEM, settings.JWTOptions()...)
-			if err != nil {
-				return nil, err
-			}
-		case jwksURL != "":
-			var err error
-			validator, err = auth.LoadJWKS(context.Background(), jwksURL, settings.JWTOptions()...)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
-			}
-		default:
-			return nil, auth.ErrInvalidPublicKey
-		}
-		validator, err := auth.WithDevSigner(validator, settings)
-		if err != nil {
-			return nil, err
-		}
+	default:
 		if settings.DevJWTSecret != "" {
 			logging.Warn("[gRPC Auth] dev signer enabled: HS256 tokens signed with AUTH_DEV_JWT_SECRET are accepted (dev tier only)")
 		}
-		logging.Info("[gRPC Auth] Supabase JWT auth mode enabled")
-		return &AuthInterceptor{
-			validator:        validator,
-			sessionTracker:   newSessionTracker(),
-			publicProcedures: publicProcedures,
-		}, nil
+		logging.Info("[gRPC Auth] JWT auth mode enabled",
+			"supabase", settings.PublicKeyPEM != "" || settings.JWKSURL != "",
+			"managed_identity", settings.Identity.Issuer,
+			"sessions", settings.Sessions != nil)
 	}
+	return &AuthInterceptor{
+		authenticator:    authenticator,
+		sessionTracker:   newSessionTracker(),
+		publicProcedures: publicProcedures,
+	}, nil
 }
 
 // authenticateRequest validates the auth token and returns the authenticated context and claims.
@@ -184,14 +166,18 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			"procedure", procedure)
 		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
 	}
+	return i.authenticateCredential(ctx, procedure, tokenString, authn.ChannelAuthorization)
+}
 
+// authenticateCredential checks credential, which arrived on channel, and
+// returns ctx carrying the caller it proves.
+func (i *AuthInterceptor) authenticateCredential(ctx context.Context, procedure, tokenString string, channel authn.Channel) (context.Context, *auth.JWTClaims, error) {
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
-	// authority, reliant:api or a runs/triggers slice of it); anything else goes through the configured
-	// JWT/apikey validator. A machine credential that reaches a token-MINTING
+	// authority, reliant:api or a runs/triggers slice of it); anything else goes through the
+	// authenticator's token chain. A machine credential that reaches a token-MINTING
 	// RPC is refused by that handler (TokenService.CreateToken), not here.
 	isAccessToken := auth.IsAccessTokenFormat(tokenString)
-	var claims *auth.JWTClaims
-	var principal *fat.Principal
+	var verified *auth.Verified
 	var err error
 	if isAccessToken {
 		if i.accessTokens == nil {
@@ -199,17 +185,23 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 				"procedure", procedure)
 			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 		}
+		var claims *auth.JWTClaims
+		var principal *fat.Principal
 		claims, principal, err = auth.ClaimsForAccessToken(ctx, i.accessTokens, tokenString)
+		if err == nil {
+			verified = auth.VerifiedAccessToken(claims, principal, channel)
+		}
 	} else {
-		claims, err = i.validator.ValidateToken(tokenString)
+		verified, err = i.authenticator.Verify(ctx, tokenString, channel)
 	}
 	if err != nil {
 		// Only a credential rejection is Unauthenticated. Anything else — the
-		// token store unreachable, a query deadline, a JWKS fetch failing —
-		// means verification never happened. Reporting that as Unauthenticated
-		// makes every client tell the operator their credential was rejected
-		// and to mint a new one, which cannot fix an unreachable dependency
-		// and destroys the only real signal.
+		// token store unreachable, a query deadline, a JWKS fetch failing, a
+		// session store or issuer down — means verification never happened.
+		// Reporting that as Unauthenticated makes every client tell the
+		// operator their credential was rejected and to mint a new one, which
+		// cannot fix an unreachable dependency and destroys the only real
+		// signal.
 		if !auth.IsCredentialRejection(err) {
 			logging.ErrorContext(ctx, "[gRPC Auth] Token verification unavailable",
 				"error", err,
@@ -229,7 +221,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	// A machine credential may be a narrow slice of reliant:api (runs:*,
 	// triggers:*): it reaches only the procedures procedureScopes grants it.
 	// A session carries no principal and is never asked.
-	if principal != nil {
+	if principal := verified.Principal; principal != nil {
 		if err := requireProcedureScope(procedure, principal); err != nil {
 			logging.DebugContext(ctx, "[gRPC Auth] Access token lacks the scope for this procedure",
 				"procedure", procedure,
@@ -238,24 +230,23 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		}
 	}
 
-	// Add claims to context
-	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
-	ctx = auth.WithCredential(ctx, claims.Credential)
-	ctx = telemetry.BindUser(ctx, claims.Sub)
-	if principal != nil {
-		ctx = auth.WithMachineToken(ctx, principal)
-	}
+	claims := verified.Claims
+	ctx = verified.Bind(ctx)
 
 	// Store the bearer so subsystems (e.g. Reliant LLM driver) can look it up
-	// by userID. Only JWTs are stored: an access token is not a Supabase JWT
-	// and must never be forwarded where one is expected.
-	if !isAccessToken {
+	// by userID. Only Supabase JWTs are stored: they are what the control
+	// plane accepts where these are forwarded. An access token, a managed
+	// identity's token and a session id are not, and must never be forwarded
+	// where one is expected.
+	if verified.Source == auth.SourceSupabase || verified.Source == auth.SourceDevSigner {
 		auth.SetUserJWT(claims.Sub, tokenString)
 	}
 
 	logging.DebugContext(ctx, "[gRPC Auth] Authenticated request",
 		"user_id", claims.Sub,
 		"role", claims.Role,
+		"credential", claims.Credential.Label(),
+		"source", string(verified.Source),
 		"procedure", procedure)
 
 	return ctx, claims, nil
@@ -266,19 +257,15 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 // a `token` query parameter for clients that cannot set headers — a <video>
 // element, like the terminal WebSocket.
 func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		if token := r.URL.Query().Get("token"); token != "" {
-			authHeader = "Bearer " + token
-		}
+	procedure := "http:" + r.URL.Path
+	var ctx context.Context
+	var err error
+	if r.Header.Get("Authorization") == "" && r.URL.Query().Get("token") != "" {
+		// A query parameter is no header: where it came from is unknown.
+		ctx, _, err = i.authenticateCredential(r.Context(), procedure, r.URL.Query().Get("token"), authn.ChannelUnknown)
+	} else {
+		ctx, _, err = i.authenticateRequest(r.Context(), procedure, r.Header.Get)
 	}
-	header := func(key string) string {
-		if key == "Authorization" {
-			return authHeader
-		}
-		return r.Header.Get(key)
-	}
-	ctx, _, err := i.authenticateRequest(r.Context(), "http:"+r.URL.Path, header)
 	if err != nil {
 		return "", err
 	}

@@ -129,12 +129,12 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// the listener's drain ends it (with a reconnect close code) when it
 	// begins.
 	handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(deps.Router, terminalTokenValidator(settings), terminal.WithTerminalCheckouts(deps.Repo))))
+		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Repo))))
 	// `reliant machine login --machine <other>`: a vendor CLI's own sign-in in
 	// a terminal session on one of the caller's machines. The CLI login is an
 	// access token, so this route resolves those too (and asks daemon:manage).
 	handle(terminal.TerminalCLILoginWSPath, serverkit.LongLived(
-		terminal.TerminalCLILoginWSHandler(deps.Router, terminalTokenValidator(settings),
+		terminal.TerminalCLILoginWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(),
 			accesstokenclient.NewCachedIntrospector(deps.Tokens), deps.Repo)))
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
 	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(deps.Repo, deps.Auth.AuthenticateHTTP))
@@ -203,35 +203,6 @@ func (r *APIHTTPRoutes) Register(mux *http.ServeMux) {
 	for _, mount := range r.routes {
 		mount(mux)
 	}
-}
-
-// terminalTokenValidator is what the terminal websocket checks a browser's
-// token with: the shared key in apikey mode, else the JWT key (PEM, else the
-// JWKS URL). nil when none is configured, which refuses every connection.
-func terminalTokenValidator(settings auth.Settings) auth.TokenValidator {
-	var validator auth.TokenValidator
-	switch settings.ModeName() {
-	case auth.ModeAPIKey:
-		if key := settings.APIKey; key != "" {
-			validator, _ = auth.NewAPIKeyValidator(key)
-		}
-	default: // supabase
-		if settings.PublicKeyPEM != "" {
-			validator, _ = auth.NewJWTValidator(settings.PublicKeyPEM, settings.JWTOptions()...)
-		} else if settings.JWKSURL != "" {
-			validator, _ = auth.LoadJWKS(context.Background(), settings.JWKSURL, settings.JWTOptions()...)
-		}
-		// The dev tier's signer too, so a dev sign-in can open a terminal.
-		// Refused outside the dev tier: nil then refuses every connection,
-		// and the gRPC interceptor has already refused the process.
-		if validator != nil {
-			var err error
-			if validator, err = auth.WithDevSigner(validator, settings); err != nil {
-				validator = nil
-			}
-		}
-	}
-	return validator
 }
 
 // corsAllowedHeaders are the request headers a cross-origin browser may send.

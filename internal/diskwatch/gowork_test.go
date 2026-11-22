@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -135,6 +136,117 @@ func TestReaper_ReclaimsGoWorkDirsOnTheGoCacheCadence(t *testing.T) {
 	}
 	if a := lastWorkDirAudit(t, h.w); a.Removed != 2 || a.Proof != "proc_scan" {
 		t.Errorf("audit = %+v, want both dirs removed on a proc_scan proof", a)
+	}
+}
+
+// TestReaperOff_ReclaimsTheDaemonsOwnGoTmpRoots is ovh-build-1 on 2026-11-22:
+// a self-hosted daemon with no cgroup delegation and the storage reaper off
+// (auto, not managed) had left 105k per-command GOTMPDIR roots, ~48 GiB,
+// because only a cgroup lets proctree remove one and only the reaper ran the
+// pass that removes the rest. With the reaper off, the daemon's own roots are
+// still reclaimed on the Go-cache cadence, on the same /proc proof; a
+// person's go-build* and go-link-* in their own TMPDIR are left alone.
+func TestReaperOff_ReclaimsTheDaemonsOwnGoTmpRoots(t *testing.T) {
+	h := newReaperHarness(t, plentyOfSpace)
+	h.w.ConfigureReaper(ReaperConfig{Enabled: false, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: h.policy})
+	tmp := h.w.env.Getenv("TMPDIR")
+	base := filepath.Join(tmp, commandGoTmpBasePrefix+itoa(os.Getuid()))
+	births := map[string]time.Time{}
+	mkRoot := func(name string, born time.Duration, withBuild bool) string {
+		t.Helper()
+		p := filepath.Join(base, name)
+		if withBuild {
+			writeFile(t, filepath.Join(p, "go-build123", "b001", "exe", "a.out"), 4096, h.now.Add(-born))
+		} else if err := os.MkdirAll(p, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		births[p] = h.now.Add(-born)
+		return p
+	}
+	deadEmpty := mkRoot("gotmp-21208-1", time.Hour, false)
+	deadKilledBuild := mkRoot("gotmp-21208-2", time.Hour, true)
+	live := mkRoot("gotmp-21208-3", time.Hour, true)
+	young := mkRoot("gotmp-21208-4", 5*time.Minute, false)
+	priorDaemon := mkRoot("gotmp-999-7", 48*time.Hour, false)
+	personsBuild := filepath.Join(tmp, "go-build77")
+	personsLink := filepath.Join(tmp, "go-link-77")
+	for _, p := range []string{personsBuild, personsLink} {
+		writeFile(t, filepath.Join(p, "b001", "a.out"), 4096, h.now.Add(-24*time.Hour))
+		births[p] = h.now.Add(-24 * time.Hour)
+	}
+	scans := 0
+	h.w.trim.birth = func(p string) time.Time { return births[p] }
+	h.w.trim.procs = func() (procSnapshot, error) {
+		scans++
+		var s procSnapshot
+		s.addRefs("GOTMPDIR=" + live)
+		return s, nil
+	}
+
+	if !h.w.reaperOffTick(context.Background()) {
+		t.Fatal("with the reaper off, the first poll did not run the pass over the daemon's own roots")
+	}
+	if h.runs() != 0 {
+		t.Fatalf("the reaper ran %d passes while disabled", h.runs())
+	}
+	for p, want := range map[string]bool{
+		deadEmpty: false, deadKilledBuild: false, priorDaemon: false,
+		live: true, young: true, personsBuild: true, personsLink: true,
+	} {
+		if exists(p) != want {
+			t.Errorf("%s exists=%v, want %v", filepath.Base(p), exists(p), want)
+		}
+	}
+	a := lastWorkDirAudit(t, h.w)
+	if a.Scope != "daemon_roots" || a.Proof != "proc_scan" || a.Scanned != 5 || a.Removed != 3 || a.KeptReferenced != 1 || a.KeptYoung != 1 {
+		t.Errorf("audit = %+v, want 3 of the daemon's 5 roots removed and nothing else judged", a)
+	}
+	if !h.logged("Go work dir pass reclaimed dead work directories") || !h.logged("removed=3") {
+		t.Errorf("no INFO line with the pass's counts:\n%s", h.logs)
+	}
+
+	// Its own cadence: not again within the Go-cache interval, again after.
+	again := mkRoot("gotmp-21208-5", time.Hour, false)
+	if h.w.reaperOffTick(context.Background()) || !exists(again) {
+		t.Fatal("the pass ran again before DefaultGoCacheInterval")
+	}
+	h.advance(DefaultGoCacheInterval)
+	if !h.w.reaperOffTick(context.Background()) || exists(again) {
+		t.Fatalf("a dead root outlived the next pass, %s later", DefaultGoCacheInterval)
+	}
+	if !exists(personsBuild) || !exists(personsLink) {
+		t.Error("the reaper-off pass removed a person's own go-build/go-link dir")
+	}
+
+	// No root base, no /proc scan: a pass where the daemon made no root costs
+	// one lstat per temp dir.
+	if err := os.RemoveAll(base); err != nil {
+		t.Fatal(err)
+	}
+	before := scans
+	h.advance(DefaultGoCacheInterval)
+	h.w.reaperOffTick(context.Background())
+	if scans != before {
+		t.Error("the pass scanned /proc with no GOTMPDIR root base to judge")
+	}
+}
+
+// With no /proc proof, the reaper-off pass removes no root, however old.
+func TestReaperOff_NoProofRemovesNoRoot(t *testing.T) {
+	h := newReaperHarness(t, plentyOfSpace)
+	h.w.ConfigureReaper(ReaperConfig{Enabled: false, PolicyPath: h.policy})
+	root := filepath.Join(h.w.env.Getenv("TMPDIR"), commandGoTmpBasePrefix+itoa(os.Getuid()), "gotmp-1-1")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	h.w.trim.birth = func(string) time.Time { return h.now.Add(-30 * 24 * time.Hour) }
+	h.w.trim.procs = func() (procSnapshot, error) { return procSnapshot{}, errors.New("pid 7: permission denied") }
+	h.w.reaperOffTick(context.Background())
+	if !exists(root) {
+		t.Fatal("a root was removed without a /proc proof")
+	}
+	if !h.logged("could not prove any GOTMPDIR root dead") {
+		t.Errorf("the failed proof is not logged:\n%s", h.logs)
 	}
 }
 

@@ -69,10 +69,13 @@ func IsYAML(p string) bool {
 }
 
 // Discovery bounds apply to workflows and scenarios together, per source.
+// A source past one is not synced at all, so they sit well above what a real
+// project holds: control-plane crossed 1024 entries (its scenarios) on
+// 2026-11-21, and every machine kept firing its last catalog for hours.
 const (
 	MaxWorkflowFileBytes     = 1 << 20
-	MaxWorkflowLayoutBytes   = 8 << 20
-	MaxWorkflowLayoutEntries = 1024
+	MaxWorkflowLayoutBytes   = 32 << 20
+	MaxWorkflowLayoutEntries = 8192
 	MaxWorkflowLayoutDepth   = 4
 )
 

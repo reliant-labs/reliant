@@ -166,6 +166,15 @@ type Spec struct {
 	// *NoOrgAccountError when none serves it, before anything is written.
 	// Ignored for an attended launch and for a chat with no org.
 	OrgAccountsOnly bool
+	// FiringTraceParent is the W3C traceparent of the span that fired this
+	// launch, for an unattended one: its run is a trace of its own
+	// (runTraceContext), linked to this span instead of parented under it.
+	// Empty means the span current when Launch is called, which is the
+	// firing span on every fire path that launches inside it; a caller that
+	// launches away from its firing (a redrive of a parked event, say) names
+	// it here. Ignored for an attended launch, whose run stays in its
+	// caller's trace.
+	FiringTraceParent string
 	// UserJWT is the caller's JWT, carried on the run's execution context so a
 	// cloud-daemon chat's first run resolves the control-plane daemon the same
 	// way its later runs do. Interactive callers fill it; scheduled fires have

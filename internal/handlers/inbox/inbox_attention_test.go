@@ -245,7 +245,7 @@ func TestInboxAttention_FilterOnlyRegisteredLaunchedChats(t *testing.T) {
 func TestInboxAttention_RequiredReadErrorsFailClosed(t *testing.T) {
 	repo := newInflightRepo(0)
 	repo.ListAttentionIncidentsFunc = func(context.Context, string) ([]*core.AttentionIncident, error) { return nil, assert.AnError }
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(mockDeps(repo)))
 	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.Error(t, err)
 }
