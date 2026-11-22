@@ -42,13 +42,16 @@ type CleanupOutput struct {
 // - Cleaning up any pending tool execution requests
 // - Notifying the UI of the cancelled state
 type CleanupActivity struct {
-	repo CleanupStore
+	repo      CleanupStore
+	approvals ApprovalResolveStore
 }
 
-// NewCleanupActivity creates a new CleanupActivity
-func NewCleanupActivity(repo CleanupStore) *CleanupActivity {
+// NewCleanupActivity creates a new CleanupActivity; approvals closes the run's
+// pending approvals.
+func NewCleanupActivity(repo CleanupStore, approvals ApprovalResolveStore) *CleanupActivity {
 	return &CleanupActivity{
-		repo: repo,
+		repo:      repo,
+		approvals: approvals,
 	}
 }
 
@@ -98,7 +101,7 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 	// announces the close on the chat feed.
 	cancelledCount := 0
 	for _, approval := range pendingApprovals {
-		closed, err := a.repo.ResolvePendingApproval(ctx, approval.ID,
+		closed, err := a.approvals.ResolvePendingApproval(ctx, approval.ID,
 			int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED),
 			"The run waiting on this request ended; nothing was approved.", "run_ended")
 		if err == nil && !closed {

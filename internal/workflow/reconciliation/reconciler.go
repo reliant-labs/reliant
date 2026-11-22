@@ -95,6 +95,7 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	approvals  Approvals
 	tempClient client.Client
 
 	// owners answers whose chat a pass is working on, so the records it logs
@@ -171,6 +172,10 @@ type Reconciler struct {
 	// completion in this process (see it).
 	approvalFeedRepaired atomic.Bool
 }
+
+// SetApprovals gives the approval sweep the store it reads and closes through;
+// without it the sweep does nothing.
+func (r *Reconciler) SetApprovals(a Approvals) { r.approvals = a }
 
 // SetResetGuard installs the shared reset-attempt guard (see
 // v2workflow.ResetAttemptGuard). Nil-safe: an unset guard always allows resets.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
 )
@@ -132,7 +133,7 @@ func TestCleanupActivity_CancelsApprovals(t *testing.T) {
 	require.Len(t, pending, 2)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 2, output.ApprovalsCancelled)
@@ -161,7 +162,7 @@ func TestCleanupActivity_NoApprovals(t *testing.T) {
 	chatID := createTestChat(t, repo)
 
 	// Run cleanup activity (no approvals to cancel)
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ApprovalsCancelled)
@@ -220,7 +221,7 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 	require.Nil(t, resultBlock, "should have no tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled, "should have cancelled 1 orphaned tool call")
@@ -336,7 +337,7 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 	require.NotNil(t, resultBlock, "should have tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled, "should NOT cancel tool calls that have results")
@@ -376,7 +377,7 @@ func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ApprovalsCancelled, "Only the pending approval should be cancelled")
@@ -430,7 +431,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 
 	// First cleanup - should create repair
 	output1, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
@@ -503,7 +504,7 @@ func TestCleanupActivity_MultipleOrphanedToolCalls(t *testing.T) {
 	}
 
 	// Run cleanup
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(repo, approvalclose.NewFromRepo(repo))
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 3, output.ToolCallsCancelled, "should repair all 3 orphaned tool calls")

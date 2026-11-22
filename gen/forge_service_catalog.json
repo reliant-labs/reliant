@@ -56404,6 +56404,17 @@
     },
     {
       "consumer": "Project",
+      "field": "Detachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Detachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
       "field": "MoveFacts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
@@ -57090,6 +57101,17 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Checkouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.MachineCheckouts",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

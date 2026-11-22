@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -198,9 +199,14 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// APPROVAL ACTIVITIES
 	// ========================================================================
 
+	var approvals handlers.ApprovalResolveStore
+	if deps.Repo != nil {
+		approvals = approvalclose.NewFromRepo(deps.Repo)
+	}
+
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(approvals))
 
 	// ========================================================================
 	// QUESTION ACTIVITIES
@@ -244,7 +250,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo, approvals))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo))
 

@@ -23,6 +23,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -1239,6 +1240,29 @@ type WorkflowReconcilerDeps struct {
 	Activity *daemonstate.Publisher
 }
 
+// approvalSweepStore is what the reconciler's approval sweep reads (the ext
+// store) and closes through (the closer, which announces on the chat feed).
+type approvalSweepStore struct {
+	reads  store.ApprovalExtStore
+	closer *approvalclose.Closer
+}
+
+func (s approvalSweepStore) ListStaleApprovals(ctx context.Context, limit int) ([]store.StaleApproval, error) {
+	return s.reads.ListStaleApprovals(ctx, limit)
+}
+
+func (s approvalSweepStore) ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error) {
+	return s.reads.ListUnannouncedApprovalResolutions(ctx, limit)
+}
+
+func (s approvalSweepStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error) {
+	return s.closer.ResolvePendingApproval(ctx, id, status, reason, actionTaken)
+}
+
+func (s approvalSweepStore) AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error {
+	return s.closer.AnnounceApprovalResolution(ctx, a)
+}
+
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
 // Temporal client's so reset (stuck-task recovery) requests land in the right
 // namespace; the task queue defaults to the shared worker queue. Backgrounded
@@ -1251,6 +1275,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg.Namespace = d.Namespace
 	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
 	r.SetResetGuard(d.ResetGuard)
+	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
 	if d.Activity != nil {

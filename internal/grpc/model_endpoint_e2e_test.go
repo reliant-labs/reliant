@@ -69,7 +69,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	nc := e2eStartNATS(t)
 
 	authority := tokenauthority.NewMemory()
-	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM())})
 	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
