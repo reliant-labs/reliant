@@ -1,0 +1,12 @@
+---
+name: forge
+description: Load first in any Reliant Forge project, before editing anything. Points to `{{.CLI}} skill load forge`, which lists what this project already gets with no setup (traces, per-endpoint latency and error rates, alerts, release health checks, build-once deploys) and what forge generates, so you never hand-write it.
+---
+
+This project uses **Reliant Forge** (github.com/reliant-labs/forge), run as `{{.CLI}}`. It is not Atlassian Forge, Foundry's `forge` (Solidity) or Laravel Forge; do not use their commands.
+
+The guidance lives in the `{{.CLI}}` binary, so it always matches the version this project pins. Read it there; do not look for copies on disk.
+
+1. Run `{{.CLI}} skill load forge` first. It is the entry point: it opens with what this project gets with no setup (traces, per-endpoint latency and error rates, alerts, release health checks, build-once deploys), each with the command that shows it.
+2. Look up a topic with `{{.CLI}} skill search <query>`, then `{{.CLI}} skill load <name>`. `{{.CLI}} skill list` prints the catalog.
+3. Before concluding forge cannot do something, run `{{.CLI}} project capabilities`.

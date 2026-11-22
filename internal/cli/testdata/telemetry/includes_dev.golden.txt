@@ -1,0 +1,73 @@
+=== logs-identity.yaml
+# Written by `forge env up` from the env's forge.Telemetry declarations; included by
+# deploy/observability/otel-collector.yaml. Regenerated on every run.
+error_mode: ignore
+log_statements:
+- conditions:
+  - attributes["service.name"] == "temporal"
+  context: resource
+  statements:
+  - set(attributes["service.name"], "temporal")
+- conditions:
+  - attributes["service.name"] == "worker"
+  context: resource
+  statements:
+  - set(attributes["service.name"], "billing-worker")
+=== logs-parse.yaml
+# Written by `forge env up` from the env's forge.Telemetry declarations; included by
+# deploy/observability/otel-collector.yaml. Regenerated on every run.
+error_mode: silent
+log_statements:
+- conditions:
+  - resource.attributes["service.name"] == "temporal"
+  statements:
+  - set(log.attributes["forge.telemetry.original"], log.body) where log.attributes["forge.telemetry.original"]
+    == nil
+  - set(log.attributes["forge.telemetry.parsed"], ParseJSON(log.attributes["forge.telemetry.original"]))
+    where IsMatch(log.attributes["forge.telemetry.original"], "^\\s*\\{")
+  - set(log.severity_text, String(log.attributes["forge.telemetry.parsed"]["level"]))
+    where log.attributes["forge.telemetry.parsed"]["level"] != nil
+  - set(log.severity_number, SEVERITY_NUMBER_UNSPECIFIED) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil
+  - set(log.severity_number, SEVERITY_NUMBER_TRACE) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:trace)$$")
+  - set(log.severity_number, SEVERITY_NUMBER_DEBUG) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:debug)$$")
+  - set(log.severity_number, SEVERITY_NUMBER_INFO) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:info|information)$$")
+  - set(log.severity_number, SEVERITY_NUMBER_WARN) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:warn|warning)$$")
+  - set(log.severity_number, SEVERITY_NUMBER_ERROR) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:error|err)$$")
+  - set(log.severity_number, SEVERITY_NUMBER_FATAL) where log.attributes["forge.telemetry.parsed"]["level"]
+    != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["level"]),
+    "(?i)^(?:fatal|critical|crit|panic)$$")
+  - set(log.body, log.attributes["forge.telemetry.parsed"]["msg"]) where log.attributes["forge.telemetry.parsed"]["msg"]
+    != nil
+  - delete_key(log.attributes, "level")
+  - delete_key(log.attributes, "msg")
+- conditions:
+  - resource.attributes["service.name"] == "billing-worker"
+  statements:
+  - set(log.attributes["forge.telemetry.original"], log.body) where log.attributes["forge.telemetry.original"]
+    == nil
+  - set(log.attributes["forge.telemetry.parsed"], ParseKeyValue(log.attributes["forge.telemetry.original"]))
+  - merge_maps(log.attributes, log.attributes["forge.telemetry.parsed"], "upsert")
+    where log.attributes["forge.telemetry.parsed"] != nil
+- statements:
+  - delete_key(log.attributes, "forge.telemetry.original")
+  - delete_key(log.attributes, "forge.telemetry.parsed")
+  - delete_key(log.attributes, "forge.telemetry.rule")
+=== logs-preserve.yaml
+# Written by `forge env up` from the env's forge.Telemetry declarations; included by
+# deploy/observability/otel-collector.yaml. Regenerated on every run.
+from: body
+id: forge_telemetry_original
+if: resource["service.name"] in ["temporal", "worker"]
+to: attributes["forge.telemetry.original"]
+type: copy

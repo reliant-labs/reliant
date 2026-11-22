@@ -1,0 +1,18 @@
+package crews
+
+import (
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+type Deps struct {
+	// Owners tells the generated CRUD ops who the caller is, for the
+	// tables whose migration declares `forge:owner=` (see the forge
+	// `db/crud-overrides` skill).
+	Owners crud.OwnerResolver
+	DB     orm.Context
+}
+
+type Service struct {
+	deps Deps
+}

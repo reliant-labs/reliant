@@ -1,0 +1,50 @@
+//go:build e2e
+// +build e2e
+
+package orders_test
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+
+	connect "connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+
+	"github.com/reliant-labs/forge/pkg/pgtest"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	pb "github.com/example/demo/gen/services/orders/v1"
+	"github.com/example/demo/gen/services/orders/v1/ordersv1connect"
+)
+
+// freePort finds an available TCP port on loopback for the service binary
+// this harness is about to spawn. pgtest.ReserveLoopbackPort is the shared
+// implementation — the same one that picks a port for ephemeral postgres.
+func freePort() int {
+	port, err := pgtest.ReserveLoopbackPort()
+	if err != nil {
+		panic(fmt.Sprintf("failed to find free port: %v", err))
+	}
+	return port
+}
+
+// newClient creates a Connect RPC client for the orders service.
+//
+// Connect error assertions in tests should use tdd.AssertConnectErrorV2
+// from github.com/reliant-labs/forge/pkg/tdd.
+//
+// connect-go v2 clients wrap a transport; WithReadMaxBytes(0) keeps the
+// response size unbounded, as a connect-go v1 client was, and
+// svcerr.ClientInterceptorV2 lets a test read the reason a call failed with
+// as svcerr.MetaOf(err).Get(svcerr.ReasonHeader).
+func newClient(t *testing.T, baseURL string) ordersv1connect.OrdersServiceClient {
+	t.Helper()
+	return ordersv1connect.NewOrdersServiceClient(connect.NewClient(
+		connecthttp.NewTransport(http.DefaultClient, baseURL, connecthttp.WithReadMaxBytes(0)),
+		svcerr.ClientInterceptorV2(),
+	))
+}
+
+// Ensure the generated protobuf package import remains referenced.
+var _ = pb.File_services_orders_v1_orders_proto
