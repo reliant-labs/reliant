@@ -33,7 +33,7 @@ func orgKeyRow(org, creator, key string) core.AccountUpsert {
 
 func orgPriorities(t *testing.T, repo *Repo, org string) []string {
 	t.Helper()
-	all, err := repo.ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
+	all, err := TestAccounts(t, repo).ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
 	require.NoError(t, err)
 	var ids []string
 	for _, a := range all {
@@ -56,18 +56,18 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	first := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-first-key-0001"))
 	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-old-key-0002"))
 	label, paused, reason := "Acme prod", true, "the provider rejected the key"
-	_, err := repo.PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &label, Paused: &paused, NeedsReauth: &reason})
+	_, err := TestAccounts(t, repo).PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &label, Paused: &paused, NeedsReauth: &reason})
 	require.NoError(t, err)
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
 	grantsBefore, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
 	chat := createTestChat(t, repo)
 	insertTestThreadForWorkflow(t, repo, "th-rot", chat, "wf-rot", ThreadStatusRunning)
-	ok, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-rot", Provider: "anthropic", AccountID: acct.ID, Reason: "initial"}, "")
+	ok, err := TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-rot", Provider: "anthropic", AccountID: acct.ID, Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	until := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC) // a bench to carry over, not a clock
-	require.NoError(t, repo.BenchAccount(ctx, owner, acct.ID, until, "minute", false))
+	require.NoError(t, TestAccounts(t, repo).BenchAccount(ctx, owner, acct.ID, until, "minute", false))
 
 	got, err := repo.RotateOrgAPIKey(ctx, "org-1", acct.ID, orgKey("org-1", "sk-ant-new-key-0003"))
 	require.NoError(t, err)
@@ -81,15 +81,15 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	assert.Equal(t, core.OrgAccessSelected, got.OrgAccess)
 	assert.Equal(t, []string{first.ID, acct.ID}, orgPriorities(t, repo, "org-1"))
 
-	opened, err := repo.GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
+	opened, err := TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-new-key-0003", opened.Secrets.Secret)
 
-	a, err := repo.GetThreadAssignment(ctx, "th-rot", "anthropic")
+	a, err := TestAccounts(t, repo).GetThreadAssignment(ctx, "th-rot", "anthropic")
 	require.NoError(t, err)
 	require.NotNil(t, a)
 	assert.Equal(t, acct.ID, a.AccountID, "the thread stays on the rotated account")
-	limits, err := repo.ListOwnedAccountLimits(ctx, owner)
+	limits, err := TestAccounts(t, repo).ListOwnedAccountLimits(ctx, owner)
 	require.NoError(t, err)
 	require.Contains(t, limits, acct.ID, "limit state carries over")
 	grantsAfter, err := repo.ListOrgAccountGrants(ctx, "org-1")
@@ -99,7 +99,7 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	// A key the org already holds as another account is refused, and nothing changes.
 	_, err = repo.RotateOrgAPIKey(ctx, "org-1", acct.ID, orgKey("org-1", "sk-ant-first-key-0001"))
 	assert.ErrorIs(t, err, core.ErrOrgAPIKeyInUse)
-	opened, err = repo.GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
+	opened, err = TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, owner, acct.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-new-key-0003", opened.Secrets.Secret)
 
@@ -151,7 +151,7 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	assert.Empty(t, none)
 
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
-	require.NoError(t, repo.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-1"), acct.ID))
+	require.NoError(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-1"), acct.ID))
 	var n int
 	require.NoError(t, raw.QueryRowContext(ctx, `SELECT count(*) FROM provider_account_grants WHERE account_id=$1`, acct.ID).Scan(&n))
 	assert.Zero(t, n, "grants cascade with the account")
@@ -215,13 +215,13 @@ func TestOrgAccountAccessOrderAndDeleteAreScopedToTheOrg(t *testing.T) {
 	_, err = repo.SetOrgAccountAccess(ctx, "org-1", a.ID, "everyone")
 	assert.Error(t, err)
 
-	require.NoError(t, repo.ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, a.ID}))
+	require.NoError(t, TestAccounts(t, repo).ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, a.ID}))
 	assert.Equal(t, []string{b.ID, a.ID}, orgPriorities(t, repo, "org-1"))
-	assert.ErrorIs(t, repo.ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, mine.ID}), core.ErrInvalidAccountOrder)
+	assert.ErrorIs(t, TestAccounts(t, repo).ReorderOwnedProviderAccounts(ctx, owner, "anthropic", []string{b.ID, mine.ID}), core.ErrInvalidAccountOrder)
 
-	assert.ErrorIs(t, repo.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-2"), a.ID), core.ErrProviderAccountNotFound)
-	assert.ErrorIs(t, repo.DeleteOwnedProviderAccount(ctx, core.UserAccountOwner("ada"), a.ID), core.ErrProviderAccountNotFound)
-	require.NoError(t, repo.DeleteOwnedProviderAccount(ctx, owner, b.ID))
+	assert.ErrorIs(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner("org-2"), a.ID), core.ErrProviderAccountNotFound)
+	assert.ErrorIs(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, core.UserAccountOwner("ada"), a.ID), core.ErrProviderAccountNotFound)
+	require.NoError(t, TestAccounts(t, repo).DeleteOwnedProviderAccount(ctx, owner, b.ID))
 	assert.Equal(t, []string{a.ID}, orgPriorities(t, repo, "org-1"), "priorities re-densify")
 }
 
@@ -297,7 +297,7 @@ func TestUnbindAndReleaseClearOnlyTheirSeats(t *testing.T) {
 	attribute(seatB.ID, "org-1", core.AttributionWorkspace)
 	attribute(approved.ID, "org-1", core.AttributionApproved)
 	attribute(otherOrg.ID, "org-2", core.AttributionWorkspace)
-	managed, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	managed, _, err := TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: "dana", Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
 		Secrets: core.AccountSecrets{Secret: "rk-managed-0001"},
 	})

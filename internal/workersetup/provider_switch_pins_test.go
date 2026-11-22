@@ -31,12 +31,12 @@ func TestProviderSwitchClearsOnlyIncompatibleThreadAccountPins(t *testing.T) {
 	_, err := repo.CreateThread(ctx, &db.Thread{ID: thread, ChatID: chatID})
 	require.NoError(t, err)
 	add := func(provider string) core.ProviderAccount {
-		a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		a, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 			UserID: user, Provider: provider, AuthKind: core.AuthKindOAuth,
 			IdentityKey: "switch-" + provider, Secrets: core.AccountSecrets{Secret: "test-key"},
 		})
 		require.NoError(t, err)
-		_, err = repo.SetThreadAssignment(ctx, core.Assignment{
+		_, err = db.TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{
 			ThreadID: thread, Provider: provider, AccountID: a.ID, AssignedAt: time.Now(), Reason: "initial",
 		}, "")
 		require.NoError(t, err)
@@ -44,15 +44,15 @@ func TestProviderSwitchClearsOnlyIncompatibleThreadAccountPins(t *testing.T) {
 	}
 	old, chosen := add("claude"), add("codex")
 	until := time.Now().Add(time.Hour)
-	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), old.ID, until, "five_hour", false))
-	routing := accountRouting(repo, nil)
+	require.NoError(t, db.TestAccounts(t, repo).BenchAccount(ctx, core.UserAccountOwner(user), old.ID, until, "five_hour", false))
+	routing := accountRouting(db.TestAccounts(t, repo), repo, nil)
 	require.NotNil(t, routing.ClearOtherAssignments)
 	require.NoError(t, routing.ClearOtherAssignments(ctx, "someone-else", thread, "codex"))
-	pins, err := repo.ListThreadAssignments(ctx, thread)
+	pins, err := db.TestAccounts(t, repo).ListThreadAssignments(ctx, thread)
 	require.NoError(t, err)
 	require.Len(t, pins, 2, "foreign users cannot clear pins")
 	require.NoError(t, routing.ClearOtherAssignments(ctx, user, thread, "codex"))
-	pins, err = repo.ListThreadAssignments(ctx, thread)
+	pins, err = db.TestAccounts(t, repo).ListThreadAssignments(ctx, thread)
 	require.NoError(t, err)
 	require.Len(t, pins, 1)
 	require.Equal(t, "codex", pins[0].Provider)
@@ -62,7 +62,7 @@ func TestProviderSwitchClearsOnlyIncompatibleThreadAccountPins(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, chosen.ID, assigned.Account.AccountID)
-	limits, err := repo.ListAccountLimits(ctx, user)
+	limits, err := db.TestAccounts(t, repo).ListAccountLimits(ctx, user)
 	require.NoError(t, err)
 	require.NotNil(t, limits[old.ID].LimitedUntil, "other chats still respect the old account's limit")
 }

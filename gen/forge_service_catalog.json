@@ -69,6 +69,7 @@
         "ProcessSettings",
         "Project",
         "ProviderAccount",
+        "ProviderAccounts",
         "PullRequestRecord",
         "Question",
         "QueuedDeliverer",
@@ -509,6 +510,7 @@
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
+        "ProviderAccounts",
         "RemoteExecutor",
         "RepoUpdateFeed",
         "RunLauncher",
@@ -54716,6 +54718,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ProviderAccounts",
+      "name": "ProviderAccounts",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewProviderAccounts"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "PullRequestRecord",
       "name": "PullRequestRecord",
       "kind": "component",
@@ -55555,6 +55569,32 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "AccountRecorder",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AccountUsagePoller",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Approval",
@@ -56568,11 +56608,10 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
-        "Database"
+        "Database",
+        "ProviderAccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -56766,6 +56805,19 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "ProcessRuntime",
+      "field": "ProviderAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Project",
       "field": "Apps",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
@@ -56916,6 +56968,19 @@
     },
     {
       "consumer": "ProviderAccount",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Accounts",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.ChatWaker",
       "methods": [],
@@ -56960,7 +57025,20 @@
       "candidates": [],
       "providers": [
         "Chat",
-        "Database"
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccounts",
+      "field": "Vault",
+      "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
       ],
       "resolution": "composition_expression"
     },
@@ -57199,11 +57277,23 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Store",
       "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database",
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Accounts",
+      "methods": [],
       "candidates": [
-        "Database"
+        "ProviderAccounts"
       ],
       "providers": [
-        "Database"
+        "ProviderAccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -57560,6 +57650,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "TemporalWorker",
+      "field": "ProviderAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "TemporalWorker",

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -62,7 +64,7 @@ func greenfieldFixture(t *testing.T) (*db.Repo, context.Context, *db.Chat) {
 // run should probe for.
 func TestWantsGreenfieldProbeOnAChatsFirstTurn(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	assert.True(t, launcher.WantsGreenfieldProbe(ctx, chat))
 }
@@ -72,7 +74,7 @@ func TestWantsGreenfieldProbeOnAChatsFirstTurn(t *testing.T) {
 // it every turn would be noise.
 func TestWantsGreenfieldProbeSkipsAfterFirstTurn(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	// A prior turn exists. The root workflow and thread have to exist first —
 	// messages hang off a context window, which is scoped to a real thread.
@@ -101,7 +103,7 @@ func TestWantsGreenfieldProbeSkipsAfterFirstTurn(t *testing.T) {
 // A chat with no machine has no directory, and must never reach a daemon.
 func TestWantsGreenfieldProbeSkipsANoMachineChat(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 	chat.NoMachine = true
 
 	assert.False(t, launcher.WantsGreenfieldProbe(ctx, chat))

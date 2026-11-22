@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package provideraccounts_test
 
 import (
 	"context"
@@ -17,8 +17,7 @@ import (
 // limit state under the org's owner key, and the member's grants.
 func TestOrgAccountReadsForTheLoader(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 
 	mine := mustUpsert(t, repo, apiKeyUpsert("member", "mine", "sk-ant-personal-0001"))

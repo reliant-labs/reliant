@@ -176,6 +176,9 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
+	// GetProjectWithUserCheck is the org-aware project read the handlers and the
+	// launcher share; db.Repo delegates it to projectaccess.
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore

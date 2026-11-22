@@ -192,8 +192,8 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err != nil || got == nil || got.Content != "out '?' tr-c" || fmt.Sprint(got.GrantedTools) != "[shell view]" || *got.MessageID != m4 {
 		t.Fatalf("FindToolCallResult(tr-c) = %+v, %v", got, err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.GrantedTools != nil {
-		t.Fatalf("Repo.GetToolCallResult(tr-b) = %+v; want no grants", got)
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-b"); got == nil || got.GrantedTools != nil {
+		t.Fatalf("store.FindToolCallResult(tr-b, Repo.ORM()) = %+v; want no grants", got)
 	}
 	if got, err := store.FindToolCallResult(ctx, o, "absent"); err != nil || got != nil {
 		t.Fatalf("FindToolCallResult(absent) = %v, %v", got, err)
@@ -205,7 +205,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, rewrite); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
 		t.Fatalf("after rewrite: %+v", got)
 	}
 
@@ -217,7 +217,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, broken); err != nil {
 		t.Fatalf("upsert invalid UTF-8 result: %v", err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.Content != "line \uFFFD..." {
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-b"); got == nil || got.Content != "line \uFFFD..." {
 		t.Fatalf("after invalid UTF-8 write: %+v", got)
 	}
 
