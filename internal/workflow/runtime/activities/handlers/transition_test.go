@@ -73,7 +73,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(h.Repo())
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   workflowID,
@@ -133,7 +133,7 @@ func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(h.Repo())
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:       chatID,
@@ -176,7 +176,7 @@ func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
 		ID: childID, ParentID: &parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: childID, Status: db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(h.Repo())
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:           chatID,

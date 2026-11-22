@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestMachineHealth_IsScopedToTheCallersOwnDaemons runs MachineHealth over the
@@ -48,7 +49,7 @@ func TestMachineHealth_IsScopedToTheCallersOwnDaemons(t *testing.T) {
 		require.NoError(t, database.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
 			DaemonID: m.daemon, UserID: m.user, Source: db.DaemonAttachmentSourceInbound,
 		}))
-		require.NoError(t, database.UpdateDaemonAttachmentHealth(ctx, m.daemon, m.health))
+		require.NoError(t, store.SetDaemonAttachmentHealth(ctx, database.ORM(), m.daemon, m.health))
 	}
 
 	router := NewNATSDaemonRouter(nil, WithDatabase(database))

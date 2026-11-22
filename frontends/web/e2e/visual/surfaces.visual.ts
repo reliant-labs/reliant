@@ -17,8 +17,14 @@ import { stagingDatabaseFixtures } from './fixtures/data'
 import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
+import { testsFixtures } from './fixtures/tests'
 
 type Viewport = 'desktop' | 'mobile'
+
+/** Every TestsService read answering Unimplemented: a control plane without the service. */
+const TESTS_SERVICE_MISSING = Object.fromEntries(
+  Object.keys(testsFixtures).map((key) => [key, { __error: { code: 'unimplemented', message: 'TestsService is not served here' } }]),
+)
 
 interface Surface {
   name: string
@@ -720,13 +726,21 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('billing-hosting-tab'),
   },
   {
-    // Tests › Overview as production shows it until control-plane's TestsService is
-    // re-vendored (services/controlPlane/tests/testApi.ts): every read answers
-    // Unimplemented, so the page says so and the nav's Tests group has no badge.
+    // Tests › Overview on the shopfront fixture report (fixtures/tests.ts, answered over
+    // TestsService like every other RPC here): coverage, pass rate, flakes, the last run.
     name: 'shell-tests',
     path: '/forge/p/shopfront/tests',
     on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('tests-headline'),
+  },
+  {
+    // The same page on a control plane that does not serve TestsService (Unimplemented):
+    // "this control plane doesn't store test runs yet", and no nav badge.
+    name: 'shell-tests-not-configured',
+    path: '/forge/p/shopfront/tests',
+    on: ['desktop'],
     ready: (page) => page.getByText("This control plane doesn't store test runs yet").first(),
+    harness: { fixtures: TESTS_SERVICE_MISSING },
   },
 ]
 

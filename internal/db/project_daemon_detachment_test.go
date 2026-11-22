@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -28,7 +29,7 @@ func TestDetachProjectFromDaemon_DropsTheMachinesRowAndCatalog(t *testing.T) {
 	require.True(t, p.push(t, p.cicdID, 2000, nil, nil))
 	require.Len(t, p.unionWorkflows(t), 1)
 
-	require.NoError(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 
 	rows, err := p.repo.ListProjectDaemonsForProject(ctx, p.projectID)
 	require.NoError(t, err)
@@ -39,13 +40,13 @@ func TestDetachProjectFromDaemon_DropsTheMachinesRowAndCatalog(t *testing.T) {
 	assert.False(t, synced, "the detached machine's catalog is gone")
 	assert.Empty(t, p.unionWorkflows(t), "only the detached machine provided the workflow")
 
-	detached, err := p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, p.defaultID)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), p.defaultID)
 	require.NoError(t, err)
 	require.Len(t, detached, 1)
 	assert.Equal(t, "/work/"+p.defaultID, detached[0].Path)
 
 	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, p.defaultID, "/elsewhere", nil))
-	detached, err = p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, p.defaultID)
+	detached, err = store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), p.defaultID)
 	require.NoError(t, err)
 	assert.Empty(t, detached, "recording the checkout again ends the detachment")
 }
@@ -75,7 +76,7 @@ func TestDetachProjectFromDaemon_GuardRunsUnderTheCatalogLock(t *testing.T) {
 
 	guarded, detached := make(chan struct{}), make(chan error, 1)
 	go func() {
-		detached <- p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error {
+		detached <- store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error {
 			close(guarded)
 			return nil
 		})
@@ -91,7 +92,7 @@ func TestDetachProjectFromDaemon_GuardRunsUnderTheCatalogLock(t *testing.T) {
 	require.NoError(t, <-detached)
 }
 
-// A guard's ErrNothingToDetach ends the detach as a success that records
+// A guard's core.ErrNothingToDetach ends the detach as a success that records
 // nothing; any other guard error aborts it unchanged.
 func TestDetachProjectFromDaemon_GuardOutcomes(t *testing.T) {
 	p := newTwoMachineProject(t)
@@ -99,13 +100,13 @@ func TestDetachProjectFromDaemon_GuardOutcomes(t *testing.T) {
 	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 
 	refused := errors.New("refused")
-	require.ErrorIs(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error { return refused }), refused)
-	require.NoError(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error { return ErrNothingToDetach }))
+	require.ErrorIs(t, store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error { return refused }), refused)
+	require.NoError(t, store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, func(context.Context) error { return core.ErrNothingToDetach }))
 
 	rows, err := p.repo.ListProjectDaemonsForProject(ctx, p.projectID)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1, "neither aborted detach removed the checkout")
-	detached, err := p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, p.defaultID)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), p.defaultID)
 	require.NoError(t, err)
 	assert.Empty(t, detached)
 }
@@ -116,7 +117,7 @@ func TestRecordObservedProjectDaemonInScope_LeavesADetachedPairAlone(t *testing.
 	p := newTwoMachineProject(t)
 	ctx := context.Background()
 	require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
-	require.NoError(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 
 	recorded, err := p.repo.RecordObservedProjectDaemonInScope(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil, nil)
 	require.NoError(t, err)
@@ -124,7 +125,7 @@ func TestRecordObservedProjectDaemonInScope_LeavesADetachedPairAlone(t *testing.
 	rows, err := p.repo.ListProjectDaemonsForProject(ctx, p.projectID)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
-	detached, err := p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, p.defaultID)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), p.defaultID)
 	require.NoError(t, err)
 	assert.Len(t, detached, 1, "the detachment stands")
 
@@ -142,7 +143,7 @@ func TestSyncProjectConfigSnapshot_DropsADetachedMachinesSnapshot(t *testing.T) 
 	for _, id := range []string{p.defaultID, p.cicdID} {
 		require.NoError(t, p.repo.UpsertProjectDaemon(ctx, p.projectID, id, "/work/"+id, nil))
 	}
-	require.NoError(t, p.repo.DetachProjectFromDaemon(ctx, p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(ctx, p.repo.ORM(), p.projectID, p.defaultID, "/work/"+p.defaultID, nil))
 
 	assert.False(t, p.push(t, p.defaultID, 3000, []config.StoredWorkflow{release}, nil), "the detached machine's snapshot is dropped")
 	_, synced, err := p.repo.GetProjectMachineWorkflowsJSON(ctx, p.projectID, p.defaultID)

@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/reliant-labs/forge/pkg/observe"
@@ -487,7 +488,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.siblings", func(ctx context.Context) error {
 			var err error
-			siblingMessages, err = s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
+			siblingMessages, err = s.deps.Siblings.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
 			if err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
 					"error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
@@ -729,8 +730,11 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*re
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.update_heads", func(ctx context.Context) error {
 			var err error
-			updates, err = s.deps.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
-			if err != nil {
+			var source string
+			updates, source, err = s.deps.Heads.SnapshotUpdateHeads(ctx, chatID)
+			if err == nil {
+				trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
+			} else {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", shortID(chatID))
 			}
 			return err
@@ -1089,7 +1093,7 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
-		updates, err := s.deps.Repo.GetUserUpdatesSince(ctx, userID, currentSeq, batchSize)
+		updates, err := s.deps.UserLog.UserUpdatesSince(ctx, userID, currentSeq, batchSize)
 		if err != nil {
 			return err
 		}

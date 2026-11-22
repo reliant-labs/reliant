@@ -43,7 +43,7 @@ func TestChatSnapshotSkipTotal(t *testing.T) {
 	open := func(t *testing.T, skipTotal bool) (*reliantv1.ChatSyncSnapshot, int32) {
 		t.Helper()
 		spy := &countSpyRepo{Repository: repo}
-		svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: spy}))
+		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: spy})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID, SkipTotal: skipTotal})
 		snapshot := nextChatEvent(t, events).GetSnapshot()
 		require.NotNil(t, snapshot)

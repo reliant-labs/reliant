@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A run that completed only because its failure path ran (run_outcome
@@ -58,9 +59,9 @@ func TestFailureEpisode_AHandledFailureDoesNotEndIt(t *testing.T) {
 		created, err := repo.CreateTriggerEvent(ctx, ev)
 		require.NoError(t, err)
 		require.True(t, created)
-		require.NoError(t, repo.SetLaunchEventRunStatus(ctx, chatID, core.TriggerRunCompleted))
+		require.NoError(t, store.SetLaunchEventRunStatus(ctx, repo.ORM(), chatID, core.TriggerRunCompleted))
 		if outcome != "" {
-			require.NoError(t, repo.SetLaunchEventRunOutcome(ctx, chatID, outcome))
+			require.NoError(t, store.SetLaunchEventRunOutcome(ctx, repo.ORM(), chatID, outcome))
 		}
 	}
 	episode := func() ([]string, Streak) {

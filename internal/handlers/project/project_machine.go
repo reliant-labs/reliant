@@ -213,7 +213,7 @@ func (s *Service) projectAtPathOn(ctx context.Context, userID, daemonID, path st
 		if row == nil || ospath.Clean(row.Path) != want {
 			continue
 		}
-		if p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID); err == nil && p != nil && scope.Includes(p.OrgID) {
+		if p, err := s.deps.Projects.GetProjectWithUserCheck(ctx, row.ProjectID, userID); err == nil && p != nil && scope.Includes(p.OrgID) {
 			return p, nil
 		}
 	}

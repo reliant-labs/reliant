@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -235,7 +236,7 @@ type mockRepo struct {
 	// Approval sweep (approval_sweep_test.go): the stale approvals the query
 	// reports, which closes find them still pending, the closes made, and
 	// the unannounced resolutions and announcements.
-	staleApprovals        []db.StaleApproval
+	staleApprovals        []store.StaleApproval
 	approvalAlreadyClosed map[string]bool
 	closedApprovals       map[string]string // id -> reason
 	unannounced           []*db.Approval

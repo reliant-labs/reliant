@@ -72,7 +72,7 @@ func (f *runEventFixture) finish(t *testing.T, status, outcome, errText string) 
 		Status: status, Thread: f.chatID, Outcome: outcome, Error: errText,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, input, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, input, &out))
 }
 
 func (f *runEventFixture) events(t *testing.T) []*core.RunEvent {
@@ -186,7 +186,7 @@ func TestWorkflowStatus_ChildAndCancelledEmitNoRunEvent(t *testing.T) {
 		WorkflowName: "child", Status: "completed", Thread: f.chatID + "/child",
 	}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, input, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, input, &out))
 	f.finish(t, "cancelled", "", "")
 	assert.Empty(t, f.events(t), "only a ROOT run finishing or failing is a workflow event")
 }

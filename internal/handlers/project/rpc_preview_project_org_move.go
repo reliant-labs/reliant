@@ -60,11 +60,11 @@ func (s *Service) PreviewProjectOrgMove(
 	if err != nil {
 		return nil, projectMoveRefusal(ctx, err)
 	}
-	blockers, err := s.deps.Repo.ProjectOrgMoveBlockers(ctx, projectID)
+	blockers, err := s.deps.Ledger.ProjectOrgMoveBlockers(ctx, projectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the project's running work"))
 	}
-	effects, err := s.deps.Repo.ProjectOrgMoveEffects(ctx, projectID, to)
+	effects, err := s.deps.Ledger.ProjectOrgMoveEffects(ctx, projectID, to)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read what the move would change"))
 	}

@@ -17,9 +17,21 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
+
+// Approvals is what the approval sweep reads and writes: approvals nothing
+// waits on any more, and closed approvals whose chat feed still says pending
+// (approval_sweep.go). store.ApprovalExtStore reads them; approvalclose.Closer
+// closes and announces.
+type Approvals interface {
+	ListStaleApprovals(ctx context.Context, limit int) ([]store.StaleApproval, error)
+	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
+	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
+}
 
 // Questions reads a chat's open blocking questions: the progress watchdog
 // never terminates a run that is parked on one. store.QuestionExtStore
@@ -66,13 +78,6 @@ type ReconcilerStore interface {
 	// Chats, threads and the progress watchdog's user-input waits.
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-
-	// Approvals nothing waits on any more, and closed approvals whose chat
-	// feed still says pending (approval_sweep.go).
-	ListStaleApprovals(ctx context.Context, limit int) ([]db.StaleApproval, error)
-	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
-	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
-	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
 
 	// Stranded spawns, backgrounded processes and the tool-call rows they
 	// close.

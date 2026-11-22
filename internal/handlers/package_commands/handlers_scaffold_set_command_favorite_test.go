@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -25,7 +27,7 @@ func (setFavoriteNoProjectRepo) GetProjectWithUserCheck(context.Context, string,
 func TestSetCommandFavorite_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: setFavoriteNoProjectRepo{}}))
+	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: setFavoriteNoProjectRepo{}, Projects: projectaccesstest.For(setFavoriteNoProjectRepo{})}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetCommandFavoriteRequest, pb.SetCommandFavoriteResponse]{
 		{

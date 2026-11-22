@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
@@ -45,7 +46,7 @@ func meterOnce(t *testing.T, h *IdempotencyTestHelper, driver llm.Driver, userID
 	t.Helper()
 	resolved := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
 	exec := func(ctx context.Context, _ string) (string, error) {
-		_, err := newUsageMeter(h.Repo(), userID, chatID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		_, err := newUsageMeter(llmusagetest.New(t, h.Repo()), userID, chatID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
 		return "", err
 	}
 	var suite temporaltest.WorkflowTestSuite
@@ -121,7 +122,7 @@ func TestUsageMeter_RealStreamFailureKeepsUsageAcrossActivityRetry(t *testing.T)
 	driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: "gpt-4o", APIModel: "gpt-4o"}, ApiKey: "k", BaseURL: srv.URL, MaxTokens: 100})
 	resolved := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
 	runRetried(t, "MeteredStream", func(ctx context.Context, _ string) error {
-		_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		_, err := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
 		return err
 	}, "x")
 

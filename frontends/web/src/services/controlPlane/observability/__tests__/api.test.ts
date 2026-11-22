@@ -687,10 +687,11 @@ describe("usage", () => {
     });
   });
 
-
-  it("surfaces the billing service's error", async () => {
-    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
-    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code: Code.PermissionDenied });
+  // control-plane#3095 removed ObservabilityService's copy of the rpc, so no
+  // error, Unimplemented included, sends the read anywhere else.
+  it.each([Code.Unimplemented, Code.PermissionDenied])("surfaces error code %s without falling back", async (code) => {
+    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("failed", code));
+    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code });
     expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
     expect(client.getObservabilityUsage).toHaveBeenCalledTimes(1);
   });

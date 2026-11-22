@@ -54,7 +54,6 @@ var userScopedReads = map[string]string{
 
 	"ListArchivedChats":        readCallersFilter,
 	"ListChats":                readCallersFilter,
-	"ListInboxPending":         readCallersFilter,
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,
@@ -65,8 +64,6 @@ var userScopedReads = map[string]string{
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
 	// caller's own, decided by CanReadTrigger, or one of an org they
 	// administer (control-plane's live answer).
-	"ListNoOrgAccountPauses":       readCallersFilter,
-	"ListPersonallyFundedTriggers": readCallersFilter,
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).
@@ -74,12 +71,10 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves": readCallersFilter,
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
 	"ListDeletedProjects":         readCallersFilter,
-	"FindProjectOrgMoveByRequest": readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
@@ -93,11 +88,6 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUserInScope":      readCallersFilter,
 	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
-	// The shared lists read OTHER users' rows of one org; SharingService
-	// passes each through authz.SharedChatsFor / SharedProjectsFor,
-	// which is where a viewer is decided.
-	"ListSharedProjects": readCallersFilter,
-
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
 	"GetPresetBySlugAndProject":        readParentAuthorized,
@@ -108,12 +98,8 @@ var userScopedReads = map[string]string{
 	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"ListChatsForWorktree":  readParentAuthorized,
-	"RecentTriggerFirings":  readParentAuthorized,
-	"RecentTriggerOutcomes": readParentAuthorized,
-	"WorkflowSlugExists":    readParentAuthorized,
+	"RecentTriggerFirings": readParentAuthorized,
 
-	"GetAnalyticsEnabled":         readPersonal,
 	"GetAutomationToken":          readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
@@ -122,13 +108,11 @@ var userScopedReads = map[string]string{
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,
 	"GetPresetBySlug":                 readPersonal,
-	"GetPrivacySettings":              readPersonal,
 	"GetProviderAccountWithSecrets":   readPersonal,
 	"GetSetting":                      readPersonal,
 	"GetSettingValue":                 readPersonal,
 	"ListAccountLimits":               readPersonal,
 	"ListCommandFavorites":            readPersonal,
-	"ListDismissedInboxItemIDs":       readPersonal,
 	"ListLLMUsageDaily":               readPersonal,
 	"ListLLMUsageDetail":              readPersonal,
 	"ListMachinePoolsForUser":         readPersonal,
@@ -147,7 +131,6 @@ var userScopedReads = map[string]string{
 	"ListHeldWorktreesForUser":          readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountLiveLaunchedRuns":            readBackground,
 	"CountTriggerCapacityHeldByMember": readBackground,
 	"HasEnabledTriggerOfKind":          readBackground,
 	"ListCapacityWakeTargets":          readBackground,

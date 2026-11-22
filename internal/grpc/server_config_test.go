@@ -23,6 +23,7 @@ import (
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -76,7 +77,7 @@ func testStreaming(t *testing.T) testRoute {
 	repo := &streaminghandler.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
 	}
-	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, Senders: &streaminghandler.MockSenders{}, SpawnCalls: &streaminghandler.MockSpawnCalls{}})
+	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, Senders: &streaminghandler.MockSenders{}, Heads: &streaminghandler.MockHeads{}, UserLog: &streaminghandler.MockUserLog{}, OrgFeed: &streaminghandler.MockOrgFeed{}, Siblings: &streaminghandler.MockSiblings{}, SpawnCalls: &streaminghandler.MockSpawnCalls{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.StreamingService", svc)
 }
@@ -84,7 +85,7 @@ func testStreaming(t *testing.T) testRoute {
 // testForge is the real ForgeService, with mount's options over the chain.
 func testForge(t *testing.T, mount ...mountkit.Option) testRoute {
 	t.Helper()
-	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: &forge.MockRouter{}, Repo: &forge.MockRepository{}})
+	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: &forge.MockRouter{}, Repo: &forge.MockRepository{}, Projects: &projectaccess.MockService{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.ForgeService", svc, mount...)
 }

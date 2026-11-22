@@ -26,7 +26,10 @@ import (
 // This is a SIMPLE struct that just holds shared dependencies
 // Unlike V1, it has NO methods - activities are separate structs
 type Activities struct {
-	Repo           *db.Repo
+	Repo *db.Repo
+	// LLMUsage records every model request in the usage ledger. Optional: nil
+	// records nothing.
+	LLMUsage       handlers.LLMUsageRecorder
 	StreamingHub   streaming.StreamingHub
 	Threads        *threads.Service
 	ToolsFactory   *tools.ToolsFactory
@@ -48,6 +51,9 @@ type Activities struct {
 	// run a command or a request. Optional: nil makes a step that uses a secret
 	// fail rather than run with the placeholder.
 	SecretResolver handlers.SecretResolver
+	// StepKeys mints and revokes a run node's LLM gateway step key (the
+	// control plane). Optional: nil refuses every node with llm_gateway.
+	StepKeys handlers.StepKeyIssuer
 	// AllowPrivateEgress picks the dial policy for user-supplied model
 	// endpoint URLs (netguard.ForDeployment); false refuses private targets.
 	AllowPrivateEgress bool

@@ -38,7 +38,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			recent, err = s.deps.Repo.RecentTriggerOutcomes(gctx, userID, ids, triggers.HealthWindow)
+			recent, err = s.deps.Firings.RecentTriggerOutcomes(gctx, userID, ids, triggers.HealthWindow)
 			return err
 		})
 	})
@@ -49,7 +49,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			episodes, err = s.deps.Repo.FiringsSinceLastUnmanagedSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			episodes, err = s.deps.Firings.FiringsSinceLastUnmanagedSuccess(gctx, userID, ids, triggers.EpisodeFirings)
 			return err
 		})
 	})
@@ -60,7 +60,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			diagnosticEpisodes, err = s.deps.Repo.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			diagnosticEpisodes, err = s.deps.Firings.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
 			return err
 		})
 	})
@@ -77,7 +77,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 	})
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
-			incidents, err = s.deps.Repo.ListAttentionIncidents(gctx, userID)
+			incidents, err = s.deps.Items.ListAttentionIncidents(gctx, userID)
 			incidents = authz.Visible(gctx, userID, incidents, reads.incident)
 			return err
 		})
@@ -100,7 +100,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 	var managed map[string]bool
 	if len(chatIDs) > 0 {
 		if err := lim.do(ctx, func() (err error) {
-			managed, err = s.deps.Repo.AttentionManagedChats(ctx, userID, chatIDs)
+			managed, err = s.deps.Items.AttentionManagedChats(ctx, userID, chatIDs)
 			return err
 		}); err != nil {
 			return nil, err

@@ -31,6 +31,12 @@ type Deps struct {
 	// Senders titles the senders of the messages a snapshot assembles
 	// (store.ThreadExtStore satisfies it).
 	Senders Senders
+	// Heads, UserLog, OrgFeed and Siblings are the update and message reads
+	// that have left the Repository (deps.go).
+	Heads    Heads
+	UserLog  UserLog
+	OrgFeed  OrgFeed
+	Siblings Siblings
 	// SpawnCalls maps child threads to their spawn tool calls for the
 	// reconnect snapshot.
 	SpawnCalls SpawnCalls
@@ -99,6 +105,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.SpawnCalls == nil {
 		return fmt.Errorf("streaming: Deps.SpawnCalls is required")
+	}
+	if d.Heads == nil || d.UserLog == nil || d.OrgFeed == nil || d.Siblings == nil {
+		return fmt.Errorf("streaming: Deps.Heads, UserLog, OrgFeed and Siblings are required")
 	}
 	return nil
 }
