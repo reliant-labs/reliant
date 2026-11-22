@@ -104,7 +104,6 @@ var userScopedReads = map[string]string{
 	"RecentTriggerFirings":  readParentAuthorized,
 	"RecentTriggerOutcomes": readParentAuthorized,
 
-	"GetAnalyticsEnabled":         readPersonal,
 	"GetAutomationToken":          readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
@@ -113,7 +112,6 @@ var userScopedReads = map[string]string{
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,
 	"GetPresetBySlug":                 readPersonal,
-	"GetPrivacySettings":              readPersonal,
 	"GetProviderAccountWithSecrets":   readPersonal,
 	"GetSetting":                      readPersonal,
 	"GetSettingValue":                 readPersonal,

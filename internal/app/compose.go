@@ -92,8 +92,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/privacy"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -389,6 +391,7 @@ func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 		Network:      g.ServerProcessConfig.GetNetwork(),
 		Analytics:    g.ServerProcessConfig.GetAnalytics(),
 		DB:           g.Database(),
+		Privacy:      g.Privacy(),
 	})
 }
 
@@ -918,7 +921,7 @@ func (g *Graph) newReliantKeySweep() (*ReliantKeySweep, error) {
 
 func (g *Graph) newLLMUsageRetention() (*LLMUsageRetention, error) {
 	return NewLLMUsageRetention(LLMUsageRetentionDeps{
-		DB: g.Database(),
+		Ledger: g.Llmusage(),
 	})
 }
 
@@ -1383,6 +1386,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),
+		Privacy:                 g.Privacy(),
 		ControlPlane:            controlPlaneClient(g.ServerProcessConfig.GetControlPlane()),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
@@ -1545,6 +1549,35 @@ func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
 		DB:        g.Database(),
 		Authority: g.TokenAuthority(),
 	})
+}
+
+// newPrivacy constructs the privacy package (internal/privacy): each user's
+// analytics and crash-reporting choices, kept as user-level settings.
+func (g *Graph) newPrivacy() (privacy.Service, error) {
+	svc, err := privacy.New(privacy.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Settings: store.NewSettingExtStore(g.Database().ORM()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return privacy.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newLlmusage constructs the llmusage package (internal/llmusage): the
+// per-call usage ledger and its retention.
+func (g *Graph) newLlmusage() (llmusage.Service, error) {
+	svc, err := llmusage.New(llmusage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Ledger: store.NewLlmCallUsageExtStore(g.Database().ORM()),
+		Tx:     g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return llmusage.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newSeatmatch constructs the seatmatch package (internal/seatmatch).

@@ -37,6 +37,8 @@ type Deps struct {
 	// Repo stores settings, provider credentials and privacy choices
 	// (deps.go).
 	Repo Repository
+	// Privacy keeps the user's analytics and crash-reporting choices.
+	Privacy Privacy
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
 	// server.go passes the deployment's controlplane adapter.
 	ControlPlane LLMKeyMinter
@@ -82,6 +84,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("settings: Deps.Repo is required")
+	}
+	if d.Privacy == nil {
+		return fmt.Errorf("settings: Deps.Privacy is required")
 	}
 	if d.ControlPlane == nil {
 		return fmt.Errorf("settings: Deps.ControlPlane is required")

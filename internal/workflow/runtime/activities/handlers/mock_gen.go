@@ -1089,7 +1089,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=5ce8ccf5cf09a5e1c8b06958829d22c7b5e7e1a0923ed6bf7a2d34d558b40e8e
+// forge:hash=3c3a35f0f51b67e6bb1918499bb0496457936a6aca555352656c7d3d2fc30673
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1167,7 +1167,6 @@ type MockCallLLMStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc                                   func(context.Context, db.LLMCallUsage) (bool, error)
 	MarkAgentMessagesDeliveredFunc                           func(context.Context, []string, time.Time, string) ([]string, error)
 	SetAgentMessagesDeliveredMessageIDFunc                   func(context.Context, []string, string) error
 	EmitAgentMessagesDrainedUpdateFunc                       func(context.Context, string, db.AgentMessagesDrainedUpdate) error
@@ -1787,15 +1786,6 @@ func (m *MockCallLLMStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "GetTrigger")
 }
 
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockCallLLMStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockCallLLMStore", "RecordLLMCallUsage")
-}
-
 // MarkAgentMessagesDelivered records the call and delegates to MarkAgentMessagesDeliveredFunc when set.
 func (m *MockCallLLMStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
 	m.Recorder.Record("MarkAgentMessagesDelivered", ctx, ids, deliveredAt, deliveredMessageID)
@@ -2011,7 +2001,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=0b3d2e113b65fc568fe67d18d8ec8c8f5321ed0917cec57cd1ccfecb529d1930
+// forge:hash=141f004593c6de69f2e01aff12da50965bdd8cebdfb8632b2a07c1b7cbbbe2ff
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -2069,7 +2059,6 @@ type MockCompactStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc                                   func(context.Context, db.LLMCallUsage) (bool, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
@@ -2504,15 +2493,6 @@ func (m *MockCompactStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockCompactStore", "GetTrigger")
-}
-
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockCompactStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockCompactStore", "RecordLLMCallUsage")
 }
 
 // ListContentBlocksForMessages records the call and delegates to ListContentBlocksForMessagesFunc when set.
@@ -3483,7 +3463,7 @@ func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID strin
 var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
-// forge:hash=f5b2e587dbfed3b015fd146dcd22ab7102f5a4c418100f3e5704afef17111b01
+// forge:hash=1a0958c5135d364a5649f6f7386ff8d21f4bc00e583a7146e6450856f7a7de5f
 
 // MockGenerateTitleStore is a test mock for the GenerateTitleStore interface.
 //
@@ -3500,7 +3480,6 @@ type MockGenerateTitleStore struct {
 	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc      func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc            func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc    func(context.Context, db.LLMCallUsage) (bool, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3564,15 +3543,6 @@ func (m *MockGenerateTitleStore) GetTrigger(ctx context.Context, id string) (*co
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockGenerateTitleStore", "GetTrigger")
-}
-
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockGenerateTitleStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockGenerateTitleStore", "RecordLLMCallUsage")
 }
 
 // Compile-time check.

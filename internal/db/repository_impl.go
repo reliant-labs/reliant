@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -2240,28 +2239,8 @@ func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 
 // ==================== Settings Helper Methods ====================
 
-func (r *Repo) getBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return false, err
-	}
-	val, err := strconv.ParseBool(setting.Value)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse bool value: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repo) SetString(ctx context.Context, userID string, projectID *string, key, value string) error {
 	return r.upsertSetting(ctx, userID, projectID, key, value, "string")
-}
-
-func (r *Repo) setBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatBool(value), "bool")
 }
 
 func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *string, key, value, valueType string) error {
