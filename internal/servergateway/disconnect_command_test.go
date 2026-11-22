@@ -26,6 +26,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -46,7 +47,7 @@ func startDisconnectGateway(t *testing.T) *disconnectGateway {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	authority := tokenauthority.NewMemory()
-	svc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	svc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo})
 	require.NoError(t, err)
 
 	daemonAuth, err := grpcserver.NewDaemonAuth(authority)

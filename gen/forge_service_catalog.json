@@ -57146,6 +57146,28 @@
     },
     {
       "consumer": "ToolsDaemon",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Attachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "LocalModels",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.LocalModels",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Repository",
       "methods": [],

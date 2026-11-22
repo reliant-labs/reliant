@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -55,7 +56,7 @@ func startDrainGateway(t *testing.T) (*drainGateway, string, string) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	authority := tokenauthority.NewMemory()
-	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo})
 	require.NoError(t, err)
 	listener := newTestDaemonListener(t, authority, gateway)
 

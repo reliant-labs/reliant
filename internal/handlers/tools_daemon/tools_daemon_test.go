@@ -11,21 +11,44 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
-	"github.com/stretchr/testify/require"
 )
 
 // newTestService builds the gateway service over repo as the daemon-gateway
 // does, with no publishers; a test that needs one sets it in svc.deps. A nil
 // repo exercises the in-memory routing alone.
+//
+// A real *db.Repo also gets the lease and inventory stores over its database,
+// as the composition root wires them; a fake repository gets neither, so the
+// writes they would observe go through newTestServiceWithLeases.
 func newTestService(repo Repository) *Service {
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo})
+	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo}
+	if real, ok := repo.(*db.Repo); ok {
+		deps.Attachments, deps.LocalModels = realLeases(real)
+	}
+	return newService(deps)
+}
+
+// newTestServiceWithLeases is newTestService with the lease and inventory
+// roles wired as well (a nil role leaves its writes off, as in production
+// without a database).
+func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalModels) *Service {
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Attachments: leases, LocalModels: models})
+}
+
+// realLeases is the generated stores over a real database: what the composition
+// root hands the gateway.
+func realLeases(repo interface{ ORM() *orm.Client }) (Attachments, LocalModels) {
+	return store.NewDaemonAttachmentExtStore(repo.ORM()), store.NewDaemonExtStore(repo.ORM())
 }
 
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {

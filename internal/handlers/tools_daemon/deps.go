@@ -28,15 +28,10 @@ type Repository interface {
 	MergeDeclaredDaemonLabels(ctx context.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error)
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
-	SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error
 
-	// The attachment lease a connected daemon holds on this gateway.
+	// The attachment lease a connected daemon holds on this gateway is the
+	// Attachments role; UpsertDaemonAttachment stays here for now.
 	UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error
-	RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (created bool, err error)
-	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
-	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
-	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
-	UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health db.MachineHealth) error
 
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
@@ -111,4 +106,25 @@ type ProjectReconcileStore interface {
 	// ForgeAppsStore records the forge apps the reconcile probe reports for
 	// each repo of a checkout it found (projectfacts.RecordForgeApps).
 	projectfacts.ForgeAppsStore
+}
+
+// Attachments is the lease a connected daemon holds on this gateway and what
+// its heartbeats record on it. store.DaemonAttachmentExtStore satisfies it.
+type Attachments interface {
+	// RenewDaemonAttachment renews the lease of a stream the caller is
+	// holding right now, re-creating the row if it is gone, and reports
+	// whether it had to.
+	RenewDaemonAttachment(ctx context.Context, att *core.DaemonAttachment) (created bool, err error)
+	// ReleaseDaemonAttachment deletes the lease a session created, never a
+	// newer session's.
+	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
+	SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
+	SetDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
+	SetDaemonAttachmentHealth(ctx context.Context, daemonID string, health core.MachineHealth) error
+}
+
+// LocalModels stores the model inventory a daemon publishes.
+// store.DaemonExtStore satisfies it.
+type LocalModels interface {
+	SetDaemonLocalModels(ctx context.Context, daemonID, inventoryJSON string) error
 }

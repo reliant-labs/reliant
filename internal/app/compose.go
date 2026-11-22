@@ -192,6 +192,8 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
+		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
+		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
