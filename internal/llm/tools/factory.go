@@ -345,6 +345,11 @@ func (f *ToolsFactory) SaveAttachment() Tool {
 	return NewSaveAttachmentTool(f.store())
 }
 
+// PresentImage shows image files from the machine to the user in the chat.
+func (f *ToolsFactory) PresentImage() Tool {
+	return NewPresentImageTool(f.store())
+}
+
 func (f *ToolsFactory) Write() Tool {
 	return NewWriteTool()
 }
