@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -35,10 +36,13 @@ func recordFireSpans(t *testing.T) *tracetest.SpanRecorder {
 }
 
 // causeSpan is a span standing in for whatever caused a firing (the fire
-// activity, a webhook request, a redrive pass); it is still open.
+// activity, a webhook request, a redrive pass); it is still open. Its ctx
+// knows the trigger owner is a member of org-1, the org the tests' triggers
+// belong to.
 func causeSpan(t *testing.T) (context.Context, trace.SpanContext) {
 	t.Helper()
-	ctx, span := otel.Tracer("test").Start(context.Background(), "cause")
+	member := authz.WithMembership(context.Background(), memberOf("org-1"))
+	ctx, span := otel.Tracer("test").Start(member, "cause")
 	t.Cleanup(func() { span.End() })
 	return ctx, span.SpanContext()
 }
