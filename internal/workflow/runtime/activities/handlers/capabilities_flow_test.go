@@ -82,7 +82,7 @@ func serverToolExecutor(repo *db.Repo) toolexec.ToolExecutor {
 func (f *noMachineFixture) execute(t *testing.T, executor toolexec.ToolExecutor, caps *reliantv1.ToolCapabilities, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, ExecuteToolsInput{
 		ChatID:       f.chat.ID,
 		Thread:       f.chat.ID,
 		Capabilities: caps,

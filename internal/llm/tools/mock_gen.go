@@ -1527,7 +1527,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=609804af406e0252e71e9efebbdb4efb8398a117a9f65e4b92de756a79b6e0e6
+// forge:hash=54d2e3d90a6d0919b46626de3b1979b9cdaa81eb962f898319777d86b30dc5a7
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1578,7 +1578,6 @@ type MockspawnStatusStore struct {
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
 	LastThreadActivityByChatFunc                             func(context.Context, string) (map[string]time.Time, error)
 	ListPendingApprovalsByChatFunc                           func(context.Context, string) ([]*db.Approval, error)
-	ProviderBackoffByChatFunc                                func(context.Context, string) (map[string]db.ProviderBackoff, error)
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.
@@ -1950,17 +1949,34 @@ func (m *MockspawnStatusStore) ListPendingApprovalsByChat(ctx context.Context, c
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ListPendingApprovalsByChat")
 }
 
+// Compile-time check.
+var _ spawnStatusStore = (*MockspawnStatusStore)(nil)
+
+// forge:section MockproviderBackoffReader
+// forge:hash=aeaecae3a443f4e6ed4617835b2605945ec3859ab30491b96b62931c07648833
+
+// MockproviderBackoffReader is a test mock for the providerBackoffReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockproviderBackoffReader.<Method>Func not set" error.
+type MockproviderBackoffReader struct {
+	contractkit.Recorder
+	ProviderBackoffByChatFunc func(context.Context, string) (map[string]core.ProviderBackoff, error)
+}
+
 // ProviderBackoffByChat records the call and delegates to ProviderBackoffByChatFunc when set.
-func (m *MockspawnStatusStore) ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]db.ProviderBackoff, error) {
+func (m *MockproviderBackoffReader) ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]core.ProviderBackoff, error) {
 	m.Recorder.Record("ProviderBackoffByChat", ctx, chatID)
 	if m.ProviderBackoffByChatFunc != nil {
 		return m.ProviderBackoffByChatFunc(ctx, chatID)
 	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ProviderBackoffByChat")
+	return nil, contractkit.MockNotSet("MockproviderBackoffReader", "ProviderBackoffByChat")
 }
 
 // Compile-time check.
-var _ spawnStatusStore = (*MockspawnStatusStore)(nil)
+var _ providerBackoffReader = (*MockproviderBackoffReader)(nil)
 
 // forge:section MockSpawnQuestions
 // forge:hash=87c747b90b6687ac0dc8055fc21fc08380b3c05e2b0997b079194907573754ac

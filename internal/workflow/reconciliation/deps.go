@@ -87,9 +87,6 @@ type ReconcilerStore interface {
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	// Which chats owning a still-running backgrounded process are held on a
-	// provider usage limit (reassertHeldRunWork).
-	ChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error)
 
 	// The agent-message mailbox.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)

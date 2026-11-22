@@ -561,7 +561,7 @@ func TestInterruptThread_RecordsCancellationDurablyImmediately(t *testing.T) {
 		"terminal is what checkPriorTerminalResult keys on; a non-terminal row lets the tool re-run")
 	assert.NotNil(t, call.CompletedAt, "a terminal call must record when it stopped")
 
-	result, err := repo.GetToolCallResult(ctx, callID)
+	result, err := store.FindToolCallResult(ctx, repo.ORM(), callID)
 	require.NoError(t, err)
 	require.NotNil(t, result, "a terminal row with no result leaves the transcript with a dangling tool_call")
 	assert.True(t, result.IsError, "a cancelled tool did not succeed")

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -26,6 +27,9 @@ type TaskQueue string
 type Deps struct {
 	// Store is everything a launch reads and writes in the database.
 	Store Store
+	// Projects reads the project a launch runs in, only when its owner may
+	// write it (owner and org decided together: projectaccess).
+	Projects projectaccess.Service
 	// Selections is the chat selection store: the layer between a chat's
 	// presets and a send's params, and where a start records its first choice.
 	// store.ChatSelectionExtStore satisfies it.
@@ -135,7 +139,6 @@ type WorkflowResolver interface {
 type ProjectLookup interface {
 	daemonplacement.Installs
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)

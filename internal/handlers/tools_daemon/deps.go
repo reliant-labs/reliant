@@ -23,9 +23,6 @@ type Repository interface {
 	// Daemon rows and what a heartbeat reports about the machine.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	UpsertDaemon(ctx context.Context, daemon *db.Daemon) error
-	// MergeDeclaredDaemonLabels merges the durable labels a daemon declared
-	// at registration into its row's labels; false when it wrote nothing.
-	MergeDeclaredDaemonLabels(ctx context.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error)
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
 

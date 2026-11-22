@@ -54,6 +54,8 @@ type Deps struct {
 	// Checkouts is the machine's checkout lock and detachments
 	// (store.ProjectDaemonDetachmentExtStore).
 	Checkouts MachineCheckouts
+	// Pools holds the machine pools and the durable labels a daemon declares.
+	Pools MachinePools
 	// UserUpdateHub forwards daemon heartbeats, list changes and local-model
 	// inventories to the owner's web clients as ephemeral user updates.
 	// Without it they are not published.
@@ -131,6 +133,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Installs == nil {
 		return fmt.Errorf("tools_daemon: Deps.Installs is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("tools_daemon: Deps.Pools is required")
 	}
 	return nil
 }

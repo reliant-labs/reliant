@@ -40,6 +40,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -438,11 +440,12 @@ type ProcessRuntime struct {
 // ProcessRuntimeDeps is what that state reads. Settings orders it after the
 // config-only globals (drivers.Configure before the key provider).
 type ProcessRuntimeDeps struct {
-	Settings     *ProcessSettings
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
-	Network      *configv1.NetworkConfig
-	Analytics    *configv1.AnalyticsConfig
+	Settings         *ProcessSettings
+	DB               *db.Repo
+	ProviderAccounts provideraccounts.Service
+	ControlPlane     *configv1.ControlPlaneConfig
+	Network          *configv1.NetworkConfig
+	Analytics        *configv1.AnalyticsConfig
 	// Privacy is where each user's analytics consent is read from.
 	Privacy privacy.Service
 }
@@ -453,8 +456,8 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.
-	drivers.InitializeAPIKeyProvider(repo)
-	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
+	drivers.InitializeAPIKeyProvider(d.ProviderAccounts, repo)
+	healer := drivers.InstallReliantKeyHealer(d.ProviderAccounts, repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
 	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, repo)
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
@@ -666,6 +669,33 @@ type AutomationTokensDeps struct {
 // router reads it back.
 func NewAutomationTokens(d AutomationTokensDeps) (automationtokens.Service, error) {
 	return automationtokens.NewInstrumented(automationtokens.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
+}
+
+// ProviderAccountsDeps is the database provider accounts live in and the vault that
+// seals their secrets.
+type ProviderAccountsDeps struct {
+	DB    *db.Repo
+	Vault vault.Service
+}
+
+// NewProviderAccounts is the only path to the provider_accounts table for accounts, their
+// limit state and thread assignments. Handlers, the router, the usage poller and the
+// drivers take the narrow slice of it each reads.
+func NewProviderAccounts(d ProviderAccountsDeps) (provideraccounts.Service, error) {
+	return provideraccounts.NewInstrumented(provideraccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
+}
+
+// OrgAccountsDeps is the database an organization's provider credentials live in and the vault
+// that seals a rotated key.
+type OrgAccountsDeps struct {
+	DB    *db.Repo
+	Vault vault.Service
+}
+
+// NewOrgAccounts is the only path to an organization's own accounts, their grants, seats and
+// workspace bindings, the rejected-key notices and the gone-org purge.
+func NewOrgAccounts(d OrgAccountsDeps) (orgaccounts.Service, error) {
+	return orgaccounts.NewInstrumented(orgaccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
 }
 
 // PauseServiceDeps is what pauses and resumes runs.

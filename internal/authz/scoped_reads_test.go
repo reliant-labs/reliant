@@ -65,7 +65,6 @@ var userScopedReads = map[string]string{
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).
-	"ListMemberAccountGrants": readCallersFilter,
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
@@ -96,24 +95,17 @@ var userScopedReads = map[string]string{
 
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
-	"HasFreshIntegrationAccess":       readPersonal,
-	"GetLatestUserUpdateSequence":     readPersonal,
-	"GetMachinePoolByName":            readPersonal,
-	"GetMachinePoolForUser":           readPersonal,
-	"GetPresetBySlug":                 readPersonal,
-	"GetProviderAccountWithSecrets":   readPersonal,
-	"GetSetting":                      readPersonal,
-	"GetSettingValue":                 readPersonal,
-	"ListAccountLimits":               readPersonal,
-	"ListCommandFavorites":            readPersonal,
-	"ListLLMUsageDaily":               readPersonal,
-	"ListLLMUsageDetail":              readPersonal,
-	"ListMachinePoolsForUser":         readPersonal,
-	"ListProviderAccounts":            readPersonal,
-	"ListProviderAccountsWithSecrets": readPersonal,
-	"ListSettings":                    readPersonal,
-	"ListSettingsByKey":               readPersonal,
-	"ListVisibilityOverrides":         readPersonal,
+	"HasFreshIntegrationAccess":   readPersonal,
+	"GetLatestUserUpdateSequence": readPersonal,
+	"GetPresetBySlug":             readPersonal,
+	"GetSetting":                  readPersonal,
+	"GetSettingValue":             readPersonal,
+	"ListCommandFavorites":        readPersonal,
+	"ListLLMUsageDaily":           readPersonal,
+	"ListLLMUsageDetail":          readPersonal,
+	"ListSettings":                readPersonal,
+	"ListSettingsByKey":           readPersonal,
+	"ListVisibilityOverrides":     readPersonal,
 
 	"IsDaemonAttached":                  readOrgless,
 	"ListAttachedDaemonIDsForUser":      readOrgless,
@@ -123,12 +115,11 @@ var userScopedReads = map[string]string{
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountTriggerCapacityHeldByMember": readBackground,
-	"HasEnabledTriggerOfKind":          readBackground,
-	"ListCapacityWakeTargets":          readBackground,
-	"ListChatsPausedForMachine":        readBackground,
-	"ListChatsQueuedForMachine":        readBackground,
-	"ListChatsWaitingForMachine":       readBackground,
+	"HasEnabledTriggerOfKind":    readBackground,
+	"ListCapacityWakeTargets":    readBackground,
+	"ListChatsPausedForMachine":  readBackground,
+	"ListChatsQueuedForMachine":  readBackground,
+	"ListChatsWaitingForMachine": readBackground,
 }
 
 var (

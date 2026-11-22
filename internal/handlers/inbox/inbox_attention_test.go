@@ -23,7 +23,7 @@ func attentionFiring(t *testing.T, f *inboxFixture, id, trigger string, status d
 
 func applyInboxAttention(t *testing.T, f *inboxFixture, chat, run, key, phase, state string, at time.Time, timeout time.Duration) {
 	t.Helper()
-	result, err := f.repo.ApplyAttentionUpdate(f.ctx, core.AttentionUpdate{
+	result, err := applyAttentionUpdateRC(f.ctx, f.repo, core.AttentionUpdate{
 		ChatID: chat, RunID: run, Key: key, Phase: phase, State: state, StartedAt: at, RecoveryTimeout: timeout,
 		FailureClass: "unsuccessful", Detail: "Needs a person",
 	})

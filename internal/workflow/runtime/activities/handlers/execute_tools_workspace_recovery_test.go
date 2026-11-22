@@ -102,7 +102,7 @@ func setupWorkspaceRecoveryFixture(t *testing.T) *workspaceRecoveryFixture {
 func (f *workspaceRecoveryFixture) run(t *testing.T, executor *daemonLikeExecutor, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).WithWorktreeReviver(store.NewWorktreeExtStore(f.h.Repo().ORM())).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo())).WithWorktreeReviver(store.NewWorktreeExtStore(f.h.Repo().ORM())).Execute, ExecuteToolsInput{
 		ChatID:      f.chatID,
 		Thread:      f.chatID,
 		ProjectPath: f.workspace,

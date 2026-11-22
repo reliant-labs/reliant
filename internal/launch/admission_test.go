@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 type admissionStore struct{ WorkflowResolver }

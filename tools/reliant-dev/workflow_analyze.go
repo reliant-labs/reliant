@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -72,7 +73,7 @@ type runData struct {
 	// Wall clock alone cannot separate a slow unit from a rate-limited one, and
 	// the retry ladder leaves no other trace: it runs inside one activity attempt,
 	// so it produces no message, no step execution and no status change.
-	backoffByThread map[string]db.ProviderBackoff
+	backoffByThread map[string]core.ProviderBackoff
 }
 
 func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, error) {
@@ -93,7 +94,7 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		byThread:        map[string]*db.Workflow{},
 		stepsByWF:       map[string][]*db.StepExecution{},
 		blocksByMsg:     map[string][]*db.MessageContentBlock{},
-		backoffByThread: map[string]db.ProviderBackoff{},
+		backoffByThread: map[string]core.ProviderBackoff{},
 	}
 	for _, wf := range workflows {
 		rd.workflowByID[wf.ID] = wf

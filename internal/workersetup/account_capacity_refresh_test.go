@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 )
 
@@ -54,7 +55,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	prevClient := drivers.AccountAvailabilityClient
 	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return noCatalog{name: string(id)}, nil
@@ -62,7 +63,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	t.Cleanup(func() { drivers.AccountAvailabilityClient = prevClient })
 
 	user := "user-" + uuid.NewString()
-	alice, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	alice, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.ClaudeIdentityKey("alice", "org-alice"), Email: "alice@acme.com",
 		ExternalAccountID: "alice", OrganizationID: "org-alice",
@@ -82,16 +83,16 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	agentThread := chatID + "-agent"
 	_, err = repo.CreateThread(ctx, &db.Thread{ID: agentThread, ChatID: chatID})
 	require.NoError(t, err)
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, agentThread, "Claude", false, now.Add(3*time.Hour), now))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, agentThread, "Claude", false, now.Add(3*time.Hour), now))
 
 	// The provider refused alice on its 5-hour window, and benched it until
 	// the reset. The agent's thread is pinned to alice.
 	reset := now.Add(3 * time.Hour).Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), alice.ID, reset, "five_hour", false))
-	_, err = repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: agentThread, Provider: "claude", AccountID: alice.ID, AssignedAt: now, Reason: accountrouter.ReasonInitial}, "")
+	require.NoError(t, db.TestAccounts(t, repo).BenchAccount(ctx, core.UserAccountOwner(user), alice.ID, reset, "five_hour", false))
+	_, err = db.TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: agentThread, Provider: "claude", AccountID: alice.ID, AssignedAt: now, Reason: accountrouter.ReasonInitial}, "")
 	require.NoError(t, err)
 
-	routing := accountRouting(repo, nil)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, nil)
 	assign := func() (accountrouter.Result, error) {
 		avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(user))
 		return routing.Router.Assign(ctx, accountrouter.Request{
@@ -106,15 +107,15 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	// Settings' refresh: the usage endpoint reports the 5-hour window at 10%.
 	signals := &recordedSignals{}
 	fetcher := &accountlimits.Fetcher{
-		Store:  repo,
-		Tokens: drivers.RefreshingTokens{Store: repo},
+		Store:  db.TestAccounts(t, repo),
+		Tokens: drivers.RefreshingTokens{Store: db.TestAccounts(t, repo)},
 		Doer: usageDoer(func(*http.Request) (*http.Response, error) {
 			body := fmt.Sprintf(`{"five_hour":{"utilization":10,"resets_at":%q},"seven_day":{"utilization":20,"resets_at":%q}}`,
 				now.Add(2*time.Hour).Format(time.RFC3339), now.Add(48*time.Hour).Format(time.RFC3339))
 			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, nil
 		}),
 		OnCapacity: func(ctx context.Context, userID, _ string) {
-			capacitywake.WakeUser(ctx, repo, signals, userID, "test")
+			capacitywake.WakeUser(ctx, providerbackofftest.New(t, repo), signals, userID, "test")
 		},
 	}
 	res, err := fetcher.RefreshUsage(ctx, user, alice.ID)

@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -63,7 +64,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	})
 	ctx := context.Background()
 
-	launcher := launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	workflows := launchableDeclarations{fakeWorkflows: fakeWorkflows{yaml: map[string]string{scenarioWorkflow: workflow}}}
 	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), f.repo, "reliant-labs")
 	starter := &recordingStarter{}

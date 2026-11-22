@@ -14,7 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/chataccess"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
@@ -28,22 +28,23 @@ import (
 // restate the handler's own assumptions.
 
 type env struct {
-	t     *testing.T
-	repo  *db.Repo
-	svc   *provider_account.Service
-	valid func(provider, key string) (bool, string)
-	keys  []string // keys the validator saw
+	t        *testing.T
+	repo     *db.Repo
+	accounts provideraccounts.Service
+	svc      *provider_account.Service
+	valid    func(provider, key string) (bool, string)
+	keys     []string // keys the validator saw
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	e := &env{t: t, repo: repo, valid: func(string, string) (bool, string) { return true, "ok" }}
+	e := &env{t: t, repo: repo, accounts: db.TestAccounts(t, repo), valid: func(string, string) (bool, string) { return true, "ok" }}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
-		Store:   repo,
-		Chats:   chataccess.NewFromORM(repo.ORM()),
-		Funding: store.NewChatPersonalFundingExtStore(repo.ORM()),
+		Store:    repo,
+		Accounts: e.accounts,
+		Funding:  store.NewChatPersonalFundingExtStore(repo.ORM()),
 		ValidateKey: func(_ context.Context, p models.Family, key string) (bool, string) {
 			e.keys = append(e.keys, key)
 			return e.valid(string(p), key)
@@ -65,7 +66,7 @@ func (e *env) addKey(user, provider, key string) *pb.AddProviderAPIKeyResponse {
 
 func (e *env) oauthAccount(user, provider, id string) core.ProviderAccount {
 	e.t.Helper()
-	a, _, err := e.repo.UpsertProviderAccount(as(user), core.AccountUpsert{
+	a, _, err := e.accounts.UpsertProviderAccount(as(user), core.AccountUpsert{
 		UserID: user, Provider: provider, AuthKind: core.AuthKindOAuth, IdentityKey: id, Email: id + "@example.com",
 		Secrets: core.AccountSecrets{Secret: "tok-" + id, Refresh: "ref-" + id},
 	})
@@ -109,7 +110,7 @@ func TestAddProviderAPIKeyValidatesAndDedupes(t *testing.T) {
 	assert.EqualValues(t, 1, accounts[1].Priority)
 
 	// The default (first) key is the one the drivers use.
-	withSecrets, err := e.repo.ListProviderAccountsWithSecrets(as(user), user)
+	withSecrets, err := e.accounts.ListProviderAccountsWithSecrets(as(user), user)
 	require.NoError(t, err)
 	require.Len(t, withSecrets, 2)
 	assert.Equal(t, "sk-first-1111", withSecrets[0].Secrets.Secret)
@@ -155,7 +156,7 @@ func TestDeleteProviderAccountReDensifies(t *testing.T) {
 	// Deleting the default promotes the next key to the default.
 	_, err = e.svc.DeleteProviderAccount(as(user), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: a.Id}))
 	require.NoError(t, err)
-	withSecrets, err := e.repo.ListProviderAccountsWithSecrets(as(user), user)
+	withSecrets, err := e.accounts.ListProviderAccountsWithSecrets(as(user), user)
 	require.NoError(t, err)
 	require.Len(t, withSecrets, 1)
 	assert.Equal(t, "sk-c-3333", withSecrets[0].Secrets.Secret)
@@ -251,7 +252,7 @@ func TestListShowsStatusAndStoredWindows(t *testing.T) {
 	acct := e.oauthAccount(user, "claude", "alice")
 	used := 0.82
 	reset := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
-	require.NoError(t, e.repo.UpsertAccountLimitSnapshot(as(user), core.LimitState{
+	require.NoError(t, e.accounts.UpsertAccountLimitSnapshot(as(user), core.LimitState{
 		AccountID: acct.ID, UserID: user, Status: "allowed", Source: "headers", ObservedAt: time.Now(),
 		Windows: []core.LimitWindow{{Name: "5h", UsedFraction: &used, ResetsAt: reset, LengthS: 5 * 3600}},
 	}))
@@ -263,7 +264,7 @@ func TestListShowsStatusAndStoredWindows(t *testing.T) {
 	assert.InDelta(t, 0.82, got[0].Windows[0].GetUsedFraction(), 1e-9)
 	assert.Equal(t, pb.UsageSource_USAGE_SOURCE_HEADERS, got[0].UsageSource)
 
-	require.NoError(t, e.repo.BenchAccount(as(user), core.UserAccountOwner(user), acct.ID, time.Now().Add(time.Hour), "5h", false))
+	require.NoError(t, e.accounts.BenchAccount(as(user), core.UserAccountOwner(user), acct.ID, time.Now().Add(time.Hour), "5h", false))
 	assert.Equal(t, pb.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_LIMITED, e.list(user)[0].Status)
 	assert.NotNil(t, e.list(user)[0].LimitedUntil)
 }
@@ -290,7 +291,7 @@ func TestGetChatProviderAccount(t *testing.T) {
 	assert.Nil(t, res.Account)
 
 	// The root thread's newest assignment is the current provider's account.
-	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-time.Hour), Reason: "initial"}, "")
+	_, err = e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-time.Hour), Reason: "initial"}, "")
 	require.NoError(t, err)
 	res, err = get(chat, user)
 	require.NoError(t, err)
@@ -298,14 +299,14 @@ func TestGetChatProviderAccount(t *testing.T) {
 	assert.Equal(t, claude.ID, res.Account.Id)
 
 	// After a cross-provider fallback the codex account is current; the claude one stays remembered.
-	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "codex", AccountID: codex.ID, AssignedAt: time.Now(), Reason: "limited"}, "")
+	_, err = e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "codex", AccountID: codex.ID, AssignedAt: time.Now(), Reason: "limited"}, "")
 	require.NoError(t, err)
 	res, err = get(chat, user)
 	require.NoError(t, err)
 	assert.Equal(t, codex.ID, res.Account.Id)
 
 	// Removing the account leaves the other provider's assignment as the answer.
-	require.NoError(t, e.repo.DeleteProviderAccount(ctx, user, codex.ID))
+	require.NoError(t, e.accounts.DeleteProviderAccount(ctx, user, codex.ID))
 	res, err = get(chat, user)
 	require.NoError(t, err)
 	assert.Equal(t, claude.ID, res.Account.Id)
@@ -347,12 +348,12 @@ func TestGetChatProviderAccountFollowsTheAccountThatServedTheLastReply(t *testin
 		return resp.Msg.GetAccount().GetId()
 	}
 
-	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-2 * time.Hour), Reason: "initial"}, "")
+	_, err = e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-2 * time.Hour), Reason: "initial"}, "")
 	require.NoError(t, err)
 	reply("m-claude-1", claude.ID)
 	assert.Equal(t, claude.ID, chipAccount())
 
-	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "codex", AccountID: codex.ID, AssignedAt: time.Now().Add(-time.Hour), Reason: "limited"}, "")
+	_, err = e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "codex", AccountID: codex.ID, AssignedAt: time.Now().Add(-time.Hour), Reason: "limited"}, "")
 	require.NoError(t, err)
 	reply("m-codex-1", codex.ID)
 	assert.Equal(t, codex.ID, chipAccount(), "on the fallback provider")
@@ -363,7 +364,7 @@ func TestGetChatProviderAccountFollowsTheAccountThatServedTheLastReply(t *testin
 	assert.Equal(t, claude.ID, chipAccount(), "back on Claude")
 
 	// The serving account was deleted: fall back to the newest sticky assignment still standing.
-	require.NoError(t, e.repo.DeleteProviderAccount(ctx, user, claude.ID))
+	require.NoError(t, e.accounts.DeleteProviderAccount(ctx, user, claude.ID))
 	assert.Equal(t, codex.ID, chipAccount())
 }
 
@@ -411,14 +412,14 @@ func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
 		_, err := e.repo.CreateThread(ctx, &db.Thread{ID: chatID, ChatID: chatID, CreatedAt: fixedNow})
 		require.NoError(t, err)
 		key := fmt.Sprintf("sk-ant-org-chip-key-%d-a1b2", n)
-		acct, _, err = e.repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		acct, _, err = e.accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 			Owner: owner, OrgAccess: access, CreatedByUserID: "admin",
 			Provider: "anthropic", AuthKind: core.AuthKindAPIKey,
 			IdentityKey: core.APIKeyIdentityKey(owner.Key(), "anthropic", key), KeyHint: core.KeyHint(key),
 			Secrets: core.AccountSecrets{Secret: key},
 		})
 		require.NoError(t, err)
-		_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "anthropic", AccountID: acct.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
+		_, err = e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "anthropic", AccountID: acct.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
 		require.NoError(t, err)
 		return chatID, acct
 	}
@@ -448,7 +449,7 @@ func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
 	selected, selectedKey := chatOnOrgKey(core.OrgAccessSelected)
 	assert.Nil(t, get(selected), "a member without a grant is not shown the key")
 	// Granted in their current membership, it is theirs.
-	require.NoError(t, e.repo.SetOrgAccountGrants(ctx, orgID, selectedKey.ID, []string{user}, "admin"))
+	require.NoError(t, db.TestOrgAccounts(e.t, e.repo).SetOrgAccountGrants(ctx, orgID, selectedKey.ID, []string{user}, "admin"))
 	require.NotNil(t, get(selected))
 
 	// Removed from the org: the stale assignments name nothing, whatever the key's access.
@@ -459,7 +460,7 @@ func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
 	// The person's own chats elsewhere never reach the org's accounts.
 	drivers.InitializeOrgMembership(members)
 	personalChat, root := seedChat(t, e.repo, user)
-	_, err := e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "anthropic", AccountID: everyoneKey.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
+	_, err := e.accounts.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "anthropic", AccountID: everyoneKey.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
 	require.NoError(t, err)
 	assert.Nil(t, get(personalChat), "a chat with no org names no org account")
 }
@@ -505,7 +506,7 @@ func TestAccountThatAddsCapacityWakesTheUsersBlockedChats(t *testing.T) {
 	w := &wakes{}
 	svc := provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
 		Store:       repo,
-		Chats:       chataccess.NewFromORM(repo.ORM()),
+		Accounts:    db.TestAccounts(t, repo),
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
 		ChatWaker:   w,
 	}))

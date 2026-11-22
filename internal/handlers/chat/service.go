@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"go.temporal.io/api/workflowservice/v1"
@@ -40,6 +41,8 @@ type Deps struct {
 	// Chats reads a chat the caller may write, the owner check and the org
 	// check in one call (chataccess).
 	Chats chataccess.Service
+	// Backoff reads and releases the provider-backoff markers of the chats' runs.
+	Backoff Backoff
 	// Questions lists the chat's open questions (Questions, deps.go).
 	Questions Questions
 	// Spawns reads the spawn tree (Spawns, deps.go).
@@ -104,6 +107,16 @@ type Router interface {
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 }
 
+// Backoff reads and releases the provider-backoff markers of a chat's runs.
+// providerbackoff.Service satisfies it.
+type Backoff interface {
+	// ClearUsageLimitWait releases a stopped run's markers (runs.UsageLimitWaits).
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
+	// ListCapacityWakeTargets lists the root runs of a user's chats that may
+	// have a thread blocked on a provider (WakeUserChats).
+	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)
+}
+
 // validateDeps returns an error if any required Deps field is nil. The
 // gate runs once at construction so handlers need no per-RPC nil-checks.
 func (d Deps) validateDeps() error {
@@ -118,6 +131,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("chat: Deps.Chats is required")
+	}
+	if d.Backoff == nil {
+		return fmt.Errorf("chat: Deps.Backoff is required")
 	}
 	if d.Questions == nil {
 		return fmt.Errorf("chat: Deps.Questions is required")
@@ -183,7 +199,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -198,7 +214,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

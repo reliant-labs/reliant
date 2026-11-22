@@ -3,6 +3,7 @@ package trigger
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -11,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,11 +20,11 @@ import (
 func (e *triggerTestEnv) addPool(t *testing.T, name string, members ...string) *core.MachinePool {
 	t.Helper()
 	for _, m := range members {
-		found, err := e.repo.SetDaemonLabels(e.ctx, e.userID, m, map[string]string{"pool": name})
+		found, err := store.SetDaemonLabels(e.ctx, e.repo.ORM(), e.userID, m, map[string]string{"pool": name})
 		require.NoError(t, err)
 		require.True(t, found)
 	}
-	pool, err := e.repo.PutMachinePool(e.ctx, &core.MachinePool{UserID: e.userID, Name: name, Selector: machinepool.DefaultSelector(name), MemberIdleTimeout: core.DefaultMemberIdleTimeout})
+	pool, err := store.PutMachinePool(e.ctx, e.repo.ORM(), &core.MachinePool{UserID: e.userID, Name: name, Selector: machinepool.DefaultSelector(name), MemberIdleTimeout: core.DefaultMemberIdleTimeout}, uuid.NewString(), time.Now().UTC())
 	require.NoError(t, err)
 	return pool
 }
@@ -44,12 +46,12 @@ func (e *triggerTestEnv) createOnMachine(t *testing.T) tools.TriggerSummary {
 // machine of another user, which store.ListMachinePoolMembers can never
 // return, so the guard against it is exercised end to end.
 type foreignMemberRepo struct {
-	*db.Repo
+	Pools
 	foreign string
 }
 
 func (r foreignMemberRepo) ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
-	rows, err := r.Repo.ListMachinePoolMembers(ctx, pool, projectID)
+	rows, err := r.Pools.ListMachinePoolMembers(ctx, pool, projectID)
 	return append(rows, core.MachinePoolMemberRow{DaemonID: r.foreign, Name: "theirs"}), err
 }
 
@@ -127,9 +129,9 @@ func TestAgentActivationMachinePool(t *testing.T) {
 		{"update to an unknown or another user's pool: refused", func(t *testing.T, env *triggerTestEnv, _ *core.MachinePool) {
 			created := env.createOnMachine(t)
 			other := uuid.NewString()
-			_, err := env.repo.PutMachinePool(env.ctx, &core.MachinePool{UserID: other, Name: "theirs", Selector: machinepool.DefaultSelector("theirs"), MemberIdleTimeout: core.DefaultMemberIdleTimeout})
+			_, err := store.PutMachinePool(env.ctx, env.repo.ORM(), &core.MachinePool{UserID: other, Name: "theirs", Selector: machinepool.DefaultSelector("theirs"), MemberIdleTimeout: core.DefaultMemberIdleTimeout}, uuid.NewString(), time.Now().UTC())
 			require.NoError(t, err)
-			theirs, err := env.repo.GetMachinePoolByName(env.ctx, other, "theirs")
+			theirs, err := store.GetMachinePoolByName(env.ctx, env.repo.ORM(), other, "theirs")
 			require.NoError(t, err)
 			unknown, foreignName := "no-such-pool", "theirs"
 			for _, p := range []tools.ActivationParams{
@@ -191,7 +193,7 @@ func TestAgentActivationMachinePool(t *testing.T) {
 			created := env.createOnMachine(t)
 			theirs := uuid.NewString()
 			require.NoError(t, env.repo.UpsertDaemon(env.ctx, &db.Daemon{ID: theirs, UserID: uuid.NewString()}))
-			env.configure(t, func(d *Deps) { d.Repo = foreignMemberRepo{Repo: env.repo, foreign: theirs} })
+			env.configure(t, func(d *Deps) { d.Pools = foreignMemberRepo{Pools: d.Pools, foreign: theirs} })
 			p := tools.ActivationParams{TriggerID: created.ID, MachinePool: &pipeline}
 			_, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, p)
 			require.ErrorContains(t, err, "has a member that is not one of your machines")
@@ -212,7 +214,7 @@ func TestAgentActivationMachinePool(t *testing.T) {
 			// transaction, refuses.
 			theirs := uuid.NewString()
 			require.NoError(t, env.repo.UpsertDaemon(env.ctx, &db.Daemon{ID: theirs, UserID: uuid.NewString()}))
-			env.configure(t, func(d *Deps) { d.Repo = foreignMemberRepo{Repo: env.repo, foreign: theirs} })
+			env.configure(t, func(d *Deps) { d.Pools = foreignMemberRepo{Pools: d.Pools, foreign: theirs} })
 			_, err = env.svc.ManageActivation(unattendedCtx(env.ctx), env.userID, tools.ToolUpdateTriggerActivation, p, "")
 			require.ErrorContains(t, err, "has a member that is not one of your machines")
 			stored, err := env.repo.GetTrigger(env.ctx, created.ID)

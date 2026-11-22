@@ -145,7 +145,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 // availability falls back to "every configured provider serves".
 func connectOnlyAnthropic(t *testing.T, ctx context.Context, repo *db.Repo, userID string) {
 	t.Helper()
-	llmdrivers.InitializeAPIKeyProvider(repo)
+	llmdrivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	original := llmdrivers.AccountAvailabilityClient
 	llmdrivers.AccountAvailabilityClient = func(context.Context, models.DriverID, models.DriverConfig) (registry.Client, error) {
 		return nil, errors.New("no provider catalog in this test")
