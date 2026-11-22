@@ -3118,14 +3118,6 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 	return store.InsertRunEvent(ctx, r.ORM(), ev)
 }
 
-// GetRunEvent returns ErrRunEventNotFound on a miss.
-func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
-	if id == "" {
-		return nil, fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.LoadRunEvent(ctx, r.ORM(), id)
-}
-
 // HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
 // of the kind.
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
@@ -3153,25 +3145,14 @@ func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID 
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
+//
+// Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
+// there, and only tests still call this.
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
 	}
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
-}
-
-// MarkRunEventDispatched records that the event's dispatch has started.
-func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
-	if id == "" {
-		return fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
-}
-
-// DeleteDispatchedRunEventsBefore prunes dispatched events older than
-// cutoff, returning how many were removed.
-func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
 }
 
 // RecentTriggerFirings returns each trigger's newest perTrigger firings in

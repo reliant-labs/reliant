@@ -465,7 +465,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerLauncher != nil {
 		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
-			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
+			workflowevent.NewActivity(store.NewRunEventExtStore(cfg.Database.ORM()), dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
 		)
 	}
