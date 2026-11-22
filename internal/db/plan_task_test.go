@@ -177,7 +177,7 @@ func TestPlanCRUD(t *testing.T) {
 	t.Run("delete plan", func(t *testing.T) {
 		plan := createTestPlan(t, repo, chatID)
 
-		if err := repo.DeletePlan(ctx, plan.ID); err != nil {
+		if err := store.RemovePlan(ctx, repo.ORM(), plan.ID); err != nil {
 			t.Fatalf("DeletePlan: %v", err)
 		}
 
@@ -397,7 +397,7 @@ func TestTaskCRUD(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		if err := repo.DeleteTask(ctx, task.ID); err != nil {
+		if err := store.RemoveTask(ctx, repo.ORM(), task.ID); err != nil {
 			t.Fatalf("DeleteTask: %v", err)
 		}
 
@@ -667,7 +667,7 @@ func TestTaskDependencies(t *testing.T) {
 		}
 
 		// Delete task A — should cascade to the dependency
-		if err := repo.DeleteTask(ctx, a.ID); err != nil {
+		if err := store.RemoveTask(ctx, repo.ORM(), a.ID); err != nil {
 			t.Fatalf("DeleteTask: %v", err)
 		}
 

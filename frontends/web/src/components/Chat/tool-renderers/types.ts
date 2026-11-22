@@ -49,9 +49,10 @@ export interface ToolResultData {
   metadata?: string;
   is_error?: boolean;
   /**
-   * Images the tool generated, as attachment metadata. Populated for a tool
-   * that persists an attachment (generate_image); the backend writes a sibling
-   * IMAGE content block and the store folds it onto the result here.
+   * Images the tool produced, as attachment metadata. Populated for any tool
+   * that persists an attachment (generate_image, present_image, a viewed
+   * screenshot); the backend writes a sibling IMAGE content block and the
+   * store folds it onto the result here.
    */
   attachments?: Attachment[];
   /**

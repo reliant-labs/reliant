@@ -792,12 +792,13 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 	// A generated video rides in an IMAGE-typed block like an image does: the
 	// block type only says "render this attachment", and the UI splits the two
 	// by MIME. Replay to the model drops it (see messageconv.ContentBlockToPart).
-	// A document (a PDF the view or read_attachment tool returned) gets a
-	// DOCUMENT block, which the history reload folds back into its tool result
-	// (messageconv.foldToolResultMedia).
+	// An image a tool presented to the user (TypeDisplay) is rendered the same
+	// way and dropped from replay the same way. A document (a PDF the view or
+	// read_attachment tool returned) gets a DOCUMENT block, which the history
+	// reload folds back into its tool result (messageconv.foldToolResultMedia).
 	var blockType reliantv1.ContentBlockType
 	switch att.AttachmentType {
-	case string(attachment.TypeImage), string(attachment.TypeVideo):
+	case string(attachment.TypeImage), string(attachment.TypeVideo), string(attachment.TypeDisplay):
 		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
 	case string(attachment.TypeDocument):
 		blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT

@@ -33,10 +33,16 @@ export interface ShortcutDefinition {
   name: string;
   description: string;
   category: string;
-  /** Authored desktop binding, e.g. "Cmd+Shift+P". */
+  /** Authored binding, e.g. "Cmd+Shift+P" — the same on every surface. */
   defaultBinding: string;
   /** Authored browser binding; equals defaultBinding when no override. */
   defaultWebBinding: string;
+  /**
+   * Older chords that also fire in the desktop app (Cmd+T beside New Chat's
+   * Cmd+Alt+N): what a browser never releases, kept for desktop muscle
+   * memory. A remap of the shortcut replaces them along with the binding.
+   */
+  desktopAliases?: string[];
   /** User override, or null when using the default. */
   currentBinding: string | null;
   context: string;
@@ -64,6 +70,8 @@ interface ShortcutsState {
   setEditing: (id: string | null) => void;
   /** The binding in effect for this platform, authored form. */
   getEffectiveBinding: (id: string) => string;
+  /** The desktop aliases in effect for this platform, authored form. */
+  getEffectiveAliases: (id: string) => string[];
   /**
    * The user's override when this surface cannot use it (a desktop remap to a
    * chord the browser never releases), so the UI can say why it is not in
@@ -97,10 +105,10 @@ function overrideUnavailable(
 /**
  * The binding a shortcut should use right now, in authored form.
  *
- * A user override wins wherever it can fire. Otherwise desktop takes the plain
- * default and the browser takes the web default, which is where chords the
- * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases. A
- * desktop-only shortcut is unbound in a browser, override or not: overrides
+ * A user override wins wherever it can fire. Otherwise the default applies —
+ * one binding on every surface, which config/shortcuts.yaml keeps off the
+ * chords a browser never releases (a web default remains possible, and the
+ * browser takes it). A desktop-only shortcut is unbound in a browser, override or not: overrides
  * follow the user between surfaces, and there the browser's own feature is
  * the one the key should reach.
  *
@@ -126,8 +134,26 @@ export function effectiveBinding(
 }
 
 /**
- * A shortcut's binding as the user should see it on this surface ("⌘⌥N" in a
- * Mac browser, "⌘T" in the desktop app), or "" when it is unbound.
+ * The extra chords a shortcut answers to on this surface, in authored form.
+ *
+ * Only the desktop app has them: a desktop alias is a chord the browser keeps
+ * for itself (Cmd+T, Cmd+W), there only so the move to a binding that works
+ * everywhere does not break desktop muscle memory. A user's remap replaces the
+ * whole default — the alias included, as it replaced the old chord before
+ * aliases existed. An alias another shortcut's binding claims yields to it
+ * (ShortcutRegistry), so a remap onto Cmd+T takes Cmd+T.
+ */
+export function effectiveAliases(
+  shortcut: Pick<ShortcutDefinition, "currentBinding" | "desktopAliases">,
+  platform: KeyboardPlatform = detectPlatform(),
+): string[] {
+  if (!platform.isDesktop || shortcut.currentBinding) return [];
+  return shortcut.desktopAliases ?? [];
+}
+
+/**
+ * A shortcut's binding as the user should see it on this surface ("⌘⌥N"), or
+ * "" when it is unbound.
  *
  * The one way to put a binding in front of the user. A literal "Cmd+T" in a
  * tooltip is the desktop chord, and in a browser it opens a browser tab instead
@@ -177,11 +203,17 @@ function syncToNativeMenu(shortcuts: Record<string, ShortcutDefinition>): void {
 
   const platform = detectPlatform();
   const bindings: Record<string, string> = {};
+  // Separate from `bindings`, whose shape an older main process reads: a menu
+  // item whose binding is a sequence (Close Tab's Cmd+K X) can still carry
+  // its single-chord alias (Cmd+W) as its native accelerator.
+  const aliases: Record<string, string[]> = {};
   for (const [id, shortcut] of Object.entries(shortcuts)) {
     bindings[id] = effectiveBinding(shortcut, platform);
+    const live = effectiveAliases(shortcut, platform);
+    if (live.length > 0) aliases[id] = live;
   }
 
-  void window.electronAPI.updateShortcutBindings(bindings).catch((error) => {
+  void window.electronAPI.updateShortcutBindings(bindings, aliases).catch((error) => {
     logger.error("Failed to sync shortcuts to native menu", error);
   });
 }
@@ -202,6 +234,9 @@ function buildRegistry(
       id: shortcut.id,
       handler: shortcut.handler,
       binding: authored ? parseBinding(authored, platform.isMac) : "",
+      aliases: effectiveAliases(shortcut, platform).map((alias) =>
+        parseBinding(alias, platform.isMac),
+      ),
       context: shortcut.context,
       allowInInput: shortcut.allowInInput,
       passthrough: shortcut.passthrough,
@@ -369,6 +404,12 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
     const shortcut = get().shortcuts[id];
     if (!shortcut) return "";
     return effectiveBinding(shortcut);
+  },
+
+  getEffectiveAliases: (id: string) => {
+    const shortcut = get().shortcuts[id];
+    if (!shortcut) return [];
+    return effectiveAliases(shortcut);
   },
 
   getUnavailableOverride: (id: string) => {

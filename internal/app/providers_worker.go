@@ -54,6 +54,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -276,7 +277,12 @@ type WriteLedgerDeps struct {
 // node or an agent tool, before it is made, so the event it causes can be
 // attributed.
 func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: d.DB.IntegrationWrites(), Runs: d.DB}), nil
+	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB}), nil
+}
+
+// newWriteLedger is the integration write ledger over repo's database.
+func newWriteLedger(repo *db.Repo) *writeledger.Ledger {
+	return writeledger.NewLedger(store.NewIntegrationWriteExtStore(repo.ORM()))
 }
 
 // StoredConfigProviderDeps is where project configs are stored.
@@ -462,7 +468,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -883,7 +889,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-		WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
@@ -926,7 +932,7 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 		}
 	}
 	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
-		Store:  d.DB,
+		Store:  store.NewWorkflowCheckRunExtStore(d.DB.ORM()),
 		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
 		RunURL: workflowcheck.HostedRunURL,
 	})
@@ -989,7 +995,7 @@ type WriteLedgerPruneDeps struct {
 //
 //forge:root-only worker
 func NewWriteLedgerPrune(d WriteLedgerPruneDeps) (*WriteLedgerPrune, error) {
-	return &WriteLedgerPrune{ledger: d.Ledger, writes: d.DB.IntegrationWrites()}, nil
+	return &WriteLedgerPrune{ledger: d.Ledger, writes: newWriteLedger(d.DB)}, nil
 }
 
 // Run prunes until ctx ends.

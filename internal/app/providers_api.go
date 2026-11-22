@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -713,7 +714,13 @@ func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPla
 	if err != nil {
 		return nil, err
 	}
-	return ghaccess.New(repo, tokens, ghaccess.Options{
+	var grants ghaccess.Grants
+	var refreshes ghaccess.Refreshes
+	if repo != nil {
+		grants = store.NewIntegrationEventAccessExtStore(repo.ORM())
+		refreshes = store.NewIntegrationAccessRefreshExtStore(repo.ORM())
+	}
+	return ghaccess.New(grants, refreshes, tokens, ghaccess.Options{
 		Logger: slog.Default().With("component", "ghaccess"),
 	}), nil
 }
@@ -842,7 +849,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).
@@ -970,9 +977,38 @@ type WorktreeSweepDeps struct {
 // The sweep records the use a daemon reports through the optional UseStore;
 // a Repo that lost the method would silently stop recording it.
 var (
-	_ worktreesweep.UseStore  = (*db.Repo)(nil)
-	_ worktreesweep.MarkStore = (*db.Repo)(nil)
+	_ worktreesweep.UseStore  = store.WorktreeExtStore(nil)
+	_ worktreesweep.MarkStore = store.WorktreeExtStore(nil)
 )
+
+// worktreeSweepStore is what the sweep's auto-archive reads and writes: the
+// worktree queries and the one chat query that says whether a chat is bound.
+// Only the methods AutoArchiveStore names are called through it.
+type worktreeSweepStore struct {
+	store.WorktreeExtStore
+	chats interface {
+		GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	}
+}
+
+func (s worktreeSweepStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return s.chats.GetLiveChatIDForWorktree(ctx, worktreeID)
+}
+
+// idleRetirementStore is what idle retirement reads (which worktrees a chat
+// is running in) and writes (the archive).
+type idleRetirementStore struct {
+	store.ChatExtStore
+	store.WorktreeExtStore
+}
+
+func (s idleRetirementStore) ListWorktreeIDsWithRunningChat(ctx context.Context, ids []string) (map[string]bool, error) {
+	return s.ChatExtStore.ListWorktreeIDsWithRunningChat(ctx, ids)
+}
+
+func (s idleRetirementStore) ArchiveRecoverableIdleWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {
+	return s.WorktreeExtStore.ArchiveRecoverableIdleWorktree(ctx, id, quietSince)
+}
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
@@ -996,20 +1032,24 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	if err != nil {
 		return nil, err
 	}
+	o := database.ORM()
+	worktrees := store.NewWorktreeExtStore(o)
+	chats := store.NewChatExtStore(o)
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
-		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
+		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
-		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, database).
-		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
+		WithUseStore(worktrees).
+		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
+		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
 		WithLandedIdle(d.Settings.WorktreeLandedIdle).
-		WithReclaimMarks(database, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
+		WithReclaimMarks(worktrees, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -313,16 +314,23 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		wait = defaultMachineWait()
 	}
 	var result CommandResult
+	// reattached: the verdict is that of a command reattached to — by a
+	// retry, or by this attempt after its transport dropped.
+	reattached := retry
+	execSpanCtx, execSpan := telemetry.StartRunExec(ctx, telemetry.RunExecStart{Command: input.Command, Attempt: attempt,
+		Credentials: credentials, InWorktree: worktreePath != ""})
 	if retry {
 		reattacher, ok := executor.(RunReattacher)
 		if !ok {
+			execSpan.End(telemetry.RunExecEnd{Outcome: telemetry.RunOutcomeRetryRefused})
 			return refuse()
 		}
 		var attached bool
-		result, attached, err = reattacher.ReattachCommand(ctx, requestID, timeout)
+		result, attached, err = reattacher.ReattachCommand(execSpanCtx, requestID, timeout)
 		if !attached {
 			activity.GetLogger(ctx).Info("[RunStep] retry found no command to reattach to; refusing to run it again",
 				"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt, "request_id", requestID)
+			execSpan.End(telemetry.RunExecEnd{Outcome: telemetry.RunOutcomeRetryRefused})
 			return refuse()
 		}
 		activity.GetLogger(ctx).Info("[RunStep] retry reattached to the command the previous attempt started",
@@ -330,9 +338,10 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			"exit_code", result.ExitCode, "error", err)
 	} else {
 		observe := a.observeMachine(execCtx)
-		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
-		result, err = reattachAfterTransportDrop(ctx, executor, input, requestID, timeout, result, err)
+		result, err = executeUntilDelivered(withRunRequestID(execSpanCtx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
+		result, reattached, err = reattachAfterTransportDrop(execSpanCtx, executor, input, requestID, timeout, result, err)
 	}
+	execSpan.End(runExecEnd(ctx, result, err, reattached))
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
 	if err == nil && foreign && exitCode != 0 && !interrupted {
@@ -624,30 +633,31 @@ const (
 // reattachAfterTransportDrop is the first half of that: given what
 // executeUntilDelivered returned, it waits for the command's own verdict when
 // the command may have run, no result came back, and this attempt is still
-// live. Anything else is returned unchanged.
-func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (CommandResult, error) {
+// live. Anything else is returned unchanged. reattached reports that the
+// returned verdict is the reattached command's.
+func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (_ CommandResult, reattached bool, _ error) {
 	var transportErr *toolexec.TransportError
 	if err == nil || !errors.As(err, &transportErr) || transportErr.NotDispatched || ctx.Err() != nil || requestID == "" {
-		return result, err
+		return result, false, err
 	}
 	reattacher, ok := executor.(RunReattacher)
 	if !ok {
-		return result, err
+		return result, false, err
 	}
 	logger := activity.GetLogger(ctx)
 	logger.Info("[RunStep] no result came back; asking the machine about the command it was sent",
 		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
 		"code", transportErr.Code, "detail", transportErr.Detail)
-	reattached, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
+	reattachedResult, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
 	if !attached {
 		logger.Info("[RunStep] the machine cannot vouch for the command; its outcome is unknown",
 			"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID)
-		return result, err
+		return result, false, err
 	}
 	logger.Info("[RunStep] reattached to the command after the transport dropped",
 		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
-		"exit_code", reattached.ExitCode, "error", reattachErr)
-	return reattached, reattachErr
+		"exit_code", reattachedResult.ExitCode, "error", reattachErr)
+	return reattachedResult, true, reattachErr
 }
 
 // attemptReleased reports whether ctx ended because this attempt was let go —

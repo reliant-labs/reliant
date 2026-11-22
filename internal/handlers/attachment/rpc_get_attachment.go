@@ -12,15 +12,15 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ============================================================================
 // Helper Methods
 // ============================================================================
 
-// dbAttachmentToProto converts a db.Attachment to protobuf AttachmentInfo
-func dbAttachmentToProto(a *db.Attachment) *reliantv1.AttachmentInfo {
+// dbAttachmentToProto converts a core.Attachment to protobuf AttachmentInfo
+func dbAttachmentToProto(a *core.Attachment) *reliantv1.AttachmentInfo {
 	info := &reliantv1.AttachmentInfo{
 		Id:             a.ID,
 		UserId:         a.UserID,
@@ -53,7 +53,7 @@ func (s *Service) GetAttachment(
 		return nil, svcerr.InvalidArgument("attachment_id is required")
 	}
 
-	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
+	dbAttachment, err := s.deps.Attachments.GetAttachment(ctx, attachmentID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get attachment"))
 	}

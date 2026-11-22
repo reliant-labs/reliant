@@ -17,12 +17,12 @@ func TestDeleteTask_Generated(t *testing.T) {
 	t.Parallel()
 
 	var deleted string
-	repo := newTaskRepo()
-	repo.DeleteTaskFunc = func(_ context.Context, id string) error {
+	repo := newTaskMocks()
+	repo.Tasks.RemoveTaskFunc = func(_ context.Context, id string) error {
 		deleted = id
 		return nil
 	}
-	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
+	svc := task.NewTestTask(t, task.WithTaskDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteTaskRequest, pb.DeleteTaskResponse]{
 		{

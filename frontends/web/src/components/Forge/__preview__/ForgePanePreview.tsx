@@ -68,6 +68,12 @@ import { fixtureVulnerabilityApi, type VulnScenario } from "../Security/fixtures
 import { SbomsPage } from "../Security/SbomsPage";
 import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
 import { VulnerabilityPage } from "../Security/VulnerabilityPage";
+import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
+import { TestsFlakyPage } from "../Tests/TestsFlakyPage";
+import { TestsFlakyTestPage } from "../Tests/TestsFlakyTestPage";
+import { TestsCoveragePage } from "../Tests/TestsPlaceholderPages";
+import { TestsRunPage } from "../Tests/TestsRunPage";
+import { TestsRunsPage } from "../Tests/TestsRunsPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -459,6 +465,12 @@ function buildRouter(path: string) {
     vulnerabilities: VulnerabilitiesPage,
     vulnerability: VulnerabilityPage,
     sboms: SbomsPage,
+    tests: TestsOverviewPage,
+    testsCoverage: TestsCoveragePage,
+    testsRuns: TestsRunsPage,
+    testsRun: TestsRunPage,
+    testsFlaky: TestsFlakyPage,
+    testsFlakyTest: TestsFlakyTestPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

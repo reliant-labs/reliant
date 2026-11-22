@@ -19,8 +19,8 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores attachments and their bytes.
-	Repo Repository
+	// Attachments stores attachments and their bytes.
+	Attachments AttachmentStore
 	// API is the API server's config: max_upload_size (MAX_UPLOAD_SIZE) is
 	// the largest upload accepted, in bytes. Nil, or a zero size, takes the
 	// default, 10 MB.
@@ -37,8 +37,8 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("attachment: Deps.Config is required")
 	}
-	if d.Repo == nil {
-		return fmt.Errorf("attachment: Deps.Repo is required")
+	if d.Attachments == nil {
+		return fmt.Errorf("attachment: Deps.Attachments is required")
 	}
 	return nil
 }

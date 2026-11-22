@@ -49,7 +49,7 @@ func orgKeyEnv(t *testing.T, lister *MockOrgLister, keys ...core.ProviderAccount
 	if lister != nil {
 		deps.MyOrgs = lister
 	}
-	return NewTestInbox(t, WithInboxDeps(deps)), repo
+	return NewTestInbox(t, withDeps(deps)), repo
 }
 
 func listOrgKeys(t *testing.T, svc *Service, ctx context.Context, jwt string) ([]*reliantv1.InboxItem, *reliantv1.ListInboxResponse) {

@@ -275,6 +275,9 @@ func ptrValue(s *string) string {
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
 	toolExecutor toolexec.ToolExecutor
+	// reviver brings an archived worktree back when its chat works in it
+	// again. Set by WithWorktreeReviver; nil revives nothing.
+	reviver WorktreeReviver
 	// configProvider resolves the project's skills for the skill tool. Set by
 	// WithConfigProvider; nil means the skill tool sees none.
 	configProvider cfgpkg.ConfigProvider
@@ -285,6 +288,13 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+}
+
+// WithWorktreeReviver lets a chat that works in its archived worktree bring it
+// back (see WorktreeReviver).
+func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteToolsActivity {
+	a.reviver = r
+	return a
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity

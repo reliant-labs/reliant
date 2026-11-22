@@ -36,13 +36,12 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{
 				ListAttentionIncidentsFunc: func(context.Context, string) ([]*core.AttentionIncident, error) { return nil, nil },
-				ListWorktreeRecoveriesFunc: func(context.Context, string, string) ([]*core.WorktreeRecovery, error) { return nil, nil },
 				ListInboxPendingFunc:       func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
 				// The other required read succeeds, so the pending read's
 				// error is the one the caller sees.
 				ListTriggersFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },
 			}
-			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())
+			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
 			_, err := svc.ListInbox(AuthedContext(t), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err))
@@ -62,7 +61,7 @@ func TestInboxErrorsOnTheWire(t *testing.T) {
 	repo := &MockRepository{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) {
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
-	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())
+	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: repo, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
 	_, err := client.ListInbox(context.Background(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
