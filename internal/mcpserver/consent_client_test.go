@@ -37,7 +37,8 @@ func resolveWorkspace(t *testing.T, store *memStore, validator OAuthTokenValidat
 	for k, v := range headers {
 		r.Header.Set(k, v)
 	}
-	return a.resolve(r, "user-jwt")
+	sess, _, err := a.resolve(r, "user-jwt")
+	return sess, err
 }
 
 func bindWorkspace(t *testing.T, store *memStore, client, grant string) {

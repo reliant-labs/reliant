@@ -112,6 +112,40 @@ func TestIntrospectAccount_DecodesTheMachinesOrg(t *testing.T) {
 	}
 }
 
+// An MCP client's OAuth token (mcp:oauth) carries its client and audience on
+// the wire, and they reach the principal; an older control plane names
+// neither, and the token is then never one IsMCPOAuthFor accepts.
+func TestIntrospect_DecodesAnMCPOAuthTokensClientAndAudience(t *testing.T) {
+	const resource = "https://api.example.com/mcp"
+	for name, tc := range map[string]struct {
+		extra      string
+		wantClient string
+		wantAud    string
+		accepted   bool
+	}{
+		"named":         {extra: `,"clientId":"mcp_abc","audience":"` + resource + `"`, wantClient: "mcp_abc", wantAud: resource, accepted: true},
+		"older control": {extra: ``},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := fakeCP(t, func(string, map[string]any) (int, string) {
+				return 200, `{"active":true,"tokenId":"tok-1","orgId":"acme","actingUserId":"user-1","scopes":["mcp:oauth"]` + tc.extra + `}`
+			})
+			defer srv.Close()
+
+			p, err := New(Deps{BaseURL: srv.URL, Sign: sign}).Introspect(context.Background(), liveToken)
+			if err != nil {
+				t.Fatalf("Introspect: %v", err)
+			}
+			if p.ClientID != tc.wantClient || p.Audience != tc.wantAud {
+				t.Fatalf("client %q audience %q, want %q / %q", p.ClientID, p.Audience, tc.wantClient, tc.wantAud)
+			}
+			if got := p.IsMCPOAuthFor(resource); got != tc.accepted {
+				t.Fatalf("IsMCPOAuthFor = %v, want %v", got, tc.accepted)
+			}
+		})
+	}
+}
+
 // A daemon credential holds every scope, and the control plane resolves that
 // against its OWN catalog, which may be newer than this binary's. A scope only
 // it knows is skipped, never a reason to refuse the daemon; an explicit list
