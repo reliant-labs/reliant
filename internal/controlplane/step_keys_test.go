@@ -81,6 +81,15 @@ func TestRevokeStepKey_SpeaksTheContract(t *testing.T) {
 	assert.Equal(t, "/controlplane.v1.LLMStepKeyInternalService/RevokeStepKey", path)
 	assert.Equal(t, map[string]any{"requestId": "runstep-abc"}, got)
 	assert.Equal(t, StepKeyRevocation{Revoked: true, KeyID: "sk_1", SpendUSD: 0.42, SpendKnown: true}, rev)
+
+	// Already revoked (or unknown): revoked=false is an answer, not an
+	// error, and still carries the key's recorded spend.
+	c, _ = stepKeyServer(t, func(w http.ResponseWriter, _ string, _ map[string]any) {
+		_, _ = w.Write([]byte(`{"keyId":"sk_1","spendUsd":0.42,"spendKnown":true}`))
+	})
+	rev, err = c.RevokeStepKey(context.Background(), "runstep-abc")
+	require.NoError(t, err)
+	assert.Equal(t, StepKeyRevocation{KeyID: "sk_1", SpendUSD: 0.42, SpendKnown: true}, rev)
 }
 
 // A control plane without the service, one with no gateway for it, or an
@@ -97,8 +106,8 @@ func TestStepKey_Errors(t *testing.T) {
 		},
 		"not configured": func(w http.ResponseWriter) {
 			w.Header().Set("X-Forge-Error-Reason", ReasonStepKeysNotConfigured)
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"code":"failed_precondition","message":"no gateway"}`))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"code":"unavailable","message":"no gateway"}`))
 		},
 	} {
 		c, _ := stepKeyServer(t, func(w http.ResponseWriter, _ string, _ map[string]any) { respond(w) })

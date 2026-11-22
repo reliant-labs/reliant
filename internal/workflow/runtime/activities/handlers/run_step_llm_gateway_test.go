@@ -83,9 +83,10 @@ func (m *envMachine) ExecuteCommand(ctx context.Context, command, _ string, _ in
 	return CommandResult{Stdout: "using " + gatewayTestKey, Stderr: "token=" + gatewayTestKey}, nil
 }
 
-// gatewayStep is a run step on a chat whose machine registered (or not) the
-// step-env capability.
-func gatewayStep(t *testing.T, capable bool, keys StepKeyIssuer, machine RunExecutor) (*ExecuteRunStepActivity, string) {
+// gatewayChat is a chat whose machine registered (or not) the step-env
+// capability. One per test: the store is the slow part, so a test's cases
+// share it, each with an activity of its own (gatewayAct).
+func gatewayChat(t *testing.T, capable bool) (*db.Repo, string) {
 	t.Helper()
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
@@ -97,11 +98,23 @@ func gatewayStep(t *testing.T, capable bool, keys StepKeyIssuer, machine RunExec
 	d, err := repo.GetDaemon(context.Background(), testMachine)
 	require.NoError(t, err)
 	require.Equal(t, caps, *d.Capabilities, "the registration this test relies on")
+	return repo, chatID
+}
+
+// gatewayAct is a run step over repo, keys and machine.
+func gatewayAct(repo *db.Repo, keys StepKeyIssuer, machine RunExecutor) *ExecuteRunStepActivity {
 	act := NewExecuteRunStepActivity(repo, nil, machine)
 	if keys != nil {
 		act = act.WithStepKeys(keys)
 	}
-	return act, chatID
+	return act
+}
+
+// gatewayStep is gatewayChat and gatewayAct together.
+func gatewayStep(t *testing.T, capable bool, keys StepKeyIssuer, machine RunExecutor) (*ExecuteRunStepActivity, string) {
+	t.Helper()
+	repo, chatID := gatewayChat(t, capable)
+	return gatewayAct(repo, keys, machine), chatID
 }
 
 func gatewayInput(chatID string) ExecuteRunStepInput {
@@ -161,6 +174,7 @@ func TestRunStepLLMGateway_RefusedWithoutAnIssuer(t *testing.T) {
 // The control plane's refusal is the step's verdict, in Reliant's words.
 func TestRunStepLLMGateway_MintRefusalFailsTheStepWithItsReason(t *testing.T) {
 	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
 	for reason, want := range map[string]string{
 		controlplane.ReasonStepKeyCreditExhausted: "Reliant credits are used up",
 		controlplane.ReasonStepKeyNoBillingOrg:    "cannot bill the run's organization",
@@ -168,8 +182,7 @@ func TestRunStepLLMGateway_MintRefusalFailsTheStepWithItsReason(t *testing.T) {
 	} {
 		keys := &fakeStepKeys{mintErr: &controlplane.StepKeyError{Code: "failed_precondition", Reason: reason, Message: "cp says no"}}
 		machine := &envMachine{}
-		act, chatID := gatewayStep(t, true, keys, machine)
-		out, err := runGatewayStep(t, act, gatewayInput(chatID), 1)
+		out, err := runGatewayStep(t, gatewayAct(repo, keys, machine), gatewayInput(chatID), 1)
 		require.NoError(t, err, reason)
 		assert.Equal(t, -1, out.ExitCode, reason)
 		assert.Contains(t, out.Stderr, want, reason)
@@ -181,15 +194,13 @@ func TestRunStepLLMGateway_MintRefusalFailsTheStepWithItsReason(t *testing.T) {
 	}
 
 	keys := &fakeStepKeys{mintErr: controlplane.ErrStepKeysUnsupported}
-	act, chatID := gatewayStep(t, true, keys, &envMachine{})
-	out, err := runGatewayStep(t, act, gatewayInput(chatID), 1)
+	out, err := runGatewayStep(t, gatewayAct(repo, keys, &envMachine{}), gatewayInput(chatID), 1)
 	require.NoError(t, err)
 	assert.Contains(t, out.Stderr, "this deployment cannot issue LLM gateway step keys")
 
 	// A mint whose answer was lost may have made a key: revoked by request id.
 	keys = &fakeStepKeys{mintErr: errors.New("connection reset")}
-	act, chatID = gatewayStep(t, true, keys, &envMachine{})
-	out, err = runGatewayStep(t, act, gatewayInput(chatID), 1)
+	out, err = runGatewayStep(t, gatewayAct(repo, keys, &envMachine{}), gatewayInput(chatID), 1)
 	require.NoError(t, err)
 	assert.Equal(t, -1, out.ExitCode)
 	_, revokes := keys.calls()
@@ -243,17 +254,16 @@ func TestRunStepLLMGateway_RunsWithTheKeyThenRevokesIt(t *testing.T) {
 // A failed command, and a command whose result never came back, revoke too.
 func TestRunStepLLMGateway_RevokesOnFailure(t *testing.T) {
 	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
 	keys := &fakeStepKeys{}
-	act, chatID := gatewayStep(t, true, keys, &envMachine{results: []CommandResult{{ExitCode: 1, Stderr: "boom"}}})
-	out, err := runGatewayStep(t, act, gatewayInput(chatID), 1)
+	out, err := runGatewayStep(t, gatewayAct(repo, keys, &envMachine{results: []CommandResult{{ExitCode: 1, Stderr: "boom"}}}), gatewayInput(chatID), 1)
 	require.NoError(t, err)
 	assert.Equal(t, 1, out.ExitCode)
 	_, revokes := keys.calls()
 	assert.Equal(t, []string{stepRequestID}, revokes)
 
 	keys = &fakeStepKeys{}
-	act, chatID = gatewayStep(t, true, keys, &envMachine{err: errors.New("the machine went away")})
-	_, err = runGatewayStep(t, act, gatewayInput(chatID), 1)
+	_, err = runGatewayStep(t, gatewayAct(repo, keys, &envMachine{err: errors.New("the machine went away")}), gatewayInput(chatID), 1)
 	require.Error(t, err)
 	_, revokes = keys.calls()
 	assert.Equal(t, []string{stepRequestID}, revokes)
@@ -264,9 +274,10 @@ func TestRunStepLLMGateway_RevokesOnFailure(t *testing.T) {
 // that finds nothing to reattach to revokes too. A retry never mints.
 func TestRunStepLLMGateway_TheRetryRevokes(t *testing.T) {
 	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
 	keys := &fakeStepKeys{revokeIt: controlplane.StepKeyRevocation{Revoked: true, KeyID: "sk_1", SpendUSD: 1.5, SpendKnown: true}}
 	machine := newFakeMachine()
-	act, chatID := gatewayStep(t, true, keys, machine)
+	act := gatewayAct(repo, keys, machine)
 
 	_, err := runGatewayStep(t, act, gatewayInput(chatID), 1)
 	require.Error(t, err, "the first attempt was released")
@@ -288,8 +299,7 @@ func TestRunStepLLMGateway_TheRetryRevokes(t *testing.T) {
 
 	// Nothing to reattach to: refused, and still revoked.
 	keys = &fakeStepKeys{}
-	act, chatID = gatewayStep(t, true, keys, newFakeMachine())
-	_, err = runGatewayStep(t, act, gatewayInput(chatID), 2)
+	_, err = runGatewayStep(t, gatewayAct(repo, keys, newFakeMachine()), gatewayInput(chatID), 2)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "refusing to re-execute") || strings.Contains(err.Error(), "retry"), err.Error())
 	mints, revokes = keys.calls()
