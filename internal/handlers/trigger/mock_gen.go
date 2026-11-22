@@ -114,7 +114,7 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=0328c3a906222cee25451c7766bda1ee8657f50e9e394beab8aa2e3fd94f357e
+// forge:hash=a092a3511f29ca25bc6ed0fbb7ded593af47d3f38f584b956749a60f83176e49
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -147,9 +147,6 @@ type MockRepository struct {
 	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
 	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 	GetChatRowFunc                     func(context.Context, string) (*db.ChatRow, error)
-	GetMachinePoolForUserFunc          func(context.Context, string, string) (*core.MachinePool, error)
-	GetMachinePoolByNameFunc           func(context.Context, string, string) (*core.MachinePool, error)
-	ListMachinePoolMembersFunc         func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error)
 	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetPresetBySlugFunc                func(context.Context, string, string) (*db.Preset, error)
@@ -371,33 +368,6 @@ func (m *MockRepository) GetChatRow(ctx context.Context, id string) (*db.ChatRow
 	return nil, contractkit.MockNotSet("MockRepository", "GetChatRow")
 }
 
-// GetMachinePoolForUser records the call and delegates to GetMachinePoolForUserFunc when set.
-func (m *MockRepository) GetMachinePoolForUser(ctx context.Context, userID string, id string) (*core.MachinePool, error) {
-	m.Recorder.Record("GetMachinePoolForUser", ctx, userID, id)
-	if m.GetMachinePoolForUserFunc != nil {
-		return m.GetMachinePoolForUserFunc(ctx, userID, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetMachinePoolForUser")
-}
-
-// GetMachinePoolByName records the call and delegates to GetMachinePoolByNameFunc when set.
-func (m *MockRepository) GetMachinePoolByName(ctx context.Context, userID string, name string) (*core.MachinePool, error) {
-	m.Recorder.Record("GetMachinePoolByName", ctx, userID, name)
-	if m.GetMachinePoolByNameFunc != nil {
-		return m.GetMachinePoolByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetMachinePoolByName")
-}
-
-// ListMachinePoolMembers records the call and delegates to ListMachinePoolMembersFunc when set.
-func (m *MockRepository) ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
-	m.Recorder.Record("ListMachinePoolMembers", ctx, pool, projectID)
-	if m.ListMachinePoolMembersFunc != nil {
-		return m.ListMachinePoolMembersFunc(ctx, pool, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolMembers")
-}
-
 // GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
 func (m *MockRepository) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
 	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
@@ -508,6 +478,52 @@ func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockPools
+// forge:hash=0a60e20a06d59a6dd96e6679b86dc7762b4c9b75965ec65ddc5e2a1994d580f1
+
+// MockPools is a test mock for the Pools interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPools.<Method>Func not set" error.
+type MockPools struct {
+	contractkit.Recorder
+	GetMachinePoolForUserFunc  func(context.Context, string, string) (*core.MachinePool, error)
+	ListMachinePoolMembersFunc func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error)
+	GetMachinePoolByNameFunc   func(context.Context, string, string) (*core.MachinePool, error)
+}
+
+// GetMachinePoolForUser records the call and delegates to GetMachinePoolForUserFunc when set.
+func (m *MockPools) GetMachinePoolForUser(ctx context.Context, userID string, id string) (*core.MachinePool, error) {
+	m.Recorder.Record("GetMachinePoolForUser", ctx, userID, id)
+	if m.GetMachinePoolForUserFunc != nil {
+		return m.GetMachinePoolForUserFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "GetMachinePoolForUser")
+}
+
+// ListMachinePoolMembers records the call and delegates to ListMachinePoolMembersFunc when set.
+func (m *MockPools) ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
+	m.Recorder.Record("ListMachinePoolMembers", ctx, pool, projectID)
+	if m.ListMachinePoolMembersFunc != nil {
+		return m.ListMachinePoolMembersFunc(ctx, pool, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "ListMachinePoolMembers")
+}
+
+// GetMachinePoolByName records the call and delegates to GetMachinePoolByNameFunc when set.
+func (m *MockPools) GetMachinePoolByName(ctx context.Context, userID string, name string) (*core.MachinePool, error) {
+	m.Recorder.Record("GetMachinePoolByName", ctx, userID, name)
+	if m.GetMachinePoolByNameFunc != nil {
+		return m.GetMachinePoolByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "GetMachinePoolByName")
+}
+
+// Compile-time check.
+var _ Pools = (*MockPools)(nil)
 
 // forge:section MockAutomationKeyStore
 // forge:hash=4c2a71ac20db6ca19477ad9f23a999258f654f85595ab2ada09e3459aa48156c

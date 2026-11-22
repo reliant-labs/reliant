@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=9a402a87efbb22eadfc14c0a5b4afe1895c62f614eb165207d5bf420d25e9cbf
+// forge:hash=4067dafef1a7363a7b0dc3cac8eda2fc438ffb7aa0fda491e683a85d0b4648b6
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -30,7 +30,6 @@ type MockRepository struct {
 	contractkit.Recorder
 	GetDaemonFunc                               func(context.Context, string) (*db.Daemon, error)
 	UpsertDaemonFunc                            func(context.Context, *db.Daemon) error
-	MergeDeclaredDaemonLabelsFunc               func(context.Context, string, string, bool, map[string]string, int) (bool, error)
 	GetDaemonStorageStateFunc                   func(context.Context, string) (string, error)
 	SetDaemonStorageStateFunc                   func(context.Context, string, string) error
 	UpsertDaemonAttachmentFunc                  func(context.Context, *db.DaemonAttachment) error
@@ -48,7 +47,6 @@ type MockRepository struct {
 	UpdateProjectFunc                           func(context.Context, *db.Project, string) error
 	ListReposByProjectFunc                      func(context.Context, string) ([]*core.Repo, error)
 	SetRepoForgeAppsFunc                        func(context.Context, string, []core.RepoForgeApp, bool) error
-	ListMachinePoolsForUserFunc                 func(context.Context, string) ([]*db.MachinePool, error)
 	RecordFailedProjectDaemonRestoreInScopeFunc func(context.Context, string, string, string, *string, string, *core.OrgScope) (bool, error)
 	ListDaemonsByUserIDFunc                     func(context.Context, string) ([]*db.Daemon, error)
 }
@@ -69,15 +67,6 @@ func (m *MockRepository) UpsertDaemon(ctx context.Context, daemon *db.Daemon) er
 		return m.UpsertDaemonFunc(ctx, daemon)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpsertDaemon")
-}
-
-// MergeDeclaredDaemonLabels records the call and delegates to MergeDeclaredDaemonLabelsFunc when set.
-func (m *MockRepository) MergeDeclaredDaemonLabels(ctx context.Context, userID string, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error) {
-	m.Recorder.Record("MergeDeclaredDaemonLabels", ctx, userID, daemonID, boundCredential, labels, maxLabels)
-	if m.MergeDeclaredDaemonLabelsFunc != nil {
-		return m.MergeDeclaredDaemonLabelsFunc(ctx, userID, daemonID, boundCredential, labels, maxLabels)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "MergeDeclaredDaemonLabels")
 }
 
 // GetDaemonStorageState records the call and delegates to GetDaemonStorageStateFunc when set.
@@ -231,15 +220,6 @@ func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, ap
 		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
 	}
 	return contractkit.MockNotSet("MockRepository", "SetRepoForgeApps")
-}
-
-// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
-func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error) {
-	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
-	if m.ListMachinePoolsForUserFunc != nil {
-		return m.ListMachinePoolsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
 }
 
 // RecordFailedProjectDaemonRestoreInScope records the call and delegates to RecordFailedProjectDaemonRestoreInScopeFunc when set.
