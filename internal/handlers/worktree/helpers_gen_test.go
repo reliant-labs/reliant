@@ -194,6 +194,14 @@ func newTestWorktreeDeps(cfg *testConfig) Deps {
 	if deps.Repo == nil {
 		deps.Repo = &MockRepository{}
 	}
+	// Refetch (UserRefetch) gets the mock forge generates for it,
+	// MockUserRefetch. A test that reaches this dependency sets the methods it
+	// calls — WithWorktreeDeps(Deps{Refetch: &MockUserRefetch{...}}) — or
+	// supplies a real implementation; an unset method returns
+	// contractkit.MockNotSet, never a nil error.
+	if deps.Refetch == nil {
+		deps.Refetch = &MockUserRefetch{}
+	}
 	// Rows (Rows) gets the mock forge generates for it,
 	// MockRows. A test that reaches this dependency sets the methods it
 	// calls — WithWorktreeDeps(Deps{Rows: &MockRows{...}}) — or

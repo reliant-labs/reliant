@@ -13,6 +13,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
 )
 
@@ -49,10 +50,10 @@ func TestRestartServer_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t, stored)
 	var refetched []string
-	store.EmitUserRefetchFunc = func(_ context.Context, userID string, kind db.RefetchType, opts db.RefetchOpts) error {
+	refetch := &mcp.MockUserRefetch{EmitUserRefetchFunc: func(_ context.Context, userID string, kind core.RefetchType, opts core.RefetchOpts) error {
 		refetched = append(refetched, fmt.Sprintf("%s %v %s", userID, kind, *opts.ProjectID))
 		return nil
-	}
+	}}
 	var actions []string
 	routed := newService(t, store, daemonFunc(func(commandType string, payload []byte) ([]byte, error) {
 		if commandType != "mcp.manage_server" {
@@ -68,7 +69,7 @@ func TestRestartServer_Generated(t *testing.T) {
 		}
 		actions = append(actions, req.Action+" "+req.ServerName+" at "+req.ProjectPath)
 		return []byte(`{"success":true}`), nil
-	}))
+	}), refetch)
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RestartServerRequest, pb.RestartServerResponse]{
 		{
 			Name:    "a server the project does not configure is not found",

@@ -29,6 +29,9 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// Refetch tells the user's clients to re-read what a write changed
+	// (UserRefetch, deps.go).
+	Refetch UserRefetch
 	// Rows reads a worktree, looks up a create's prior row and deletes a
 	// worktree (deps.go).
 	Rows Rows
@@ -100,6 +103,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.Refetch == nil {
+		return fmt.Errorf("worktree: Deps.Refetch is required")
 	}
 	if d.Rows == nil {
 		return fmt.Errorf("worktree: Deps.Rows is required")

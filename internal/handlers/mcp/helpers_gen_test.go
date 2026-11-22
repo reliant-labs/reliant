@@ -191,6 +191,14 @@ func newTestMCPDeps(cfg *testConfig) Deps {
 	if deps.ProjectRows == nil {
 		deps.ProjectRows = &MockProjectReader{}
 	}
+	// Refetch (UserRefetch) gets the mock forge generates for it,
+	// MockUserRefetch. A test that reaches this dependency sets the methods it
+	// calls — WithMCPDeps(Deps{Refetch: &MockUserRefetch{...}}) — or
+	// supplies a real implementation; an unset method returns
+	// contractkit.MockNotSet, never a nil error.
+	if deps.Refetch == nil {
+		deps.Refetch = &MockUserRefetch{}
+	}
 	// Projects (projectaccess.Service) gets the mock forge generates for it,
 	// projectaccess.MockService. A test that reaches this dependency sets the methods it
 	// calls — WithMCPDeps(Deps{Projects: &projectaccess.MockService{...}}) — or

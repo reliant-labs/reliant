@@ -90,8 +90,6 @@ type Repository interface {
 	// archiving a chat holds it so no delivery starts a run around the archive.
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
 
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-
 	// CreateWorktree, UpdateWorktree, ArchiveWorktree and
 	// GetLiveWorktreeByName are called directly too; the roles below already
 	// declare them. Worktree, project, repo and daemon reads go through
@@ -101,4 +99,10 @@ type Repository interface {
 	machinewake.Owners
 	daemonplacement.WorktreeReader
 	daemonplacement.Installs
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
 }

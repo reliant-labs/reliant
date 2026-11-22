@@ -40,7 +40,6 @@ type Repository interface {
 
 	// What the owner's other clients are told.
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 
 	// ListProjects is called directly too; ProjectReconcileRepo declares it.
 	ProjectReconcileRepo
@@ -167,4 +166,10 @@ type ProjectDaemons interface {
 	// ResolveQueuedProjectDaemon applies the outcome a daemon reported for a
 	// clone queued to it.
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
 }

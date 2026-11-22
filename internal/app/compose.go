@@ -210,6 +210,7 @@ func (g *Graph) newPprof() (*serverkit.Pprof, error) {
 
 func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 	return tools_daemon.New(tools_daemon.Deps{
+		Refetch:         g.chatUpdates(),
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
@@ -635,6 +636,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
 		Checks:           g.RecordOnlyChecks(),
 		ConnectionVault:  g.CredentialsConnectionvault(),
+		Updates:          g.chatUpdates(),
 		ProviderAccounts: g.CredentialsProvideraccounts(),
 		OrgAccounts:      g.CredentialsOrgaccounts(),
 		Temporal:         g.TemporalClient(),
@@ -909,6 +911,7 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
+		Updates:      g.chatUpdates(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Router:       g.APIDaemonRouter(),
 		Settings:     g.APISettings(),
@@ -1118,6 +1121,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		return nil, err
 	}
 	return worktree.New(worktree.Deps{
+		Refetch:        g.chatUpdates(),
 		GitCredentials: recoveryCredentials{client: credentials},
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1307,6 +1311,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
+		Refetch:        g.chatUpdates(),
 		Projects:       g.Projectaccess(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		Logger:         g.Log,
@@ -1447,6 +1452,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 // a live request.
 func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 	return provider_account.New(provider_account.Deps{
+		Refetch:     g.chatUpdates(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
@@ -1468,6 +1474,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
+		Refetch:   g.chatUpdates(),
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
@@ -1507,6 +1514,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 // newSettings constructs the settings handler (internal/handlers/settings).
 func (g *Graph) newSettings() (*settings.Service, error) {
 	return settings.New(settings.Deps{
+		Refetch:                 g.chatUpdates(),
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),

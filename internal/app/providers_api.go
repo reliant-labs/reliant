@@ -28,12 +28,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -1013,6 +1015,8 @@ type WorktreeSweepDeps struct {
 	DB           *db.Repo
 	Router       *APIDaemonRouter
 	Settings     *APISettings
+	// Updates tells the user's clients a worktree changed.
+	Updates chatupdates.Service
 }
 
 // The sweep records the use a daemon reports through the optional UseStore;
@@ -1085,7 +1089,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
-				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
+				if err := d.Updates.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).

@@ -122,7 +122,6 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 				stored = *record.MCPConfigs
 				return nil
 			}
-			store.EmitUserRefetchFunc = func(context.Context, string, db.RefetchType, db.RefetchOpts) error { return nil }
 			router := daemonFunc(func(command string, payload []byte) ([]byte, error) {
 				stateMu.Lock()
 				defer stateMu.Unlock()

@@ -156,7 +156,7 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 		s.learnForgeNameForProject(ctx, conn, project, projectPath)
 	}
 
-	return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+	return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, core.RefetchFileTree, core.RefetchOpts{
 		ProjectID: &project.ID,
 	})
 }

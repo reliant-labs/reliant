@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Questions lists a chat's or a user's questions. Each takes the chat or user
@@ -27,7 +28,6 @@ type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
@@ -51,4 +51,10 @@ type Messenger interface {
 // to the chat's open clients. *agentmailbox.Mailbox satisfies it.
 type Mailbox interface {
 	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
 }

@@ -58361,6 +58361,7 @@
     },
     {
       "consumer": "MCP",
+<<<<<<< ours
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -58372,6 +58373,16 @@
         "Projectaccess"
       ],
       "resolution": "composition_expression"
+=======
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+>>>>>>> theirs
     },
     {
       "consumer": "MCP",
@@ -59176,6 +59187,17 @@
     },
     {
       "consumer": "ProviderAccount",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "ProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Store",
       "methods": [],
@@ -59282,6 +59304,17 @@
         "Database"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Question",
@@ -59642,6 +59675,17 @@
         "Privacy"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Settings",
@@ -60042,6 +60086,17 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -60238,6 +60293,17 @@
         "Database"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "ToolsDaemon",
@@ -61100,6 +61166,17 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [],
@@ -61214,6 +61291,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorktreeSweep",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "WriteLedgerPrune",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
@@ -61306,6 +61394,14 @@
       "component": "Inbox.MyOrgs",
       "source": {
         "path": "internal/handlers/inbox/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "MCP.Refetch",
+      "source": {
+        "path": "internal/handlers/mcp/service.go",
         "symbol": "New"
       }
     },
@@ -61503,6 +61599,22 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "ProviderAccount.Refetch",
+      "source": {
+        "path": "internal/handlers/provider_account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Question.Refetch",
+      "source": {
+        "path": "internal/handlers/question/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Seatmatch.Rollout",
       "source": {
         "path": "internal/seatmatch/service.go",
@@ -61512,6 +61624,14 @@
     {
       "code": "binding_unresolved",
       "component": "Settings.ControlPlane",
+      "source": {
+        "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Settings.Refetch",
       "source": {
         "path": "internal/handlers/settings/service.go",
         "symbol": "New"
@@ -61607,6 +61727,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "TemporalWorker.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTemporalWorker"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Token.GitBotTokens",
       "source": {
         "path": "internal/handlers/token/service.go",
@@ -61618,6 +61746,14 @@
       "component": "Token.GitTokens",
       "source": {
         "path": "internal/handlers/token/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "ToolsDaemon.Refetch",
+      "source": {
+        "path": "internal/handlers/tools_daemon/service.go",
         "symbol": "New"
       }
     },
@@ -61787,6 +61923,22 @@
       "source": {
         "path": "internal/handlers/worktree/service.go",
         "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Worktree.Refetch",
+      "source": {
+        "path": "internal/handlers/worktree/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorktreeSweep.Updates",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewWorktreeSweep"
       }
     },
     {

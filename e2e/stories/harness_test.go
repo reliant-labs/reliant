@@ -32,6 +32,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -436,6 +437,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
+		Refetch:   chatupdates.NewFromORM(s.Repo.ORM(), s.Repo, nil),
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
