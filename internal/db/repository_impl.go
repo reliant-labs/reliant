@@ -3304,10 +3304,6 @@ func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, node
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
-func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
-}
-
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
 	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
 }
