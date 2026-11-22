@@ -82,21 +82,6 @@ service ObservabilityService {
     };
   }
 
-  // QueryMetric returns time series for one metric: an aggregation, optional
-  // group-by attribute keys, and a step. Max range 30 days.
-  //
-  // Deprecated: it is a one-series line panel; call QueryPanel instead, which
-  // runs the same evaluator and also returns series_meta, series_total and
-  // warnings. Removed in a follow-up once the console and forge's cloud backend
-  // no longer call it.
-  rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
-    option deprecated = true;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
   // GetMetric is the metric detail the explorer's side pane opens on: the
   // catalog entry, the export-interval estimate, whether the metric mixes
   // temporalities, every attribute key with its distinct-value estimate (and
@@ -153,6 +138,26 @@ service ObservabilityService {
   // (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
   // 72 hours).
   rpc GetFlamegraph(GetFlamegraphRequest) returns (GetFlamegraphResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ExportPGOProfile returns the merged CPU call-edge profile of one or more
+  // services as a gzipped pprof that `go build -pgo=` accepts: what
+  // `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+  // from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+  // forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+  // local ClickStack would give. Max range 30 days. No data in the range is
+  // not an error: edge_count is 0 and pprof is a valid empty profile. A
+  // credential bound to one environment is refused (PermissionDenied): the
+  // aggregate is keyed by the environment name a workload reports, so the
+  // binding cannot be enforced. A profile larger than one response may carry
+  // is refused (ResourceExhausted), never truncated.
+  rpc ExportPGOProfile(ExportPGOProfileRequest) returns (ExportPGOProfileResponse) {
+    // A read: it exports what is stored and changes nothing.
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -233,28 +238,27 @@ service ObservabilityService {
     };
   }
 
-  // GetDashboards returns the dashboards for an environment in forge's
-  // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
-  // synthesized from the services seen in the org's data in scope.time_range;
-  // a deployed environment's real spec replaces it once it reaches
-  // control-plane. Max range 30 days.
-  rpc GetDashboards(GetDashboardsRequest) returns (GetDashboardsResponse) {
+  // GetManagedDatabaseMetrics returns the health series of the org's managed
+  // Postgres databases (Reliant hosting's ManagedDatabase, a CloudNativePG
+  // cluster per database): connections (active, idle, max), transactions per
+  // second, cache hit ratio, the database instances' CPU and memory, and
+  // storage. The platform's node agent collects them from the database's own
+  // exporter and the kubelet, stamped with the tenant from the namespace the
+  // operator labelled, never from the data. Admission and scoping are every
+  // other read's (QueryScope). Max range 30 days.
+  rpc GetManagedDatabaseMetrics(GetManagedDatabaseMetricsRequest) returns (GetManagedDatabaseMetricsResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
     };
   }
 
-  // GetObservabilityUsage returns the org's month-to-date observability usage
-  // against its included allowance: billed bytes, projected overage, a
-  // per-signal and per-service breakdown, and the quota state the gateway is
-  // enforcing. It is a plain Postgres read of what the hourly meter wrote
-  // (nothing here queries ClickHouse), so it works when the tenant is
-  // unreachable. Membership-checked on org_id.
-  // Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
-  // Kept until deployed clients have migrated; it remains Postgres-only.
-  rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
-    option deprecated = true;
+  // GetDashboards returns the dashboards for an environment in forge's
+  // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
+  // synthesized from the services seen in the org's data in scope.time_range;
+  // a deployed environment's real spec replaces it once it reaches
+  // control-plane. Max range 30 days.
+  rpc GetDashboards(GetDashboardsRequest) returns (GetDashboardsResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -644,7 +648,7 @@ message TimePoint {
   // ignored. Metrics panels only (a formula over a missing operand).
   // A flag rather than `optional double value`: the latter turns the Go field
   // into *float64 for every message that carries a TimePoint (service
-  // overview trends, QueryMetric, sql panels), a source-breaking change for
+  // overview trends, metric panels, sql panels), a source-breaking change for
   // callers that never see a gap.
   bool null = 4;
 }
@@ -917,20 +921,6 @@ enum MetricTemporality {
   METRIC_TEMPORALITY_CUMULATIVE = 2;
 }
 
-enum MetricAggregation {
-  METRIC_AGGREGATION_UNSPECIFIED = 0; // default per type: AVG gauge, RATE sum, AVG histogram
-  METRIC_AGGREGATION_AVG = 1;
-  METRIC_AGGREGATION_SUM = 2;
-  METRIC_AGGREGATION_MIN = 3;
-  METRIC_AGGREGATION_MAX = 4;
-  METRIC_AGGREGATION_COUNT = 5; // data points (gauge), observations (histogram)
-  METRIC_AGGREGATION_INCREASE = 6; // sum/histogram: growth within each step
-  METRIC_AGGREGATION_RATE = 7; // INCREASE per second
-  METRIC_AGGREGATION_P50 = 8; // histogram only
-  METRIC_AGGREGATION_P95 = 9; // histogram only
-  METRIC_AGGREGATION_P99 = 10; // histogram only
-}
-
 message ListMetricsRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // Substring of the metric name.
@@ -1089,55 +1079,6 @@ message MetricExemplar {
   bool trace_stored = 6;
 }
 
-message QueryMetricRequest {
-  QueryScope scope = 1 [(buf.validate.field).required = true];
-  string metric_name = 2 [
-    (buf.validate.field).string.min_len = 1,
-    (buf.validate.field).string.max_len = 256
-  ];
-  // Unset: looked up from the org's data.
-  MetricType metric_type = 3;
-  // Gauge and sum: each series is first reduced to its last value in the
-  // bucket, then AVG/SUM/MIN/MAX are taken across series (so SUM of a memory
-  // gauge over pods is the total); COUNT is the number of data points.
-  // INCREASE/RATE (sum, histogram) use per-series deltas and handle both
-  // cumulative and delta temporality, treating a decrease as a counter reset.
-  MetricAggregation aggregation = 4;
-  // Allowlisted keys to split series by (see QueryScope; for a metric, its
-  // declared data-point attributes are allowed too). "reliant.env.id" or
-  // "deployment.environment.name" compares environments, "k8s.container.name" a
-  // container. Max 3.
-  repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
-  reserved 6;
-  reserved "filters";
-  // Bucket width. 0 = chosen from the range (about 120 points). The server
-  // raises it so a series never exceeds 1500 points; step_seconds in the
-  // response is the width used.
-  int32 step_seconds = 7 [(buf.validate.field).int32.gte = 0];
-}
-
-message QueryMetricResponse {
-  repeated MetricSeries series = 1;
-  int32 step_seconds = 2;
-  MetricType metric_type = 3;
-  string unit = 4;
-  // The aggregation used (the default per type when the request left it
-  // unspecified).
-  MetricAggregation aggregation = 6;
-  // True when more than 50 series matched; the largest 50 are returned.
-  bool series_truncated = 5;
-  // The instance narrowing this answer applied: scope.instance_ids and
-  // instance_users, echoed exactly. Unset when the request named none, or
-  // when this read could not apply it (controlplane.v1.InstanceScope).
-  controlplane.v1.InstanceScope instance_scope = 7;
-}
-
-message MetricSeries {
-  // group_by key -> value for this series. Empty without group_by.
-  map<string, string> labels = 1;
-  repeated TimePoint points = 2;
-}
-
 // === Service overview ===
 
 message GetServiceOverviewRequest {
@@ -1224,6 +1165,41 @@ message GetFlamegraphResponse {
   // so it answers for the whole scope even when scope.instance_ids or
   // instance_users is set (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 7;
+}
+
+message ExportPGOProfileRequest {
+  // The org and the range (scope.time_range: from, to). As in
+  // GetFlamegraphRequest, scope.services, project and filters are not applied
+  // (the services are named below) and the profile carries no dev-instance
+  // narrowing; membership of scope.org_id is checked, and so are env_ids.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // OTEL service names (workload names) whose CPU profiles are merged into one
+  // profile: every workload that runs the binary.
+  repeated string services = 2 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 256
+  ];
+  // The forge environment NAME (deployment.environment.name), which the PGO
+  // aggregate is keyed by. "" = every environment.
+  string env = 3 [(buf.validate.field).string.max_len = 128];
+  // The forge project name (service.namespace), so two projects of one org
+  // that share a service or environment name do not mix. "" = any project.
+  string service_namespace = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message ExportPGOProfileResponse {
+  // gzipped pprof (forge profilequery.WritePGO): one sample per call edge,
+  // with provenance in the profile's comments.
+  bytes pprof = 1;
+  // Call edges in the profile; 0 when the range holds no data.
+  int32 edge_count = 2;
+  // CPU nanoseconds the edges carry, summed.
+  int64 total_weight = 3;
+  // The oldest and newest hours that contributed; unset when edge_count is 0.
+  google.protobuf.Timestamp oldest = 4;
+  google.protobuf.Timestamp newest = 5;
 }
 
 // === Attribute values (filter autocomplete) ===
@@ -1424,6 +1400,15 @@ message Workload {
   // console says "since at least ...").
   google.protobuf.Timestamp health_since = 21;
   bool health_since_known = 22;
+  // forge's role for the workload: "service", "worker", "operator", "job" or
+  // "cron", where kind is only the Kubernetes kind (a service, a worker and an
+  // operator are all Deployments). From the environment's recorded bundle
+  // (DeclaredWorkload.forge_kind: a forge Workload record's spec.kind, else the
+  // forge.dev/kind label forge stamps on what it renders), else the hosted
+  // deployment ledger's spec.kind. Empty when neither knows it (a deployment by
+  // an older forge, a hand-written manifest) and on a read narrowed to dev
+  // instances: fall back to kind.
+  string forge_kind = 23;
 }
 
 // WorkloadHealthChange is one transition of a workload's health, derived from
@@ -1529,6 +1514,22 @@ message WorkloadPod {
   // The latest Kubernetes Warning event naming this pod (BackOff, Unhealthy,
   // Evicted, ...) among the events GetWorkload returns. Unset when none.
   WorkloadEvent latest_warning = 11;
+  // The pod's own CPU (cores) and memory (working set, bytes) over the window:
+  // the sum of its containers'. latest sums the containers' latest samples;
+  // p95 sums the containers' p95s, an upper bound on the pod's own p95. limit
+  // and request are set only when every container reports one (a container
+  // without a limit leaves the pod unbounded), and the utilization ratios are
+  // derived from them. Unset, not zero, when no usage was read for the pod: an
+  // agent that reported none, or a read answered from the raw tables (one with
+  // attribute filters, narrowed to dev instances, or reaching back before the
+  // tenant's query rollups), which carry no per-pod usage yet.
+  ResourceUsage cpu = 12;
+  ResourceUsage memory = 13;
+  // The pod's containers, each with its own usage (cpu, memory as on
+  // Workload.containers, but this pod's alone), image, restarts in the window
+  // and last terminated reason. Ordered by container name; empty when no usage
+  // was read for the pod (see cpu).
+  repeated WorkloadContainer containers = 14;
 }
 
 enum WorkloadJobResult {
@@ -1628,7 +1629,7 @@ message GetWorkloadRequest {
   ];
   // Narrow to one container. Empty = every container.
   string container = 3 [(buf.validate.field).string.max_len = 256];
-  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
+  // Bucket width. 0 = chosen from the range (about 120 points).
   int32 step_seconds = 4 [(buf.validate.field).int32.gte = 0];
 }
 
@@ -1674,6 +1675,58 @@ message WorkloadSeries {
   string unit = 4;
   // Utilization and usage: the worst replica per bucket. Restarts: the sum over
   // replicas of the growth within the bucket.
+  repeated TimePoint points = 5;
+}
+
+message GetManagedDatabaseMetricsRequest {
+  // Max range 30 days. Every environment in scope is returned separately.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // The ManagedDatabase name (the CloudNativePG cluster). Empty = every
+  // managed database in scope.
+  string database = 2 [(buf.validate.field).string.max_len = 256];
+  // Bucket width. 0 = chosen from the range.
+  int32 step_seconds = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message GetManagedDatabaseMetricsResponse {
+  // One series per (environment, database, metric), ordered by environment,
+  // database, then metric. A metric with no data in scope has no series.
+  repeated ManagedDatabaseSeries series = 1;
+  int32 step_seconds = 2;
+  // True when the series cap (200) cut the result.
+  bool truncated = 3;
+}
+
+enum ManagedDatabaseMetric {
+  MANAGED_DATABASE_METRIC_UNSPECIFIED = 0;
+  // Client connections by state, summed over the instances and databases
+  // (cnpg_backends_total). Idle in transaction counts as neither.
+  MANAGED_DATABASE_METRIC_CONNECTIONS_ACTIVE = 1;
+  MANAGED_DATABASE_METRIC_CONNECTIONS_IDLE = 2;
+  // The server's max_connections setting (the highest instance's).
+  MANAGED_DATABASE_METRIC_CONNECTIONS_MAX = 3;
+  // Committed plus rolled back transactions per second.
+  MANAGED_DATABASE_METRIC_TPS = 4;
+  // Buffer cache hits over all block reads in the bucket, 0..1.
+  MANAGED_DATABASE_METRIC_CACHE_HIT_RATIO = 5;
+  // The Postgres containers of the database's instances: CPU in cores and
+  // memory working set in bytes.
+  MANAGED_DATABASE_METRIC_CPU_USAGE = 6;
+  MANAGED_DATABASE_METRIC_MEMORY_WORKING_SET = 7;
+  // The data volume (pgdata): bytes used and its capacity.
+  MANAGED_DATABASE_METRIC_STORAGE_USED = 8;
+  MANAGED_DATABASE_METRIC_STORAGE_CAPACITY = 9;
+  // The databases' own size (pg_database_size), summed.
+  MANAGED_DATABASE_METRIC_DATABASE_SIZE = 10;
+}
+
+message ManagedDatabaseSeries {
+  string env_id = 1;
+  // The ManagedDatabase name.
+  string database = 2;
+  ManagedDatabaseMetric metric = 3;
+  // UCUM: "{connection}", "{transaction}/s", "1", "{cpu}", "By".
+  string unit = 4;
   repeated TimePoint points = 5;
 }
 
@@ -2202,114 +2255,6 @@ message QueryQuotaExhausted {
   // "automation" (alert evaluation) or "agent" (the CLI and tokens). Empty
   // when the quota is not split into lanes.
   string lane = 3;
-}
-
-// === Usage and billing ===
-
-message GetObservabilityUsageRequest {
-  // The org whose usage to return. The caller must be a member.
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-// QuotaState is what the gateway does with the org's telemetry right now.
-enum ObservabilityQuotaState {
-  OBSERVABILITY_QUOTA_STATE_UNSPECIFIED = 0;
-  // Under the allowance, or billed (funded) / exempt: nothing is dropped.
-  OBSERVABILITY_QUOTA_STATE_OK = 1;
-  // At or over 100% with no way to bill the overage: debug logs and routine
-  // traces are dropped; errors and metrics are kept.
-  OBSERVABILITY_QUOTA_STATE_OVER_100 = 2;
-  // At or over 150%: only error logs, error spans and metrics are kept.
-  OBSERVABILITY_QUOTA_STATE_OVER_150 = 3;
-}
-
-message GetObservabilityUsageResponse {
-  // The billing period: the UTC calendar month. period_end is exclusive.
-  google.protobuf.Timestamp period_start = 1;
-  google.protobuf.Timestamp period_end = 2;
-  // The end of the last fully metered hour. Usage lags real time by up to
-  // about an hour and a quarter; the page must say so.
-  google.protobuf.Timestamp measured_through = 3;
-
-  // Billed bytes this period (uncompressed bytes stored, after the browser cap),
-  // and the included allowance. 1 GB = 2^30 bytes in the product.
-  int64 used_bytes = 4;
-  int64 allowance_bytes = 5;
-
-  // Overage accrued so far, and projected for the whole period at the current
-  // rate of use, in cents. Zero for an exempt org.
-  int64 overage_cents = 6;
-  int64 projected_bytes = 7;
-  int64 projected_overage_cents = 8;
-  // Cents per GB above the allowance, as a decimal string ("25.0000").
-  string rate_cents_per_gb = 9;
-
-  // What the gateway enforces, and the state usage alone implies. They differ
-  // for an org that pays (enforced ok, usage over_100) or is exempt.
-  ObservabilityQuotaState state = 10;
-  ObservabilityQuotaState usage_state = 11;
-  bool funded = 12;
-  bool exempt = 13;
-  // A funded org's overage is billed up to this many cents a month; at it the
-  // gateway degrades telemetry like an unfunded org.
-  int64 spend_cap_cents = 14;
-  bool spend_cap_reached = 15;
-
-  // Anonymous browser telemetry is billed only up to a share of the allowance.
-  int64 browser_bytes = 16;
-  int64 browser_billed_bytes = 17;
-  int64 browser_cap_bytes = 18;
-
-  repeated SignalUsage by_signal = 19;
-  repeated ServiceUsage by_service = 20;
-
-  // Bytes stored that were never billed because they are Reliant's own telemetry
-  // (workspace/daemon and platform logs). Zero for every customer in normal
-  // operation: that data is routed to Reliant's own org.
-  int64 operator_bytes = 21;
-  // Billed bytes that are customer metadata: per-workload container data about the
-  // org's own deployments (pod CPU and memory, restarts, k8s events, image and
-  // version). Billed like any other data and included in used_bytes; reported on
-  // its own line. Node- and cluster-level platform data ("infrastructure") is
-  // Reliant's own and is never billed.
-  int64 metadata_bytes = 22;
-  // The split of stored bytes across services and categories (by_service,
-  // browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
-  // signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
-  // weighted by row count instead of bytes. Only a billing-exempt org, which is
-  // never charged, is metered this way. stored bytes and rows stay exact.
-  bool breakdown_estimated = 23;
-
-  // Dev telemetry: what developers' LOCAL stacks sent with dev tokens
-  // (reliant.source=dev). It is metered inside the allowance and never billed as
-  // overage: dev_bytes is every dev byte stored; dev_billed_bytes the part of it
-  // counted in used_bytes (within the month's dev ceiling, and only while the
-  // allowance has room); dev_ceiling_bytes the month's dev ceiling (25 percent of
-  // the allowance, at least 2 GiB). Past the ceiling dev_state is over_100: the
-  // gateway then drops the org's dev DEBUG logs and error-free dev traces, and
-  // nothing else of the org's.
-  int64 dev_bytes = 24;
-  int64 dev_billed_bytes = 25;
-  int64 dev_ceiling_bytes = 26;
-  ObservabilityQuotaState dev_state = 27;
-}
-
-message SignalUsage {
-  // "logs", "traces", "metrics" or "profiles".
-  string signal = 1;
-  int64 billed_bytes = 2;
-  int64 stored_bytes = 3;
-  int64 rows = 4;
-}
-
-message ServiceUsage {
-  // The service.name; empty for data that carried none.
-  string service = 1;
-  string signal = 2;
-  int64 billed_bytes = 3;
-  // billed_bytes is weighted by rows, not bytes, for at least one hour (see
-  // GetObservabilityUsageResponse.breakdown_estimated).
-  bool estimated = 4;
 }
 
 // === Release health ===

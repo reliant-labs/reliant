@@ -57,6 +57,11 @@
   ${If} $0 != ""
     CreateDirectory "$INSTDIR\cli"
     CopyFiles /SILENT "$INSTDIR\resources\server\$0\reliant-backend.exe" "$INSTDIR\cli\reliant.exe"
+    ; The copy is this app's: `reliant update` reads the owner from the marker
+    ; beside it and defers to the app's updater (internal/cliupdate).
+    FileOpen $1 "$INSTDIR\cli\reliant.exe.managed-by" w
+    FileWrite $1 "reliant-desktop$\r$\n"
+    FileClose $1
 
     ; Add $INSTDIR\cli to the user PATH if not already present.
     ReadRegStr $1 HKCU "Environment" "Path"
@@ -102,6 +107,7 @@
   ${EndIf}
 
   Delete "$INSTDIR\cli\reliant.exe"
+  Delete "$INSTDIR\cli\reliant.exe.managed-by"
   RMDir  "$INSTDIR\cli"
 
   Pop $1

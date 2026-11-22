@@ -1,23 +1,52 @@
 // forge:deps — consumer-declared interfaces for this package's Deps.
 // The interfaces below are this package's own declarations of what it
-// needs from its Deps; mock_gen.go mocks them. *db.Repo satisfies Repository.
+// needs from its Deps; mock_gen.go mocks them. The composition root fills
+// them from the generated stores (internal/store): store.TaskExtStore,
+// store.PlanExtStore, store.ThreadExtStore and store.ChatExtStore.
 package task
 
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Repository is the slice of *db.Repo the task handlers use.
-type Repository interface {
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
-	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	GetPlan(ctx context.Context, id string) (*db.Plan, error)
-	CreateTask(ctx context.Context, task *db.Task) error
-	GetTask(ctx context.Context, id string) (*db.Task, error)
-	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
-	UpdateTask(ctx context.Context, task *db.Task) error
-	DeleteTask(ctx context.Context, id string) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
+// TaskStore reads and writes tasks. store.TaskExtStore satisfies it.
+type TaskStore interface {
+	GetTask(ctx context.Context, id string) (*core.Task, error)
+	InsertTask(ctx context.Context, t *core.Task) error
+	ReplaceTask(ctx context.Context, t *core.Task) error
+	RemoveTask(ctx context.Context, id string) error
+	ListTasksByPlan(ctx context.Context, planID string) ([]*core.Task, error)
+}
+
+// PlanStore reads the plan a task belongs to. store.PlanExtStore satisfies
+// it.
+type PlanStore interface {
+	GetPlan(ctx context.Context, id string) (*core.Plan, error)
+}
+
+// ThreadStore resolves a plan's thread. store.ThreadExtStore satisfies it.
+type ThreadStore interface {
+	GetThread(ctx context.Context, id string) (*core.Thread, error)
+}
+
+// ChatStore reads the chat that authorizes a task. store.ChatExtStore
+// satisfies it.
+type ChatStore interface {
+	GetChatRow(ctx context.Context, id string) (*core.ChatRow, error)
+}
+
+// ChatRefetcher tells a chat's clients to re-read its plan and tasks.
+// *db.Repo satisfies it.
+type ChatRefetcher interface {
+	EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error
+}
+
+// TxRunner opens the transactions of the read-check-write rpcs. *orm.Client
+// satisfies it.
+type TxRunner interface {
+	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }

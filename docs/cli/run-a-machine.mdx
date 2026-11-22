@@ -135,6 +135,28 @@ $ reliant daemon stop
 Error: refusing to stop daemon PID 241: it is a managed daemon (record /home/workspace/.reliant-data/daemon-state.json). Reliant runs this machine's daemon and restarts it; stopping it takes the machine offline. Restart the machine from its page under Settings → Machines in the Reliant app instead
 ```
 
+## 7. Keep it up to date
+
+How a daemon is updated depends on who installed its `reliant`. The desktop app updates the `reliant` it ships, Homebrew and your system's package manager update theirs, and Reliant updates its cloud machines. A `reliant` you unpacked from a [release archive](/getting-started/installation#cli-only-headless-linux-ci-runners) into a directory you can write updates itself:
+
+```text
+$ reliant update --check
+reliant v1.25.0, channel latest
+Newest release: 1.26.0 (built 2026-11-20)
+An update is available: run `reliant update`.
+
+$ reliant update
+Update reliant v1.25.0 to 1.26.0 (channel latest)? [y/N] y
+Downloading reliant 1.26.0 and checking its signature...
+Signature verified. Replacing /home/me/.local/bin/reliant...
+Updated reliant v1.25.0 to v1.26.0.
+A daemon that is already running keeps its version until it restarts (reliant daemon stop, then reliant daemon start).
+```
+
+`reliant update` installs only a release that `release.yml` signed for its own tag (the [Sigstore signature](https://github.com/reliant-labs/reliant/blob/main/dev-docs/cli-release-artifacts.md#signing) every release carries), and it checks the new binary runs before replacing anything. The previous binary is kept under `~/.reliant/upgrade/previous`, and a new binary that fails to start is put back. `--yes` skips the question, `--json` prints the report for a script, and `--channel alpha` follows release candidates, as a release candidate's build does already.
+
+On any other install, `reliant update` changes nothing and names what updates it instead, for example `update the Reliant desktop app`. A `reliant` in a directory only root can write, such as `/usr/local/bin`, needs `sudo reliant update`, or move it to one you own (`~/.local/bin`) so it can update itself. On Windows, `--check` works but the update itself does not yet.
+
 ## Join a machine pool when it starts
 
 <Note>

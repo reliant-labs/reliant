@@ -26,7 +26,6 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "listTraces",
   "getTrace",
   "listMetrics",
-  "queryMetric",
   "getMetric",
   "listMetricExemplars",
   "getServiceGraph",
@@ -43,6 +42,11 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   // A ClickHouse read over the env's user events (control-plane
   // rpc_get_user_activity.go opens a read slot); the web does not call it yet.
   "getUserActivity",
+  // ClickHouse reads through the same read gate (control-plane
+  // rpc_export_pgo_profile.go and rpc_get_managed_database_metrics.go call
+  // s.open); the web does not call them yet.
+  "exportPGOProfile",
+  "getManagedDatabaseMetrics",
   // IssuesService
   "listIssues",
   "getIssue",
@@ -56,7 +60,6 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
 
 /** The methods of the services above that take no read slot. */
 export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
-  "getObservabilityUsage",
   // Postgres, Kubernetes (runtime configs and the release ledger) and the
   // hub's StaticSites; no ClickHouse query.
   "listFrontendReplay",
@@ -68,6 +71,10 @@ export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "linkIssueChat",
   "listAssignableUsers",
   "listIssueTimeline",
+  // Maintenance windows: Postgres alone (control-plane obsread Admit, no
+  // read slot).
+  "declareMaintenanceWindow",
+  "listMaintenanceWindows",
 ]);
 
 /** Whether `<serviceTypeName>/<MethodName>` (the wire names) is a ClickHouse read. */
