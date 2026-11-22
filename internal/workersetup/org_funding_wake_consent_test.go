@@ -75,7 +75,7 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	prevClient := drivers.AccountAvailabilityClient
 	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return noCatalog{name: string(id)}, nil
@@ -103,9 +103,9 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 	}
 	t.Cleanup(func() { drivers.GetDriver = prevDefault })
 
-	recorder := accountlimits.NewRecorder(repo, nil)
+	recorder := accountlimits.NewRecorder(db.TestAccounts(t, repo), nil)
 	t.Cleanup(recorder.Close)
-	routing := accountRouting(repo, recorder)
+	routing := accountRouting(db.TestAccounts(t, repo), repo, recorder)
 	require.NotNil(t, routing.DriverFor)
 
 	// A chat of the org with the member's first message: its first turn.
@@ -139,20 +139,20 @@ func (w *orgFundingWorld) orgKey(name, access string) core.ProviderAccount {
 	w.t.Helper()
 	owner := core.OrgAccountOwner(w.org)
 	secret := "sk-ant-api03-" + name + "-" + uuid.NewString()
-	acct, _, err := w.repo.UpsertProviderAccount(w.ctx, core.AccountUpsert{
+	acct, _, err := db.TestAccounts(w.t, w.repo).UpsertProviderAccount(w.ctx, core.AccountUpsert{
 		Owner: owner, OrgAccess: access, CreatedByUserID: "owner", Provider: "anthropic", AuthKind: core.AuthKindAPIKey,
 		IdentityKey: core.APIKeyIdentityKey(owner.Key(), "anthropic", secret), KeyHint: core.KeyHint(secret),
 		Secrets: core.AccountSecrets{Secret: secret},
 	})
 	require.NoError(w.t, err)
-	acct, err = w.repo.PatchOwnedProviderAccount(w.ctx, owner, acct.ID, core.AccountPatch{Label: &name})
+	acct, err = db.TestAccounts(w.t, w.repo).PatchOwnedProviderAccount(w.ctx, owner, acct.ID, core.AccountPatch{Label: &name})
 	require.NoError(w.t, err)
 	return acct
 }
 
 func (w *orgFundingWorld) pause(acct core.ProviderAccount, paused bool) {
 	w.t.Helper()
-	_, err := w.repo.PatchOwnedProviderAccount(w.ctx, core.OrgAccountOwner(w.org), acct.ID, core.AccountPatch{Paused: &paused})
+	_, err := db.TestAccounts(w.t, w.repo).PatchOwnedProviderAccount(w.ctx, core.OrgAccountOwner(w.org), acct.ID, core.AccountPatch{Paused: &paused})
 	require.NoError(w.t, err)
 }
 
@@ -211,7 +211,7 @@ func limitedOrgChat(t *testing.T) (w *orgFundingWorld, team, backup, mine core.P
 	backup = w.orgKey("Backup Anthropic EU", core.OrgAccessSelected)
 	require.NoError(t, w.repo.SetOrgAccountGrants(w.ctx, w.org, backup.ID, []string{w.member}, "owner"))
 	reset := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	require.NoError(t, w.repo.BenchAccount(w.ctx, core.OrgAccountOwner(w.org), backup.ID, reset, "five_hour", false))
+	require.NoError(t, db.TestAccounts(w.t, w.repo).BenchAccount(w.ctx, core.OrgAccountOwner(w.org), backup.ID, reset, "five_hour", false))
 	mine = db.SeedProviderAccount(t, w.repo, w.member, "anthropic", "sk-ant-api03-member-own-"+uuid.NewString())
 	return w, team, backup, mine
 }
@@ -359,7 +359,7 @@ func TestOrgFunding_AnOrgKeyForOtherModelsDoesNotEndTheWait(t *testing.T) {
 
 	owner := core.OrgAccountOwner(w.org)
 	secret := "sk-openai-" + uuid.NewString()
-	_, _, err = w.repo.UpsertProviderAccount(w.ctx, core.AccountUpsert{
+	_, _, err = db.TestAccounts(w.t, w.repo).UpsertProviderAccount(w.ctx, core.AccountUpsert{
 		Owner: owner, OrgAccess: core.OrgAccessMembers, CreatedByUserID: "owner", Provider: "openai", AuthKind: core.AuthKindAPIKey,
 		IdentityKey: core.APIKeyIdentityKey(owner.Key(), "openai", secret), KeyHint: core.KeyHint(secret),
 		Secrets: core.AccountSecrets{Secret: secret},

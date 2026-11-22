@@ -29,8 +29,8 @@ func (p launchPolicy) ResolveOrgPolicy(context.Context, string) (accesstokenclie
 }
 
 // anthropicAndOpenAIKeys is a person's own Anthropic and OpenAI keys.
-func anthropicAndOpenAIKeys() *drivers.MockAPIKeyStore {
-	return &drivers.MockAPIKeyStore{
+func anthropicAndOpenAIKeys() *drivers.MockAccountStore {
+	return &drivers.MockAccountStore{
 		ListProviderAccountsWithSecretsFunc: func(context.Context, string) ([]core.AccountWithSecrets, error) {
 			key := func(id, provider, secret string) core.AccountWithSecrets {
 				return core.AccountWithSecrets{
@@ -49,7 +49,7 @@ func anthropicAndOpenAIKeys() *drivers.MockAPIKeyStore {
 }
 
 func TestLaunchValidation_FailsWithThePolicysReason(t *testing.T) {
-	drivers.InitializeAPIKeyProvider(anthropicAndOpenAIKeys())
+	drivers.InitializeAPIKeyProvider(anthropicAndOpenAIKeys(), nil)
 	prev := orgpolicy.EnforcementOf(orgpolicy.PointProviders)
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, orgpolicy.EnforcementEnforce)
 	t.Cleanup(func() { orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, prev) })

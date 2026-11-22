@@ -4527,12 +4527,6 @@ func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.accounts.SetSealer(sealer)
 }
 
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
-// opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
-}
-
 // HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
 // (store.HasNoOrgAccountPauses).
 func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {

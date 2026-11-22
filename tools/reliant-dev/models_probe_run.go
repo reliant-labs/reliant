@@ -13,8 +13,10 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -22,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
@@ -67,12 +70,12 @@ type probeOutcome struct {
 // provider accounts, without changing production code. They appear as API-key accounts of lowest
 // priority; a provider the database already has an account for is left alone.
 type envOverlayRepo struct {
-	drivers.APIKeyStore
+	drivers.AccountStore
 	extra map[string]string
 }
 
 func (r envOverlayRepo) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
-	accounts, err := r.APIKeyStore.ListProviderAccountsWithSecrets(ctx, userID)
+	accounts, err := r.AccountStore.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +382,11 @@ environment. Cost is a handful of tiny prompts per cell.`,
 				return err
 			}
 			defer repo.Close() //nolint:errcheck
-			drivers.InitializeAPIKeyProvider(envOverlayRepo{APIKeyStore: repo, extra: envProviderKeys()})
+			accounts, err := probeAccounts(repo)
+			if err != nil {
+				return err
+			}
+			drivers.InitializeAPIKeyProvider(envOverlayRepo{AccountStore: accounts, extra: envProviderKeys()}, repo)
 			if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 				return fmt.Errorf("model registry: %w", err)
 			}
@@ -596,4 +603,31 @@ func printProbeTable(cmd *cobra.Command, outcomes []probeOutcome) {
 		fmt.Fprintf(cmd.OutOrStdout(), " [%s=%d]", class, n)
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
+}
+
+// probeAccounts reads the database's provider accounts when RELIANT_VAULT_KEY is set (the vault
+// key their secrets are sealed under); without it the probe sees only the environment's keys, as
+// it always has: it never boots a vault, which would write to the database.
+func probeAccounts(repo *db.Repo) (drivers.AccountStore, error) {
+	key := os.Getenv("RELIANT_VAULT_KEY")
+	if key == "" {
+		return noAccounts{}, nil
+	}
+	ring, err := crypto.ParseKeyring(key)
+	if err != nil {
+		return nil, fmt.Errorf("RELIANT_VAULT_KEY: %w", err)
+	}
+	sealer := vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: sealer})
+	if err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
+// noAccounts is a database with no readable accounts.
+type noAccounts struct{ drivers.AccountStore }
+
+func (noAccounts) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
+	return nil, nil
 }

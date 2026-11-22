@@ -67,12 +67,15 @@ type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
 	Database       *db.Repo
-	StreamingHub   streaming.StreamingHub
-	ToolsFactory   *tools.ToolsFactory
-	ToolExecutor   toolexec.ToolExecutor
-	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
-	MCPBinder      toolexec.MCPContextBinder
-	ConfigProvider config.ConfigProvider
+	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
+	// routing reads and writes (credentials/provideraccounts).
+	ProviderAccounts AccountStore
+	StreamingHub     streaming.StreamingHub
+	ToolsFactory     *tools.ToolsFactory
+	ToolExecutor     toolexec.ToolExecutor
+	DaemonRouter     toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
+	MCPBinder        toolexec.MCPContextBinder
+	ConfigProvider   config.ConfigProvider
 
 	// TriggerLauncher is the one door a scheduled fire launches through,
 	// normally *launch.Launcher.
@@ -280,7 +283,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	if cfg.ProviderAccounts != nil && cfg.Database != nil {
+		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	}
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)

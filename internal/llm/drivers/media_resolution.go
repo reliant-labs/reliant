@@ -249,7 +249,7 @@ func preferredMediaModel(ctx context.Context, userID string, registry *models.Mo
 	if globalAPIKeyProvider == nil {
 		return nil
 	}
-	all, err := modelprefs.LoadAll(ctx, globalAPIKeyProvider.repo, userID)
+	all, err := modelprefs.LoadAll(ctx, globalAPIKeyProvider.settings, userID)
 	if err != nil {
 		logging.WarnContext(ctx, "Media tag preferences partially unreadable; affected tags use defaults", "userID", userID, "error", err)
 	}

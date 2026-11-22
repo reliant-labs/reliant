@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package provideraccounts_test
 
 import (
 	"context"
@@ -25,14 +25,14 @@ func claudeUpsert(user, acct, org, secret, refresh string) core.AccountUpsert {
 	}
 }
 
-func mustUpsert(t *testing.T, repo *Repo, u core.AccountUpsert) core.ProviderAccount {
+func mustUpsert(t *testing.T, repo *env, u core.AccountUpsert) core.ProviderAccount {
 	t.Helper()
 	a, _, err := repo.UpsertProviderAccount(context.Background(), u)
 	require.NoError(t, err)
 	return a
 }
 
-func priorities(t *testing.T, repo *Repo, user, provider string) []string {
+func priorities(t *testing.T, repo *env, user, provider string) []string {
 	t.Helper()
 	all, err := repo.ListProviderAccounts(context.Background(), user)
 	require.NoError(t, err)
@@ -49,8 +49,7 @@ func priorities(t *testing.T, repo *Repo, user, provider string) []string {
 func TestUpsertProviderAccountDedupesByIdentityAndAppendsPriority(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 
 	a1, created, err := repo.UpsertProviderAccount(ctx, claudeUpsert("u1", "alice", "org1", "tok-1", "ref-1"))
@@ -100,8 +99,7 @@ func TestUpsertProviderAccountDedupesByIdentityAndAppendsPriority(t *testing.T) 
 func TestUpsertProviderAccountKeepsRefreshTokenWhenReconsentOmitsIt(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "tok-1", "ref-1"))
 
@@ -120,8 +118,7 @@ func TestUpsertProviderAccountKeepsRefreshTokenWhenReconsentOmitsIt(t *testing.T
 func TestUpsertProviderAccountValidation(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	base := claudeUpsert("u1", "a", "o", "t", "r")
 
@@ -147,8 +144,7 @@ func TestUpsertProviderAccountValidation(t *testing.T) {
 func TestAccountSecretsAreSealedAndBoundToTheRow(t *testing.T) {
 	t.Parallel()
 
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "PLAINTEXT-ACCESS", "PLAINTEXT-REFRESH"))
@@ -177,8 +173,7 @@ func TestAccountSecretsAreSealedAndBoundToTheRow(t *testing.T) {
 func TestListProviderAccountsWithSecretsSkipsUnopenableRow(t *testing.T) {
 	t.Parallel()
 
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t1", "r1"))
 	b := mustUpsert(t, repo, claudeUpsert("u1", "bob", "o", "t2", "r2"))
@@ -199,8 +194,7 @@ func TestListProviderAccountsWithSecretsSkipsUnopenableRow(t *testing.T) {
 func TestAccountsAreScopedToTheirUser(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 
@@ -222,8 +216,7 @@ func TestAccountsAreScopedToTheirUser(t *testing.T) {
 func TestReorderProviderAccounts(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "a", "o", "t", "r"))
 	b := mustUpsert(t, repo, claudeUpsert("u1", "b", "o", "t", "r"))
@@ -256,15 +249,14 @@ func TestReorderProviderAccounts(t *testing.T) {
 func TestDeleteProviderAccountDensifiesAndCascades(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "a", "o", "t", "r"))
 	b := mustUpsert(t, repo, claudeUpsert("u1", "b", "o", "t", "r"))
 	c := mustUpsert(t, repo, claudeUpsert("u1", "c", "o", "t", "r"))
 
 	chat := createTestChat(t, repo)
-	insertTestThreadForWorkflow(t, repo, "th-del", chat, "wf-del", ThreadStatusRunning)
+	insertTestThread(t, repo, "th-del", chat, "wf-del")
 	ok, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-del", Provider: "claude", AccountID: b.ID, Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -286,8 +278,7 @@ func TestDeleteProviderAccountDensifiesAndCascades(t *testing.T) {
 func TestCompareAndSwapAccountTokensExactlyOneWinner(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "access-0", "refresh-0"))
 	exp := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
@@ -364,8 +355,7 @@ func TestCompareAndSwapAccountTokensExactlyOneWinner(t *testing.T) {
 func TestPatchProviderAccount(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 
@@ -407,8 +397,7 @@ func TestPatchProviderAccount(t *testing.T) {
 func TestManagedAccountIdentityAndAPIKeyAccount(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 
 	m, created, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{UserID: "u1", Provider: "reliant",
@@ -431,8 +420,7 @@ func TestManagedAccountIdentityAndAPIKeyAccount(t *testing.T) {
 func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 	t0 := time.Now().UTC().Truncate(time.Second)
@@ -507,8 +495,7 @@ func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 func TestBenchBeforeAnySnapshotCreatesLimitState(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
@@ -545,8 +532,7 @@ func TestAccountStatusPrecedence(t *testing.T) {
 func TestLeaseUsagePollsConcurrentLeasersGetDisjointSets(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 
@@ -610,8 +596,7 @@ func TestLeaseUsagePollsConcurrentLeasersGetDisjointSets(t *testing.T) {
 func TestScheduleUsagePoll(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 	next := time.Now().Add(10 * time.Minute).UTC().Truncate(time.Second)
@@ -644,15 +629,14 @@ func TestScheduleUsagePoll(t *testing.T) {
 func TestThreadAssignmentCompareAndSet(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "a", "o", "t", "r"))
 	b := mustUpsert(t, repo, claudeUpsert("u1", "b", "o", "t", "r"))
 	c := mustUpsert(t, repo, claudeUpsert("u1", "c", "o", "t", "r"))
 	chat := createTestChat(t, repo)
-	insertTestThreadForWorkflow(t, repo, "th-1", chat, "wf-1", ThreadStatusRunning)
-	insertTestThreadForWorkflow(t, repo, "th-2", chat, "wf-2", ThreadStatusRunning)
+	insertTestThread(t, repo, "th-1", chat, "wf-1")
+	insertTestThread(t, repo, "th-2", chat, "wf-2")
 
 	got, err := repo.GetThreadAssignment(ctx, "th-1", "claude")
 	require.NoError(t, err)
@@ -729,8 +713,7 @@ func TestThreadAssignmentCompareAndSet(t *testing.T) {
 func TestRecentAssignmentCounts(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "a", "o", "t", "r"))
 	b := mustUpsert(t, repo, claudeUpsert("u1", "b", "o", "t", "r"))
@@ -743,7 +726,7 @@ func TestRecentAssignmentCounts(t *testing.T) {
 		age  time.Duration
 	}{{a.ID, time.Minute}, {a.ID, 2 * time.Minute}, {a.ID, time.Hour}, {b.ID, 30 * time.Second}} {
 		th := fmt.Sprintf("th-rc-%d", i)
-		insertTestThreadForWorkflow(t, repo, th, chat, "wf-"+th, ThreadStatusRunning)
+		insertTestThread(t, repo, th, chat, "wf-"+th)
 		ok, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: th, Provider: "claude", AccountID: spec.acct,
 			AssignedAt: now.Add(-spec.age), Reason: "initial"}, "")
 		require.NoError(t, err)
@@ -762,8 +745,7 @@ func TestRecentAssignmentCounts(t *testing.T) {
 func TestMessagesProviderAccountIDColumn(t *testing.T) {
 	t.Parallel()
 
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	_, raw := newEnv(t)
 	var typ, nullable string
 	require.NoError(t, raw.QueryRow(`SELECT data_type, is_nullable FROM information_schema.columns
 		WHERE table_name='messages' AND column_name='provider_account_id'`).Scan(&typ, &nullable))
@@ -779,8 +761,7 @@ func TestMessagesProviderAccountIDColumn(t *testing.T) {
 func TestMergeOnIdentityRewrite(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 
 	legacy := claudeUpsert("u1", "x", "o", "old-tok", "old-ref")
@@ -812,8 +793,7 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 	})
 
 	t.Run("merge keeps the account that already holds the real identity", func(t *testing.T) {
-		repo2, cleanup2 := SetupTestDB(t)
-		defer cleanup2()
+		repo2, _ := newEnv(t)
 		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
 		ph.IdentityKey = core.PlaceholderIdentityKey("row-2")
 		phAcct := mustUpsert(t, repo2, ph) // priority 0
@@ -822,8 +802,8 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 		_, err := repo2.PatchProviderAccount(ctx, "u1", phAcct.ID, core.AccountPatch{Label: &label})
 		require.NoError(t, err)
 		chat := createTestChat(t, repo2)
-		insertTestThreadForWorkflow(t, repo2, "th-m1", chat, "wf-m1", ThreadStatusRunning)
-		insertTestThreadForWorkflow(t, repo2, "th-m2", chat, "wf-m2", ThreadStatusRunning)
+		insertTestThread(t, repo2, "th-m1", chat, "wf-m1")
+		insertTestThread(t, repo2, "th-m2", chat, "wf-m2")
 		for _, asg := range []core.Assignment{
 			{ThreadID: "th-m1", Provider: "claude", AccountID: phAcct.ID, Reason: "initial"},
 			{ThreadID: "th-m2", Provider: "claude", AccountID: real.ID, Reason: "initial"},
@@ -872,8 +852,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 	ctx := context.Background()
 
 	t.Run("its pause, label, bench and poll schedule survive a merge with a newer placeholder", func(t *testing.T) {
-		repo, cleanup := SetupTestDB(t)
-		defer cleanup()
+		repo, _ := newEnv(t)
 		real := mustUpsert(t, repo, claudeUpsert("u1", "erin", "o", "real-tok", "real-ref"))
 		paused, label := true, "work"
 		_, err := repo.PatchProviderAccount(ctx, "u1", real.ID, core.AccountPatch{Paused: &paused, Label: &label})
@@ -904,8 +883,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 	})
 
 	t.Run("a placeholder's pause carries over to the survivor", func(t *testing.T) {
-		repo, cleanup := SetupTestDB(t)
-		defer cleanup()
+		repo, _ := newEnv(t)
 		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
 		ph.IdentityKey = core.PlaceholderIdentityKey("row")
 		phAcct := mustUpsert(t, repo, ph)
@@ -923,8 +901,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 	})
 
 	t.Run("an account with a real identity is never treated as a placeholder to rewrite", func(t *testing.T) {
-		repo, cleanup := SetupTestDB(t)
-		defer cleanup()
+		repo, _ := newEnv(t)
 		a := mustUpsert(t, repo, claudeUpsert("u1", "gina", "o", "ta", "ra"))
 		b := mustUpsert(t, repo, claudeUpsert("u1", "hank", "o", "tb", "rb"))
 
@@ -942,8 +919,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 	})
 
 	t.Run("a placeholder is rewritten in place when no one holds the real identity", func(t *testing.T) {
-		repo, cleanup := SetupTestDB(t)
-		defer cleanup()
+		repo, _ := newEnv(t)
 		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
 		ph.IdentityKey = core.PlaceholderIdentityKey("solo")
 		phAcct := mustUpsert(t, repo, ph)
@@ -968,8 +944,7 @@ func TestDisplayLabel(t *testing.T) {
 func TestGetAccountLimitsAndLastTraffic(t *testing.T) {
 	t.Parallel()
 
-	repo, cleanup := SetupTestDB(t)
-	defer cleanup()
+	repo, _ := newEnv(t)
 	ctx := context.Background()
 	a := mustUpsert(t, repo, claudeUpsert("u1", "alice", "o", "t", "r"))
 

@@ -261,7 +261,7 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	// No real provider catalog: a fake key would be refused (Copilot answers
 	// 401), and a refused credential is now — correctly — unavailable. These
 	// tests are about the settings resolveLLMCall computes, so every provider

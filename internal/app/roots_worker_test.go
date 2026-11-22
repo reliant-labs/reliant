@@ -80,7 +80,7 @@ func TestWorkerReadiness(t *testing.T) {
 // database they read.
 func TestWorkerInstallsProcessStateFirst(t *testing.T) {
 	names := PlanWorker().Names()
-	require.Equal(t, []string{"probe_listener", "integration_settings", "process_settings", "db_repo", "database", "process_runtime"}, names[:6])
+	require.Equal(t, []string{"probe_listener", "integration_settings", "process_settings", "db_repo", "database", "vault", "provider_accounts", "process_runtime"}, names[:8])
 }
 
 // The worker's variants never reach another root: each is

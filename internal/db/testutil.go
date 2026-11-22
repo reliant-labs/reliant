@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/pgtest"
 	forgedb "github.com/reliant-labs/reliant/db"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -333,9 +334,24 @@ func SeedProviderAccount(t *testing.T, repo *Repo, userID, provider, secret stri
 		u.AuthKind, u.IdentityKey = core.AuthKindAPIKey, core.APIKeyIdentityKey(userID, provider, secret)
 		u.KeyHint = core.KeyHint(secret)
 	}
-	acct, _, err := repo.UpsertProviderAccount(context.Background(), u)
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: repo.accounts.sealer})
+	if err != nil {
+		t.Fatalf("seed %s account: %v", provider, err)
+	}
+	acct, _, err := accounts.UpsertProviderAccount(context.Background(), u)
 	if err != nil {
 		t.Fatalf("seed %s account: %v", provider, err)
 	}
 	return acct
+}
+
+// TestAccounts is the provider-account store over repo's database and a throwaway vault: what a
+// test uses to seed or read accounts now that the facade does not.
+func TestAccounts(tb testing.TB, repo *Repo) provideraccounts.Service {
+	tb.Helper()
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: repo.accounts.sealer})
+	if err != nil {
+		tb.Fatalf("provider accounts: %v", err)
+	}
+	return accounts
 }

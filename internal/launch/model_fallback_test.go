@@ -19,8 +19,8 @@ import (
 // claudeOnlyAccounts is prod user 30542add's provider settings on 2026-10-10:
 // Codex disconnected, Claude connected — here as an Anthropic API key, which
 // BuildAvailableDrivers registers under the same anthropic driver.
-func claudeOnlyAccounts() *drivers.MockAPIKeyStore {
-	return &drivers.MockAPIKeyStore{
+func claudeOnlyAccounts() *drivers.MockAccountStore {
+	return &drivers.MockAccountStore{
 		ListProviderAccountsWithSecretsFunc: func(context.Context, string) ([]core.AccountWithSecrets, error) {
 			return []core.AccountWithSecrets{{
 				ProviderAccount: core.ProviderAccount{ID: "key-1", UserID: "user-1", Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
@@ -44,7 +44,7 @@ func claudeOnlyAccounts() *drivers.MockAPIKeyStore {
 // other test here uses the "mock" model, which validation resolves without
 // reading providers.
 func TestValidateWorkflowInputs_UnservableModelIsNotAValidationError(t *testing.T) {
-	drivers.InitializeAPIKeyProvider(claudeOnlyAccounts())
+	drivers.InitializeAPIKeyProvider(claudeOnlyAccounts(), nil)
 	launcher := NewLauncher(nil, nil, nil, nil, "")
 	ctx := context.Background()
 

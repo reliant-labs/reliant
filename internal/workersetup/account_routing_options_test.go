@@ -30,7 +30,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 	prevClient := drivers.AccountAvailabilityClient
 	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
@@ -52,7 +52,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 
 	user := "user-" + uuid.NewString()
 	for _, name := range []string{"alice", "bob"} {
-		_, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 			UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 			IdentityKey: core.ClaudeIdentityKey(name, "org-"+name), Email: name + "@acme.com",
 			ExternalAccountID: name, OrganizationID: "org-" + name,
@@ -77,7 +77,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 		env := suite.NewTestActivityEnvironment()
 		activity := handlers.NewCallLLMActivity(repo, nil, nil, emptyConfig{}, nil, nil)
 		if routed {
-			activity = activity.WithAccountRouting(accountRouting(repo, nil))
+			activity = activity.WithAccountRouting(accountRouting(db.TestAccounts(t, repo), repo, nil))
 		}
 		env.RegisterActivity(activity.Execute)
 		_, err = env.ExecuteActivity(activity.Execute, types.ActivityInput{
