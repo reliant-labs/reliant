@@ -285,6 +285,12 @@ export interface SpotlightTarget {
   icon?: React.ReactNode;
   /** Spotlight config for this specific target */
   spotlightConfig?: SpotlightConfig;
+  /**
+   * The side its label prefers, used when the label fits there; otherwise the
+   * first side with room (right, left, above, below). For a wide target, like
+   * the composer, whose side is over other chrome.
+   */
+  labelPosition?: "right" | "left" | "above" | "below";
 }
 
 // ─── Checklist Types ─────────────────────────────────────────────────────────
