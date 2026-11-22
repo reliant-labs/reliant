@@ -2,9 +2,28 @@
 package main
 
 import (
+	"context"
 	"regexp"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 )
+
+func TestProbeAccountsWithoutVaultKey(t *testing.T) {
+	t.Setenv("RELIANT_VAULT_KEY", "")
+	// No database should be needed for the environment-key-only path.
+	accounts, err := probeAccounts(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, err := drivers.BuildAvailableDrivers(context.Background(), accounts, drivers.PersonalScope("probe-user"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(available.Accounts) != 0 {
+		t.Fatalf("unexpected stored accounts: %v", available.Accounts)
+	}
+}
 
 func TestProbeMatrixBuilder(t *testing.T) {
 	ms := []probeModel{

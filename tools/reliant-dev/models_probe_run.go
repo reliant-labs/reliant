@@ -631,3 +631,8 @@ type noAccounts struct{ drivers.AccountStore }
 func (noAccounts) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
 	return nil, nil
 }
+
+// With no readable accounts there is no account limit state either.
+func (noAccounts) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
+	return nil, nil
+}
