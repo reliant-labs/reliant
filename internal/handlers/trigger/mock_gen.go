@@ -86,8 +86,34 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
+// forge:section MockOwners
+// forge:hash=0252499f11645a8504df193dd2086864a8280ffc310fc17957a30baf14004428
+
+// MockOwners is a test mock for the Owners interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOwners.<Method>Func not set" error.
+type MockOwners struct {
+	contractkit.Recorder
+	AdoptTriggerFunc func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
+}
+
+// AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
+func (m *MockOwners) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner string, offerID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("AdoptTrigger", ctx, t, previousOwner, offerID, reads)
+	if m.AdoptTriggerFunc != nil {
+		return m.AdoptTriggerFunc(ctx, t, previousOwner, offerID, reads...)
+	}
+	return contractkit.MockNotSet("MockOwners", "AdoptTrigger")
+}
+
+// Compile-time check.
+var _ Owners = (*MockOwners)(nil)
+
 // forge:section MockRepository
-// forge:hash=27f8ea5ae6c53b6fd22b55cad1d16e61257572d1d57dc5dc6b46dd07c77ddfd3
+// forge:hash=1907c579b1619ceaf7427f82d761ddf3c26cbd7f9f69324bbdff399e7e048522
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -108,7 +134,6 @@ type MockRepository struct {
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
 	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
-	AdoptTriggerFunc                   func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	ResumeTriggerPausedByFunc          func(context.Context, string, string, time.Time) (bool, error)
@@ -238,15 +263,6 @@ func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger
 		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
-}
-
-// AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
-func (m *MockRepository) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner string, offerID string, reads ...db.OrgRead) error {
-	m.Recorder.Record("AdoptTrigger", ctx, t, previousOwner, offerID, reads)
-	if m.AdoptTriggerFunc != nil {
-		return m.AdoptTriggerFunc(ctx, t, previousOwner, offerID, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "AdoptTrigger")
 }
 
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.

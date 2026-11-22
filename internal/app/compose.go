@@ -102,6 +102,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -1110,6 +1111,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Owners:       g.Triggerowner(),
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1240,10 +1242,11 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:      g.Database(),
+		Favorites: store.NewCommandFavoriteExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1503,6 +1506,7 @@ func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Offers:   g.Triggerowner(),
 		Triggers: g.Trigger(),
 		Now:      nil, // optional — no provider
 	})
@@ -1547,6 +1551,27 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 		return nil, err
 	}
 	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newTriggerowner constructs the triggerowner package (internal/triggerowner):
+// the one writer of a trigger's owner after it is created (the takeover).
+func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
+	o := g.Database().ORM()
+	stores := triggerowner.NewStores(o)
+	svc, err := triggerowner.New(triggerowner.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Tx:       o,
+		Locks:    stores,
+		Triggers: stores,
+		Offers:   stores,
+		OrgReads: stores,
+		Now:      nil, // optional — no provider
+	})
+	if err != nil {
+		return nil, err
+	}
+	return triggerowner.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newOrgUsage constructs the org-usage handler (internal/handlers/org_usage):

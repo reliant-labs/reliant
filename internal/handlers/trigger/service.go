@@ -33,6 +33,8 @@ type Deps struct {
 	// the projects, chats, daemons, workflows and presets a trigger names
 	// (deps.go).
 	Repo Repository
+	// Owners re-owns an orphaned trigger (deps.go).
+	Owners Owners
 
 	// Syncer converges a trigger's Temporal Schedule, and Fires starts a
 	// manual fire. TemporalBackend builds both over a Temporal client.
@@ -180,6 +182,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
+	}
+	if d.Owners == nil {
+		return fmt.Errorf("trigger: Deps.Owners is required")
 	}
 	return nil
 }

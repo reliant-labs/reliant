@@ -411,7 +411,7 @@ func TestAdoptTrigger_RefusedOnceTheOwnerChanged(t *testing.T) {
 	stale.ProjectID = e.bobProject
 	stale.DaemonID = e.bobDaemon
 	stale.Enabled = false
-	err := e.repo.AdoptTrigger(context.Background(), &stale, "someone-else", "")
+	err := realOwners(t, e.repo).AdoptTrigger(context.Background(), &stale, "someone-else", "")
 	assert.ErrorIs(t, err, core.ErrTriggerOwnerChanged)
 	assert.Equal(t, e.userID, e.row(t, old.ID).UserID)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -136,6 +137,24 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			release, err := p.Repo.LockProviderKey(ctx, storetest.SeedUserID, "anthropic")
 			if err == nil {
 				release()
+			}
+			return err
+		}},
+		// The trigger owner's writes (internal/triggerowner): the trigger's
+		// row lock and the new owner's org lock serialize them, so READ
+		// COMMITTED. The trigger does not exist: the transaction is begun
+		// and the read after its lock answers not found.
+		{"triggerowner.CreateTriggerOffer", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).CreateTriggerOffer(ctx, &core.TriggerOffer{ID: "o-iso", TriggerID: "trg-none", PreviousOwnerUserID: "u"})
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
+			}
+			return err
+		}},
+		{"triggerowner.AdoptTrigger", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).AdoptTrigger(ctx, &core.Trigger{ID: "trg-none", UserID: "new", ProjectID: storetest.SeedProjectID}, "old", "")
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
 			}
 			return err
 		}},
@@ -263,4 +282,14 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			t.Fatalf("the ledger entry written inside the rolled-back transaction: %d rows, want 1", n)
 		}
 	})
+}
+
+// triggerOwner is the trigger owner service over the probe's database.
+func triggerOwner(p *storetest.TxProbe) triggerowner.Service {
+	stores := triggerowner.NewStores(p.ORM)
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: p.ORM, Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }

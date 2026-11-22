@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -139,7 +140,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID}))
 
-	deps := Deps{Repo: repo, Syncer: backend, Fires: backend}
+	deps := Deps{Repo: repo, Owners: realOwners(t, repo), Syncer: backend, Fires: backend}
 	return &triggerTestEnv{
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
 		deps:      deps,
@@ -822,4 +823,14 @@ func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = uuid.NewString() }),
 	}))
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+}
+
+// realOwners is the trigger owner service over repo's database, as the
+// composition root wires it.
+func realOwners(t testing.TB, repo *db.Repo) triggerowner.Service {
+	t.Helper()
+	stores := triggerowner.NewStores(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	require.NoError(t, err)
+	return svc
 }

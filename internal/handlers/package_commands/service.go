@@ -26,6 +26,8 @@ type Deps struct {
 	Router Router
 	// Repo resolves worktrees and stores command favorites.
 	Repo Repository
+	// Favorites stores command favorites.
+	Favorites Favorites
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -42,6 +44,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("package_commands: Deps.Repo is required")
+	}
+	if d.Favorites == nil {
+		return fmt.Errorf("package_commands: Deps.Favorites is required")
 	}
 	return nil
 }

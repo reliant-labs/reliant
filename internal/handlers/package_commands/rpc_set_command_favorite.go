@@ -38,9 +38,9 @@ func (s *Service) SetCommandFavorite(
 
 	// Add or remove favorite based on is_favorite flag
 	if req.Msg.IsFavorite {
-		err = s.deps.Repo.AddCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Favorites.AddCommandFavorite(ctx, userID, projectID, commandKey)
 	} else {
-		err = s.deps.Repo.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Favorites.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
 	}
 
 	if err != nil {
