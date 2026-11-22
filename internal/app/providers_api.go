@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -713,7 +714,13 @@ func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPla
 	if err != nil {
 		return nil, err
 	}
-	return ghaccess.New(repo, tokens, ghaccess.Options{
+	var grants ghaccess.Grants
+	var refreshes ghaccess.Refreshes
+	if repo != nil {
+		grants = store.NewIntegrationEventAccessExtStore(repo.ORM())
+		refreshes = store.NewIntegrationAccessRefreshExtStore(repo.ORM())
+	}
+	return ghaccess.New(grants, refreshes, tokens, ghaccess.Options{
 		Logger: slog.Default().With("component", "ghaccess"),
 	}), nil
 }
@@ -842,7 +849,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).

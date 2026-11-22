@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -63,7 +64,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 
 	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), f.starter, noopRunRecorder{}, "test-queue")
 	workflows := launchableDeclarations{fakeWorkflows: fakeWorkflows{yaml: map[string]string{scenarioWorkflow: workflow}}}
-	enricher := NewOriginEnricher(f.repo.IntegrationWrites(), f.repo, "reliant-labs")
+	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), f.repo, "reliant-labs")
 	starter := &recordingStarter{}
 	intake := NewIntake(f.repo, starter, "").WithWorkflows(workflows).WithEnrichers(enricher)
 	firer := NewEventFirer(f.repo, launcher).WithWorkflows(workflows)
@@ -71,7 +72,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 	return &scenario{
 		repo: f.repo, starter: f.starter, intake: intake, firer: firer, trigger: f.trigger, userID: f.trigger.UserID,
-		recorder: writeledger.New(writeledger.Deps{Store: f.repo.IntegrationWrites(), Runs: f.repo}),
+		recorder: writeledger.New(writeledger.Deps{Store: writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), Runs: f.repo}),
 		chats:    map[string]string{},
 	}
 }
@@ -354,7 +355,7 @@ func (s *scenario) recordPush(t *testing.T, workflow, triggerName, branch, headS
 		ID: chatID, Title: workflow, ProjectID: s.trigger.ProjectID, UserID: s.userID, WorkflowName: &name, WorkflowID: &wfID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	require.NoError(t, s.repo.IntegrationWrites().CreateIntegrationWrite(ctx, &core.IntegrationWrite{
+	require.NoError(t, writeledger.NewLedger(store.NewIntegrationWriteExtStore(s.repo.ORM())).CreateIntegrationWrite(ctx, &core.IntegrationWrite{
 		ID: uuid.NewString(), UserID: s.userID, ChatID: chatID, WorkflowName: workflow, TriggerName: triggerName,
 		Integration: "github", Action: "git.publish", Actor: core.IntegrationActorApp,
 		Scope: "github:acme/app", Target: "github:acme/app#7",
