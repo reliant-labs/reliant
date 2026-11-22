@@ -8,10 +8,12 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A scroll-back page is sized over the rows the transcript renders. HIDDEN
@@ -77,7 +79,7 @@ func TestListMessages_ScrollBackPagesCountOnlyTranscriptRows(t *testing.T) {
 	visible(4, 6)
 	hiddenRun(2)
 
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	page := func(beforeSeq int64, recent int32) *reliantv1.ListMessagesResponse {
 		t.Helper()
 		req := &reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &recent}

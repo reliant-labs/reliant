@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestExpandAgentIDPrefix(t *testing.T) {
@@ -75,7 +77,7 @@ func TestSpawnTools_AcceptAnUnambiguousAgentIDPrefix(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID[:8]})
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID[:8]})
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.Equal(t, childID, meta.AgentID)
 
@@ -86,7 +88,7 @@ func TestSpawnTools_AcceptAnUnambiguousAgentIDPrefix(t *testing.T) {
 	// A prefix of an agent the caller does not own resolves to nothing, so
 	// the tool's own refusal still applies.
 	_, otherChild, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: otherChild[:8]})
+	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: otherChild[:8]})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "not a sub-agent spawned from this thread")
 }
@@ -113,7 +115,7 @@ func TestSpawnStatus_Listing_RunningFirstDedupedAndFilterable(t *testing.T) {
 		RequestedAt: resumedAt, CompletedAt: &resumedAt, CreatedAt: resumedAt, UpdatedAt: resumedAt,
 	}))
 
-	tool := NewSpawnStatusTool(repo)
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp, meta := runSpawnStatus(t, tool, rc, SpawnStatusParams{})

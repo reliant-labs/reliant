@@ -47,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -356,7 +357,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
 	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
-		runs.NewService(s.Repo, s.Temporal, pause), taskQueue)
+		runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), taskQueue)
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -400,19 +401,21 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Temporal: s.Temporal,
-		Pause:    pause,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Temporal:  s.Temporal,
+		Pause:     pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Signals:  pause,
-		Messages: chatSvc,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Signals:   pause,
+		Messages:  chatSvc,
 	})
 	require.NoError(t, err, "question service")
 	approvalSvc, err := approval.New(approval.Deps{
@@ -806,7 +809,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 // NewestPendingQuestion returns the chat's newest pending question, or nil.
 func (h *Harness) NewestPendingQuestion(chatID string) (*db.Question, error) {
 	// Oldest first: the newest pending question is the last.
-	pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+	pending, err := store.NewQuestionExtStore(h.Stack.Repo.ORM()).ListPendingQuestionsByChat(h.Ctx, chatID)
 	if err != nil || len(pending) == 0 {
 		return nil, err
 	}
