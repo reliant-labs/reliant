@@ -149,16 +149,12 @@ func TestTriggerEventQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CountLiveLaunchedRuns(%s): %v", user, err)
 		}
-		twin, err := env.Repo.CountLiveLaunchedRuns(ctx, user, core.TriggerEventKindAgentStartRun)
-		if err != nil {
-			t.Fatalf("Repo.CountLiveLaunchedRuns(%s): %v", user, err)
-		}
 		want := 0
 		if user == storetest.SeedUserID {
 			want = 1
 		}
-		if port != want || twin != want {
-			t.Fatalf("CountLiveLaunchedRuns(%s): port %d, twin %d, want %d", user, port, twin, want)
+		if port != want {
+			t.Fatalf("CountLiveLaunchedRuns(%s): %d, want %d", user, port, want)
 		}
 	}
 

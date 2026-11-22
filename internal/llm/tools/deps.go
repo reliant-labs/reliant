@@ -79,11 +79,41 @@ type scenarioLoaderStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
-// scenarioExecStore is what runScenarioByName reads and writes: the scenario,
-// its recorded result, and the loader the run resolves refs with.
+// ScenarioStore is the scenario rows the scenario tools find and rewrite.
+// store.WorkflowScenarioExtStore satisfies it.
+type ScenarioStore interface {
+	FindWorkflowScenarioByName(ctx context.Context, draftID string, name string) (*db.WorkflowScenario, error)
+	ReplaceWorkflowScenario(ctx context.Context, s *db.WorkflowScenario) error
+}
+
+// scenarioFinder is the scenario read of view_scenario, delete_scenario and
+// run_scenario.
+type scenarioFinder interface {
+	FindWorkflowScenarioByName(ctx context.Context, draftID string, name string) (*db.WorkflowScenario, error)
+}
+
+// LaunchedRunCounter counts the runs a user's agents have launched and that
+// are still live. store.TriggerEventExtStore satisfies it.
+type LaunchedRunCounter interface {
+	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
+}
+
+// WorktreeChatLister lists the chats bound to a worktree.
+// store.ChatExtStore satisfies it.
+type WorktreeChatLister interface {
+	ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]db.WorktreeChat, error)
+}
+
+// WorkflowSlugChecker reports whether a user already has a workflow with a
+// slug. store.WorkflowDraftExtStore satisfies it.
+type WorkflowSlugChecker interface {
+	WorkflowSlugExists(ctx context.Context, userID string, slug string) (bool, error)
+}
+
+// scenarioExecStore is what runScenarioByName writes and loads with: the
+// scenario's recorded result and the loader the run resolves refs with.
 type scenarioExecStore interface {
 	scenarioLoaderStore
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 	UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error
 }
 
@@ -257,7 +287,6 @@ type spawnStopStore interface {
 type startRunStore interface {
 	runCallerStore
 	startRunLineageReader
-	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 }
 
@@ -308,7 +337,6 @@ type getWorkflowStore interface {
 type createWorkflowStore interface {
 	workflowsource.Store
 	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
-	WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error)
 }
 
 // workflowWriteStore is the store of edit_workflow and write_workflow, which
@@ -333,14 +361,11 @@ type listScenariosStore interface {
 // viewScenarioStore is view_scenario's store.
 type viewScenarioStore interface {
 	workflowDraftLookup
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 }
 
 // editScenarioStore is edit_scenario's store.
 type editScenarioStore interface {
 	workflowDraftLookup
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
-	UpdateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 }
 
 // writeScenarioStore is write_scenario's store; it runs the scenario it saves.
@@ -348,14 +373,12 @@ type writeScenarioStore interface {
 	workflowDraftLookup
 	scenarioExecStore
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
-	UpdateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 }
 
 // deleteScenarioStore is delete_scenario's store.
 type deleteScenarioStore interface {
 	workflowDraftLookup
 	DeleteWorkflowScenario(ctx context.Context, id string) error
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 }
 
 // runScenarioStore is run_scenario's store.
@@ -375,7 +398,6 @@ type worktreeStore interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
-	ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]db.WorktreeChat, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

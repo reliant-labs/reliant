@@ -352,6 +352,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
