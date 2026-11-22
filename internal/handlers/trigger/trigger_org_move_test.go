@@ -62,14 +62,16 @@ func TestResumeAfterOrgMove(t *testing.T) {
 					require.Equal(t, "alice", userID, "decided as the trigger's owner")
 					return &db.Project{ID: id, UserID: userID}, nil
 				},
-				ResumeTriggerPausedByFunc: func(_ context.Context, id, reason string, seen time.Time) (bool, error) {
+			}
+			resumer := &MockOrgMoveResumer{
+				ResumePausedTriggerFunc: func(_ context.Context, id, reason string, seen time.Time) (bool, error) {
 					asked = true
 					assert.Equal(t, core.TriggerPausedOrgMove, reason)
 					assert.Equal(t, tc.trigger.UpdatedAt, seen, "the version it checked")
 					return tc.pauseHeld, nil
 				},
 			}
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgGitHubApps: tc.apps}))
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgMoves: resumer, OrgGitHubApps: tc.apps}))
 			resumed, why, err := svc.ResumeAfterOrgMove(context.Background(), tc.trigger)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, outcome{resumed: resumed, asked: asked}, "why: %s", why)
@@ -93,10 +95,10 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	// A trigger edited after the move read it (still disabled, so the pause
 	// stands) is not turned on from the old read: an error, so the move reads
 	// it again and checks the definition it would turn on.
-	repo.ResumeTriggerPausedByFunc = func(context.Context, string, string, time.Time) (bool, error) {
+	changed := &MockOrgMoveResumer{ResumePausedTriggerFunc: func(context.Context, string, string, time.Time) (bool, error) {
 		return false, core.ErrTriggerChangedSinceRead
-	}
-	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}))
+	}}
+	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgMoves: changed}))
 	_, _, err = svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", ""))
 	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 }

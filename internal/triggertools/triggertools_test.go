@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggertools"
@@ -128,7 +129,8 @@ func setup(t *testing.T, publicURL string) *env {
 
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
-		Owners: realOwners(t, repo), Syncer: e.backend, Fires: e.backend,
+		OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Owners:   realOwners(t, repo), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
