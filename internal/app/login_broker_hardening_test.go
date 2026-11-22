@@ -56,8 +56,8 @@ func TestSessionEndpointRefusesATokenInTheCookie(t *testing.T) {
 }
 
 // A flood of invented user ids cannot lock password resets out for
-// everyone: the limiter evicts an unspent window to admit a new key, and
-// never a spent one (that would hand its key a fresh budget).
+// everyone: to admit a key it has not seen, the limiter evicts the oldest
+// unspent window, and the oldest spent one only when every window is spent.
 func TestResetLimiterSurvivesAFloodOfInventedIDs(t *testing.T) {
 	l := newAttemptLimiter(5, time.Hour)
 	fixed := time.Date(2030, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -68,13 +68,25 @@ func TestResetLimiterSurvivesAFloodOfInventedIDs(t *testing.T) {
 	require.True(t, l.reserve("real-user"), "a real user was locked out by invented ids")
 	require.LessOrEqual(t, len(l.entries), attemptLimiterMaxKeys)
 
+	// Every retained window spent (five guesses at each invented id) must
+	// not refuse an unseen real user either: the oldest spent window makes
+	// room, and every newer one keeps its count.
 	full := newAttemptLimiter(1, time.Hour)
-	full.now = l.now
+	clock := fixed
+	full.now = func() time.Time { return clock }
 	for i := range attemptLimiterMaxKeys {
+		clock = fixed.Add(time.Duration(i) * time.Millisecond)
 		require.True(t, full.reserve(fmt.Sprintf("spent-%d", i)))
 	}
-	require.False(t, full.reserve("new"), "with every window spent, nothing is evicted")
-	require.True(t, full.spent("spent-0"), "a spent window keeps its count")
+	clock = fixed.Add(time.Minute)
+	require.True(t, full.reserve("real-user"), "a full table of spent windows locked an unseen user out")
+	require.False(t, full.reserve("real-user"), "the admitted user is charged like any other key")
+	require.LessOrEqual(t, len(full.entries), attemptLimiterMaxKeys)
+	require.False(t, full.spent("spent-0"), "the oldest spent window is the one dropped")
+	for _, k := range []string{"spent-1", fmt.Sprintf("spent-%d", attemptLimiterMaxKeys-1)} {
+		require.True(t, full.spent(k), "%s: a newer spent window keeps its count", k)
+		require.False(t, full.reserve(k), "%s: a newer spent window is still refused", k)
+	}
 }
 
 // One client cannot charge reset attempts without bound: after its budget,

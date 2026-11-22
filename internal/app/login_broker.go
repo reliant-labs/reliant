@@ -1385,7 +1385,9 @@ func appBaseFrom(loginURI string) string {
 //
 // Memory is bounded: an expired window is dropped whenever the table grows
 // past attemptLimiterMaxKeys, so an attacker typing endless addresses cannot
-// grow it without limit.
+// grow it without limit. A full table never refuses a key it has not seen:
+// that would let anyone who fills it with invented keys (user ids, client
+// addresses) lock every real caller out. evict makes room instead.
 type attemptLimiter struct {
 	mu      sync.Mutex
 	max     int
@@ -1415,9 +1417,8 @@ func (l *attemptLimiter) reserve(key string) bool {
 		if len(l.entries) >= attemptLimiterMaxKeys {
 			l.sweep(now)
 		}
-		if len(l.entries) >= attemptLimiterMaxKeys && !l.evict() {
-			// Every live window is spent: refuse rather than grow.
-			return false
+		if len(l.entries) >= attemptLimiterMaxKeys {
+			l.evict()
 		}
 		e = &attemptEntry{since: now}
 		l.entries[key] = e
@@ -1429,23 +1430,31 @@ func (l *attemptLimiter) reserve(key string) bool {
 	return true
 }
 
-// evict drops the oldest window that still has attempts left, so a flood of
-// distinct keys (invented user ids) cannot lock every unseen key out. A spent
-// window is never evicted: that would hand its key a fresh budget. false when
-// every window is spent.
-func (l *attemptLimiter) evict() bool {
-	var oldest string
-	var since time.Time
+// evict drops one window to make room for a key the table has not seen.
+//
+// It drops the oldest window that still has attempts left. Only when every
+// window is spent does it drop the oldest spent one, which hands that key a
+// fresh budget: the price of never refusing an unseen key. It is a bounded
+// price. To refresh a spent window an attacker must first open and spend
+// attemptLimiterMaxKeys newer windows (each one charged to a client's own
+// budget), and the window dropped is the one nearest its expiry anyway.
+func (l *attemptLimiter) evict() {
+	var open, spent string
+	var openSince, spentSince time.Time
 	for k, e := range l.entries {
-		if e.used < l.max && (oldest == "" || e.since.Before(since)) {
-			oldest, since = k, e.since
+		if e.used < l.max {
+			if open == "" || e.since.Before(openSince) {
+				open, openSince = k, e.since
+			}
+		} else if spent == "" || e.since.Before(spentSince) {
+			spent, spentSince = k, e.since
 		}
 	}
-	if oldest == "" {
-		return false
+	if open != "" {
+		delete(l.entries, open)
+		return
 	}
-	delete(l.entries, oldest)
-	return true
+	delete(l.entries, spent)
 }
 
 // sweep drops every expired window.
