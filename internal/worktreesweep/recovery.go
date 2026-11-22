@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -106,32 +107,48 @@ func (s *Sweeper) recoverHeld(ctx context.Context, t target, cand *core.ReclaimC
 	if e == nil || !e.enabled || e.store == nil || e.credentials == nil || w.KeepFiles || (w.State != worktreereclaim.StateArchived && w.State != worktreereclaim.StateActive) {
 		return false
 	}
+	// bail ends this attempt. Every early return keeps the originals, and
+	// used to say nothing: a row that never reached a recovery journal (none
+	// had in prod by 2026-11-22) gave no sign of which step stopped it. The
+	// usual one, a workspace not yet observed idle for RecoveryIdleFloor, is
+	// logged at debug; the rest, which mean something failed, at info.
+	bail := func(step string, quiet bool) bool {
+		log := logging.InfoContext
+		if quiet {
+			log = logging.DebugContext
+		}
+		log(ctx, "[WorktreeSweep] git recovery not started", "worktreeID", w.ID, "daemonID", t.daemonID, "step", step)
+		return true
+	}
 	current, err := s.store.GetWorktree(ctx, w.ID)
 	if err != nil || current == nil || current.IsMain || Fence(current) != w.Fence {
-		return true
+		return bail("the row changed or is the main checkout", true)
 	}
 	req := worktreereclaim.RecoveryRequest{Worktree: w}
 	var observed worktreereclaim.RecoveryResponse
-	if err := s.recoverySend(ctx, t, CommandRecoveryObserve, req, &observed); err != nil || !worktreereclaim.RecoveryIdleEligible(observed.Activity, s.now()) {
-		return true
+	if err := s.recoverySend(ctx, t, CommandRecoveryObserve, req, &observed); err != nil {
+		return bail("observe: the machine did not answer", false)
+	}
+	if !worktreereclaim.RecoveryIdleEligible(observed.Activity, s.now()) {
+		return bail("observe: not observed idle for "+worktreereclaim.RecoveryIdleFloor.String(), true)
 	}
 	req.Activity = observed.Activity
 	repos, err := s.store.ListReposByProject(ctx, current.ProjectID)
 	if err != nil || len(repos) == 0 || len(repos) != len(w.Checkouts) {
-		return true
+		return bail("the project's repositories do not match the workspace's checkouts", false)
 	}
 	captureID := uuid.NewString()
 	recoveryID := uuid.NewString()
 	req.RecoveryID = recoveryID
 	for _, repo := range repos {
 		if repo.RemoteURL == nil || *repo.RemoteURL == "" {
-			return true
+			return bail("a repository has no remote to publish to", false)
 		}
 		req.Captures = append(req.Captures, worktreereclaim.RecoveryCapture{Version: 1, CaptureID: captureID, WorktreeID: w.ID, RepoID: repo.ID, Rel: filepath.ToSlash(repo.RelativePath), RemoteURL: *repo.RemoteURL, RecoveryRef: "refs/heads/reliant-recovery/" + w.ID + "/" + captureID + "/" + repo.ID})
 	}
 	var captured worktreereclaim.RecoveryResponse
 	if err := s.recoverySend(ctx, t, CommandRecoveryCapture, req, &captured); err != nil || captured.Outcome != worktreereclaim.OutcomeCaptured || len(captured.Captures) != len(req.Captures) {
-		return true
+		return bail("capture: "+string(captured.Outcome)+" "+string(captured.Reason), false)
 	}
 	// The daemon may enrich descriptors but cannot redirect publication to a
 	// different repository/ref, omit a checkout, or swap identities.
