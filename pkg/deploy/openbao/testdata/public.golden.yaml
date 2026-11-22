@@ -1,0 +1,277 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao
+  namespace: openbao
+spec:
+  ports:
+  - name: api
+    port: 8200
+    targetPort: 8200
+  - name: public
+    port: 8210
+    targetPort: 8210
+  selector:
+    app.kubernetes.io/name: openbao
+status:
+  loadBalancer: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao
+  namespace: openbao
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: openbao-converge
+    ports:
+    - port: 8200
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: openbao
+    ports:
+    - port: 8200
+      protocol: TCP
+    - port: 8201
+      protocol: TCP
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: envoy-gateway-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: proxy
+          app.kubernetes.io/managed-by: envoy-gateway
+          app.kubernetes.io/name: envoy
+          gateway.envoyproxy.io/owning-gateway-name: public
+          gateway.envoyproxy.io/owning-gateway-namespace: demo-prod
+    ports:
+    - port: 8210
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+  policyTypes:
+  - Ingress
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-public-from-demo-prod
+  namespace: openbao
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: demo-prod
+  to:
+  - group: ""
+    kind: Service
+    name: openbao
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-public
+  namespace: openbao
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: openbao
+    sectionName: public
+  validation:
+    caCertificateRefs:
+    - group: ""
+      kind: ConfigMap
+      name: openbao-ca
+    hostname: openbao.openbao.svc
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-public
+  namespace: demo-prod
+spec:
+  hostnames:
+  - secrets.example.com
+  parentRefs:
+  - name: public
+    sectionName: openbao-public
+  rules:
+  - backendRefs:
+    - name: openbao
+      namespace: openbao
+      port: 8210
+    matches:
+    - method: PUT
+      path:
+        type: RegularExpression
+        value: ^/v1/auth/jwt-[A-Za-z0-9][A-Za-z0-9_-]*/login$
+    - method: POST
+      path:
+        type: RegularExpression
+        value: ^/v1/auth/jwt-[A-Za-z0-9][A-Za-z0-9_-]*/login$
+    - method: GET
+      path:
+        type: Exact
+        value: /v1/auth/token/lookup-self
+    - method: GET
+      path:
+        type: RegularExpression
+        value: ^/v1/secret/data/tenants/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z_][A-Za-z0-9_]*$
+    timeouts:
+      request: 30s
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-public
+  namespace: demo-prod
+spec:
+  rateLimit:
+    local:
+      rules:
+      - clientSelectors:
+        - path:
+            type: PathPrefix
+            value: /
+        limit:
+          requests: 500
+          unit: Second
+      - clientSelectors:
+        - sourceCIDR:
+            type: Distinct
+            value: 0.0.0.0/0
+        limit:
+          requests: 50
+          unit: Second
+      - clientSelectors:
+        - sourceCIDR:
+            type: Distinct
+            value: ::/0
+        limit:
+          requests: 50
+          unit: Second
+    type: Local
+  requestBuffer:
+    limit: 16Ki
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: openbao-public
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-public
+  namespace: demo-prod
+spec:
+  connection:
+    connectionLimit:
+      value: 2000
+  headers:
+    earlyRequestHeaders:
+      remove:
+      - x-forwarded-for
+  path:
+    escapedSlashesAction: RejectRequest
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: public
+    sectionName: openbao-public
+  timeout:
+    http:
+      requestReceivedTimeout: 30s
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: openbao-converge
+    app.kubernetes.io/part-of: demo
+    forge.dev/component: openbao
+    forge.dev/component-owner: demo.prod
+  name: openbao-converge
+  namespace: openbao
+spec:
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+  - ports:
+    - port: 443
+      protocol: TCP
+    - port: 6443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+  - ports:
+    - port: 8200
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: openbao
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: openbao-converge
+  policyTypes:
+  - Egress

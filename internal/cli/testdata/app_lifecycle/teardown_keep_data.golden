@@ -1,0 +1,20 @@
+--- stdout
+This will tear down app "shop" on https://cp.example: every hosted environment is deleted.
+  ENV       ID         DEPLOYMENTS   CUSTOM DOMAINS
+  prod      env_prod   2             none
+  staging   env_stg    2             none
+
+Removed: each environment, its deployments, workloads, URLs, Flux objects, custom resources and namespaces.
+Kept (--keep-data): their managed databases — still running and billed as storage, listed by
+  `forge env retained list` until purged, and NOT reattached by a later deploy.
+Kept: the app — its name, release history and release images (not billed) — so
+  `forge env deploy <env> <release>` recreates an env; custom domains stay in your organization, unbound.
+Each env's secrets stop being delivered and are not given back to a recreated env: set them again.
+Afterwards nothing runs or bills except the kept databases' storage.
+
+  prod     deleted; the platform is tearing it down
+  staging  deleted; the platform is tearing it down
+
+Tore down app "shop": every env is deleted and the platform is tearing them down. Its releases are kept.
+Kept databases bill storage until purged: `forge env retained list`, then `forge env retained purge <id>`.
+--- error

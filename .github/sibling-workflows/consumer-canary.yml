@@ -1,0 +1,158 @@
+# The consumer canary: reliant and control-plane at their main, built against
+# THIS forge. Informational on a pull request, never part of `CI gate`.
+#
+# WHY. forge may break its consumers freely (it is pre-1.0), but the PR that
+# breaks them pays for it: it fixes forge, or ships the `forge fix` codemod.
+# Without this check the break surfaces at pin time, on whoever pins next
+# (research/pinning: failure classes F1 and F2). dev-docs/consumer-canary.md
+# is the long form; the logic is internal/consumercanary, run through
+# scripts/ci-consumer-canary.sh, and `task canary` runs the same thing locally.
+# This file is the wrapper: checkouts, caches, and when to run.
+#
+# WHEN IT RUNS, AND WHY NOT ON EVERY PULL REQUEST.
+#
+#   push to main      always. A red main is bisected from the merge that caused it.
+#   nightly           nightly.yml calls this with `-force`, so consumers that
+#                     moved under an unchanged forge are caught and a red opens
+#                     the "Nightly CI is red" issue.
+#   pull request      only with the `ci:canary` label (`labeled` starts it). A
+#                     whole-module build, vet and test of a consumer measured
+#                     215s + 120s cold for reliant alone, on top of the same for
+#                     control-plane: it cannot fit the five-minute pull-request
+#                     tier (ci.yml, "TWO TIERS"), and every job a pull request
+#                     adds is another runner to queue for. Label a pull request
+#                     that changes pkg/ before merging it. The same diff is also
+#                     judged cheaply, on every pull request, by ci.yml's
+#                     `apigate` step: an incompatible change to pkg/ must be
+#                     declared and ship its codemod.
+#
+# THE PRIVATE CONSUMER. control-plane is private. It is checked out with
+# CONTROL_PLANE_DEPLOY_KEY, a read-only deploy key — the same secret reliant's
+# CI uses for its own cp-contract check (reliant/.github/workflows/ci.yml). The
+# secret must exist in THIS repository's secrets; it does not yet (see
+# dev-docs/consumer-canary.md). Without it the run checks reliant only and says
+# "control-plane NOT CHECKED" as a warning annotation and in the summary: it is
+# never reported as a pass. Fork pull requests get no secrets, so they are the
+# same.
+#
+# The key is handed to actions/checkout alone, in that step's `with:`, and
+# removed afterwards (persist-credentials: false); no later step — including
+# the ones that build and test the code under review — has it in its
+# environment.
+name: Consumer Canary
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  # nightly.yml: forced, so an unchanged forge is still checked against
+  # consumers that moved.
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel a superseded run on a pull request only (ci.yml says why). Adding some
+# OTHER label to a pull request is a `labeled` event too; its run gets a group
+# of its own so it cannot cancel a `ci:canary` run in progress, and all of its
+# jobs skip.
+concurrency:
+  group: consumer-canary-${{ github.event_name }}-${{ github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'ci:canary' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  canary:
+    name: Consumers build against this forge
+    if: >-
+      ${{ github.event_name != 'pull_request'
+        || contains(github.event.pull_request.labels.*.name, 'ci:canary') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # Depth 2: HEAD^1 is the base the diff is judged against (the merge
+      # commit's first parent on a pull request, the previous commit on main).
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Check out reliant main (public)
+        uses: actions/checkout@v7
+        with:
+          repository: reliant-labs/reliant
+          ref: main
+          path: _consumers/reliant
+          fetch-depth: 1
+          persist-credentials: false
+
+      # `secrets` cannot be tested in an `if:`, so a step with the secret in its
+      # own env — and nothing else's — records whether it exists.
+      - name: Is the control-plane deploy key available?
+        id: cpkey
+        env:
+          KEY: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Check out control-plane main (private, read-only)
+        if: ${{ steps.cpkey.outputs.present == 'true' }}
+        uses: actions/checkout@v7
+        with:
+          repository: reliant-labs/control-plane
+          ref: main
+          path: _consumers/control-plane
+          ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The consumers' modules and the objects their builds produced. Keyed on
+      # the consumers' own go.sum files, not forge's: they are what these hold.
+      - name: Note when the Go build cache was restored
+        run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      # Saved once per UTC day, not per push: at ~1.5 GB a push it was one of
+      # the saves that evicted the pull-request tier's caches (ci.yml's
+      # "Build-cache note").
+      - name: The caches' day
+        id: day
+        run: echo "rev=day-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Go caches
+        id: caches
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: canary-${{ runner.os }}-${{ hashFiles('_consumers/*/go.sum') }}-${{ steps.day.outputs.rev }}
+          restore-keys: |
+            canary-${{ runner.os }}-${{ hashFiles('_consumers/*/go.sum') }}-
+            canary-${{ runner.os }}-
+
+      # -force on anything but a push or a pull request: a scheduled or manual
+      # run has no diff to judge, and means "check them all".
+      - name: Build, vet and test the consumers against this forge
+        env:
+          FORCE: ${{ github.event_name != 'push' && github.event_name != 'pull_request' && '-force' || '' }}
+        run: scripts/ci-consumer-canary.sh HEAD^1 -- $FORCE
+
+      - name: Drop the module archives
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.caches.outputs.cache-hit != 'true' }}
+        run: |
+          dir="$(go env GOMODCACHE)/cache/download"
+          if [ -d "$dir" ]; then find "$dir" -name '*.zip' -type f -delete; fi
+      - uses: ./.github/actions/trim-go-build-cache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.caches.outputs.cache-hit != 'true' }}
+      # Main only (ci.yml's "Build-cache note"): an entry a pull request saves
+      # is visible to that pull request alone and costs everyone else budget.
+      - name: Save the Go caches (main only)
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.caches.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.caches.outputs.cache-primary-key }}

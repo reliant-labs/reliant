@@ -1,0 +1,95 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    deploy.reliant.dev/generation: "42"
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.env-prod
+  namespace: flux-acme
+spec:
+  interval: 5m0s
+  layerSelector:
+    mediaType: application/vnd.forge.bundle.manifests.v1.tar+gzip
+    operation: extract
+  ref:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  secretRef:
+    name: registry-pull
+  url: oci://registry.example.com/orgs/acme/bundle.v1/prod
+  verify:
+    matchOIDCIdentity:
+    - issuer: ^https://token\.actions\.githubusercontent\.com$
+      subject: ^https://github\.com/acme/app/\.github/workflows/release\.yml@refs/heads/main$
+    provider: cosign
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: gke-reliant-labs-us-central1-prod
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-gke-reliant-labs-us-central1-prod
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: cluster-a-kubeconfig
+  path: manifests/gke_reliant-labs_us-central1_prod
+  prune: true
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 5m0s
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: vke-staging
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-vke-staging
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: cluster-b-kubeconfig
+  path: manifests/vke-staging
+  prune: true
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 5m0s
+  wait: true

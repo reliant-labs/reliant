@@ -1,0 +1,9 @@
+{
+  "schema": "forge.obs.logs/v1",
+  "ok": false,
+  "exit_code": 2,
+  "error": "the local ClickStack is not running",
+  "suggested": [
+    "forge env up dev"
+  ]
+}
