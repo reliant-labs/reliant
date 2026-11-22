@@ -177,9 +177,11 @@ nodes:
       display_style: warning
       content: "No forge project of {{ inputs.repo }} was found in the worktree {{ nodes.wt.path }}: {{ nodes.dir.stderr }}"
 
-  # The test's package must belong to the selected module: `go test <import path>` resolves it only
-  # then, and a package from another module (or from a module nested below this one) fails as
-  # "[setup failed]", which the verify would read as a flake that is still failing. Prints the module path.
+  # Resolves the test with Go before the agent sees it. `go test <import path>` fails as "[setup failed]"
+  # for a package of another module, of a module nested below this one, or a directory Go builds no files
+  # from (none, docs only, all excluded by build constraints), and `-run '^Test$'` passes vacuously when no
+  # built test file declares the test. The verify would read the first as a flake still failing and the
+  # second as fixed, so both are refused here as invalid input. Prints the module path.
   - id: pkgcheck
     type: run
     timeout: 5m
@@ -201,6 +203,15 @@ nodes:
           fi
           d=$(dirname "$d")
         done
+        errs=$(GOWORK=off go list -e -f '{{ '{{' }} if .Error}}{{ '{{' }} .Error}}{{ '{{' }} "\n"}}{{ '{{' }} end}}{{ '{{' }} range .DepsErrors}}{{ '{{' }} .Err}}{{ '{{' }} "\n"}}{{ '{{' }} end}}' "$pkg" 2>&1) \
+          || { echo "go list could not resolve $pkg in the module $mod: $errs"; exit 2; }
+        [ -z "$errs" ] || { echo "Go cannot load the package $pkg in the module $mod, so there is no test to run: $errs"; exit 2; }
+        dir=$(GOWORK=off go list -e -f '{{ '{{' }} .Dir}}' "$pkg")
+        files=$(GOWORK=off go list -e -f '{{ '{{' }} range .TestGoFiles}}{{ '{{' }} .}}{{ '{{' }} "\n"}}{{ '{{' }} end}}{{ '{{' }} range .XTestGoFiles}}{{ '{{' }} .}}{{ '{{' }} "\n"}}{{ '{{' }} end}}' "$pkg")
+        [ -n "$files" ] || { echo "the package $pkg has no test files Go builds (none, or all excluded by build constraints)"; exit 2; }
+        found=
+        for f in $files; do grep -qE '^func {{ nodes.check.test }}\(' "$dir/$f" && found="$f"; done
+        [ -n "$found" ] || { echo "no test file of $pkg that Go builds declares func {{ nodes.check.test }}; it was renamed or deleted, or is excluded by build constraints"; exit 2; }
         printf '%s' "$mod"
       credentials: none
 
@@ -278,12 +289,14 @@ nodes:
         gate_exit: "{{ nodes.?gate.exit_code.orValue(-1) }}"
         gate_tail: "{{ nodes.?gate.stdout.orValue('') }}"
         # pass: 50/50 under -race and the flake gate green (exit 2, no changed test, is green: the fix may
-        # be outside the tests). retry: the agent says fixed, the verify says no.
+        # be outside the tests). setup: go test could not load the package, which no retry fixes.
+        # retry: the agent says fixed, the verify says no.
         verdict: >-
           {{ !(has(nodes.agent.response) && nodes.agent.response != null) ? 'blocked'
              : (nodes.agent.response.outcome == 'worthless' ? 'worthless'
              : (nodes.agent.response.outcome != 'fixed' ? 'blocked'
-             : (nodes.?race.exit_code.orValue(-1) == 0 && nodes.?gate.exit_code.orValue(-1) in [0, 2] ? 'pass' : 'retry'))) }}
+             : (nodes.?race.exit_code.orValue(-1) == 4 ? 'setup'
+             : (nodes.?race.exit_code.orValue(-1) == 0 && nodes.?gate.exit_code.orValue(-1) in [0, 2] ? 'pass' : 'retry')))) }}
       nodes:
         - id: agent
           type: workflow
@@ -362,11 +375,19 @@ nodes:
             command: |
               cd '{{ iter.item.module }}' || exit 1
               out=$(mktemp)
-              go test -run '^{{ iter.item.test }}$' -count={{ inputs.verify_count }} -race -timeout 50m '{{ iter.item.package }}' >"$out" 2>&1
+              go test -v -run '^{{ iter.item.test }}$' -count={{ inputs.verify_count }} -race -timeout 50m '{{ iter.item.package }}' >"$out" 2>&1
               rc=$?
-              tail -c 6000 "$out"
-              printf '\nfailed runs: %s of {{ inputs.verify_count }}\n' "$(grep -c -- '--- FAIL: {{ iter.item.test }}' "$out")"
+              passed=$(grep -c -- '--- PASS: {{ iter.item.test }} (' "$out")
+              failed=$(grep -c -- '--- FAIL: {{ iter.item.test }} (' "$out")
+              grep -v -e '^=== ' -e '^--- PASS: ' -e '^    --- PASS: ' "$out" | tail -c 6000
+              printf '\npassed runs: %s of {{ inputs.verify_count }}; failed runs: %s\n' "$passed" "$failed"
+              # 4: Go could not load or build the package ([setup failed]), a resolution failure, not a flake.
+              if grep -q '\[setup failed\]' "$out"; then rm -f "$out"; echo 'go test could not load the package: [setup failed]'; exit 4; fi
               rm -f "$out"
+              # A green exit with fewer passes than runs means the test did not run: not a fix.
+              if [ $rc -eq 0 ] && [ "$passed" -ne {{ inputs.verify_count }} ]; then
+                echo 'the test did not run {{ inputs.verify_count }} times; the change renamed, deleted or skipped it'; exit 1
+              fi
               exit $rc
             credentials: none
 
@@ -421,7 +442,8 @@ nodes:
       kind: >-
         {{ nodes.attempt.verdict == 'pass' ? 'fixed'
            : (nodes.attempt.verdict == 'worthless' ? 'worthless'
-           : (nodes.attempt.verdict == 'retry' ? 'still_failing' : 'blocked')) }}
+           : (nodes.attempt.verdict == 'retry' ? 'still_failing'
+           : (nodes.attempt.verdict == 'setup' ? 'setup_failed' : 'blocked'))) }}
       response: "{{ nodes.attempt.response }}"
       signature: >-
         {{ has(nodes.attempt.response.signature) && nodes.attempt.response.signature != '' ? nodes.attempt.response.signature
@@ -569,7 +591,9 @@ nodes:
 
         {{ nodes.result.kind == 'still_failing'
            ? 'The verify was still red after ' + string(inputs.max_attempts) + ' round(s).'
-           : 'The agent stopped without a fix.' }} {{ nodes.result.response.summary }}
+           : (nodes.result.kind == 'setup_failed'
+              ? 'Blocked, not still flaky: `go test` could not load `' + nodes.check.package + '` after the agent\'s change ([setup failed]), so the test never ran.'
+              : 'The agent stopped without a fix.') }} {{ nodes.result.response.summary }}
 
         {{ has(nodes.result.response.root_cause) ? '**What it found:** ' + nodes.result.response.root_cause : '' }}
 
