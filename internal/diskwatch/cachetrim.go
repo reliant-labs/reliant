@@ -286,16 +286,16 @@ func (w *Watcher) trimNativeCaches(ctx context.Context, urgent, measureMod bool,
 			logCacheTrim(trigger, *r)
 		}
 	}
-	if r := w.goWorkDirPass(ctx, cfg, urgent, trigger, p); r != nil {
+	if r := w.goWorkDirPass(ctx, cfg, urgent, trigger, p, false); r != nil {
 		out = append(out, *r)
 	}
 	return out
 }
 
 // goWorkDirTick runs the go_work_dirs pass alone, between full passes, on the
-// Go-cache pass's cadence (reaperTick). The caller holds the storage
-// single-flight.
-func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string) {
+// Go-cache pass's cadence (reaperTick, or ownGoTmpTick with the reaper off,
+// daemonOnly). The caller holds the storage single-flight.
+func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string, daemonOnly bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			logging.WarnContext(ctx, "[diskwatch] Go work dir pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
@@ -307,12 +307,13 @@ func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string) {
 	cfg := w.cacheTrimConfig()
 	ctx, cancel := context.WithTimeout(ctx, cfg.PassBudget)
 	defer cancel()
-	w.goWorkDirPass(ctx, cfg, trigger == "pressure", trigger, w.newPacer(cfg.RatePerSec))
+	w.goWorkDirPass(ctx, cfg, trigger == "pressure", trigger, w.newPacer(cfg.RatePerSec), daemonOnly)
 }
 
 // goWorkDirPass runs the go_work_dirs pass (gowork.go), logs it and records it
-// in the trim audit log.
-func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent bool, trigger string, p *pacer) *CacheTrimResult {
+// in the trim audit log. daemonOnly judges only the daemon's own per-command
+// GOTMPDIR roots (trimGoWorkDirs).
+func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent bool, trigger string, p *pacer, daemonOnly bool) *CacheTrimResult {
 	if ctx.Err() != nil || p.stopped != nil {
 		return nil
 	}
@@ -320,11 +321,9 @@ func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent
 	if urgent && (age < 0 || age > 2*time.Hour) {
 		age = 2 * time.Hour
 	}
-	r, audit := w.trimGoWorkDirs(ctx, age, p)
+	r, audit := w.trimGoWorkDirs(ctx, age, p, daemonOnly)
 	w.auditGoWorkDirs(ctx, trigger, audit)
-	if r != nil {
-		logCacheTrim(trigger, *r)
-	}
+	logWorkDirPass(ctx, trigger, audit)
 	return r
 }
 
