@@ -32,17 +32,18 @@ type Repository interface {
 	SetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string, isVisible bool) error
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
 
-	// Provider accounts: sign-in, re-label, limits and the usage poll a new
-	// account schedules.
+	// The refetch every settings write pushes to the user's other clients.
+	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
+}
+
+// Accounts is the person's provider accounts: sign-in, re-label, limits and the usage poll a new
+// account schedules. credentials/provideraccounts.Service satisfies it; the secrets stay inside it.
+type Accounts interface {
 	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error)
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
 	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
-
-	// The refetch every settings write pushes to the user's other clients.
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-
 	drivers.AccountLister
 }
 

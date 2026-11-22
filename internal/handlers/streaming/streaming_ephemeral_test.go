@@ -165,7 +165,7 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 		ID: chatID, Title: "drained", ProjectID: catchupProject, UserID: raceTestUserID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"historical-agent-msg"},
 	}))
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
@@ -189,7 +189,7 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 	<-chatHub.subscribed
 
 	// A drain that happens now must still be delivered live, unchanged.
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"live-agent-msg"},
 	}))
 	latest, err := repo.GetUpdatesSince(ctx, chatID, snapshot.GetLatestSequence(), 10)
@@ -222,7 +222,7 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 	seen, err := repo.GetLatestUpdateSequence(ctx, chatID)
 	require.NoError(t, err)
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"missed-agent-msg"},
 	}))
 

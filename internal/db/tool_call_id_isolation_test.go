@@ -135,7 +135,7 @@ func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *test
 	})
 	require.ErrorIs(t, err, core.ErrToolCallIDInAnotherChat)
 
-	got, err := repo.GetToolCallResult(ctx, reusedToolCallID)
+	got, err := store.FindToolCallResult(ctx, repo.ORM(), reusedToolCallID)
 	require.NoError(t, err)
 	require.Equal(t, "chat A's output", got.Content)
 }

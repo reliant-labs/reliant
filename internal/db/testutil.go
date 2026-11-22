@@ -18,6 +18,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/pgtest"
 	forgedb "github.com/reliant-labs/reliant/db"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -208,7 +210,7 @@ func NewTestVault(tb testing.TB, repo *Repo) vault.Service {
 // without one.
 func EnableTestCredentialSealing(tb testing.TB, repo *Repo) {
 	tb.Helper()
-	repo.EnableCredentialSealing(NewTestVault(tb, repo))
+	repo.testVault = NewTestVault(tb, repo)
 }
 
 // setupTestRepo is the shared implementation: a Repo, with credential sealing,
@@ -333,9 +335,35 @@ func SeedProviderAccount(t *testing.T, repo *Repo, userID, provider, secret stri
 		u.AuthKind, u.IdentityKey = core.AuthKindAPIKey, core.APIKeyIdentityKey(userID, provider, secret)
 		u.KeyHint = core.KeyHint(secret)
 	}
-	acct, _, err := repo.UpsertProviderAccount(context.Background(), u)
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: repo.testVault})
+	if err != nil {
+		t.Fatalf("seed %s account: %v", provider, err)
+	}
+	acct, _, err := accounts.UpsertProviderAccount(context.Background(), u)
 	if err != nil {
 		t.Fatalf("seed %s account: %v", provider, err)
 	}
 	return acct
+}
+
+// TestAccounts is the provider-account store over repo's database and a throwaway vault: what a
+// test uses to seed or read accounts now that the facade does not.
+func TestAccounts(tb testing.TB, repo *Repo) provideraccounts.Service {
+	tb.Helper()
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: repo.testVault})
+	if err != nil {
+		tb.Fatalf("provider accounts: %v", err)
+	}
+	return accounts
+}
+
+// TestOrgAccounts is the org-credential store over repo's database and a throwaway vault: what a
+// test uses to administer an org's accounts, grants and seats now that the facade does not.
+func TestOrgAccounts(tb testing.TB, repo *Repo) orgaccounts.Service {
+	tb.Helper()
+	org, err := orgaccounts.NewInstrumented(orgaccounts.Deps{DB: repo.ORM(), Sealer: repo.testVault})
+	if err != nil {
+		tb.Fatalf("org accounts: %v", err)
+	}
+	return org
 }

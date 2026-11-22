@@ -72,6 +72,9 @@ type ToolsOptions struct {
 	// no doorbell, and delivery falls back to the recipient's next loop
 	// boundary (the daemon runtime has no Temporal connection).
 	AgentMessageNotifier AgentMessageNotifier
+	// ProviderBackoff lets spawn_status say which sub-agents are parked on a
+	// provider usage limit. Optional: nil leaves them reading as running.
+	ProviderBackoff providerBackoffReader
 	// SpawnStopper lets spawn_stop reach the workflow running a sub-agent.
 	// Optional: nil means spawn_stop reports that stopping is unavailable
 	// here, which is the honest answer in the daemon runtime (no Temporal
@@ -549,7 +552,7 @@ func (f *ToolsFactory) WithdrawQuestion() Tool {
 
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
-	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions, Tree: f.opts.SpawnTree})
+	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions, Tree: f.opts.SpawnTree, Backoff: f.opts.ProviderBackoff})
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {

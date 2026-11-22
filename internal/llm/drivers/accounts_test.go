@@ -17,7 +17,7 @@ import (
 
 func addClaude(t *testing.T, repo *db.Repo, user, name string) core.ProviderAccount {
 	t.Helper()
-	a, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	a, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.ClaudeIdentityKey(name, "org-"+name), Email: name + "@example.com",
 		ExternalAccountID: name, OrganizationID: "org-" + name,
@@ -30,7 +30,7 @@ func addClaude(t *testing.T, repo *db.Repo, user, name string) core.ProviderAcco
 
 func availableFor(t *testing.T, repo *db.Repo, user string) models.AvailableDrivers {
 	t.Helper()
-	available, err := buildAvailableDrivers(context.Background(), repo, PersonalScope(user), noReportClients)
+	available, err := buildAvailableDrivers(context.Background(), db.TestAccounts(t, repo), PersonalScope(user), noReportClients)
 	require.NoError(t, err)
 	return available
 }
@@ -73,7 +73,7 @@ func TestAvailableDrivers_DefaultFollowsPriority(t *testing.T) {
 	const user = "reorder"
 	a := addClaude(t, repo, user, "alice")
 	b := addClaude(t, repo, user, "bob")
-	require.NoError(t, repo.ReorderProviderAccounts(context.Background(), user, "claude", []string{b.ID, a.ID}))
+	require.NoError(t, db.TestAccounts(t, repo).ReorderProviderAccounts(context.Background(), user, "claude", []string{b.ID, a.ID}))
 
 	available := availableFor(t, repo, user)
 	assert.Equal(t, b.ID, available.Drivers["claude"].AccountID)
@@ -95,12 +95,12 @@ func TestAvailableDrivers_PausedAbsentLimitedPresentNeedsSignInAbsent(t *testing
 	broken := addClaude(t, repo, user, "broken")
 
 	yes, reason := true, "the provider rejected the saved sign-in"
-	_, err := repo.PatchProviderAccount(ctx, user, paused.ID, core.AccountPatch{Paused: &yes})
+	_, err := db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, paused.ID, core.AccountPatch{Paused: &yes})
 	require.NoError(t, err)
-	_, err = repo.PatchProviderAccount(ctx, user, broken.ID, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, broken.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), limited.ID, until, "5h", false))
+	require.NoError(t, db.TestAccounts(t, repo).BenchAccount(ctx, core.UserAccountOwner(user), limited.ID, until, "5h", false))
 
 	available := availableFor(t, repo, user)
 	ids := []string{}
@@ -114,9 +114,9 @@ func TestAvailableDrivers_PausedAbsentLimitedPresentNeedsSignInAbsent(t *testing
 
 	// Pausing/limiting every account must not take the provider out of resolution (a limited
 	// account stays); an only-account needing sign-in does.
-	_, err = repo.PatchProviderAccount(ctx, user, live.ID, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, live.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
-	_, err = repo.PatchProviderAccount(ctx, user, limited.ID, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, limited.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	available = availableFor(t, repo, user)
 	assert.NotContains(t, available.Drivers, models.DriverID("claude"))
@@ -130,7 +130,7 @@ func TestAvailableDrivers_AFullyLimitedProviderStaysResolvable(t *testing.T) {
 	defer cleanup()
 	const user = "all-limited"
 	a := addClaude(t, repo, user, "alice")
-	require.NoError(t, repo.BenchAccount(context.Background(), core.UserAccountOwner(user), a.ID, time.Now().Add(time.Hour), "5h", false))
+	require.NoError(t, db.TestAccounts(t, repo).BenchAccount(context.Background(), core.UserAccountOwner(user), a.ID, time.Now().Add(time.Hour), "5h", false))
 
 	available := availableFor(t, repo, user)
 	require.Contains(t, available.Drivers, models.DriverID("claude"))
@@ -143,7 +143,7 @@ func TestAvailableDrivers_CodexAccountsCarryDistinctInstallationDiscriminators(t
 	defer cleanup()
 	const user = "codex-two"
 	for _, name := range []string{"alice", "bob"} {
-		_, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+		_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 			UserID: user, Provider: "codex", AuthKind: core.AuthKindOAuth,
 			IdentityKey: core.CodexIdentityKey("chatgpt-"+name, "u"), ExternalAccountID: "chatgpt-" + name,
 			Secrets: core.AccountSecrets{Secret: mintCodexJWT(t, "chatgpt-"+name, time.Now().Add(time.Hour)), Refresh: "rt-" + name},
@@ -164,7 +164,7 @@ func TestAvailableDrivers_CodexAccountsCarryDistinctInstallationDiscriminators(t
 func TestImageGenerationUsesTheDefaultAccount(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	previous := AccountAvailabilityClient
 	AccountAvailabilityClient = noReportClients
 	t.Cleanup(func() { AccountAvailabilityClient = previous })
@@ -172,7 +172,7 @@ func TestImageGenerationUsesTheDefaultAccount(t *testing.T) {
 	const user = "image-default"
 	ctx := context.Background()
 	for _, key := range []string{"g-first", "g-second"} {
-		_, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 			UserID: user, Provider: "gemini", AuthKind: core.AuthKindAPIKey,
 			IdentityKey: core.APIKeyIdentityKey(user, "gemini", key), Secrets: core.AccountSecrets{Secret: key},
 		})
@@ -227,7 +227,7 @@ func TestDeadLineageMarksNeedsSignInAndLeavesAccounts(t *testing.T) {
 	ctx := context.Background()
 	const user = "dead-lineage"
 
-	a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	a, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.ClaudeIdentityKey("acct", "org"), Secrets: core.AccountSecrets{Secret: "a1", Refresh: "r1"},
 		ExpiresAt: time.Now().Add(-time.Hour),
@@ -237,7 +237,7 @@ func TestDeadLineageMarksNeedsSignInAndLeavesAccounts(t *testing.T) {
 	cfg := availableFor(t, repo, user).Drivers["claude"]
 	require.Equal(t, a.ID, cfg.AccountID)
 
-	_, err = CoordinatedAccountRefresh(ctx, repo, user, cfg.AccountID,
+	_, err = CoordinatedAccountRefresh(ctx, db.TestAccounts(t, repo), user, cfg.AccountID,
 		llm.OAuthTokens{AccessToken: cfg.APIKey, RefreshToken: cfg.RefreshToken, ExpiresAt: cfg.TokenExpiresAt},
 		func(string) (core.AccountTokens, error) {
 			return core.AccountTokens{}, &llm.RefreshRejectedError{Message: "claude session expired: please reconnect Claude"}
@@ -256,10 +256,10 @@ func TestHasStaleReliantKey_ReadsTheAccount(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	db.SeedProviderAccount(t, repo, "stale-user", "reliant", "rlnt_abcdef0123456789")
-	stale, err := HasStaleReliantKey(ctx, repo, "stale-user")
+	stale, err := HasStaleReliantKey(ctx, db.TestAccounts(t, repo), "stale-user")
 	require.NoError(t, err)
 	assert.True(t, stale)
-	stale, err = HasStaleReliantKey(ctx, repo, "nobody")
+	stale, err = HasStaleReliantKey(ctx, db.TestAccounts(t, repo), "nobody")
 	require.NoError(t, err)
 	assert.False(t, stale)
 }
@@ -277,20 +277,20 @@ func TestRefreshMergeKeepsTheAccountWithTheRealIdentity(t *testing.T) {
 
 	real := addClaude(t, repo, user, "alice")
 	label := "work"
-	_, err := repo.PatchProviderAccount(ctx, user, real.ID, core.AccountPatch{Label: &label})
+	_, err := db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, real.ID, core.AccountPatch{Label: &label})
 	require.NoError(t, err)
-	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), real.ID, time.Now().Add(time.Hour), "five_hour", false))
-	require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
+	require.NoError(t, db.TestAccounts(t, repo).BenchAccount(ctx, core.UserAccountOwner(user), real.ID, time.Now().Add(time.Hour), "five_hour", false))
+	require.NoError(t, db.TestAccounts(t, repo).ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
 
 	time.Sleep(2 * time.Millisecond) // a clock tick: the placeholder's timestamps follow the real row's
-	placeholder, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	placeholder, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.PlaceholderIdentityKey("copied-row"), Secrets: core.AccountSecrets{Secret: "old-access", Refresh: "old-refresh"},
 		ExpiresAt: time.Now().Add(-time.Hour),
 	})
 	require.NoError(t, err)
 
-	_, err = CoordinatedAccountRefresh(ctx, repo, user, placeholder.ID,
+	_, err = CoordinatedAccountRefresh(ctx, db.TestAccounts(t, repo), user, placeholder.ID,
 		llm.OAuthTokens{AccessToken: "old-access", RefreshToken: "old-refresh"},
 		func(string) (core.AccountTokens, error) {
 			return core.AccountTokens{
@@ -300,17 +300,17 @@ func TestRefreshMergeKeepsTheAccountWithTheRealIdentity(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	all, err := repo.ListProviderAccounts(ctx, user)
+	all, err := db.TestAccounts(t, repo).ListProviderAccounts(ctx, user)
 	require.NoError(t, err)
 	require.Len(t, all, 1, "merged into one account")
 	assert.Equal(t, real.ID, all[0].ID, "the account the user configured survives, not the placeholder")
 	assert.Equal(t, "work", all[0].Label)
-	limits, err := repo.GetAccountLimits(ctx, real.ID)
+	limits, err := db.TestAccounts(t, repo).GetAccountLimits(ctx, real.ID)
 	require.NoError(t, err)
 	require.NotNil(t, limits)
 	assert.NotNil(t, limits.LimitedUntil, "its bench survives")
 	assert.NotNil(t, limits.UsageAPINextAt, "its poll schedule survives")
-	got, err := repo.GetProviderAccountWithSecrets(ctx, user, real.ID)
+	got, err := db.TestAccounts(t, repo).GetProviderAccountWithSecrets(ctx, user, real.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "new-refresh", got.Secrets.Refresh, "and it carries the fresh lineage")
 }

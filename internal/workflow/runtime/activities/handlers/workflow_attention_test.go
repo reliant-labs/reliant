@@ -20,6 +20,8 @@ func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 			return &db.Chat{ID: "actual", LaunchKind: string(core.TriggerEventKindSchedule)}, nil
 		},
+	}
+	attention := &MockAttentionRecorder{
 		ApplyAttentionUpdateFunc: func(_ context.Context, u core.AttentionUpdate) (core.AttentionResult, error) {
 			calls++
 			require.Equal(t, "actual", u.ChatID)
@@ -27,7 +29,7 @@ func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 			return core.AttentionResult{}, wantErr
 		},
 	}
-	a := NewWorkflowStatusActivity(workflowStatusDeps(store))
+	a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Attention: attention})
 	in := WorkflowStatusInput{ChatID: "actual", Status: "failed", LaunchRun: true, Attention: &core.AttentionUpdate{ChatID: "forged", Phase: "start"}}
 	_, err := a.recordAttention(context.Background(), in)
 	require.ErrorIs(t, err, wantErr)
@@ -66,7 +68,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	require.False(t, managed[chatID])
 }
 
-type unavailableAttentionStore struct{ *db.Repo }
+type unavailableAttentionStore struct{}
 
 func (s unavailableAttentionStore) ApplyAttentionUpdate(context.Context, core.AttentionUpdate) (core.AttentionResult, error) {
 	return core.AttentionResult{}, errors.New("attention storage unavailable")
@@ -80,12 +82,12 @@ func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
 			chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
 			in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "success", LaunchRun: true, Thread: chatID,
 				Attention: &core.AttentionUpdate{RunID: uuid.NewString(), StartedAt: time.Now().UTC(), Key: "incident", Phase: "finish", State: "action_required"}}
-			var store WorkflowStatusStore = f.h.Repo()
+			deps := workflowStatusDeps(f.h.Repo())
 			if lost {
-				store = unavailableAttentionStore{f.h.Repo()}
+				deps.Attention = unavailableAttentionStore{}
 			}
 			var out WorkflowStatusOutput
-			err := f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(store)).Execute, in, &out)
+			err := f.h.ExecuteActivity(NewWorkflowStatusActivity(deps).Execute, in, &out)
 			wf, getErr := f.h.Repo().GetWorkflow(ctx, chatID)
 			require.NoError(t, getErr)
 			incidents, listErr := f.h.Repo().ListAttentionIncidents(ctx, f.userID)
@@ -110,12 +112,16 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 	chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
 	at := time.Now().UTC().Add(-time.Minute)
 	actorID := uuid.NewString()
-	_, err := f.h.Repo().ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: chatID, RunID: actorID, StartedAt: at, Phase: "start", Key: "observer"})
+	_, err := NewAttentionRecorder(f.h.Repo().ORM()).ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: chatID, RunID: actorID, StartedAt: at, Phase: "start", Key: "observer"})
 	require.NoError(t, err)
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: chatID,
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "observer", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
-	err = f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(unavailableAttentionStore{f.h.Repo()})).Execute, in, &out)
+	err = f.h.ExecuteActivity(NewWorkflowStatusActivity(func() WorkflowStatusDeps {
+		d := workflowStatusDeps(f.h.Repo())
+		d.Attention = unavailableAttentionStore{}
+		return d
+	}()).Execute, in, &out)
 	require.Error(t, err, "terminal activity retries rather than acknowledge a lost transition")
 	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
 	require.NoError(t, err)
@@ -140,9 +146,9 @@ func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
 	repair := f.launch(core.TriggerEventKindWorkflowEvent, db.Active())
 	at := time.Now().UTC().Add(-time.Minute)
 	actorID := uuid.NewString()
-	_, err := f.h.Repo().ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: observer, RunID: actorID, StartedAt: at, Phase: "start", Key: "repo:one:pr:12"})
+	_, err := NewAttentionRecorder(f.h.Repo().ORM()).ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: observer, RunID: actorID, StartedAt: at, Phase: "start", Key: "repo:one:pr:12"})
 	require.NoError(t, err)
-	_, err = f.h.Repo().ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: repair, RunID: uuid.NewString(), StartedAt: at.Add(time.Second), Phase: "start", Key: "repo:one:pr:12", State: "recovering", RecoveryTimeout: time.Hour})
+	_, err = NewAttentionRecorder(f.h.Repo().ORM()).ApplyAttentionUpdate(ctx, core.AttentionUpdate{ChatID: repair, RunID: uuid.NewString(), StartedAt: at.Add(time.Second), Phase: "start", Key: "repo:one:pr:12", State: "recovering", RecoveryTimeout: time.Hour})
 	require.NoError(t, err)
 	// A late observer failure is fenced but remains an honest unsuccessful job.
 	in := WorkflowStatusInput{ChatID: observer, WorkflowID: observer, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: observer,
