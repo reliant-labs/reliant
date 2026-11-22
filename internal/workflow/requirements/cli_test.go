@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -62,15 +63,21 @@ func TestCLILoginSignedInIsOK(t *testing.T) {
 }
 
 // A daemon older than the one that appends ~/.local/bin to its children's
-// PATH: the CLI is there, signed in, but its run steps cannot call it by name.
+// PATH: the CLI is there and signed in; run steps can call it by full path.
 func TestCLILoginOffPath(t *testing.T) {
-	m := &fakeMachine{out: cliProbe("RELIANT_CLI\tcodex\tsigned_in\tlocal_bin"), name: "ci-box"}
-	report, err := Check(context.Background(), &reliantv1.WorkflowRequirements{CliLogin: []string{"codex"}}, m, nil)
-	require.NoError(t, err)
-	require.Len(t, report.Problems, 1)
-	assert.Contains(t, report.Problems[0].Problem, "installed in ~/.local/bin on machine ci-box, which is not on the PATH its run steps get")
-	assert.Contains(t, report.Problems[0].Fix, "update Reliant on machine ci-box")
-	assert.Contains(t, report.Problems[0].Fix, `"$HOME/.local/bin/codex"`)
+	for _, state := range []string{"signed_in", "signed_out", "expired", "unknown"} {
+		t.Run(state, func(t *testing.T) {
+			m := &fakeMachine{out: cliProbe("RELIANT_CLI\tcodex\t" + state + "\tlocal_bin"), name: "ci-box"}
+			report, err := Check(context.Background(), &reliantv1.WorkflowRequirements{CliLogin: []string{"codex"}}, m, nil)
+			require.NoError(t, err)
+			if state == "signed_in" {
+				assert.True(t, report.OK(), report.Error())
+			} else {
+				require.Len(t, report.Problems, 1, "off-PATH must not mask sign-in failures")
+				assert.Equal(t, "codex", report.Problems[0].Name)
+			}
+		})
+	}
 }
 
 // The machine's name is quoted for the shell when it needs to be, and a
@@ -117,6 +124,9 @@ func TestValidateRejectsUnknownVendors(t *testing.T) {
 // step is) against fake vendor CLIs: every verdict line parses, and nothing a
 // vendor printed comes back.
 func TestProbeCommandWithCLILogins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixtures require POSIX shell scripts and symlinks")
+	}
 	bin := t.TempDir()
 	home := t.TempDir()
 	write := func(name, body string) {
