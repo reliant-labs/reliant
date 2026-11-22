@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -229,7 +231,7 @@ func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) 
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	starter := &fakeStarter{}
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
 		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", Messages: userSeed("go"),
 	})
