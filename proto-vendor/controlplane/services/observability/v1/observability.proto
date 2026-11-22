@@ -82,6 +82,21 @@ service ObservabilityService {
     };
   }
 
+  // QueryMetric returns time series for one metric: an aggregation, optional
+  // group-by attribute keys, and a step. Max range 30 days.
+  //
+  // Deprecated: it is a one-series line panel; call QueryPanel instead, which
+  // runs the same evaluator and also returns series_meta, series_total and
+  // warnings. Removed in a follow-up once the console and forge's cloud backend
+  // no longer call it.
+  rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
+    option deprecated = true;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetMetric is the metric detail the explorer's side pane opens on: the
   // catalog entry, the export-interval estimate, whether the metric mixes
   // temporalities, every attribute key with its distinct-value estimate (and
@@ -259,6 +274,22 @@ service ObservabilityService {
   // a deployed environment's real spec replaces it once it reaches
   // control-plane. Max range 30 days.
   rpc GetDashboards(GetDashboardsRequest) returns (GetDashboardsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetObservabilityUsage returns the org's month-to-date observability usage
+  // against its included allowance: billed bytes, projected overage, a
+  // per-signal and per-service breakdown, and the quota state the gateway is
+  // enforcing. It is a plain Postgres read of what the hourly meter wrote
+  // (nothing here queries ClickHouse), so it works when the tenant is
+  // unreachable. Membership-checked on org_id.
+  // Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+  // Kept until deployed clients have migrated; it remains Postgres-only.
+  rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option deprecated = true;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -648,7 +679,7 @@ message TimePoint {
   // ignored. Metrics panels only (a formula over a missing operand).
   // A flag rather than `optional double value`: the latter turns the Go field
   // into *float64 for every message that carries a TimePoint (service
-  // overview trends, metric panels, sql panels), a source-breaking change for
+  // overview trends, QueryMetric, sql panels), a source-breaking change for
   // callers that never see a gap.
   bool null = 4;
 }
@@ -921,6 +952,20 @@ enum MetricTemporality {
   METRIC_TEMPORALITY_CUMULATIVE = 2;
 }
 
+enum MetricAggregation {
+  METRIC_AGGREGATION_UNSPECIFIED = 0; // default per type: AVG gauge, RATE sum, AVG histogram
+  METRIC_AGGREGATION_AVG = 1;
+  METRIC_AGGREGATION_SUM = 2;
+  METRIC_AGGREGATION_MIN = 3;
+  METRIC_AGGREGATION_MAX = 4;
+  METRIC_AGGREGATION_COUNT = 5; // data points (gauge), observations (histogram)
+  METRIC_AGGREGATION_INCREASE = 6; // sum/histogram: growth within each step
+  METRIC_AGGREGATION_RATE = 7; // INCREASE per second
+  METRIC_AGGREGATION_P50 = 8; // histogram only
+  METRIC_AGGREGATION_P95 = 9; // histogram only
+  METRIC_AGGREGATION_P99 = 10; // histogram only
+}
+
 message ListMetricsRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // Substring of the metric name.
@@ -1077,6 +1122,55 @@ message MetricExemplar {
   // The trace is in the trace store. false: it was sampled out and the trace
   // view would be empty.
   bool trace_stored = 6;
+}
+
+message QueryMetricRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  MetricType metric_type = 3;
+  // Gauge and sum: each series is first reduced to its last value in the
+  // bucket, then AVG/SUM/MIN/MAX are taken across series (so SUM of a memory
+  // gauge over pods is the total); COUNT is the number of data points.
+  // INCREASE/RATE (sum, histogram) use per-series deltas and handle both
+  // cumulative and delta temporality, treating a decrease as a counter reset.
+  MetricAggregation aggregation = 4;
+  // Allowlisted keys to split series by (see QueryScope; for a metric, its
+  // declared data-point attributes are allowed too). "reliant.env.id" or
+  // "deployment.environment.name" compares environments, "k8s.container.name" a
+  // container. Max 3.
+  repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
+  reserved 6;
+  reserved "filters";
+  // Bucket width. 0 = chosen from the range (about 120 points). The server
+  // raises it so a series never exceeds 1500 points; step_seconds in the
+  // response is the width used.
+  int32 step_seconds = 7 [(buf.validate.field).int32.gte = 0];
+}
+
+message QueryMetricResponse {
+  repeated MetricSeries series = 1;
+  int32 step_seconds = 2;
+  MetricType metric_type = 3;
+  string unit = 4;
+  // The aggregation used (the default per type when the request left it
+  // unspecified).
+  MetricAggregation aggregation = 6;
+  // True when more than 50 series matched; the largest 50 are returned.
+  bool series_truncated = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 7;
+}
+
+message MetricSeries {
+  // group_by key -> value for this series. Empty without group_by.
+  map<string, string> labels = 1;
+  repeated TimePoint points = 2;
 }
 
 // === Service overview ===
@@ -1629,7 +1723,7 @@ message GetWorkloadRequest {
   ];
   // Narrow to one container. Empty = every container.
   string container = 3 [(buf.validate.field).string.max_len = 256];
-  // Bucket width. 0 = chosen from the range (about 120 points).
+  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
   int32 step_seconds = 4 [(buf.validate.field).int32.gte = 0];
 }
 
@@ -1684,7 +1778,7 @@ message GetManagedDatabaseMetricsRequest {
   // The ManagedDatabase name (the CloudNativePG cluster). Empty = every
   // managed database in scope.
   string database = 2 [(buf.validate.field).string.max_len = 256];
-  // Bucket width. 0 = chosen from the range.
+  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
   int32 step_seconds = 3 [(buf.validate.field).int32.gte = 0];
 }
 
@@ -2255,6 +2349,114 @@ message QueryQuotaExhausted {
   // "automation" (alert evaluation) or "agent" (the CLI and tokens). Empty
   // when the quota is not split into lanes.
   string lane = 3;
+}
+
+// === Usage and billing ===
+
+message GetObservabilityUsageRequest {
+  // The org whose usage to return. The caller must be a member.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QuotaState is what the gateway does with the org's telemetry right now.
+enum ObservabilityQuotaState {
+  OBSERVABILITY_QUOTA_STATE_UNSPECIFIED = 0;
+  // Under the allowance, or billed (funded) / exempt: nothing is dropped.
+  OBSERVABILITY_QUOTA_STATE_OK = 1;
+  // At or over 100% with no way to bill the overage: debug logs and routine
+  // traces are dropped; errors and metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_100 = 2;
+  // At or over 150%: only error logs, error spans and metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_150 = 3;
+}
+
+message GetObservabilityUsageResponse {
+  // The billing period: the UTC calendar month. period_end is exclusive.
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  // The end of the last fully metered hour. Usage lags real time by up to
+  // about an hour and a quarter; the page must say so.
+  google.protobuf.Timestamp measured_through = 3;
+
+  // Billed bytes this period (uncompressed bytes stored, after the browser cap),
+  // and the included allowance. 1 GB = 2^30 bytes in the product.
+  int64 used_bytes = 4;
+  int64 allowance_bytes = 5;
+
+  // Overage accrued so far, and projected for the whole period at the current
+  // rate of use, in cents. Zero for an exempt org.
+  int64 overage_cents = 6;
+  int64 projected_bytes = 7;
+  int64 projected_overage_cents = 8;
+  // Cents per GB above the allowance, as a decimal string ("25.0000").
+  string rate_cents_per_gb = 9;
+
+  // What the gateway enforces, and the state usage alone implies. They differ
+  // for an org that pays (enforced ok, usage over_100) or is exempt.
+  ObservabilityQuotaState state = 10;
+  ObservabilityQuotaState usage_state = 11;
+  bool funded = 12;
+  bool exempt = 13;
+  // A funded org's overage is billed up to this many cents a month; at it the
+  // gateway degrades telemetry like an unfunded org.
+  int64 spend_cap_cents = 14;
+  bool spend_cap_reached = 15;
+
+  // Anonymous browser telemetry is billed only up to a share of the allowance.
+  int64 browser_bytes = 16;
+  int64 browser_billed_bytes = 17;
+  int64 browser_cap_bytes = 18;
+
+  repeated SignalUsage by_signal = 19;
+  repeated ServiceUsage by_service = 20;
+
+  // Bytes stored that were never billed because they are Reliant's own telemetry
+  // (workspace/daemon and platform logs). Zero for every customer in normal
+  // operation: that data is routed to Reliant's own org.
+  int64 operator_bytes = 21;
+  // Billed bytes that are customer metadata: per-workload container data about the
+  // org's own deployments (pod CPU and memory, restarts, k8s events, image and
+  // version). Billed like any other data and included in used_bytes; reported on
+  // its own line. Node- and cluster-level platform data ("infrastructure") is
+  // Reliant's own and is never billed.
+  int64 metadata_bytes = 22;
+  // The split of stored bytes across services and categories (by_service,
+  // browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
+  // signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
+  // weighted by row count instead of bytes. Only a billing-exempt org, which is
+  // never charged, is metered this way. stored bytes and rows stay exact.
+  bool breakdown_estimated = 23;
+
+  // Dev telemetry: what developers' LOCAL stacks sent with dev tokens
+  // (reliant.source=dev). It is metered inside the allowance and never billed as
+  // overage: dev_bytes is every dev byte stored; dev_billed_bytes the part of it
+  // counted in used_bytes (within the month's dev ceiling, and only while the
+  // allowance has room); dev_ceiling_bytes the month's dev ceiling (25 percent of
+  // the allowance, at least 2 GiB). Past the ceiling dev_state is over_100: the
+  // gateway then drops the org's dev DEBUG logs and error-free dev traces, and
+  // nothing else of the org's.
+  int64 dev_bytes = 24;
+  int64 dev_billed_bytes = 25;
+  int64 dev_ceiling_bytes = 26;
+  ObservabilityQuotaState dev_state = 27;
+}
+
+message SignalUsage {
+  // "logs", "traces", "metrics" or "profiles".
+  string signal = 1;
+  int64 billed_bytes = 2;
+  int64 stored_bytes = 3;
+  int64 rows = 4;
+}
+
+message ServiceUsage {
+  // The service.name; empty for data that carried none.
+  string service = 1;
+  string signal = 2;
+  int64 billed_bytes = 3;
+  // billed_bytes is weighted by rows, not bytes, for at least one hour (see
+  // GetObservabilityUsageResponse.breakdown_estimated).
+  bool estimated = 4;
 }
 
 // === Release health ===

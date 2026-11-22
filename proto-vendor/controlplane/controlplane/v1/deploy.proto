@@ -304,11 +304,11 @@ message DeployEnvironment {
   // 'dev' | 'staging' | 'prod' | 'preview-pr-123'. Free-form: the platform
   // owns an environment's lifecycle, not a tenant's taxonomy.
   string name = 2;
-  // 3 was kind (per-workload placement, forge docs/design/per-workload-placement.md):
+  // DEPRECATED (per-workload placement, forge docs/design/per-workload-placement.md):
   // placement is a property of each workload, never of the environment. Read
-  // lifetime, secret_posture and hosted_slot instead.
-  reserved 3;
-  reserved "kind";
+  // lifetime, secret_posture and hosted_slot instead. Still populated, from
+  // the legacy column, until the next release reserves the tag.
+  DeployEnvironmentKind kind = 3 [deprecated = true];
 
   // READ-ONLY. The Kubernetes namespace, allocated by the platform from the
   // tenant's namespace_prefix. A client that could name this could name

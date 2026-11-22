@@ -1815,10 +1815,20 @@ message GetCurrentUserComputeUsageResponse {
   // not be rendered as a value.
   bool usage_measured = 10;
 
-  // 11-15 were the integer small-daemon-second fields, superseded by the
-  // exact weighted-second fields below.
-  reserved 11, 12, 13, 14, 15;
-  reserved "included_small_daemon_seconds", "used_small_daemon_seconds", "remaining_small_daemon_seconds", "granted_small_daemon_seconds_remaining", "running_multiplier";
+  // The plan allowance for this period, in small-daemon-seconds.
+  int64 included_small_daemon_seconds = 11 [deprecated = true];
+  // Consumed this period: drained counter + undrained segments.
+  int64 used_small_daemon_seconds = 12 [deprecated = true];
+  // max(0, included − used). Never negative.
+  int64 remaining_small_daemon_seconds = 13 [deprecated = true];
+  // One-time coupon grant still unspent, in small-daemon-seconds. Reported
+  // alongside the allowance rather than folded into it: the allowance
+  // refills every period, a grant depletes once. Spent after the allowance
+  // and before overage.
+  int64 granted_small_daemon_seconds_remaining = 14 [deprecated = true];
+  // Sum of the multipliers of the daemons running right now (the burn rate
+  // in SDS per second). Zero when nothing runs.
+  int64 running_multiplier = 15 [deprecated = true];
   // Exact rational weighted-second accounting; no legacy integer truncation.
   string pricing_version = 23;
   string allowance_weighted_seconds = 24;
@@ -1857,11 +1867,12 @@ message GetCurrentUserComputeUsageResponse {
 // SizeUsage is one size's running usage within a period (design §6.1).
 message SizeUsage {
   string size = 1;
-  // 2-5 were the integer multiplier and whole-second fields, superseded by
-  // cost_weight and the exact_* rational fields.
-  reserved 2, 3, 4, 5;
-  reserved "multiplier", "running_seconds", "included_small_daemon_seconds", "overage_seconds";
-  // exact_overage_seconds × this size's hourly price / 3600, in cents, as an exact
+  int64 multiplier = 2 [deprecated = true];
+  // Deprecated whole seconds; exact rational field is canonical.
+  int64 running_seconds = 3 [deprecated = true];
+  int64 included_small_daemon_seconds = 4 [deprecated = true];
+  int64 overage_seconds = 5 [deprecated = true];
+  // overage_seconds × this size's hourly price / 3600, in cents, as an exact
   // decimal string rounded half-up to 4 places.
   string overage_cost_cents = 6;
   string pricing_version = 7;
@@ -1882,12 +1893,10 @@ message StorageUsage {
   int64 included_gib = 2;
   // max(0, provisioned − included): what bills right now.
   int64 extra_gib = 3;
-  // 4 was the integer extra_gib_seconds, superseded by exact_extra_gib_seconds.
-  reserved 4;
-  reserved "extra_gib_seconds";
-  // Billed excess GiB × seconds so far this period, as an exact rational.
+  // Billed excess GiB × seconds so far this period.
+  int64 extra_gib_seconds = 4 [deprecated = true];
   string exact_extra_gib_seconds = 8;
-  // exact_extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
+  // extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
   string cost_cents = 5;
   // cost_cents plus extra_gib carried to the end of the period.
   string projected_cost_cents = 6;
