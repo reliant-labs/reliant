@@ -129,6 +129,9 @@ func RecordProjectDaemonQueued(ctx context.Context, db orm.Context, projectID, d
 // reads the rows, so a clone's stuck-clone timeout counts from the connect
 // that let it start, not from when it was queued.
 func StartQueuedProjectDaemonClones(ctx context.Context, db orm.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
 		Set("clone_started_at = NOW()").
 		Where("daemon_id = ?", daemonID).
@@ -163,6 +166,9 @@ func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, da
 // project id. A non-empty installErr marks the row failed; otherwise it is
 // installed, as of now.
 func ResolveQueuedProjectDaemon(ctx context.Context, db orm.Context, requestID, installErr string) error {
+	if requestID == "" {
+		return fmt.Errorf("request ID cannot be empty")
+	}
 	q := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil))
 	if installErr != "" {
 		q = q.Set("install_state = ?", core.ProjectInstallFailed).
@@ -246,6 +252,9 @@ func ListProjectDaemonsForProjects(ctx context.Context, db orm.Context, projectI
 // ListProjectDaemonsForDaemon returns every project installed (or being
 // installed) on the daemon, oldest clone first.
 func ListProjectDaemonsForDaemon(ctx context.Context, db orm.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	if daemonID == "" {
+		return nil, fmt.Errorf("daemon ID cannot be empty")
+	}
 	rows, err := ListProjectDaemon(ctx, db,
 		orm.WhereEq(ProjectDaemonFieldDaemonID, daemonID),
 		orm.WithOrderBy(ProjectDaemonFieldClonedAt, orm.Asc))

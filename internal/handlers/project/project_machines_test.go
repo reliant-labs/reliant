@@ -553,9 +553,9 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	p := f.project(t, "m", "/home/workspace/m-"+uuid.NewString(), f.cloud, nil)
 	oldPath, newPath := "/Users/me/m-"+uuid.NewString(), "/Users/me/moved-"+uuid.NewString()
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, oldPath, nil))
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: f.repo, Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
-	}}}))
+	}}})))
 
 	_, err := svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,

@@ -294,7 +294,7 @@ func TestProjectDaemonQueries(t *testing.T) {
 	if err := store.RemoveProjectDaemon(ctx, env.ORM, p, "d2"); err != nil {
 		t.Fatalf("RemoveProjectDaemon(missing): %v", err)
 	}
-	if left, _ := env.Repo.ListProjectDaemonsForDaemon(ctx, "d2"); len(left) != 0 {
+	if left, _ := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "d2"); len(left) != 0 {
 		t.Fatalf("row survived RemoveProjectDaemon: %+v", left)
 	}
 }

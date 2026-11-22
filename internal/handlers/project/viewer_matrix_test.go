@@ -18,7 +18,7 @@ func TestProjectServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Orgs: f.Membership})))
 	viewertest.RunService(t, f, svc, "reliant.v1.ProjectService", nil)
 }
 
@@ -27,7 +27,7 @@ func TestGetProjectForAViewerHasNoPath(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Orgs: f.Membership})))
 	resp, err := svc.GetProject(f.Viewer, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.ProjectID}))
 	if err != nil {
 		t.Fatal(err)

@@ -25,6 +25,10 @@ type Deps struct {
 	// Repo stores projects and what hangs off them: their daemons, repos,
 	// main worktree, seeded config row and prompts.
 	Repo Repository
+	// Lookups finds a user's project by path or remote within an org.
+	Lookups ProjectLookups
+	// Installs lists the checkouts a machine holds.
+	Installs DaemonInstalls
 	// Detachments records and reads a project's detachments from machines.
 	Detachments Detachments
 	// Router runs every filesystem and git operation on the caller's
@@ -97,6 +101,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("project: Deps.Repo is required")
+	}
+	if d.Lookups == nil {
+		return fmt.Errorf("project: Deps.Lookups is required")
+	}
+	if d.Installs == nil {
+		return fmt.Errorf("project: Deps.Installs is required")
 	}
 	if d.Detachments == nil {
 		return fmt.Errorf("project: Deps.Detachments is required")

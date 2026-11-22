@@ -101,8 +101,70 @@ func (m *MockDetachments) ListProjectDaemonDetachmentsForDaemon(ctx context.Cont
 // Compile-time check.
 var _ Detachments = (*MockDetachments)(nil)
 
+// forge:section MockProjectLookups
+// forge:hash=624ff5345ed34ed2fcdcd1cd2dd963fa7f8e089638a49198c71b8cab231ae16b
+
+// MockProjectLookups is a test mock for the ProjectLookups interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectLookups.<Method>Func not set" error.
+type MockProjectLookups struct {
+	contractkit.Recorder
+	GetProjectByPathAndUserInScopeFunc      func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteURLAndUserInScopeFunc func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+}
+
+// GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
+func (m *MockProjectLookups) GetProjectByPathAndUserInScope(ctx context.Context, path string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByPathAndUserInScope", ctx, path, userID, scope)
+	if m.GetProjectByPathAndUserInScopeFunc != nil {
+		return m.GetProjectByPathAndUserInScopeFunc(ctx, path, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByPathAndUserInScope")
+}
+
+// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
+func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
+	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
+		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByRemoteURLAndUserInScope")
+}
+
+// Compile-time check.
+var _ ProjectLookups = (*MockProjectLookups)(nil)
+
+// forge:section MockDaemonInstalls
+// forge:hash=963e8e9c52341ec63a056862e2a83f00d8f84aa7b085b751371e5dc04efd6c36
+
+// MockDaemonInstalls is a test mock for the DaemonInstalls interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockDaemonInstalls.<Method>Func not set" error.
+type MockDaemonInstalls struct {
+	contractkit.Recorder
+	ListProjectDaemonsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
+}
+
+// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
+func (m *MockDaemonInstalls) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonsForDaemonFunc != nil {
+		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockDaemonInstalls", "ListProjectDaemonsForDaemon")
+}
+
+// Compile-time check.
+var _ DaemonInstalls = (*MockDaemonInstalls)(nil)
+
 // forge:section MockRepository
-// forge:hash=2c03d31e5a4d6c88aa4930f23bf56a1db2a30ddff3dba947e66eb445f9ed92e1
+// forge:hash=8fdb2d6ce1eb958b47955555dd9b7e80cc642cbdcc73194e3eeaaa606ddef491
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -112,48 +174,45 @@ var _ Detachments = (*MockDetachments)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	AssignUnassignedOrgFunc                 func(context.Context, string, string) error
-	CreateProjectFunc                       func(context.Context, *db.Project) error
-	GetProjectFunc                          func(context.Context, string) (*db.Project, error)
-	GetProjectByPathAndUserFunc             func(context.Context, string, string) (*db.Project, error)
-	GetProjectByRemoteURLAndUserFunc        func(context.Context, string, string) (*db.Project, error)
-	GetProjectByPathAndUserInScopeFunc      func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	GetProjectByRemoteURLAndUserInScopeFunc func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	GetProjectWithUserCheckFunc             func(context.Context, string, string) (*db.Project, error)
-	ListProjectsFunc                        func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	UpdateProjectFunc                       func(context.Context, *db.Project, string) error
-	SetProjectForgeNameFunc                 func(context.Context, string, string, string) (bool, error)
-	TouchProjectFunc                        func(context.Context, string, string) error
-	DeleteProjectFunc                       func(context.Context, string, string) error
-	ScheduleProjectDeletionFunc             func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
-	RestoreProjectFunc                      func(context.Context, string, core.ProjectDecision) ([]string, error)
-	ClaimProjectPurgeNowFunc                func(context.Context, string, core.ProjectDecision) error
-	PurgeClaimedProjectFunc                 func(context.Context, string, string) ([]string, error)
-	ListDeletedProjectsFunc                 func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
-	UpsertProjectDaemonFunc                 func(context.Context, string, string, string, *string) error
-	RecordObservedProjectDaemonInScopeFunc  func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
-	UpsertQueuedProjectDaemonFunc           func(context.Context, string, string, string, *string, string) error
-	ListProjectDaemonsForProjectFunc        func(context.Context, string) ([]*core.ProjectDaemon, error)
-	ListProjectDaemonsForDaemonFunc         func(context.Context, string) ([]*core.ProjectDaemon, error)
-	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
-	DeleteProjectDaemonFunc                 func(context.Context, string, string) error
-	BeginCheckoutTeardownFunc               func(context.Context, string, string, string, string, func(ctx context.Context) error) (*db.CheckoutTeardown, error)
-	SettleCheckoutTeardownFunc              func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
-	CreateRepoFunc                          func(context.Context, *core.Repo) error
-	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
-	ListReposByProjectsFunc                 func(context.Context, []string) ([]*core.Repo, error)
-	ListRepoForgeAppsByProjectsFunc         func(context.Context, []string) ([]core.RepoForgeApp, error)
-	ListProjectDaemonsForProjectsFunc       func(context.Context, []string) ([]*core.ProjectDaemon, error)
-	SetRepoForgeAppsFunc                    func(context.Context, string, []core.RepoForgeApp, bool) error
-	CreateWorktreeFunc                      func(context.Context, *db.Worktree) error
-	ListWorktreesFunc                       func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	UpdateWorktreeFunc                      func(context.Context, *db.Worktree) error
-	ListFailedWorktreesForDaemonFunc        func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
-	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
-	UpsertProjectConfigRecordFunc           func(context.Context, *db.ProjectConfigRecord) error
-	CreateSettingFunc                       func(context.Context, *db.Setting) error
-	GetSettingFunc                          func(context.Context, string, *string, string) (*db.Setting, error)
-	UpdateSettingFunc                       func(context.Context, *db.Setting) error
+	AssignUnassignedOrgFunc                func(context.Context, string, string) error
+	CreateProjectFunc                      func(context.Context, *db.Project) error
+	GetProjectFunc                         func(context.Context, string) (*db.Project, error)
+	GetProjectByPathAndUserFunc            func(context.Context, string, string) (*db.Project, error)
+	GetProjectByRemoteURLAndUserFunc       func(context.Context, string, string) (*db.Project, error)
+	GetProjectWithUserCheckFunc            func(context.Context, string, string) (*db.Project, error)
+	ListProjectsFunc                       func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	UpdateProjectFunc                      func(context.Context, *db.Project, string) error
+	SetProjectForgeNameFunc                func(context.Context, string, string, string) (bool, error)
+	TouchProjectFunc                       func(context.Context, string, string) error
+	DeleteProjectFunc                      func(context.Context, string, string) error
+	ScheduleProjectDeletionFunc            func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProjectFunc                     func(context.Context, string, core.ProjectDecision) ([]string, error)
+	ClaimProjectPurgeNowFunc               func(context.Context, string, core.ProjectDecision) error
+	PurgeClaimedProjectFunc                func(context.Context, string, string) ([]string, error)
+	ListDeletedProjectsFunc                func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
+	UpsertProjectDaemonFunc                func(context.Context, string, string, string, *string) error
+	RecordObservedProjectDaemonInScopeFunc func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
+	UpsertQueuedProjectDaemonFunc          func(context.Context, string, string, string, *string, string) error
+	ListProjectDaemonsForProjectFunc       func(context.Context, string) ([]*core.ProjectDaemon, error)
+	GetDaemonFunc                          func(context.Context, string) (*db.Daemon, error)
+	DeleteProjectDaemonFunc                func(context.Context, string, string) error
+	BeginCheckoutTeardownFunc              func(context.Context, string, string, string, string, func(ctx context.Context) error) (*db.CheckoutTeardown, error)
+	SettleCheckoutTeardownFunc             func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
+	CreateRepoFunc                         func(context.Context, *core.Repo) error
+	ListReposByProjectFunc                 func(context.Context, string) ([]*core.Repo, error)
+	ListReposByProjectsFunc                func(context.Context, []string) ([]*core.Repo, error)
+	ListRepoForgeAppsByProjectsFunc        func(context.Context, []string) ([]core.RepoForgeApp, error)
+	ListProjectDaemonsForProjectsFunc      func(context.Context, []string) ([]*core.ProjectDaemon, error)
+	SetRepoForgeAppsFunc                   func(context.Context, string, []core.RepoForgeApp, bool) error
+	CreateWorktreeFunc                     func(context.Context, *db.Worktree) error
+	ListWorktreesFunc                      func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	UpdateWorktreeFunc                     func(context.Context, *db.Worktree) error
+	ListFailedWorktreesForDaemonFunc       func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
+	MergeWorktreeCleanupMetadataFunc       func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
+	UpsertProjectConfigRecordFunc          func(context.Context, *db.ProjectConfigRecord) error
+	CreateSettingFunc                      func(context.Context, *db.Setting) error
+	GetSettingFunc                         func(context.Context, string, *string, string) (*db.Setting, error)
+	UpdateSettingFunc                      func(context.Context, *db.Setting) error
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.
@@ -199,24 +258,6 @@ func (m *MockRepository) GetProjectByRemoteURLAndUser(ctx context.Context, remot
 		return m.GetProjectByRemoteURLAndUserFunc(ctx, remoteURL, userID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByRemoteURLAndUser")
-}
-
-// GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
-func (m *MockRepository) GetProjectByPathAndUserInScope(ctx context.Context, path string, userID string, scope *core.OrgScope) (*db.Project, error) {
-	m.Recorder.Record("GetProjectByPathAndUserInScope", ctx, path, userID, scope)
-	if m.GetProjectByPathAndUserInScopeFunc != nil {
-		return m.GetProjectByPathAndUserInScopeFunc(ctx, path, userID, scope)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByPathAndUserInScope")
-}
-
-// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
-func (m *MockRepository) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*db.Project, error) {
-	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
-	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
-		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByRemoteURLAndUserInScope")
 }
 
 // GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
@@ -352,15 +393,6 @@ func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, proje
 		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
-}
-
-// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
-func (m *MockRepository) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonsForDaemonFunc != nil {
-		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForDaemon")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.

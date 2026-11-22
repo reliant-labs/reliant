@@ -215,10 +215,12 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 // and ListProjects' deadline is a deadline on the wire, not internal.
 func TestProjectService_OnTheWire(t *testing.T) {
 	t.Parallel()
-	store := &project.MockRepository{
+	lookups := &project.MockProjectLookups{
 		GetProjectByPathAndUserInScopeFunc: func(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
 			return ownedProject(), nil
 		},
+	}
+	store := &project.MockRepository{
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) {
 			return nil, fmt.Errorf("list projects: %w", context.DeadlineExceeded)
 		},
@@ -231,7 +233,7 @@ func TestProjectService_OnTheWire(t *testing.T) {
 			return json.Marshal(map[string]any{"exists": true})
 		},
 	}
-	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Router: router}))
+	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Lookups: lookups, Router: router}))
 
 	_, err := client.CreateProject(context.Background(), connect.NewRequest(&pb.CreateProjectRequest{
 		Name: "proj", Path: "/work",
