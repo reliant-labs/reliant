@@ -134,7 +134,7 @@ func TestReconciler_UnreportedEndIsLevelledByHowTheRunEnded(t *testing.T) {
 				expectedBefore := anomalyCount(anomalySilentTerminalDriftExpected)
 				faultsBefore := anomalyCount(anomalySilentTerminalDrift)
 
-				_, errs := NewReconciler(repo, tempClient, DefaultConfig()).ReconcileRunningWorkflows(context.Background())
+				_, errs := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()}).ReconcileRunningWorkflows(context.Background())
 				require.Empty(t, errs)
 
 				lines := logsWithMessage(logs(), run.message)
@@ -194,7 +194,7 @@ func TestReconciler_DescendantReapAfterTerminateIsInfo(t *testing.T) {
 	expectedBefore := anomalyCount(anomalyOrphanDescendantReapedAfterTerminate)
 	faultsBefore := anomalyCount(anomalyOrphanDescendantReaped)
 
-	reconciled, errs := NewReconciler(repo, tempClient, nil).ReconcileRunningWorkflows(context.Background())
+	reconciled, errs := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: nil}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 	assert.Equal(t, 1, reconciled, "the repair still counts")
 
@@ -227,7 +227,7 @@ func TestReconciler_DescendantReapAfterTheRunsOwnEndIsAnError(t *testing.T) {
 			repo := descendantReapRepo()
 			faultsBefore := anomalyCount(anomalyOrphanDescendantReaped)
 
-			_, errs := NewReconciler(repo, &mockReconcilerTemporalClient{describeResponses: tc.describe}, nil).ReconcileRunningWorkflows(context.Background())
+			_, errs := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: tc.describe}, Config: nil}).ReconcileRunningWorkflows(context.Background())
 			require.Empty(t, errs)
 
 			reaps := logsWithMessage(logs(), reapedDescendantsAfterTerminateMessage, reapedOrphanedDescendantsMessage)

@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -102,7 +103,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 			Router: &placingRouter{wakeRecordingRouter: wake, defaultID: laptop, known: map[string]bool{vm: true, laptop: true}},
 		},
 		threads: threads.NewService(repo),
-		runs:    runs.NewService(repo, temporal, nil),
+		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	_, err = svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "continue"))

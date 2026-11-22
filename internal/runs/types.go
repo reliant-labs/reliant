@@ -5,6 +5,7 @@
 // constructs from Deps.
 //
 //forge:provided
+//forge:exclude-contract: a concrete lifecycle service built by hand with a plain Deps; its callers take the narrow roles they need, not a Service interface
 package runs
 
 import (
@@ -16,6 +17,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -35,7 +37,6 @@ type Repository interface {
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
-	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)

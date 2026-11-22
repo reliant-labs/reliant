@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
 )
 
@@ -256,7 +257,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 		backoffByThread:  map[string]db.ProviderBackoff{},
 	}
 
-	questions, err := repo.PendingQuestionsByThread(ctx, chatID)
+	questions, err := store.NewQuestionExtStore(repo.ORM()).PendingQuestionsByThread(ctx, chatID)
 	if err != nil {
 		return m, fmt.Errorf("reading questions for chat %s: %w", chatID, err)
 	}

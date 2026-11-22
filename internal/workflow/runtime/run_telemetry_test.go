@@ -39,6 +39,13 @@ import (
 // runs with.
 func recordRunSpans(t *testing.T) (*tracetest.SpanRecorder, []interceptor.WorkerInterceptor) {
 	t.Helper()
+	return recordRunSpansOwnedBy(t, nil)
+}
+
+// recordRunSpansOwnedBy is recordRunSpans with the run-scope interceptor
+// answering each chat's owner from owners, as the worker's does.
+func recordRunSpansOwnedBy(t *testing.T, owners *telemetry.ChatOwnerCache) (*tracetest.SpanRecorder, []interceptor.WorkerInterceptor) {
+	t.Helper()
 	rec := tracetest.NewSpanRecorder()
 	prevTP, prevProp := otel.GetTracerProvider(), otel.GetTextMapPropagator()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec)))
@@ -49,7 +56,7 @@ func recordRunSpans(t *testing.T) (*tracetest.SpanRecorder, []interceptor.Worker
 	})
 	tracing, err := temporalotel.NewInterceptor(temporalotel.Options{})
 	require.NoError(t, err)
-	return rec, []interceptor.WorkerInterceptor{tracing, observability.NewRunScopeWorkerInterceptor(nil)}
+	return rec, []interceptor.WorkerInterceptor{tracing, observability.NewRunScopeWorkerInterceptor(owners)}
 }
 
 func spanAttrs(s sdktrace.ReadOnlySpan) map[attribute.Key]string {
@@ -245,7 +252,10 @@ func TestRunTelemetry_CheckpointCarriesTheRunIDToARestart(t *testing.T) {
 // The activities are the harness's stubs; inside them the spans are opened
 // with the helpers the real CallLLM and ExecuteTools use.
 func TestRunTelemetry_SpanTree(t *testing.T) {
-	rec, interceptors := recordRunSpans(t)
+	owners := telemetry.NewChatOwnerOrgCache(func(context.Context, string) (telemetry.ChatOwner, error) {
+		return telemetry.ChatOwner{UserID: "user-tree", OrgID: "org-tree"}, nil
+	}, 0, 10)
+	rec, interceptors := recordRunSpansOwnedBy(t, owners)
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{Interceptors: interceptors}))
@@ -292,14 +302,21 @@ func TestRunTelemetry_SpanTree(t *testing.T) {
 	require.NotEmpty(t, runID)
 	assert.Equal(t, telemetry.GenAIOpInvokeWorkflow, rootAttrs[telemetry.AttrGenAIOperationName])
 	assert.Equal(t, "agent", rootAttrs[telemetry.AttrAIWorkflowName])
+	// The run's own span names its org, which the workflow learns from its
+	// definition load (nameRunOrg): tenant export drops a span without one.
+	assert.Equal(t, "org-tree", rootAttrs[telemetry.AttrOrgID], "the run span carries org.id")
 	traceID := root.SpanContext().TraceID()
 
-	// Every node span names its run, the save_message the workflow writes
-	// itself included.
+	// Every node span names its run, its org and its chat as the
+	// conversation, the save_message the workflow writes itself included.
 	nodes := spansNamed(spans, "workflow.node ")
 	require.NotEmpty(t, nodes)
 	for _, node := range nodes {
-		assert.NotEmpty(t, spanAttrs(node)[telemetry.AttrAIRunID], node.Name())
+		na := spanAttrs(node)
+		assert.NotEmpty(t, na[telemetry.AttrAIRunID], node.Name())
+		assert.Equal(t, "org-tree", na[telemetry.AttrOrgID], node.Name())
+		assert.Equal(t, "chat-tree", na[telemetry.AttrGenAIConversationID], node.Name())
+		assert.Equal(t, "chat-tree", na[telemetry.AttrChatID], node.Name())
 	}
 
 	var parentTurns, childTurns []sdktrace.ReadOnlySpan

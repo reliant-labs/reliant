@@ -21,7 +21,7 @@ func TestGetThreadWorkflowInputs_Generated(t *testing.T) {
 	repo.GetWorkflowByThreadFunc = func(context.Context, string, string) (*db.Workflow, error) {
 		return nil, nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetThreadWorkflowInputsRequest, pb.GetThreadWorkflowInputsResponse]{
 		{

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -38,6 +39,12 @@ type LoadWorkflowOutput struct {
 	// input's, or the one it pinned. The runtime carries it to every later
 	// load of the run.
 	CatalogPin string `json:"catalog_pin,omitempty"`
+	// OrgID is the org of the run's chat, as the worker stamps it on every
+	// span of the run (the run-scope interceptor's chat-owner lookup): the
+	// workflow names its own span with it (runtime.nameRunOrg), which it
+	// cannot look up itself. Telemetry only; empty when the chat has none,
+	// or from a worker that predates it.
+	OrgID string `json:"org_id,omitempty"`
 }
 
 // LoadWorkflowActivity loads a workflow definition from the filesystem
@@ -126,6 +133,7 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 		WorkflowJSON: jsonData,
 		HasTemplates: loaded.HasTemplates,
 		CatalogPin:   wfCtx.catalogPin,
+		OrgID:        telemetry.RunScopeFromContext(ctx).OrgID,
 	}, nil
 }
 

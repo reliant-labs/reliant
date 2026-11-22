@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -57,7 +58,7 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*Service, *wakeRecordi
 		deps: Deps{
 			Repo: repo, Temporal: temporal, Router: router,
 		},
-		runs: runs.NewService(repo, temporal, nil),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 	return svc, router, ctx, fx.chatID
 }

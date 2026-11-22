@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -65,7 +66,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 		repo,
 		threads.NewService(repo),
 		rootClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
+		runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}),
 		taskQueue,
 	)
 
@@ -235,7 +236,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	taskQueue := "trigger-cron-e2e-" + uuid.NewString()
 
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
+		runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}),
 		taskQueue)
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
@@ -326,7 +327,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	taskQueue := "trigger-manual-e2e-" + uuid.NewString()
 
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
+		runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}),
 		taskQueue)
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))

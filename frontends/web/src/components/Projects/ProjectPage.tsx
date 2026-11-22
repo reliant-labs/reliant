@@ -14,7 +14,8 @@
  *   Workspaces   the workspaces (git worktrees) its chats work in — Settings
  *                → Workspaces' own content (WorkspacesBody).
  *   Settings     the per-project controls of Settings → Projects: rename,
- *                hide, remove, its machines, and the move to another org.
+ *                hide, remove, its machines, sharing it with its org
+ *                (ProjectSharingSection), and the move to another org.
  *
  * The project comes from the org's catalog (useProjectCatalog), the same
  * answer the Projects list shows, so a project of another org is never shown
@@ -51,6 +52,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { AppSectionEmptyState } from "../Forge/Console/AppSectionEmptyState";
 import { AreaShell } from "../Layout/AreaShell";
+import { ProjectSharingSection } from "../Sharing/ProjectSharingSection";
 import { sectionsAppOf } from "../Layout/sidebar/shellProject";
 import { WorkspacesBody } from "../Settings/BranchesSection";
 import { MoveProjectOrgDialog } from "../Settings/projects/MoveProjectOrgDialog";
@@ -511,6 +513,7 @@ function ProjectSettings({ project }: { project: Project }) {
         onSetHidden={writable ? setHidden : undefined}
       />
       <ProjectMachines project={project} />
+      <ProjectSharingSection project={project} />
       {canSwitchOrg && <ProjectMoveSection project={project} onMove={() => setMoving(true)} />}
       {moving && <MoveProjectOrgDialog project={project} isOpen={moving} onClose={() => setMoving(false)} />}
       <RemoveProjectModal

@@ -80,8 +80,9 @@ type SpawnStatusResponseMetadata struct {
 }
 
 type spawnStatusTool struct {
-	repo    spawnStatusStore
-	threads *threads.Service
+	repo      spawnStatusStore
+	questions SpawnQuestions
+	threads   *threads.Service
 }
 
 const (
@@ -149,8 +150,9 @@ stopped. Call spawn_status with wait: true again to keep waiting.
 Use spawn_send to message an agent that is still running.`
 )
 
-func NewSpawnStatusTool(repo spawnStatusStore) Tool {
-	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: repo, threads: threads.NewService(repo)})
+// NewSpawnStatusTool builds the spawn_status tool.
+func NewSpawnStatusTool(deps SpawnStatusDeps) Tool {
+	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, threads: threads.NewService(deps.Store)})
 }
 
 func (s *spawnStatusTool) Name() string {
@@ -166,7 +168,7 @@ func (s *spawnStatusTool) RequiresPermission(params SpawnStatusParams) (bool, er
 }
 
 func (s *spawnStatusTool) Execute(rctx *rctx.ToolContext, params SpawnStatusParams) (ToolResponse, error) {
-	if s.repo == nil {
+	if s.repo == nil || s.questions == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 	threadID := rctx.Thread
@@ -346,7 +348,7 @@ func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *sp
 		pendingApprovalThreads:  map[string]bool{},
 		approvalSignalAvailable: true,
 	}
-	if questions, qErr := s.repo.PendingQuestionsByThread(rctx.Context, chatID); qErr == nil {
+	if questions, qErr := s.questions.PendingQuestionsByThread(rctx.Context, chatID); qErr == nil {
 		signals.pendingQuestions = questions
 	}
 	if approvals, aErr := s.repo.ListPendingApprovalsByChat(rctx.Context, chatID); aErr == nil {

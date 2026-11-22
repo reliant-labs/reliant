@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -201,7 +202,7 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 	}
 
 	counting := &countingRepo{Repository: repo}
-	service := &Service{deps: Deps{Repo: counting}}
+	service := &Service{deps: Deps{Repo: counting, Questions: &MockQuestions{}}}
 
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
@@ -273,7 +274,7 @@ func TestGetWorkflowExecutions_SavedMessageIdWithoutOutputJson(t *testing.T) {
 		},
 	})
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
 		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
