@@ -329,7 +329,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	return launch.New(launch.Deps{
 		Store:      d.DB,
 		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:    threads.NewService(d.DB),
+		Threads:    threads.New(threads.Deps{Repo: d.DB}),
 		Temporal:   d.Temporal.Client,
 		Runs:       d.Runs,
 		TaskQueue:  v2workflow.SharedTaskQueue,

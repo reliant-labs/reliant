@@ -47,7 +47,7 @@ func seedMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID, threa
 		})
 		require.NoError(t, cwErr)
 	}
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo})
 	_, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  threadID,

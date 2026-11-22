@@ -182,7 +182,7 @@ func newFireFixture(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfi
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &flakyStarter{}
-	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(repo, launcher), trigger: trigger}
 }
 

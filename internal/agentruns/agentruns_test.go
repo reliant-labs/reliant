@@ -328,7 +328,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	}))
 
 	starter := &recordingStarter{}
-	runs := New(launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: noopRecorder{}, TaskQueue: "test-queue"}), nil)
+	runs := New(launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: noopRecorder{}, TaskQueue: "test-queue"}), nil)
 
 	req := tools.StartRunRequest{
 		OwnerUserID: owner, ProjectID: projectID, Workflow: "builtin://agent",

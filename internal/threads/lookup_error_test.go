@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/dbconn"
@@ -47,7 +48,7 @@ func TestSaveMessage_OutageIsNotAMissingThread(t *testing.T) {
 			Code:     "08P01",
 			Message:  "server login has been failing, cached error: server conn crashed? (server_login_retry)",
 		}
-		svc := NewService(latestCWRepo{err: errors.Join(errors.New("failed to get latest context window"), outage)})
+		svc := New(Deps{Repo: latestCWRepo{err: errors.Join(errors.New("failed to get latest context window"), outage)}})
 		_, err := svc.SaveMessage(context.Background(), opts)
 		if err == nil {
 			t.Fatal("SaveMessage succeeded with the database down")
@@ -64,7 +65,7 @@ func TestSaveMessage_OutageIsNotAMissingThread(t *testing.T) {
 
 	t.Run("a genuinely missing thread still says so", func(t *testing.T) {
 		t.Parallel()
-		svc := NewService(latestCWRepo{err: svcerr.NotFound("context window")})
+		svc := New(Deps{Repo: latestCWRepo{err: svcerr.NotFound("context window")}})
 		_, err := svc.SaveMessage(context.Background(), opts)
 		if err == nil || !strings.Contains(err.Error(), "thread thread-1 does not exist") {
 			t.Fatalf("want a missing-thread error, got %v", err)

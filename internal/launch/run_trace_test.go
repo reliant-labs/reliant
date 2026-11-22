@@ -75,7 +75,7 @@ func TestLaunch_TriggerFanOutStartsATraceOfItsOwnPerRun(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	fireCtx, firing := tp.Tracer("test").Start(ctx, "trigger.fire integration")
 	defer firing.End()
@@ -118,7 +118,7 @@ func TestLaunch_AttendedStartStaysInItsCallersTrace(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	reqCtx, request := tp.Tracer("test").Start(ctx, "ChatService/CreateChat")
 	defer request.End()

@@ -61,7 +61,7 @@ func TestGetRunExecuteIncludesNodeMetadata(t *testing.T) {
 		require.Equal(t, root, id)
 		return []*db.StepExecution{{ID: "step", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(`{"stderr":"token=hidden"}`)}}, nil
 	}
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	var detail RunDetail
@@ -89,7 +89,7 @@ func TestGetRunReportsAUsageLimitWait(t *testing.T) {
 		return nil, svcerr.NotFound("context window")
 	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "State: running\n")
@@ -121,7 +121,7 @@ func TestGetRunReportsWhyARunFailedBeforeItsFirstNode(t *testing.T) {
 	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
 
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "State: failed\nFailure: workflow input validation failed")

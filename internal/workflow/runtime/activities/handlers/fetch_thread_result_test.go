@@ -97,7 +97,7 @@ func (f *fetchResultFixture) saveAssistant(t *testing.T, text *string, toolName 
 
 func (f *fetchResultFixture) fetch(t *testing.T) FetchThreadResultOutput {
 	t.Helper()
-	activityInstance := NewFetchThreadResultActivity(threads.NewService(f.h.Repo()))
+	activityInstance := NewFetchThreadResultActivity(threads.New(threads.Deps{Repo: f.h.Repo()}))
 
 	var output FetchThreadResultOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, FetchThreadResultInput{

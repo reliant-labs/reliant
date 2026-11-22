@@ -33,7 +33,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.NewService(f.repo), f.repo),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo}), f.repo),
 	}
 }
 

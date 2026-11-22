@@ -26,7 +26,7 @@ func TestInterruptThread_TranslatesServiceResult(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo})}
 
 	resp, err := svc.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{
 		ChatId:   fx.chatID,
@@ -59,22 +59,22 @@ func TestInterruptThread_ErrorCodes(t *testing.T) {
 	}
 
 	t.Run("a missing thread id is InvalidArgument", func(t *testing.T) {
-		ce := interrupt(t, threads.NewService(repo), fx.chatID, "")
+		ce := interrupt(t, threads.New(threads.Deps{Repo: repo}), fx.chatID, "")
 		assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
 		assert.Equal(t, "thread_id is required", ce.Message())
 	})
 	t.Run("a chat the caller cannot see is NotFound", func(t *testing.T) {
-		ce := interrupt(t, threads.NewService(repo), uuid.NewString(), fx.rootThreadID)
+		ce := interrupt(t, threads.New(threads.Deps{Repo: repo}), uuid.NewString(), fx.rootThreadID)
 		assert.Equal(t, connect.CodeNotFound, ce.Code())
 		assert.Equal(t, "chat not found", ce.Message())
 	})
 	t.Run("a thread of another chat is NotFound", func(t *testing.T) {
-		ce := interrupt(t, threads.NewService(repo), fx.chatID, uuid.NewString())
+		ce := interrupt(t, threads.New(threads.Deps{Repo: repo}), fx.chatID, uuid.NewString())
 		assert.Equal(t, connect.CodeNotFound, ce.Code())
 		assert.Equal(t, "thread not found", ce.Message())
 	})
 	t.Run("an undeliverable signal is Unavailable, without Temporal's text", func(t *testing.T) {
-		ce := interrupt(t, threads.NewService(repo, threads.WithTemporalSignaler(failingSignaler{})), fx.chatID, fx.rootThreadID)
+		ce := interrupt(t, threads.New(threads.Deps{Repo: repo, Signaler: failingSignaler{}}), fx.chatID, fx.rootThreadID)
 		assert.Equal(t, connect.CodeUnavailable, ce.Code())
 		assert.Equal(t, "interrupt undeliverable", ce.Message())
 	})
@@ -89,7 +89,7 @@ func TestInterruptThread_ErrorCodes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			broken := &MockRepository{GetChatRowWithUserCheckFunc: func(context.Context, string, string) (*db.ChatRow, error) { return nil, tc.err }}
-			ce := interrupt(t, threads.NewService(broken), fx.chatID, fx.rootThreadID)
+			ce := interrupt(t, threads.New(threads.Deps{Repo: broken}), fx.chatID, fx.rootThreadID)
 			assert.Equal(t, tc.want, ce.Code())
 			assert.NotContains(t, ce.Message(), "secret")
 		})

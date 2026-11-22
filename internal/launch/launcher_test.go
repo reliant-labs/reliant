@@ -181,7 +181,7 @@ type launchTestStore interface {
 func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
-	return New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
+	return New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
@@ -529,7 +529,7 @@ func pendingBranch(t *testing.T, repo *db.Repo, ctx context.Context, projectID, 
 		WorktreeID: &worktreeID, WorkflowName: &workflowName, WorkflowID: &chatID,
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, _, _, err := threads.NewService(repo).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: repo}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
 			Status: db.Pending(), CreatedAt: now, OwnerUserID: ptr(launchTestUserID),

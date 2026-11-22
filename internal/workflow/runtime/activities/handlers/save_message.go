@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -16,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // parseMessageRole converts a string role to its int32 proto enum value.
@@ -70,7 +71,7 @@ type SaveMessageActivity struct {
 func NewSaveMessageActivity(repo SaveMessageStore) *SaveMessageActivity {
 	return &SaveMessageActivity{
 		repo:    repo,
-		threads: threads.NewService(repo),
+		threads: threads.New(threads.Deps{Repo: repo}),
 	}
 }
 

@@ -356,7 +356,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.NewService(s.Repo), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
