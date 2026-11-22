@@ -7,6 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/planning"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -55,6 +56,10 @@ type ToolsOptions struct {
 	LaunchedRuns  LaunchedRunCounter
 	WorktreeChats WorktreeChatLister
 	WorkflowSlugs WorkflowSlugChecker
+	// Planning is the plan, task and dependency store behind the planning
+	// tools. Optional: nil makes them report that they are unavailable here,
+	// like a nil Repo.
+	Planning planning.Service
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
@@ -249,6 +254,29 @@ type toolStore interface {
 	workflowWriteStore
 	worktreeStore
 	writeScenarioStore
+}
+
+// toolPlanning is every planning role the factory hands its Planning to.
+type toolPlanning interface {
+	addDependencyPlanning
+	addTaskPlanning
+	createPlanPlanning
+	getPlanPlanning
+	listReadyTasksPlanning
+	listTasksPlanning
+	removeDependencyPlanning
+	updatePlanPlanning
+	updateTaskPlanning
+}
+
+// planning is Planning as the planning tools' roles: nil when the factory has
+// none, for the same reason store() is (a nil interface value is not nil
+// once converted).
+func (f *ToolsFactory) planning() toolPlanning {
+	if f.opts == nil || f.opts.Planning == nil {
+		return nil
+	}
+	return f.opts.Planning
 }
 
 // store is Repo as the tools' roles: a nil interface when the factory has no
@@ -448,28 +476,28 @@ func (f *ToolsFactory) GenerateVideo() Tool {
 
 // Planning tools
 func (f *ToolsFactory) CreatePlan() Tool {
-	return NewCreatePlanTool(f.store())
+	return NewCreatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdatePlan() Tool {
-	return NewUpdatePlanTool(f.store())
+	return NewUpdatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) GetPlan() Tool {
-	return NewGetPlanTool(f.store())
+	return NewGetPlanTool(f.store(), f.planning())
 }
 
 // Task tools
 func (f *ToolsFactory) ListTasks() Tool {
-	return NewListTasksTool(f.store())
+	return NewListTasksTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) AddTask() Tool {
-	return NewAddTaskTool(f.store())
+	return NewAddTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdateTask() Tool {
-	return NewUpdateTaskTool(f.store())
+	return NewUpdateTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) CreateSubtask() Tool {
@@ -477,15 +505,15 @@ func (f *ToolsFactory) CreateSubtask() Tool {
 }
 
 func (f *ToolsFactory) AddDependency() Tool {
-	return NewAddDependencyTool(f.store())
+	return NewAddDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) RemoveDependency() Tool {
-	return NewRemoveDependencyTool(f.store())
+	return NewRemoveDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) ListReadyTasks() Tool {
-	return NewListReadyTasksTool(f.store())
+	return NewListReadyTasksTool(f.store(), f.planning())
 }
 
 // ListPendingQuestions lists the caller's and its sub-agents' unanswered

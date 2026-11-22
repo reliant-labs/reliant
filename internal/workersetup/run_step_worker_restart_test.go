@@ -37,6 +37,7 @@ import (
 	reliantgrpc "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/planningtest"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -336,7 +337,7 @@ func (r *restartRig) startWorker(t *testing.T, queue string) *restartWorker {
 	nc := r.connectNATS(t)
 	router := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(r.repo))
 	// The worker's executor as internal/app's NewRemoteExecutor builds it.
-	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: r.repo})
+	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: r.repo, Planning: planningtest.New(t, r.repo)})
 	executor := toolexec.NewRemoteExecutor(router)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(factory))
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(router))

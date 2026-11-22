@@ -2370,31 +2370,12 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 	return store.GetPlan(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-
-	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
-}
-
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
-}
-
-func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
-	if plan == nil {
-		return fmt.Errorf("plan cannot be nil")
-	}
-	if plan.ID == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-
-	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
 // ==================== Tasks ====================
@@ -2421,22 +2402,6 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 	return store.GetTask(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-
-	// Get all tasks and return the one at the position
-	tasks, err := r.ListTasksByPlan(ctx, planID)
-	if err != nil {
-		return nil, err
-	}
-	if position < 0 || position >= len(tasks) {
-		return nil, fmt.Errorf("position %d out of range", position)
-	}
-	return tasks[position], nil
-}
-
 func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
@@ -2445,81 +2410,7 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
-func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-
-	tasks, err := r.ListTasksByPlan(ctx, planID)
-	if err != nil {
-		return nil, err
-	}
-
-	stats := &TaskStats{
-		Total: len(tasks),
-	}
-
-	for _, task := range tasks {
-		switch TaskStatus(task.Status) {
-		case TaskStatusPending:
-			stats.Pending++
-		case TaskStatusInProgress:
-			stats.InProgress++
-		case TaskStatusCompleted:
-			stats.Completed++
-		case TaskStatusFailed:
-			stats.Failed++
-		case TaskStatusBlocked:
-			stats.Blocked++
-		case TaskStatusCancelled:
-			stats.Cancelled++
-		case TaskStatusSkipped:
-			stats.Skipped++
-		}
-	}
-
-	return stats, nil
-}
-
-func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
-	if task == nil {
-		return fmt.Errorf("task cannot be nil")
-	}
-	if task.ID == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-
-	return store.ReplaceTask(ctx, r.ORM(), task)
-}
-
 // ==================== Task Dependencies ====================
-
-func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
-	if dep == nil {
-		return fmt.Errorf("dependency cannot be nil")
-	}
-	if dep.FromTaskID == "" || dep.ToTaskID == "" {
-		return fmt.Errorf("from_task_id and to_task_id are required")
-	}
-	if dep.FromTaskID == dep.ToTaskID {
-		return fmt.Errorf("a task cannot depend on itself")
-	}
-	return store.InsertTaskDependency(ctx, r.ORM(), dep)
-}
-
-func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
-}
-
-func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
-	if fromTaskID == "" || toTaskID == "" || depType == 0 {
-		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
-	}
-	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
-}
 
 // ==================== Background Processes ====================
 

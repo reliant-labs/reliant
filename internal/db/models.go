@@ -137,18 +137,6 @@ const (
 	TaskStatusSkipped    TaskStatus = reliantv1.TaskStatus_TASK_STATUS_SKIPPED
 )
 
-// TaskStats represents statistics about tasks in a plan
-type TaskStats struct {
-	Total      int
-	Pending    int
-	InProgress int
-	Completed  int
-	Failed     int
-	Blocked    int
-	Cancelled  int
-	Skipped    int
-}
-
 // ToolCall is an alias to the shared core tool call model.
 type ToolCall = core.ToolCall
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/planning"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
@@ -32,11 +33,71 @@ type runCallerStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
-// planLookupStore is what resolvePlanForRead and resolvePlanForWrite read to
-// find the plan a thread works on.
-type planLookupStore interface {
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
+// threadReader is the thread read the plan walk makes up the spawn tree with.
+type threadReader interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
+}
+
+// planByThread is the plan read the tools make by thread.
+// planning.Service satisfies it.
+type planByThread interface {
+	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
+}
+
+// createPlanPlanning is create_plan's planning role.
+type createPlanPlanning interface {
+	planByThread
+	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
+}
+
+// addTaskPlanning is add_task's planning role.
+type addTaskPlanning interface {
+	planByThread
+}
+
+// updatePlanPlanning is update_plan's planning role.
+type updatePlanPlanning interface {
+	planByThread
+	UpdatePlan(ctx context.Context, plan *db.Plan) error
+}
+
+// getPlanPlanning is get_plan's planning role.
+type getPlanPlanning interface {
+	planByThread
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+}
+
+// listTasksPlanning is list_tasks' planning role.
+type listTasksPlanning interface {
+	planByThread
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+}
+
+// updateTaskPlanning is update_task's planning role.
+type updateTaskPlanning interface {
+	planByThread
+	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+	UpdateTask(ctx context.Context, task *db.Task) error
+}
+
+// addDependencyPlanning is add_dependency's planning role.
+type addDependencyPlanning interface {
+	planByThread
+	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
+	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
+}
+
+// removeDependencyPlanning is remove_dependency's planning role.
+type removeDependencyPlanning interface {
+	DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error
+}
+
+// listReadyTasksPlanning is list_ready_tasks' planning role.
+type listReadyTasksPlanning interface {
+	planByThread
+	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
 }
 
 // workflowDraftLookup is what resolveWorkflowDraft reads to find a draft by
@@ -123,36 +184,30 @@ type scenarioExecStore interface {
 type createPlanStore interface {
 	CreatePlan(ctx context.Context, plan *db.Plan) error
 	CreateTask(ctx context.Context, task *db.Task) error
-	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
 }
 
 // updatePlanStore is update_plan's store.
 type updatePlanStore interface {
-	planLookupStore
+	threadReader
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	UpdatePlan(ctx context.Context, plan *db.Plan) error
 }
 
 // getPlanStore is get_plan's store.
 type getPlanStore interface {
-	planLookupStore
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
+	threadReader
 }
 
 // addTaskStore is add_task's store.
 type addTaskStore interface {
-	planLookupStore
+	threadReader
 	CreateTask(ctx context.Context, task *db.Task) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listTasksStore is list_tasks' store.
 type listTasksStore interface {
-	planLookupStore
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+	threadReader
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
@@ -165,14 +220,11 @@ type taskScopeStore interface {
 
 // updateTaskStore is update_task's store.
 type updateTaskStore interface {
-	planLookupStore
+	threadReader
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
-	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
-	UpdateTask(ctx context.Context, task *db.Task) error
 }
 
 // createSubtaskStore is create_subtask's store.
@@ -185,23 +237,18 @@ type createSubtaskStore interface {
 
 // addDependencyStore is add_dependency's store.
 type addDependencyStore interface {
-	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
 	GetTask(ctx context.Context, id string) (*db.Task, error)
-	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
 }
 
 // removeDependencyStore is remove_dependency's store.
 type removeDependencyStore interface {
-	DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listReadyTasksStore is list_ready_tasks' store.
 type listReadyTasksStore interface {
-	planLookupStore
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+	threadReader
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
