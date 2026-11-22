@@ -127,8 +127,9 @@ type StepKeyRevocation struct {
 	// Revoked is false when there was no live key for the request id.
 	Revoked bool
 	KeyID   string
-	// SpendUSD is what the key spent, as the gateway reported it at revoke
-	// time; SpendKnown false means it could not be read (unknown, not zero).
+	// SpendUSD is the spend control-plane metered for the key as of the
+	// revoke. SpendKnown false: a call was still pending settlement or the
+	// read failed, so SpendUSD is not final (it may be low, or zero).
 	SpendUSD   float64
 	SpendKnown bool
 }

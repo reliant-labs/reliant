@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llmgatewaystep"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A run node's `llm_gateway` runs its command with an LLM gateway step key:
@@ -66,9 +67,13 @@ type RunStepLLMGatewayOutput struct {
 	BillingOrgID string   `json:"billing_org_id"`
 	Models       []string `json:"models"`
 	BudgetUSD    float64  `json:"budget_usd"`
-	SpendUSD     float64  `json:"spend_usd"`
-	SpendKnown   bool     `json:"spend_known"`
-	ExpiresAt    string   `json:"expires_at"`
+	// SpendUSD is what control-plane metered for the key as of the step's
+	// end (the revoke). Final only when SpendKnown is true; false means some
+	// calls were still settling, or the read failed, so the figure is a
+	// floor at most.
+	SpendUSD   float64 `json:"spend_usd"`
+	SpendKnown bool    `json:"spend_known"`
+	ExpiresAt  string  `json:"expires_at"`
 }
 
 // stepKeyRevokeTimeout bounds the revoke, which runs detached from the
@@ -148,7 +153,10 @@ func (s *stepKeyScope) prepare(ctx context.Context, a *ExecuteRunStepActivity, e
 		TriggerID: execCtx.TriggerID, WorkflowName: execCtx.WorkflowName,
 		CLI: cli.Name, Models: gw.Models,
 		MaxBudgetUSD: llmgatewaystep.Budget(gw.BudgetUSD),
-		TTL:          llmgatewaystep.TTL(time.Duration(timeoutMs) * time.Millisecond),
+		// The key is minted before the first send, and the send may wait
+		// for its machine (executeUntilDelivered) for up to the same budget
+		// the step's activity is given for it.
+		TTL: llmgatewaystep.TTL(time.Duration(timeoutMs)*time.Millisecond, activitytypes.RunStepMachineWaitBudget),
 	})
 	if err != nil {
 		// A mint whose answer was lost may have made a key: revoke by the

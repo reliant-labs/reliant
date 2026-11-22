@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 const gatewayTestKey = "rlsk_run_step_test_key_0123456789"
@@ -222,7 +223,7 @@ func TestRunStepLLMGateway_RunsWithTheKeyThenRevokesIt(t *testing.T) {
 	assert.Equal(t, controlplane.StepKeyRequest{
 		RequestID: stepRequestID, UserID: "test-user", RunID: "wf-1", StepID: "loop/bench", ChatID: chatID,
 		ProjectID: mint.ProjectID, CLI: "claude-code", Models: []string{"claude-sonnet-4-6"},
-		MaxBudgetUSD: 2, TTL: 22 * time.Minute,
+		MaxBudgetUSD: 2, TTL: 52 * time.Minute,
 	}, mint)
 	assert.NotEmpty(t, mint.ProjectID)
 
@@ -249,6 +250,35 @@ func TestRunStepLLMGateway_RunsWithTheKeyThenRevokesIt(t *testing.T) {
 		KeyID: "sk_1", BillingOrgID: "org_1", Models: []string{"claude-sonnet-4-6", "claude-haiku-4-5"},
 		BudgetUSD: 2, SpendUSD: 0.37, SpendKnown: true, ExpiresAt: "2026-11-22T07:00:00Z",
 	}, out.LLMGateway)
+}
+
+// The key outlives everything the step can spend before its command ends:
+// the wait for its machine (the activity's RunStepMachineWaitBudget, which
+// executeUntilDelivered may use up before the first send lands) plus the
+// command's timeout plus slack, capped at 12h. A key minted for a machine
+// that comes back after 25 minutes must still be alive when the command
+// starts.
+func TestRunStepLLMGateway_TTLCoversTheMachineWait(t *testing.T) {
+	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
+	require.Equal(t, 30*time.Minute, activitytypes.RunStepMachineWaitBudget,
+		"the expectations below are written for a 30m machine-wait budget")
+	for _, tc := range []struct {
+		timeout time.Duration
+		want    time.Duration
+	}{
+		{timeout: 20 * time.Minute, want: 20*time.Minute + 30*time.Minute + 2*time.Minute},
+		{timeout: 0, want: 5*time.Minute + 30*time.Minute + 2*time.Minute},
+		{timeout: 12 * time.Hour, want: 12 * time.Hour},
+	} {
+		keys := &fakeStepKeys{}
+		in := gatewayInput(chatID)
+		in.Timeout = int(tc.timeout.Milliseconds())
+		_, err := runGatewayStep(t, gatewayAct(repo, keys, &envMachine{}), in, 1)
+		require.NoError(t, err)
+		require.Len(t, keys.mints, 1, "timeout %v", tc.timeout)
+		assert.Equal(t, tc.want, keys.mints[0].TTL, "timeout %v", tc.timeout)
+	}
 }
 
 // A failed command, and a command whose result never came back, revoke too.

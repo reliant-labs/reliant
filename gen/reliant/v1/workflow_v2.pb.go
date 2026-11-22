@@ -7852,10 +7852,12 @@ type RunLLMGatewayOutput struct {
 	Models []string `protobuf:"bytes,3,rep,name=models,proto3" json:"models,omitempty"`
 	// The key's spending cap, in US dollars.
 	BudgetUsd float64 `protobuf:"fixed64,4,opt,name=budget_usd,json=budgetUsd,proto3" json:"budget_usd,omitempty"`
-	// What the key spent, in US dollars, as the gateway reported it when the key
-	// was revoked; it can lag the last call by seconds.
+	// What the key spent, in US dollars, as metered as of the step's end (when
+	// the key was revoked). Final only when spend_known is true.
 	SpendUsd float64 `protobuf:"fixed64,5,opt,name=spend_usd,json=spendUsd,proto3" json:"spend_usd,omitempty"`
-	// Whether spend_usd was read at all (false: unknown, not zero).
+	// True when spend_usd is final. False means some calls were still settling
+	// when the step ended (or the spend could not be read): spend_usd is then
+	// not final and may be low or zero, never the whole cost.
 	SpendKnown bool `protobuf:"varint,6,opt,name=spend_known,json=spendKnown,proto3" json:"spend_known,omitempty"`
 	// When the key would have expired had it not been revoked, RFC 3339.
 	ExpiresAt     string `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`

@@ -110,9 +110,12 @@ func TestBudgetAndTTL(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, 5.0, Budget(0))
 	assert.Equal(t, 2.0, Budget(2))
-	assert.Equal(t, 7*time.Minute, TTL(0), "default timeout 5m + 2m")
-	assert.Equal(t, 22*time.Minute, TTL(20*time.Minute))
-	assert.Equal(t, 12*time.Hour, TTL(24*time.Hour), "capped")
+	assert.Equal(t, 7*time.Minute, TTL(0, 0), "default timeout 5m + 2m")
+	assert.Equal(t, 37*time.Minute, TTL(0, 30*time.Minute), "default timeout 5m + a 30m delivery wait + 2m")
+	assert.Equal(t, 52*time.Minute, TTL(20*time.Minute, 30*time.Minute))
+	assert.Equal(t, 22*time.Minute, TTL(20*time.Minute, -time.Minute), "a negative wait adds nothing")
+	assert.Equal(t, 12*time.Hour, TTL(24*time.Hour, 30*time.Minute), "capped")
+	assert.Equal(t, 12*time.Hour, TTL(12*time.Hour-time.Minute, 30*time.Minute), "capped with the wait")
 }
 
 func TestMentionsBinary(t *testing.T) {

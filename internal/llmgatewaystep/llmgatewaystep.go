@@ -37,20 +37,24 @@ const (
 	// DefaultCommandTimeout is a run node's command timeout when it sets
 	// none (the run step's own default).
 	DefaultCommandTimeout = 5 * time.Minute
-	// TTLSlack is how long a key outlives its command's timeout: room for
-	// the command to be sent and for its last call to settle.
+	// TTLSlack is how long a key outlives its command's timeout and its
+	// delivery wait: room for the command to be sent and for its last call
+	// to settle.
 	TTLSlack = 2 * time.Minute
 	// MaxTTL is the longest a step key may live.
 	MaxTTL = 12 * time.Hour
 )
 
 // TTL is the lifetime of the key of a command bounded by timeout (0: the
-// default): the timeout plus TTLSlack, at most MaxTTL.
-func TTL(timeout time.Duration) time.Duration {
+// default) that may wait up to deliveryWait to reach its machine before it
+// starts: timeout + deliveryWait + TTLSlack, at most MaxTTL. The key is
+// minted before the first send, so a command held for a machine that is
+// away must not find its key already expired when it finally starts.
+func TTL(timeout, deliveryWait time.Duration) time.Duration {
 	if timeout <= 0 {
 		timeout = DefaultCommandTimeout
 	}
-	return min(timeout+TTLSlack, MaxTTL)
+	return min(timeout+max(deliveryWait, 0)+TTLSlack, MaxTTL)
 }
 
 // Budget is the cap of a key whose node asked for budget (0: the default).

@@ -4539,15 +4539,17 @@ export type RunLLMGatewayOutput = Message<"reliant.v1.RunLLMGatewayOutput"> & {
   budgetUsd: number;
 
   /**
-   * What the key spent, in US dollars, as the gateway reported it when the key
-   * was revoked; it can lag the last call by seconds.
+   * What the key spent, in US dollars, as metered as of the step's end (when
+   * the key was revoked). Final only when spend_known is true.
    *
    * @generated from field: double spend_usd = 5;
    */
   spendUsd: number;
 
   /**
-   * Whether spend_usd was read at all (false: unknown, not zero).
+   * True when spend_usd is final. False means some calls were still settling
+   * when the step ended (or the spend could not be read): spend_usd is then
+   * not final and may be low or zero, never the whole cost.
    *
    * @generated from field: bool spend_known = 6;
    */

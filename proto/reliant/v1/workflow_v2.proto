@@ -2235,10 +2235,12 @@ message RunLLMGatewayOutput {
   repeated string models = 3;
   // The key's spending cap, in US dollars.
   double budget_usd = 4;
-  // What the key spent, in US dollars, as the gateway reported it when the key
-  // was revoked; it can lag the last call by seconds.
+  // What the key spent, in US dollars, as metered as of the step's end (when
+  // the key was revoked). Final only when spend_known is true.
   double spend_usd = 5;
-  // Whether spend_usd was read at all (false: unknown, not zero).
+  // True when spend_usd is final. False means some calls were still settling
+  // when the step ended (or the spend could not be read): spend_usd is then
+  // not final and may be low or zero, never the whole cost.
   bool spend_known = 6;
   // When the key would have expired had it not been revoked, RFC 3339.
   string expires_at = 7;
