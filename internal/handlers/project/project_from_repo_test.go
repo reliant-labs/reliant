@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -66,9 +68,7 @@ func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{
-		Repo:         repo,
-		Lookups:      store.NewProjectExtStore(repo.ORM()),
-		Installs:     store.NewProjectDaemonExtStore(repo.ORM()),
+		Repo: repo, Projects: projectaccesstest.For(repo),
 		Router:       &createProjectRowRouter{resolveID: "daemon-abc"},
 		ControlPlane: cp,
 	})))

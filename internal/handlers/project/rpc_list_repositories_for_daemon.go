@@ -29,7 +29,7 @@ func (s *Service) ListRepositoriesForDaemon(
 	}
 	out := make([]*reliantv1.DaemonRepository, 0, len(rows))
 	for _, pd := range rows {
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, pd.ProjectID, userID)
+		project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, pd.ProjectID, userID)
 		if err != nil {
 			// Either the project belongs to a different user or it was
 			// hard-deleted while still leaving the FK-cascaded row. Skip

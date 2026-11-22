@@ -18,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -553,7 +554,7 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	p := f.project(t, "m", "/home/workspace/m-"+uuid.NewString(), f.cloud, nil)
 	oldPath, newPath := "/Users/me/m-"+uuid.NewString(), "/Users/me/moved-"+uuid.NewString()
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, oldPath, nil))
-	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
 	}}})))
 

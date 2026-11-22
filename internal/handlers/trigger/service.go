@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
@@ -33,6 +35,9 @@ type Deps struct {
 	// the projects, chats, daemons, workflows and presets a trigger names
 	// (deps.go).
 	Repo Repository
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
 
 	// OrgMoves turns the triggers a project move paused back on.
 	OrgMoves OrgMoveResumer
@@ -183,6 +188,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("trigger: Deps.Projects is required")
 	}
 	if d.OrgMoves == nil {
 		return fmt.Errorf("trigger: Deps.OrgMoves is required")

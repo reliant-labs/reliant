@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -13,7 +15,7 @@ import (
 // (which fills Logger and Config).
 func newProjectService(t *testing.T, repo Repository, router Router) *Service {
 	t.Helper()
-	return NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Router: router})))
+	return NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Router: router})))
 }
 
 // withStores wires the stores over d.Repo's database when it has one, as the
