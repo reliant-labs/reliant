@@ -14,6 +14,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	daemon_registry "github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 )
 
@@ -28,7 +29,7 @@ func TestRenameMachine(t *testing.T) {
 
 	var mu sync.Mutex
 	var cpCalls []string
-	var upserts []db.DaemonIdentity
+	var upserts []core.DaemonIdentity
 	names := &daemon_registry.MockMachineNames{
 		RenameDaemonFunc: func(_ context.Context, jwt, daemonID, name string) error {
 			mu.Lock()
@@ -50,15 +51,17 @@ func TestRenameMachine(t *testing.T) {
 			}
 			return &db.Daemon{ID: "d-1", UserID: "test-user", Name: "cloud-2xl", DaemonType: &managed}, nil
 		},
-		UpsertDaemonIdentityFunc: func(_ context.Context, id db.DaemonIdentity) (bool, error) {
+	}
+	mirror := &daemon_registry.MockMirror{
+		UpsertDaemonIdentityFunc: func(_ context.Context, id core.DaemonIdentity) (bool, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			upserts = append(upserts, id)
 			return true, nil
 		},
 	}
-	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, Names: names}))
-	noCP := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
+	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, Mirror: mirror, Names: names}))
+	noCP := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, Mirror: mirror}))
 
 	req := func(id, name string) *connect.Request[pb.RenameMachineRequest] {
 		return connect.NewRequest(&pb.RenameMachineRequest{DaemonId: id, Name: name})

@@ -25,7 +25,9 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -39,9 +41,14 @@ import (
 type DerivationRepository interface {
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	ApplyDaemonLifecycle(ctx context.Context, lc db.DaemonLifecycleUpdate) (bool, error)
-	UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error)
+}
+
+// Mirror writes the registry replica of the control plane's daemon set.
+// daemonmirror.Service satisfies it.
+type Mirror interface {
+	UpsertDaemonIdentity(ctx context.Context, id core.DaemonIdentity) (bool, error)
 	RemoveDaemon(ctx context.Context, daemonID string) (userID string, removed bool, err error)
-	ApplyDaemonRegistrySnapshot(ctx context.Context, snap db.RegistrySnapshotApply) (db.RegistrySnapshotResult, error)
+	ApplyDaemonRegistrySnapshot(ctx context.Context, snap daemonmirror.RegistrySnapshotApply) (daemonmirror.RegistrySnapshotResult, error)
 }
 
 const (
@@ -110,6 +117,7 @@ const (
 type Derivation struct {
 	nc     *nats.Conn
 	repo   DerivationRepository
+	mirror Mirror
 	notify LifecycleNotifier
 }
 
@@ -121,8 +129,8 @@ type Derivation struct {
 type LifecycleNotifier func(ctx context.Context, userID, daemonID string)
 
 // NewDerivation constructs the consumer.
-func NewDerivation(nc *nats.Conn, repo DerivationRepository) *Derivation {
-	return &Derivation{nc: nc, repo: repo}
+func NewDerivation(nc *nats.Conn, repo DerivationRepository, mirror Mirror) *Derivation {
+	return &Derivation{nc: nc, repo: repo, mirror: mirror}
 }
 
 // NotifyLifecycleApplied registers the callback onLifecycle runs after a
@@ -300,7 +308,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) erro
 
 	created := false
 	if evt.HasIdentity() {
-		ident := db.DaemonIdentity{
+		ident := core.DaemonIdentity{
 			DaemonID:   evt.DaemonID,
 			UserID:     evt.UserID,
 			Name:       evt.Name,
@@ -309,7 +317,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) erro
 		if evt.CreatedAt != nil {
 			ident.CreatedAt = *evt.CreatedAt
 		}
-		wrote, err := d.repo.UpsertDaemonIdentity(ctx, ident)
+		wrote, err := d.mirror.UpsertDaemonIdentity(ctx, ident)
 		if err != nil {
 			return fmt.Errorf("upsert identity %s: %w", evt.DaemonID, err)
 		}
@@ -347,7 +355,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) erro
 // not an error. The owner's clients are told only when a row actually went,
 // using the owner the row itself recorded — the event need not carry one.
 func (d *Derivation) onRemoved(ctx context.Context, evt daemonwire.Event) error {
-	userID, removed, err := d.repo.RemoveDaemon(ctx, evt.DaemonID)
+	userID, removed, err := d.mirror.RemoveDaemon(ctx, evt.DaemonID)
 	if err != nil {
 		return fmt.Errorf("remove daemon %s: %w", evt.DaemonID, err)
 	}
@@ -363,7 +371,7 @@ func (d *Derivation) onRemoved(ctx context.Context, evt daemonwire.Event) error 
 }
 
 // handleSnapshot applies one owner's authoritative daemon set. See
-// db.Repo.ApplyDaemonRegistrySnapshot for the guards that make removal safe.
+// daemonmirror.Service.ApplyDaemonRegistrySnapshot for the guards that make removal safe.
 func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
 	var snap daemonwire.RegistrySnapshot
 	if err := json.Unmarshal(msg.Data, &snap); err != nil {
@@ -374,7 +382,7 @@ func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
 		logging.WarnContext(ctx, logPrefix+" registry snapshot missing user_id or at, dropping")
 		return
 	}
-	result, err := d.repo.ApplyDaemonRegistrySnapshot(ctx, snapshotApply(snap, time.Now().UTC()))
+	result, err := d.mirror.ApplyDaemonRegistrySnapshot(ctx, snapshotApply(snap, time.Now().UTC()))
 	if err != nil {
 		logging.WarnContext(ctx, logPrefix+" registry snapshot failed; the next one retries",
 			"userID", snap.UserID, "error", err)
@@ -401,10 +409,10 @@ func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
 // snapshotApply translates the wire snapshot into the repository's terms.
 // Daemons with no id are dropped; an entry with an unrecognised phase keeps
 // its identity but carries no lifecycle, the same rule onLifecycle applies.
-func snapshotApply(snap daemonwire.RegistrySnapshot, now time.Time) db.RegistrySnapshotApply {
-	apply := db.RegistrySnapshotApply{
+func snapshotApply(snap daemonwire.RegistrySnapshot, now time.Time) daemonmirror.RegistrySnapshotApply {
+	apply := daemonmirror.RegistrySnapshotApply{
 		UserID:            snap.UserID,
-		Daemons:           make([]db.RegistrySnapshotDaemon, 0, len(snap.Daemons)),
+		Daemons:           make([]daemonmirror.RegistrySnapshotDaemon, 0, len(snap.Daemons)),
 		KeepCreatedAfter:  snap.At.Add(-registrySnapshotGrace),
 		KeepAttachedSince: now.Add(-registryAttachmentFreshness),
 	}
@@ -412,7 +420,7 @@ func snapshotApply(snap daemonwire.RegistrySnapshot, now time.Time) db.RegistryS
 		if rd.DaemonID == "" {
 			continue
 		}
-		entry := db.RegistrySnapshotDaemon{Identity: db.DaemonIdentity{
+		entry := daemonmirror.RegistrySnapshotDaemon{Identity: core.DaemonIdentity{
 			DaemonID:   rd.DaemonID,
 			UserID:     snap.UserID,
 			Name:       rd.Name,
