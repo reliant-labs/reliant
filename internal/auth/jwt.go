@@ -392,8 +392,12 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("%w: failed to parse claims", ErrInvalidToken)
 	}
 
-	// Check expiration
-	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
+	// Check expiration. A token must carry one: with no exp (or exp 0) it
+	// would be valid forever, and every Supabase session token has one.
+	if claims.Exp <= 0 {
+		return nil, fmt.Errorf("%w: no expiry", ErrInvalidToken)
+	}
+	if time.Now().Unix() > claims.Exp {
 		return nil, ErrExpiredToken
 	}
 	// The issuer and audience the deployment expects, when it names them:
