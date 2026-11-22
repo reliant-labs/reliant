@@ -4149,10 +4149,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
-}
-
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
