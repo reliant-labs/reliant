@@ -85,6 +85,9 @@ func insertUserUpdateAt(ctx context.Context, db orm.Context, update *core.UserUp
 // LatestUserUpdateSequence is the highest sequence number a user's ledger
 // holds, 0 for a user with none.
 func LatestUserUpdateSequence(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	if userID == "" {
+		return 0, fmt.Errorf("user ID cannot be empty")
+	}
 	var seq int64
 	err := db.Bun().NewSelect().Model((*UserUpdate)(nil)).
 		ColumnExpr("COALESCE(MAX(sequence_number), 0)").

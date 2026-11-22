@@ -198,6 +198,9 @@ func TestStreamReads_EmptyOwnerFailsClosed(t *testing.T) {
 	f := newMsgFixture(t, "chat-empty-owner")
 	ctx := context.Background()
 	o := f.env.ORM
+	if _, err := store.LatestUserUpdateSequence(ctx, o, ""); err == nil {
+		t.Error("LatestUserUpdateSequence with no user succeeded")
+	}
 	if _, err := store.UserUpdatesSince(ctx, o, "", 0, 10); err == nil {
 		t.Error("UserUpdatesSince with no user succeeded")
 	}
