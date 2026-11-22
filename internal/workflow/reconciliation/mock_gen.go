@@ -103,7 +103,7 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockReconcilerStore
-// forge:hash=6e074cd64819dc3c5350339467ce9995415703c5008897ae50318c40173be8e9
+// forge:hash=2c4fbcee61599f43db31f031f7ae7e47483e95e98be102c0092cf563391a1e0e
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -134,7 +134,6 @@ type MockReconcilerStore struct {
 	UpsertToolCallResultFunc                        func(context.Context, string, *db.ToolCallResult) error
 	EmitToolCallUpdateFunc                          func(context.Context, string, db.ToolCallUpdate) error
 	GetDaemonFunc                                   func(context.Context, string) (*db.Daemon, error)
-	ChatsHeldOnUsageLimitFunc                       func(context.Context, []string, time.Time) ([]string, error)
 	EnqueueAgentMessageIfAbsentFunc                 func(context.Context, *db.AgentMessage) (bool, error)
 	ListThreadsWithOrphanedAgentMessagesFunc        func(context.Context) ([]string, error)
 	MarkQueuedAgentMessagesUndeliveredForThreadFunc func(context.Context, string) (int64, error)
@@ -349,15 +348,6 @@ func (m *MockReconcilerStore) GetDaemon(ctx context.Context, id string) (*db.Dae
 		return m.GetDaemonFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetDaemon")
-}
-
-// ChatsHeldOnUsageLimit records the call and delegates to ChatsHeldOnUsageLimitFunc when set.
-func (m *MockReconcilerStore) ChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error) {
-	m.Recorder.Record("ChatsHeldOnUsageLimit", ctx, chatIDs, since)
-	if m.ChatsHeldOnUsageLimitFunc != nil {
-		return m.ChatsHeldOnUsageLimitFunc(ctx, chatIDs, since)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ChatsHeldOnUsageLimit")
 }
 
 // EnqueueAgentMessageIfAbsent records the call and delegates to EnqueueAgentMessageIfAbsentFunc when set.

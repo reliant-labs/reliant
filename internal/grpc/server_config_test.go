@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -76,7 +77,7 @@ func testStreaming(t *testing.T) testRoute {
 	repo := &streaminghandler.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
 	}
-	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, Heads: &streaminghandler.MockHeads{}, UserLog: &streaminghandler.MockUserLog{}, OrgFeed: &streaminghandler.MockOrgFeed{}, Siblings: &streaminghandler.MockSiblings{}, SpawnCalls: &streaminghandler.MockSpawnCalls{}})
+	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, Senders: &streaminghandler.MockSenders{}, Heads: &streaminghandler.MockHeads{}, UserLog: &streaminghandler.MockUserLog{}, OrgFeed: &streaminghandler.MockOrgFeed{}, Siblings: &streaminghandler.MockSiblings{}, SpawnCalls: &streaminghandler.MockSpawnCalls{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.StreamingService", svc)
 }

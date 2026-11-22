@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -145,7 +146,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 
 	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
 	require.NoError(t, err)
-	deps := Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
+	deps := Deps{Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
 		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),

@@ -32,7 +32,7 @@ func seedMediaUser(t *testing.T) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	previous := AccountAvailabilityClient
 	AccountAvailabilityClient = noReportClients
 	t.Cleanup(func() { AccountAvailabilityClient = previous })

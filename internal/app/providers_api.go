@@ -877,7 +877,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(repo).
@@ -1299,7 +1299,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
-		r.SetHeldRunActivity(d.Activity)
+		r.SetHeldRunActivity(d.Activity, store.NewProviderBackoffExtStore(d.DB.ORM()))
 	}
 	return &WorkflowReconciler{r}, nil
 }

@@ -379,12 +379,9 @@ var sealedScanSkip = []string{
 // sealedPathAllowlist maps a repo-relative file to why it may still touch a sealed
 // table.
 var sealedPathAllowlist = map[string]string{
-	"internal/accountpurge/accountpurge.go":  "deletes a purged account's rows in its own transaction; moves with the credentials purge in the connection wave",
-	"internal/db/provider_accounts_store.go": "the provider-account store; moves to internal/credentials/provideraccounts",
-	"internal/db/org_provider_accounts.go":   "an org's accounts, grants, seats; moves to internal/credentials/orgaccounts",
-	"internal/db/org_credentials.go":         "the gone-org purge and stale-grant sweep; moves to internal/credentials/orgaccounts",
-	"internal/db/connections.go":             "the connection store and its secrets lock; moves to internal/credentials/connectionvault",
-	"internal/db/llm_usage.go":               "reads an account's display name for the usage ledger; moves with the account reads",
+	"internal/accountpurge/accountpurge.go": "deletes a purged account's rows in its own transaction; moves with the credentials purge in the connection wave",
+	"internal/db/connections.go":            "the connection store and its secrets lock; moves to internal/credentials/connectionvault",
+	"internal/db/llm_usage.go":              "reads an account's provider, label and kind (no secret) for the usage views; moves to provideraccounts when handlers/usage and org_usage take it, with their own wave",
 }
 
 func sealedFinding(t *testing.T, repo string, ids storeIdents) map[string][]scopeFinding {

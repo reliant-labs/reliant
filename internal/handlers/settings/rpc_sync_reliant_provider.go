@@ -50,7 +50,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		return nil, svcerr.Internal("control-plane returned an empty Reliant LLM key")
 	}
 
-	_, _, err = s.deps.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	_, _, err = s.deps.Accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: userID, Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
 		KeyHint: core.KeyHint(plaintext), Secrets: core.AccountSecrets{Secret: plaintext},
 	})

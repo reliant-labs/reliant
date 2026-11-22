@@ -1,5 +1,25 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+
+// Package provideraccounts is the only path to the provider_accounts table for a
+// person's and an org's provider accounts, their limit state, their poll schedule and
+// the thread assignments that pin a thread to an account.
+//
+// Every secret column (the key or access token, the refresh token, the id token) is
+// sealed here on write and opened here on read, under the owner's vault tenant: the
+// person's, or the org's (accountseal). A caller gets plaintext only from the
+// WithSecrets reads it already received it from. Each statement is scoped to an
+// owner (core.AccountOwner), and an invalid owner (a person's id shaped like an owner
+// key) reaches nothing, so a personal method never touches an org's account and an
+// org's never a person's.
+//
+// The org-side administration (grants, seats, workspace bindings, key rotation, the
+// rejected-key notices and the gone-org purge) is internal/credentials/orgaccounts.
+//
+// Built by hand, by internal/app's NewProviderAccounts provider (providers.go): never
+// a node compose.go constructs from Deps.
+//
+//forge:provided
+package provideraccounts
 
 import (
 	"context"
@@ -12,157 +32,70 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 
+	"github.com/reliant-labs/reliant/internal/credentials/accountseal"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/vault"
 )
 
-// Sealed account columns. Each ciphertext is bound to its account id and column, so a value
-// copied to another account row, another user or another column does not open.
-const (
-	accountColSecret  = "secret"
-	accountColRefresh = "refresh"
-	accountColIDToken = "id_token"
-
-	providerAccountsAADTable = "provider_accounts"
-)
-
-// ProviderAccountAAD is the vault AAD of one sealed column of one account.
-func ProviderAccountAAD(accountID, column string) []byte {
-	return []byte(providerAccountsAADTable + "\x00" + accountID + "\x00" + column)
+// Deps holds dependencies for the provideraccounts package.
+type Deps struct {
+	// DB is the forge ORM handle. A call made with a ctx carrying a transaction joins it.
+	DB orm.Context
+	// Sealer seals and opens the secret columns (the credential vault).
+	Sealer Sealer
 }
 
-var errAccountVaultDisabled = errors.New("provider accounts require the credential vault; none is configured")
-
-// accountStore is the Postgres implementation of the Repo's provider-account methods. Its statements are
-// internal/store's (provider_account*_repo_ext.go, thread_provider_account_repo_ext.go); what stays here is everything that is not SQL: sealing
-// and opening the secret columns, the advisory-lock-then-read-then-write transactions, the
-// identity merge, and the compare-and-swap loop.
-type accountStore struct {
-	db     orm.Context
-	sealer CredentialSealer
-	now    func() time.Time
+//forge:contract
+type service struct {
+	deps Deps
+	now  func() time.Time
 }
 
-// newAccountStore creates the store. Without SetSealer every secret read or write fails.
-func newAccountStore(db orm.Context) *accountStore {
-	return &accountStore{db: db, now: func() time.Time { return time.Now().UTC() }}
+// New creates the provider-account store. It fails without a vault: a secret is stored
+// only sealed.
+//
+// forge:constructor
+func New(deps Deps) (Service, error) {
+	if deps.DB == nil {
+		return nil, errors.New("provideraccounts: Deps.DB is required")
+	}
+	if deps.Sealer == nil {
+		return nil, accountseal.ErrVaultDisabled
+	}
+	return &service{deps: deps, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
-// SetSealer enables the credential vault.
-func (s *accountStore) SetSealer(sealer CredentialSealer) { s.sealer = sealer }
-
-// SetClock replaces the clock used for timestamps the store stamps itself. For tests.
-func (s *accountStore) SetClock(now func() time.Time) { s.now = now }
-
-// accountTenant is the vault tenant an owner's account secrets are sealed under: the person's,
-// or the org's (control-plane docs/design/org-provider-accounts.md §3.5). It is chosen from the
-// owner's kind, never from the stored user_id, so an org's account never opens under any person's
-// tenant (UserTenant("org:<id>") included), nor under another org's: the vault binds the tenant
-// into every ciphertext.
-func accountTenant(owner core.AccountOwner) (vault.Tenant, error) {
-	if !owner.Valid() {
-		return vault.Tenant{}, fmt.Errorf("invalid provider account owner %q/%q", owner.Kind, owner.ID)
-	}
-	if owner.IsOrg() {
-		return vault.OrgTenant(owner.ID), nil
-	}
-	return vault.UserTenant(owner.ID), nil
-}
-
-func (s *accountStore) seal(ctx context.Context, owner core.AccountOwner, accountID, column, plaintext string) ([]byte, error) {
-	if s.sealer == nil {
-		return nil, errAccountVaultDisabled
-	}
-	if plaintext == "" {
-		return nil, nil
-	}
-	tenant, err := accountTenant(owner)
-	if err != nil {
-		return nil, err
-	}
-	sealed, err := s.sealer.Seal(ctx, tenant, []byte(plaintext), ProviderAccountAAD(accountID, column))
-	if err != nil {
-		return nil, fmt.Errorf("sealing provider account %s.%s: %w", accountID, column, err)
-	}
-	return sealed, nil
-}
-
-func (s *accountStore) open(ctx context.Context, owner core.AccountOwner, accountID, column string, sealed []byte) (string, error) {
-	if s.sealer == nil {
-		return "", errAccountVaultDisabled
-	}
-	if len(sealed) == 0 {
-		return "", nil
-	}
-	tenant, err := accountTenant(owner)
-	if err != nil {
-		return "", err
-	}
-	pt, err := s.sealer.Open(ctx, tenant, sealed, ProviderAccountAAD(accountID, column))
-	if err != nil {
-		return "", fmt.Errorf("opening provider account %s.%s: %w", accountID, column, err)
-	}
-	defer clear(pt)
-	return string(pt), nil
-}
-
-func (s *accountStore) sealAll(ctx context.Context, owner core.AccountOwner, accountID string, sec core.AccountSecrets) (secret, refresh, idToken []byte, err error) {
-	if secret, err = s.seal(ctx, owner, accountID, accountColSecret, sec.Secret); err != nil {
-		return nil, nil, nil, err
-	}
-	if refresh, err = s.seal(ctx, owner, accountID, accountColRefresh, sec.Refresh); err != nil {
-		return nil, nil, nil, err
-	}
-	if idToken, err = s.seal(ctx, owner, accountID, accountColIDToken, sec.IDToken); err != nil {
-		return nil, nil, nil, err
-	}
-	return secret, refresh, idToken, nil
-}
-
-func (s *accountStore) openAll(ctx context.Context, a store.SealedProviderAccount) (core.AccountSecrets, error) {
-	var out core.AccountSecrets
-	var err error
-	owner := a.Owner() // from owner_kind / org_id, never the raw user_id
-	if out.Secret, err = s.open(ctx, owner, a.ID, accountColSecret, a.Secret); err != nil {
-		return core.AccountSecrets{}, err
-	}
-	if out.Refresh, err = s.open(ctx, owner, a.ID, accountColRefresh, a.Refresh); err != nil {
-		return core.AccountSecrets{}, err
-	}
-	if out.IDToken, err = s.open(ctx, owner, a.ID, accountColIDToken, a.IDToken); err != nil {
-		return core.AccountSecrets{}, err
-	}
-	return out, nil
+func (s *service) openAll(ctx context.Context, a store.SealedProviderAccount) (core.AccountSecrets, error) {
+	return accountseal.OpenAll(ctx, s.deps.Sealer, a.Owner(), a.ID, a.Secret, a.Refresh, a.IDToken) // owner from owner_kind / org_id, never the raw user_id
 }
 
 // inTx runs f in a READ COMMITTED transaction, or in the one ctx already carries. Writers of one
 // (user, provider) serialize on an advisory lock rather than relying on serialization retries,
 // and a transaction is never retried: f seals with fresh randomness and reads under its locks,
 // so it is only correct as the one attempt.
-func (s *accountStore) inTx(ctx context.Context, f func(ctx context.Context) error) error {
-	return s.db.RunTx(ctx, orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, f)
+func (s *service) inTx(ctx context.Context, f func(ctx context.Context) error) error {
+	return s.deps.DB.RunTx(ctx, orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, f)
 }
 
 // ListProviderAccounts lists a person's own accounts. It never returns an org's account: the
 // read is scoped to owner_kind 'user', and a user id shaped like an owner key is no person.
-func (s *accountStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+func (s *service) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
 	return s.ListOwnedProviderAccounts(ctx, core.UserAccountOwner(userID))
 }
 
 // ListOwnedProviderAccounts lists the owner's accounts, metadata only.
-func (s *accountStore) ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error) {
-	return store.ListOwnerProviderAccounts(ctx, s.db, owner)
+func (s *service) ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error) {
+	return store.ListOwnerProviderAccounts(ctx, s.deps.DB, owner)
 }
 
-func (s *accountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+func (s *service) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
 	return s.ListOwnedProviderAccountsWithSecrets(ctx, core.UserAccountOwner(userID))
 }
 
 // ListOwnedProviderAccountsWithSecrets opens every account of the owner, each under the owner's
 // tenant. An invalid owner lists nothing.
-func (s *accountStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
-	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.db, owner)
+func (s *service) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.deps.DB, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -179,13 +112,13 @@ func (s *accountStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context,
 	return out, nil
 }
 
-func (s *accountStore) GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error) {
+func (s *service) GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error) {
 	return s.GetOwnedProviderAccountWithSecrets(ctx, core.UserAccountOwner(userID), accountID)
 }
 
 // GetOwnedProviderAccountWithSecrets opens one of the owner's accounts, under the owner's tenant.
-func (s *accountStore) GetOwnedProviderAccountWithSecrets(ctx context.Context, owner core.AccountOwner, accountID string) (*core.AccountWithSecrets, error) {
-	r, err := store.GetOwnerProviderAccountSealed(ctx, s.db, owner, accountID)
+func (s *service) GetOwnedProviderAccountWithSecrets(ctx context.Context, owner core.AccountOwner, accountID string) (*core.AccountWithSecrets, error) {
+	r, err := store.GetOwnerProviderAccountSealed(ctx, s.deps.DB, owner, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +129,7 @@ func (s *accountStore) GetOwnedProviderAccountWithSecrets(ctx context.Context, o
 	return &core.AccountWithSecrets{ProviderAccount: r.ProviderAccount, Secrets: sec}, nil
 }
 
-func (s *accountStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
+func (s *service) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
 	if err := validateUpsert(u); err != nil {
 		return core.ProviderAccount{}, false, err
 	}
@@ -259,15 +192,15 @@ func validManagedUpsert(u core.AccountUpsert) bool {
 
 // upsertTx is the one write path for connecting an account: a fresh sign-in and the rewrite of a
 // placeholder identity after a refresh.
-func (s *accountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error) {
+func (s *service) upsertTx(ctx context.Context, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error) {
 	key := u.AccountOwner().Key()
-	if err := store.LockUserProviderAccounts(ctx, s.db, key, u.Provider); err != nil {
+	if err := store.LockUserProviderAccounts(ctx, s.deps.DB, key, u.Provider); err != nil {
 		return core.ProviderAccount{}, false, err
 	}
 
 	// Only a placeholder is ever rewritten: a real identity is who the account IS.
 	if u.ReplaceIdentityOf != "" && u.ReplaceIdentityOf != u.IdentityKey && core.IsPlaceholderIdentityKey(u.ReplaceIdentityOf) {
-		old, err := store.LockProviderAccountByIdentity(ctx, s.db, key, u.Provider, u.ReplaceIdentityOf)
+		old, err := store.LockProviderAccountByIdentity(ctx, s.deps.DB, key, u.Provider, u.ReplaceIdentityOf)
 		if err != nil {
 			return core.ProviderAccount{}, false, err
 		}
@@ -277,7 +210,7 @@ func (s *accountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct
 		}
 	}
 
-	existing, err := store.LockProviderAccountByIdentity(ctx, s.db, key, u.Provider, u.IdentityKey)
+	existing, err := store.LockProviderAccountByIdentity(ctx, s.deps.DB, key, u.Provider, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, false, err
 	}
@@ -290,28 +223,18 @@ func (s *accountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct
 }
 
 // credential is u's write of identity, with its secrets sealed for account accountID.
-func (s *accountStore) credential(ctx context.Context, owner core.AccountOwner, accountID string, u core.AccountUpsert, identity string) (store.ProviderAccountCredential, error) {
-	secret, refresh, idToken, err := s.sealAll(ctx, owner, accountID, u.Secrets)
-	if err != nil {
-		return store.ProviderAccountCredential{}, err
-	}
-	c := store.ProviderAccountCredential{
-		AuthKind: u.AuthKind, IdentityKey: identity,
-		Email: u.Email, ExternalAccountID: u.ExternalAccountID, OrganizationID: u.OrganizationID,
-		OrganizationName: u.OrganizationName, Plan: u.Plan, PlanRaw: u.PlanRaw, KeyHint: u.KeyHint, Scope: u.Scope,
-		Secret: secret, Refresh: refresh, IDToken: idToken, ExpiresAt: u.ExpiresAt, UpdatedAt: s.now(),
-	}
-	return c, nil
+func (s *service) credential(ctx context.Context, owner core.AccountOwner, accountID string, u core.AccountUpsert, identity string) (store.ProviderAccountCredential, error) {
+	return accountseal.Credential(ctx, s.deps.Sealer, owner, accountID, u, identity, s.now())
 }
 
-func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, error) {
+func (s *service) insertTx(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, error) {
 	id := uuid.New().String()
 	owner := u.AccountOwner()
 	c, err := s.credential(ctx, owner, id, u, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
-	priority, err := store.NextProviderAccountPriority(ctx, s.db, owner.Key(), u.Provider)
+	priority, err := store.NextProviderAccountPriority(ctx, s.deps.DB, owner.Key(), u.Provider)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
@@ -319,19 +242,19 @@ func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert) (core
 		Owner: owner, OrgAccess: u.OrgAccess, CreatedByUserID: u.CreatedByUserID,
 		AttributedOrgID: u.AttributedOrgID, AttributionSource: u.AttributionSource,
 	}
-	return store.InsertProviderAccount(ctx, s.db, id, own, u.Provider, priority, c, c.UpdatedAt)
+	return store.InsertProviderAccount(ctx, s.deps.DB, id, own, u.Provider, priority, c, c.UpdatedAt)
 }
 
 // updateTx rewrites an existing account in place with a fresh credential. Identity metadata that
 // the new write does not carry is kept; the refresh and id tokens likewise (a re-consent that
 // omits a refresh token must not erase the one we hold). Label, priority and pause are the
 // user's and are never touched here.
-func (s *accountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string) (core.ProviderAccount, error) {
+func (s *service) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string) (core.ProviderAccount, error) {
 	c, err := s.credential(ctx, cur.Owner(), cur.ID, u, identity)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
-	return store.RewriteProviderAccountCredential(ctx, s.db, cur.UserID, cur.ID, c)
+	return store.RewriteProviderAccountCredential(ctx, s.deps.DB, cur.UserID, cur.ID, c)
 }
 
 // renameTx teaches a placeholder account (old) its real identity, u.IdentityKey.
@@ -344,8 +267,8 @@ func (s *accountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u
 // once did) lost all of that. What carries over from the placeholder is only what the target
 // lacks: the smaller priority, a label, a pause, its thread assignments. The tokens written are
 // u's, the refresh response that taught us the identity, which are newer than either row.
-func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u core.AccountUpsert) (core.ProviderAccount, error) {
-	target, err := store.LockProviderAccountByIdentity(ctx, s.db, old.UserID, u.Provider, u.IdentityKey)
+func (s *service) renameTx(ctx context.Context, old core.ProviderAccount, u core.AccountUpsert) (core.ProviderAccount, error) {
+	target, err := store.LockProviderAccountByIdentity(ctx, s.deps.DB, old.UserID, u.Provider, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
@@ -359,7 +282,7 @@ func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u
 		return core.ProviderAccount{}, fmt.Errorf("refusing to merge into placeholder identity %q", target.IdentityKey)
 	}
 
-	if err := store.MoveThreadAssignments(ctx, s.db, old.ID, target.ID); err != nil {
+	if err := store.MoveThreadAssignments(ctx, s.deps.DB, old.ID, target.ID); err != nil {
 		return core.ProviderAccount{}, err
 	}
 	priority := min(target.Priority, old.Priority)
@@ -372,10 +295,10 @@ func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u
 		paused = old.PausedAt
 	}
 	// Free the identity bookkeeping before the target takes the smaller priority.
-	if err := store.RemoveProviderAccount(ctx, s.db, old.ID); err != nil {
+	if err := store.RemoveProviderAccount(ctx, s.deps.DB, old.ID); err != nil {
 		return core.ProviderAccount{}, err
 	}
-	if err := store.SetProviderAccountStanding(ctx, s.db, target.ID, priority, label, paused); err != nil {
+	if err := store.SetProviderAccountStanding(ctx, s.deps.DB, target.ID, priority, label, paused); err != nil {
 		return core.ProviderAccount{}, err
 	}
 	target.Priority, target.Label, target.PausedAt = priority, label, paused
@@ -383,7 +306,7 @@ func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u
 	if err != nil {
 		return core.ProviderAccount{}, err
 	}
-	if err := store.DensifyProviderAccounts(ctx, s.db, old.UserID, u.Provider); err != nil {
+	if err := store.DensifyProviderAccounts(ctx, s.deps.DB, old.UserID, u.Provider); err != nil {
 		return core.ProviderAccount{}, err
 	}
 	return acct, nil
@@ -398,7 +321,7 @@ const maxAccountSwapAttempts = 3
 // the UPDATE is conditioned on the exact ciphertexts that were read (the witness). Every write
 // re-seals the secret, so the witness changes whenever the row does: of two racers holding the
 // same expectation exactly one update matches.
-func (s *accountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error) {
+func (s *service) CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error) {
 	if next.Secret == "" {
 		return false, errors.New("account secret cannot be empty")
 	}
@@ -407,23 +330,23 @@ func (s *accountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, 
 	if !owner.Valid() {
 		return false, nil
 	}
-	secret, refresh, idToken, err := s.sealAll(ctx, owner, accountID, core.AccountSecrets{Secret: next.Secret, Refresh: next.Refresh, IDToken: next.IDToken})
+	secret, refresh, idToken, err := accountseal.SealAll(ctx, s.deps.Sealer, owner, accountID, core.AccountSecrets{Secret: next.Secret, Refresh: next.Refresh, IDToken: next.IDToken})
 	if err != nil {
 		return false, err
 	}
 	for range maxAccountSwapAttempts {
-		wSecret, wRefresh, found, err := store.ProviderAccountWitness(ctx, s.db, userID, accountID)
+		wSecret, wRefresh, found, err := store.ProviderAccountWitness(ctx, s.deps.DB, userID, accountID)
 		if err != nil || !found {
 			return false, err
 		}
-		stored, err := s.open(ctx, owner, accountID, accountColRefresh, wRefresh)
+		stored, err := accountseal.Open(ctx, s.deps.Sealer, owner, accountID, accountseal.ColRefresh, wRefresh)
 		if err != nil {
 			return false, err
 		}
 		if subtle.ConstantTimeCompare([]byte(stored), []byte(expectedRefresh)) != 1 {
 			return false, nil
 		}
-		swapped, err := store.SwapProviderAccountTokens(ctx, s.db, userID, accountID, store.ProviderAccountCredential{
+		swapped, err := store.SwapProviderAccountTokens(ctx, s.deps.DB, userID, accountID, store.ProviderAccountCredential{
 			Secret: secret, Refresh: refresh, IDToken: idToken, ExpiresAt: next.ExpiresAt,
 			Email: next.Email, OrganizationName: next.OrganizationName, Plan: next.Plan, PlanRaw: next.PlanRaw,
 			UpdatedAt: s.now(),
@@ -436,16 +359,16 @@ func (s *accountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, 
 }
 
 // PatchProviderAccount patches one of a person's own accounts.
-func (s *accountStore) PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+func (s *service) PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
 	return s.PatchOwnedProviderAccount(ctx, core.UserAccountOwner(userID), accountID, p)
 }
 
 // PatchOwnedProviderAccount patches one of the owner's accounts. Marking an org's key
 // needs-sign-in takes it out of every member's candidates at once (org-provider-accounts.md §4.7).
-func (s *accountStore) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+func (s *service) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
 	var out core.ProviderAccount
 	err := s.inTx(ctx, func(ctx context.Context) error {
-		cur, err := store.LockOwnerProviderAccount(ctx, s.db, owner, accountID)
+		cur, err := store.LockOwnerProviderAccount(ctx, s.deps.DB, owner, accountID)
 		if err != nil {
 			return err
 		}
@@ -474,29 +397,29 @@ func (s *accountStore) PatchOwnedProviderAccount(ctx context.Context, owner core
 				reauthReason = *p.NeedsReauth
 			}
 		}
-		out, err = store.PatchUserProviderAccount(ctx, s.db, cur.UserID, accountID, label, paused, reauthAt, reauthReason, now)
+		out, err = store.PatchUserProviderAccount(ctx, s.deps.DB, cur.UserID, accountID, label, paused, reauthAt, reauthReason, now)
 		return err
 	})
 	return out, err
 }
 
-func (s *accountStore) ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error {
+func (s *service) ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error {
 	return s.ReorderOwnedProviderAccounts(ctx, core.UserAccountOwner(userID), provider, orderedIDs)
 }
 
 // ReorderOwnedProviderAccounts sets the priorities of the owner's accounts of provider to
 // 0..n-1 in orderedIDs order. An invalid owner (a person's id shaped like an owner key) has no
 // order: core.ErrInvalidAccountOrder.
-func (s *accountStore) ReorderOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner, provider string, orderedIDs []string) error {
+func (s *service) ReorderOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner, provider string, orderedIDs []string) error {
 	if !owner.Valid() {
 		return core.ErrInvalidAccountOrder // no owner: an owner key never reaches an org's order as a person's
 	}
 	key := owner.Key()
 	return s.inTx(ctx, func(ctx context.Context) error {
-		if err := store.LockUserProviderAccounts(ctx, s.db, key, provider); err != nil {
+		if err := store.LockUserProviderAccounts(ctx, s.deps.DB, key, provider); err != nil {
 			return err
 		}
-		ids, err := store.LockProviderAccountIDs(ctx, s.db, key, provider)
+		ids, err := store.LockProviderAccountIDs(ctx, s.deps.DB, key, provider)
 		if err != nil {
 			return err
 		}
@@ -516,7 +439,7 @@ func (s *accountStore) ReorderOwnedProviderAccounts(ctx context.Context, owner c
 		}
 		now := s.now()
 		for i, id := range orderedIDs {
-			if err := store.SetProviderAccountPriority(ctx, s.db, id, i, now); err != nil {
+			if err := store.SetProviderAccountPriority(ctx, s.deps.DB, id, i, now); err != nil {
 				return err
 			}
 		}
@@ -524,95 +447,95 @@ func (s *accountStore) ReorderOwnedProviderAccounts(ctx context.Context, owner c
 	})
 }
 
-func (s *accountStore) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
+func (s *service) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
 	return s.DeleteOwnedProviderAccount(ctx, core.UserAccountOwner(userID), accountID)
 }
 
 // DeleteOwnedProviderAccount deletes one of the owner's accounts and re-densifies its provider's
 // priorities. Its ciphertext goes with the row; limit state, thread assignments and an org
 // account's grants cascade.
-func (s *accountStore) DeleteOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string) error {
+func (s *service) DeleteOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string) error {
 	if !owner.Valid() {
 		return core.ErrProviderAccountNotFound // a person's delete never reaches an org's account
 	}
 	key := owner.Key()
-	provider, err := store.UserProviderAccountProvider(ctx, s.db, key, accountID)
+	provider, err := store.UserProviderAccountProvider(ctx, s.deps.DB, key, accountID)
 	if err != nil {
 		return err
 	}
 	return s.inTx(ctx, func(ctx context.Context) error {
-		if err := store.LockUserProviderAccounts(ctx, s.db, key, provider); err != nil {
+		if err := store.LockUserProviderAccounts(ctx, s.deps.DB, key, provider); err != nil {
 			return err
 		}
-		deleted, err := store.DeleteUserProviderAccount(ctx, s.db, key, accountID)
+		deleted, err := store.DeleteUserProviderAccount(ctx, s.deps.DB, key, accountID)
 		if err != nil {
 			return err
 		}
 		if !deleted {
 			return core.ErrProviderAccountNotFound
 		}
-		return store.DensifyProviderAccounts(ctx, s.db, key, provider)
+		return store.DensifyProviderAccounts(ctx, s.deps.DB, key, provider)
 	})
 }
 
 // ---- limit state ----
 
-func (s *accountStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
+func (s *service) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
 	if !core.UserAccountOwner(userID).Valid() {
 		return map[string]core.LimitState{}, nil
 	}
-	return store.ListUserAccountLimits(ctx, s.db, userID)
+	return store.ListUserAccountLimits(ctx, s.deps.DB, userID)
 }
 
 // GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Unlike
 // ListAccountLimits it is not scoped to a user: the usage poller leases bare account ids.
-func (s *accountStore) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
-	return store.GetAccountLimitState(ctx, s.db, accountID)
+func (s *service) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
+	return store.GetAccountLimitState(ctx, s.deps.DB, accountID)
 }
 
 // EnsureUsagePollScheduled schedules a usage poll for the account only when none is scheduled and
 // its provider is one of providers. It never moves an existing schedule, so a poll that is backing
 // off stays backed off while traffic keeps arriving, and it keeps the failure count (unlike
 // ScheduleUsagePoll). An absent account, or one whose limits row does not exist yet, is a no-op.
-func (s *accountStore) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
+func (s *service) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
 	if next.IsZero() {
 		return errors.New("a poll time is required")
 	}
 	if len(providers) == 0 {
 		return nil
 	}
-	return store.EnsureUsagePollScheduled(ctx, s.db, accountID, next, providers, s.now())
+	return store.EnsureUsagePollScheduled(ctx, s.deps.DB, accountID, next, providers, s.now())
 }
 
 // ClaimUsageFetch records that the caller is about to call the account's usage API and reports
 // whether it may: false when another caller claimed it within the last floor. The claim is one
 // atomic statement, so replicas share the floor. An absent account claims nothing.
-func (s *accountStore) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
-	return store.ClaimUsageFetch(ctx, s.db, accountID, now, floor)
+func (s *service) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
+	return store.ClaimUsageFetch(ctx, s.deps.DB, accountID, now, floor)
 }
 
 // UpsertAccountLimitSnapshot writes snap for the account whose owner key is snap.UserID: an org's
 // account's limits row is keyed by the org's owner key, shared by every member who uses it.
-func (s *accountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core.LimitState) error {
+func (s *service) UpsertAccountLimitSnapshot(ctx context.Context, snap core.LimitState) error {
 	if snap.AccountID == "" || snap.UserID == "" {
 		return errors.New("account_id and user_id are required")
 	}
 	if snap.ObservedAt.IsZero() {
 		return errors.New("observed_at is required")
 	}
-	return store.UpsertAccountLimitSnapshot(ctx, s.db, snap, s.now())
+	return store.UpsertAccountLimitSnapshot(ctx, s.deps.DB, snap, s.now())
 }
 
 // BenchAccount benches one of the owner's accounts. For an org's account the bench is the org's,
 // so it takes the key out of rotation for every member until it resets.
-func (s *accountStore) BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error {
+func (s *service) BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error {
 	if until.IsZero() {
 		return errors.New("bench needs a time; pass the probe time for an unknown reset")
 	}
 	if !owner.Valid() {
 		return core.ErrProviderAccountNotFound
 	}
-	found, err := store.BenchProviderAccount(ctx, s.db, owner.Key(), accountID, until, window, probe, s.now())
+	found, err := store.BenchProviderAccount(ctx, s.deps.DB, owner.Key(), accountID, until, window, probe, s.now())
 	if err != nil {
 		return err
 	}
@@ -622,15 +545,15 @@ func (s *accountStore) BenchAccount(ctx context.Context, owner core.AccountOwner
 	return nil
 }
 
-func (s *accountStore) LeaseUsagePolls(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]string, error) {
+func (s *service) LeaseUsagePolls(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]string, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	return store.LeaseUsagePolls(ctx, s.db, now, limit, lease)
+	return store.LeaseUsagePolls(ctx, s.deps.DB, now, limit, lease)
 }
 
-func (s *accountStore) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
-	found, err := store.ScheduleUsagePoll(ctx, s.db, accountID, next, failures, errText, s.now())
+func (s *service) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
+	found, err := store.ScheduleUsagePoll(ctx, s.deps.DB, accountID, next, failures, errText, s.now())
 	if err != nil {
 		return err
 	}
@@ -642,24 +565,24 @@ func (s *accountStore) ScheduleUsagePoll(ctx context.Context, accountID string, 
 
 // ---- thread assignments ----
 
-func (s *accountStore) GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error) {
-	return store.GetThreadAssignment(ctx, s.db, threadID, provider)
+func (s *service) GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error) {
+	return store.GetThreadAssignment(ctx, s.deps.DB, threadID, provider)
 }
 
 // LatestServingAccount returns the account that served the thread's newest assistant message
 // that names one, or "" when none does. Unlike a sticky assignment it follows the provider the
 // thread last ran on, so it is right after a cross-provider fallback returns.
-func (s *accountStore) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
-	return store.LatestServingProviderAccount(ctx, s.db, threadID)
+func (s *service) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
+	return store.LatestServingProviderAccount(ctx, s.deps.DB, threadID)
 }
 
 // ListThreadAssignments returns the thread's sticky account for every provider it has used,
 // most recently assigned first.
-func (s *accountStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
-	return store.ListThreadAssignments(ctx, s.db, threadID)
+func (s *service) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
+	return store.ListThreadAssignments(ctx, s.deps.DB, threadID)
 }
 
-func (s *accountStore) SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (bool, error) {
+func (s *service) SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (bool, error) {
 	if a.ThreadID == "" || a.Provider == "" || a.AccountID == "" {
 		return false, errors.New("thread_id, provider and account_id are required")
 	}
@@ -667,24 +590,39 @@ func (s *accountStore) SetThreadAssignment(ctx context.Context, a core.Assignmen
 		a.AssignedAt = s.now()
 	}
 	if expectedAccountID == "" {
-		return store.InsertThreadAssignment(ctx, s.db, a)
+		return store.InsertThreadAssignment(ctx, s.deps.DB, a)
 	}
-	return store.ReassignThread(ctx, s.db, a, expectedAccountID)
+	return store.ReassignThread(ctx, s.deps.DB, a, expectedAccountID)
 }
 
-func (s *accountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
-	return store.RecentAssignmentCounts(ctx, s.db, accountIDs, since)
+func (s *service) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
+	return store.RecentAssignmentCounts(ctx, s.deps.DB, accountIDs, since)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without
 // opening (decrypting) any of them.
-func (s *accountStore) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return store.ListUserIDsWithProviderAccount(ctx, s.db, provider)
+func (s *service) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
+	return store.ListUserIDsWithProviderAccount(ctx, s.deps.DB, provider)
 }
 
-// CredentialSealer is the slice of the credential vault the provider-account store seals and
-// opens with. Declared here, where it is consumed.
-type CredentialSealer interface {
-	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
-	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
+// ListOwnedAccountLimits returns limit state by account id for the owner's accounts that have
+// any. An org's limits are keyed by its owner key, shared by every member who uses the account.
+func (s *service) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	if !owner.Valid() {
+		return map[string]core.LimitState{}, nil
+	}
+	return store.ListUserAccountLimits(ctx, s.deps.DB, owner.Key())
+}
+
+// ListMemberAccountGrants returns when each of orgID's accounts was granted to userID, by
+// account id. The caller decides whether a grant still counts (control-plane
+// docs/design/org-provider-accounts.md §3.3: only one made in the current membership).
+func (s *service) ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error) {
+	return store.ListMemberAccountGrants(ctx, s.deps.DB, orgID, userID)
+}
+
+// ClearOtherThreadAssignments clears incompatible provider pins before the next assignment
+// after a chat-wide provider switch, scoped to the thread's owner. Repeated calls are harmless.
+func (s *service) ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error {
+	return store.ClearOtherThreadAssignments(ctx, s.deps.DB, userID, threadID, provider)
 }

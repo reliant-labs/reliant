@@ -24,7 +24,7 @@ import (
 func TestDefaultGetDriver_ExplicitDriverThatCannotServeTheModelFails(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 	ctx := context.Background()
 	userID := "explicit-driver-user"
@@ -49,7 +49,7 @@ func TestDefaultGetDriver_ExplicitDriverThatCannotServeTheModelFails(t *testing.
 func TestDefaultGetDriver_UnpinnedModelStillAutoSelects(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 	ctx := context.Background()
 	userID := "unpinned-driver-user"

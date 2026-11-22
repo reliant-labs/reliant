@@ -105,6 +105,78 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 // Compile-time check.
 var _ Questions = (*MockQuestions)(nil)
 
+// forge:section MockMessages
+// forge:hash=e538e6cd1aaecf6b2a3928c5d327dee1754d7f777e4873819637480758889ee8
+
+// MockMessages is a test mock for the Messages interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMessages.<Method>Func not set" error.
+type MockMessages struct {
+	contractkit.Recorder
+	FindMessageFunc        func(context.Context, string) (*core.Message, error)
+	LatestTurnInThreadFunc func(context.Context, string) (*core.Message, error)
+}
+
+// FindMessage records the call and delegates to FindMessageFunc when set.
+func (m *MockMessages) FindMessage(ctx context.Context, id string) (*core.Message, error) {
+	m.Recorder.Record("FindMessage", ctx, id)
+	if m.FindMessageFunc != nil {
+		return m.FindMessageFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockMessages", "FindMessage")
+}
+
+// LatestTurnInThread records the call and delegates to LatestTurnInThreadFunc when set.
+func (m *MockMessages) LatestTurnInThread(ctx context.Context, threadID string) (*core.Message, error) {
+	m.Recorder.Record("LatestTurnInThread", ctx, threadID)
+	if m.LatestTurnInThreadFunc != nil {
+		return m.LatestTurnInThreadFunc(ctx, threadID)
+	}
+	return nil, contractkit.MockNotSet("MockMessages", "LatestTurnInThread")
+}
+
+// Compile-time check.
+var _ Messages = (*MockMessages)(nil)
+
+// forge:section MockToolBlocks
+// forge:hash=1a3e1a2808c127b60d8073f54e217258115193b01b973afc64a73ba02ab42a8a
+
+// MockToolBlocks is a test mock for the ToolBlocks interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolBlocks.<Method>Func not set" error.
+type MockToolBlocks struct {
+	contractkit.Recorder
+	FindToolBlockFunc  func(context.Context, string, reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+	ListToolBlocksFunc func(context.Context, string, reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
+}
+
+// FindToolBlock records the call and delegates to FindToolBlockFunc when set.
+func (m *MockToolBlocks) FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error) {
+	m.Recorder.Record("FindToolBlock", ctx, toolCallID, blockType)
+	if m.FindToolBlockFunc != nil {
+		return m.FindToolBlockFunc(ctx, toolCallID, blockType)
+	}
+	return nil, contractkit.MockNotSet("MockToolBlocks", "FindToolBlock")
+}
+
+// ListToolBlocks records the call and delegates to ListToolBlocksFunc when set.
+func (m *MockToolBlocks) ListToolBlocks(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error) {
+	m.Recorder.Record("ListToolBlocks", ctx, toolCallID, blockType)
+	if m.ListToolBlocksFunc != nil {
+		return m.ListToolBlocksFunc(ctx, toolCallID, blockType)
+	}
+	return nil, contractkit.MockNotSet("MockToolBlocks", "ListToolBlocks")
+}
+
+// Compile-time check.
+var _ ToolBlocks = (*MockToolBlocks)(nil)
+
 // forge:section MockSpawns
 // forge:hash=e8af4c3c3a8dce6fe8e78da7341174f420adce76e694e4e2b04114098ceab40f
 
@@ -152,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=0d1450ffcab992312fa59ba174580d1f8cca4705b7b6a7efc3b74b63150e09a1
+// forge:hash=1d5bbc2f3e116fcc61efcdf5c821980f8d61d4d6fad29cb64d58efa94ec30c37
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -178,12 +250,10 @@ type MockRepository struct {
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	MoveChatToProjectFunc                                    func(context.Context, db.ChatMove) (bool, error)
-	ListCapacityWakeTargetsFunc                              func(context.Context, string) ([]string, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
-	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
 	ClaimUserActivationFunc                                  func(context.Context, string, string, string) (bool, error)
 	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
@@ -193,8 +263,6 @@ type MockRepository struct {
 	ListMessagesFunc                                         func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
-	GetToolResultBlockFunc                                   func(context.Context, string) (*db.MessageContentBlock, error)
-	ListToolResultBlocksFunc                                 func(context.Context, string) ([]*db.MessageContentBlock, error)
 	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
 	EnqueueAgentMessageFunc                                  func(context.Context, *db.AgentMessage) error
@@ -278,7 +346,6 @@ type MockRepository struct {
 	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
-	ClearUsageLimitWaitFunc                                  func(context.Context, string, string, time.Time) error
 	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -292,7 +359,6 @@ type MockRepository struct {
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachineWorkflowsJSONFunc                       func(context.Context, string, string) (*string, bool, error)
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
-	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
 	GetTriggerEventByDedupeFunc                              func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
@@ -310,9 +376,9 @@ type MockRepository struct {
 	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
 	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
+	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	PinChatDaemonIfUnsetFunc                                 func(context.Context, string, string) (string, error)
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
-	SenderTitlesFunc                                         func(context.Context, []string) (map[string]string, error)
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.
@@ -459,15 +525,6 @@ func (m *MockRepository) MoveChatToProject(ctx context.Context, p1 db.ChatMove) 
 	return false, contractkit.MockNotSet("MockRepository", "MoveChatToProject")
 }
 
-// ListCapacityWakeTargets records the call and delegates to ListCapacityWakeTargetsFunc when set.
-func (m *MockRepository) ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error) {
-	m.Recorder.Record("ListCapacityWakeTargets", ctx, userID)
-	if m.ListCapacityWakeTargetsFunc != nil {
-		return m.ListCapacityWakeTargetsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListCapacityWakeTargets")
-}
-
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.
 func (m *MockRepository) ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error) {
 	m.Recorder.Record("ListThreadsByConversation", ctx, chatID)
@@ -502,15 +559,6 @@ func (m *MockRepository) ThreadAwaitsReply(ctx context.Context, threadID string)
 		return m.ThreadAwaitsReplyFunc(ctx, threadID)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "ThreadAwaitsReply")
-}
-
-// IsLatestTurnInThread records the call and delegates to IsLatestTurnInThreadFunc when set.
-func (m *MockRepository) IsLatestTurnInThread(ctx context.Context, threadID string, messageID string) (bool, error) {
-	m.Recorder.Record("IsLatestTurnInThread", ctx, threadID, messageID)
-	if m.IsLatestTurnInThreadFunc != nil {
-		return m.IsLatestTurnInThreadFunc(ctx, threadID, messageID)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "IsLatestTurnInThread")
 }
 
 // CountMessagesInThread records the call and delegates to CountMessagesInThreadFunc when set.
@@ -592,24 +640,6 @@ func (m *MockRepository) GetToolCall(ctx context.Context, id string) (*db.ToolCa
 		return m.GetToolCallFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetToolCall")
-}
-
-// GetToolResultBlock records the call and delegates to GetToolResultBlockFunc when set.
-func (m *MockRepository) GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error) {
-	m.Recorder.Record("GetToolResultBlock", ctx, toolCallID)
-	if m.GetToolResultBlockFunc != nil {
-		return m.GetToolResultBlockFunc(ctx, toolCallID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetToolResultBlock")
-}
-
-// ListToolResultBlocks records the call and delegates to ListToolResultBlocksFunc when set.
-func (m *MockRepository) ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error) {
-	m.Recorder.Record("ListToolResultBlocks", ctx, toolCallID)
-	if m.ListToolResultBlocksFunc != nil {
-		return m.ListToolResultBlocksFunc(ctx, toolCallID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListToolResultBlocks")
 }
 
 // ListContentBlocksByIDs records the call and delegates to ListContentBlocksByIDsFunc when set.
@@ -1359,15 +1389,6 @@ func (m *MockRepository) LockChatRunControl(ctx context.Context, chatID string) 
 	return nil, contractkit.MockNotSet("MockRepository", "LockChatRunControl")
 }
 
-// ClearUsageLimitWait records the call and delegates to ClearUsageLimitWaitFunc when set.
-func (m *MockRepository) ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error {
-	m.Recorder.Record("ClearUsageLimitWait", ctx, chatID, threadID, now)
-	if m.ClearUsageLimitWaitFunc != nil {
-		return m.ClearUsageLimitWaitFunc(ctx, chatID, threadID, now)
-	}
-	return contractkit.MockNotSet("MockRepository", "ClearUsageLimitWait")
-}
-
 // ClaimPendingTriggerEvent records the call and delegates to ClaimPendingTriggerEventFunc when set.
 func (m *MockRepository) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	m.Recorder.Record("ClaimPendingTriggerEvent", ctx, id, payload, def)
@@ -1483,15 +1504,6 @@ func (m *MockRepository) GetProjectPresetsJSON(ctx context.Context, projectID st
 		return m.GetProjectPresetsJSONFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectPresetsJSON")
-}
-
-// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
-func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
-	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
-	if m.GetProjectWithUserCheckFunc != nil {
-		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -1647,6 +1659,15 @@ func (m *MockRepository) WorkflowSourceDiagnostic(ctx context.Context, projectID
 	return "", contractkit.MockNotSet("MockRepository", "WorkflowSourceDiagnostic")
 }
 
+// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
+func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
+	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
+	if m.GetProjectWithUserCheckFunc != nil {
+		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
+}
+
 // PinChatDaemonIfUnset records the call and delegates to PinChatDaemonIfUnsetFunc when set.
 func (m *MockRepository) PinChatDaemonIfUnset(ctx context.Context, chatID string, daemonID string) (string, error) {
 	m.Recorder.Record("PinChatDaemonIfUnset", ctx, chatID, daemonID)
@@ -1665,17 +1686,34 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByIDs")
 }
 
-// SenderTitles records the call and delegates to SenderTitlesFunc when set.
-func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
-	m.Recorder.Record("SenderTitles", ctx, threadIDs)
-	if m.SenderTitlesFunc != nil {
-		return m.SenderTitlesFunc(ctx, threadIDs)
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockSenders
+// forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9
+
+// MockSenders is a test mock for the Senders interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSenders.<Method>Func not set" error.
+type MockSenders struct {
+	contractkit.Recorder
+	SenderTitlesByThreadIDsFunc func(context.Context, []string) (map[string]string, error)
+}
+
+// SenderTitlesByThreadIDs records the call and delegates to SenderTitlesByThreadIDsFunc when set.
+func (m *MockSenders) SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitlesByThreadIDs", ctx, threadIDs)
+	if m.SenderTitlesByThreadIDsFunc != nil {
+		return m.SenderTitlesByThreadIDsFunc(ctx, threadIDs)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
+	return nil, contractkit.MockNotSet("MockSenders", "SenderTitlesByThreadIDs")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Senders = (*MockSenders)(nil)
 
 // forge:section MockDirectory
 // forge:hash=83876a76b6d6a4cf6e2fbb6be01be521691ea4b970ac0f00e255c8f96d481f76

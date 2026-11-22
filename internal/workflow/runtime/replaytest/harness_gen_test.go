@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -194,7 +195,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
@@ -357,6 +358,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
+		Backoff:   providerbackofftest.New(t, s.Repo),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:    store.NewToolCallExtStore(s.Repo.ORM()),
 		Temporal:  s.Temporal,

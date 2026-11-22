@@ -23,7 +23,7 @@ func attentionChat(t *testing.T, r *Repo, id string) {
 
 func attentionApply(t *testing.T, r *Repo, u core.AttentionUpdate) core.AttentionResult {
 	t.Helper()
-	result, err := r.ApplyAttentionUpdate(context.Background(), u)
+	result, err := applyAttentionUpdateRC(context.Background(), r, u)
 	require.NoError(t, err)
 	require.True(t, result.Managed)
 	return result
@@ -113,7 +113,7 @@ func TestAttentionFenceAndStaleRegistration(t *testing.T) {
 	// Reusing RunID with a new start or chat is rejected, not reinterpreted.
 	bad := nsNew
 	bad.StartedAt = at.Add(2 * time.Nanosecond)
-	_, err = r.ApplyAttentionUpdate(context.Background(), bad)
+	_, err = applyAttentionUpdateRC(context.Background(), r, bad)
 	require.ErrorContains(t, err, "immutable")
 }
 
@@ -185,10 +185,10 @@ func TestAttentionAlreadyExpiredLeaseAndBounds(t *testing.T) {
 	require.True(t, attentionApply(t, r, u).Notify)
 	require.Equal(t, "recovery_expired", attentionList(t, r)[0].FailureClass)
 	u.RecoveryTimeout = 25 * time.Hour
-	_, err := r.ApplyAttentionUpdate(context.Background(), u)
+	_, err := applyAttentionUpdateRC(context.Background(), r, u)
 	require.ErrorContains(t, err, "timeout")
 	u.RecoveryTimeout = time.Millisecond
-	_, err = r.ApplyAttentionUpdate(context.Background(), u)
+	_, err = applyAttentionUpdateRC(context.Background(), r, u)
 	require.ErrorContains(t, err, "timeout")
 }
 
@@ -200,7 +200,7 @@ func TestAttentionOwnershipAndKeyIsolation(t *testing.T) {
 	attentionChat(t, r, "owned")
 	createActivityTestChat(t, r, "interactive")
 	base := core.AttentionUpdate{ChatID: "interactive", RunID: "invalid", StartedAt: time.Now().UTC(), Phase: "finish", Key: "same-key", State: "action_required"}
-	_, err := r.ApplyAttentionUpdate(ctx, base)
+	_, err := applyAttentionUpdateRC(ctx, r, base)
 	require.Error(t, err)
 	base.ChatID = "owned"
 	base.RunID = "valid"
@@ -217,7 +217,7 @@ func TestAttentionOwnershipAndKeyIsolation(t *testing.T) {
 	_, err = r.ORM().Exec(ctx, `UPDATE projects SET user_id=$1 WHERE id=$2`, "other-user", "test-project")
 	require.NoError(t, err)
 	base.RunID = "mismatch"
-	_, err = r.ApplyAttentionUpdate(ctx, base)
+	_, err = applyAttentionUpdateRC(ctx, r, base)
 	require.Error(t, err)
 	require.Empty(t, attentionList(t, r))
 	managed, err := r.AttentionManagedChats(ctx, "test-user", []string{"owned"})
@@ -344,7 +344,7 @@ func TestAttentionInvalidUpdatesNeverRegister(t *testing.T) {
 	} {
 		u := base
 		mutate(&u)
-		result, err := r.ApplyAttentionUpdate(context.Background(), u)
+		result, err := applyAttentionUpdateRC(context.Background(), r, u)
 		require.Error(t, err)
 		require.False(t, result.Managed)
 	}
@@ -370,7 +370,7 @@ func TestAttentionConcurrentActorsConverge(t *testing.T) {
 			if i == 11 {
 				state = "resolved"
 			}
-			_, err := r.ApplyAttentionUpdate(context.Background(), core.AttentionUpdate{ChatID: "concurrent", RunID: fmt.Sprintf("run-%02d", i), StartedAt: at, Phase: "finish", Key: "key", State: state})
+			_, err := applyAttentionUpdateRC(context.Background(), r, core.AttentionUpdate{ChatID: "concurrent", RunID: fmt.Sprintf("run-%02d", i), StartedAt: at, Phase: "finish", Key: "key", State: state})
 			errs <- err
 		}(i)
 	}
