@@ -568,10 +568,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(repo, d.Router),
+		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),

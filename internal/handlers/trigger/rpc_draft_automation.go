@@ -36,7 +36,7 @@ func (s *Service) DraftAutomation(
 	if description == "" {
 		return nil, svcerr.InvalidArgument("describe the automation: when it should run and what it should do")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, msg.GetProjectId(), userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, msg.GetProjectId(), userID)
 	if svcerr.IsNotFound(err) {
 		return nil, svcerr.NotFound("project")
 	} else if err != nil {

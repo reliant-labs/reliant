@@ -47,7 +47,7 @@ func (s *Service) DetachProjectFromDaemon(
 	if projectID == "" || daemonID == "" {
 		return nil, svcerr.InvalidArgument("project_id and daemon_id are required")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

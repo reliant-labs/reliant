@@ -1126,6 +1126,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		return nil, err
 	}
 	return trigger.New(trigger.Deps{
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
@@ -1323,6 +1324,7 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
+		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),

@@ -15,6 +15,7 @@ package projectaccesstest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -28,8 +29,15 @@ type ReadFunc = func(ctx context.Context, id, userID string) (*core.Project, err
 
 var bound sync.Map // repository pointer -> *projectaccess.MockService
 
+// hashable reports whether repo can key bound (a struct value holding a func
+// cannot).
+func hashable(repo any) bool { return repo != nil && reflect.TypeOf(repo).Comparable() }
+
 // Bind answers For(repo)'s reads from fn and returns the service.
 func Bind(repo any, fn ReadFunc) *projectaccess.MockService {
+	if !hashable(repo) {
+		return &projectaccess.MockService{GetProjectWithUserCheckFunc: fn}
+	}
 	if v, ok := bound.Load(repo); ok {
 		svc := v.(*projectaccess.MockService)
 		svc.GetProjectWithUserCheckFunc = fn
@@ -57,6 +65,9 @@ func FuncOf(repo any) ReadFunc {
 
 // CallCount is how many reads For(repo) answered.
 func CallCount(repo any) int {
+	if !hashable(repo) {
+		return 0
+	}
 	if v, ok := bound.Load(repo); ok {
 		return v.(*projectaccess.MockService).CallCount("GetProjectWithUserCheck")
 	}
@@ -68,8 +79,10 @@ func CallCount(repo any) int {
 // (a hand fixture), else the real service over its ORM handle (*db.Repo), else
 // a service that fails every read, so an unprogrammed one is loud.
 func For(repo any) projectaccess.Service {
-	if v, ok := bound.Load(repo); ok {
-		return v.(*projectaccess.MockService)
+	if hashable(repo) {
+		if v, ok := bound.Load(repo); ok {
+			return v.(*projectaccess.MockService)
+		}
 	}
 	if r, ok := repo.(interface {
 		GetProjectWithUserCheck(ctx context.Context, id, userID string) (*core.Project, error)
