@@ -23,10 +23,8 @@ const (
 	RefetchProjectOrgMoved    = core.RefetchProjectOrgMoved
 )
 
-// RefetchData is the JSON payload for refetch events.
-type RefetchData struct {
-	Type RefetchType `json:"type"`
-}
+// RefetchData is the JSON payload for refetch events; core's.
+type RefetchData = core.RefetchData
 
 // EmitUserRefetch emits a refetch signal via user_updates (global/user stream).
 // Use this for worktree-scoped or project-scoped refetches.
@@ -70,9 +68,5 @@ func (r *Repo) EmitChatRefetch(ctx context.Context, chatID string, refetchType R
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeRefetch, "refetch-"+string(refetchType), string(data))
 }
 
-// RefetchOpts provides optional scoping for user-level refetch events.
-type RefetchOpts struct {
-	ProjectID  *string
-	WorktreeID *string
-	ChatID     *string
-}
+// RefetchOpts provides optional scoping for user-level refetch events; core's.
+type RefetchOpts = core.RefetchOpts

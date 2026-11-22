@@ -26,6 +26,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -440,6 +441,13 @@ func (g *Graph) newRepoUpdateFeed() (*RepoUpdateFeed, error) {
 	})
 }
 
+// chatUpdates is the one writer of the chat and user update streams: it
+// appends a refetch and publishes it to the hubs after its transaction commits
+// (internal/chatupdates).
+func (g *Graph) chatUpdates() chatupdates.Service {
+	return chatupdates.NewFromORM(g.Database().ORM(), g.Database(), hubPublisher{users: g.UserUpdateHub(), chats: g.ChatUpdateHub()})
+}
+
 func (g *Graph) newVault() (vault.Service, error) {
 	return NewVault(VaultDeps{
 		Ctx:          g.Ctx,
@@ -532,6 +540,7 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
@@ -1096,7 +1105,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
 		AgentMessages: store.NewAgentMessageExtStore(g.Database().ORM()),
 		Messages:      store.NewMessageExtStore(g.Database().ORM()),
 		ToolBlocks:    store.NewMessageContentBlockExtStore(g.Database().ORM()),
@@ -1301,7 +1310,7 @@ func (g *Graph) newTask() (*task.Service, error) {
 		Plans:   store.NewPlanExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
-		Refetch: repo,
+		Refetch: g.chatUpdates(),
 		Tx:      repo.ORM(),
 	})
 }
@@ -1316,7 +1325,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 		Tasks:   store.NewTaskExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
-		Refetch: repo,
+		Refetch: g.chatUpdates(),
 		Tx:      repo.ORM(),
 	})
 }
@@ -1395,7 +1404,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Config:    g.Cfg,
 		Repo:      g.Database(),
 		Questions: store.NewQuestionExtStore(g.Database().ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
 		Signals:   g.PauseService(),
 		Messages:  g.Chat(),
 	})
