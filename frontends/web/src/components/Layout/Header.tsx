@@ -7,6 +7,7 @@ import {
   PanelRight,
   Menu,
   FolderGit2,
+  GitBranch,
   Settings,
 } from "lucide-react";
 import {
@@ -34,6 +35,8 @@ import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
 import { BrandMark } from "../icons/BrandMark";
 import { homePath } from "@/lib/paths";
+import { cn } from "@/lib/utils";
+import { useTopBarSlot, useTopBarVariant } from "./topBar";
 
 interface HeaderProps {
   /** Home (`/`). When set, the header leads with the Reliant mark linking there. */
@@ -92,6 +95,12 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     const main = useMainWorktree(currentProject?.id);
     const mainWorktree = main && !main.deleted_at ? main : null;
+    const branchName = currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject?.default_branch || "main";
+
+    // The top bar proposal (topBar.ts): "current" is main as it was.
+    const variant = useTopBarVariant();
+    const proposed = variant !== "current";
+    const setChatSlot = useTopBarSlot((state) => state.setEl);
 
 
 
@@ -163,7 +172,13 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
         style={dragRegionStyle}
       >
         {/* Left side */}
-        <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: trafficLightPadding }}>
+        <div
+          className={cn(
+            "flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1",
+            proposed && "min-w-0",
+          )}
+          style={{ paddingLeft: trafficLightPadding }}
+        >
 
           {/* The brand mark: the one place the signed-in shell says whose app
               this is. After the macOS traffic lights (trafficLightPadding), a
@@ -213,12 +228,44 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             </Tooltip>
           )}
 
+          {/* Proposed: the project and branch read left to right after the
+              toggle, like a path (Vercel, Linear), not a centred pill. The
+              project name opens the switcher; the branch is a fact. */}
+          {proposed && currentProject && (
+            <nav
+              aria-label="Project"
+              className="flex min-w-0 shrink items-center gap-0.5 text-ui"
+              data-testid="header-breadcrumb"
+            >
+              <Tooltip content={`Switch project (${formatShortcut("onSwitchProject")})`} side="bottom" delay={300}>
+                <button
+                  type="button"
+                  className="max-w-[12rem] truncate rounded-md px-1.5 py-1 font-medium text-foreground transition-colors hover:bg-foreground/5"
+                  onClick={openProjectSwitcher}
+                  data-testid="header-project-name"
+                  style={noDragRegionStyle}
+                >
+                  {currentProject.name}
+                </button>
+              </Tooltip>
+              <span aria-hidden="true" className="text-muted-foreground/50">/</span>
+              <span className="flex min-w-0 items-center gap-1 px-1.5 text-muted-foreground" title={branchName}>
+                <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="max-w-[14rem] truncate">{branchName}</span>
+              </span>
+            </nav>
+          )}
+
+          {/* Variant A: the open chat's header renders here (ChatHeader portals into it). */}
+          {variant === "a" && (
+            <div ref={setChatSlot} className="flex min-w-0 flex-1 items-center" data-testid="topbar-chat-slot" />
+          )}
         </div>
 
         {/* Center - the project and workspace the open chat works in (its
             files, terminal and git). Clicking it opens the sidebar's project
             switcher. */}
-        {currentProject && (
+        {currentProject && !proposed && (
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
           <div
             className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
@@ -240,7 +287,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 <span className="text-muted-foreground/50">/</span>
                 <span className="flex items-center gap-1.5 px-2 py-0.5 text-muted-foreground">
                   <FolderGit2 className="w-3.5 h-3.5 translate-y-[1px]" />
-                  <span>{currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject.default_branch || "main"}</span>
+                  <span>{branchName}</span>
                 </span>
               </>
             )}
@@ -249,10 +296,10 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
         )}
 
         {/* Right side - controls */}
-        <div className="flex items-center flex-1 justify-end">
+        <div className={cn("flex items-center justify-end", proposed ? "shrink-0" : "flex-1")}>
           {/* Draggable spacer to the right of search */}
           <div
-            className="flex-1 min-w-4"
+            className={proposed ? "w-2" : "flex-1 min-w-4"}
             style={dragRegionStyle}
           />
 
@@ -288,8 +335,13 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Detected workspace ports (open preview) */}
             <DetectedPortsChip />
 
-            {/* Daemon status */}
-            <DaemonStatusDot />
+            {/* Daemon status. Proposed: the machine's one home, a dot and
+                its name (the chat row's "Machine: …" is gone). */}
+            <DaemonStatusDot chip={proposed} />
+
+            {proposed && (onToggleTerminal || onToggleFileBrowser) && (
+              <div aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+            )}
 
             {/* The workflows tour's last step labels these two as one (data-tour). */}
             {(onToggleTerminal || onToggleFileBrowser) && (
@@ -371,7 +423,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 Settings link — renders solely inside the chat shell, which
                 needs a project. A user with no project yet (the first-run
                 state) reaches /settings, and signs out, through this. */}
-            {onNavigateToSettings && (
+            {/* Proposed: only while there is no project, when the nav (which
+                has Settings at its foot) is not the way in. */}
+            {onNavigateToSettings && (!proposed || !currentProject) && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}
                 side="bottom"
