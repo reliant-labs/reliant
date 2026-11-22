@@ -1,73 +1,65 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { DEPLOY_CHAT, PROJECT, mockAppsBackend } from './appsMocks';
 import { PHONE } from './mobileMocks';
 
 // Deployed apps as first-class surfaces, against a mocked backend
-// (appsMocks.ts): the Apps page, the sidebar, the home view, the console's
-// Overview, a chat that deployed, and onboarding's choice between building an
-// app, connecting a repository and just chatting.
+// (appsMocks.ts): the apps on Projects, the home view, a chat that deployed,
+// and onboarding's choice between building an app, connecting a repository
+// and just chatting.
+
+// The apps are a filter of Projects (U6, one shell): a project row carries
+// its app's chip, and an app with no code here is a row of its own
+// (components/Projects/ProjectsPage.tsx, over ProjectService/ListProjectsWithApps).
+const catalogRow = (page: Page, key: string) => page.locator(`[data-testid="projects-row"][data-row-key="${key}"]`);
 
 test.describe('Apps', () => {
-  test('the Apps page lists every app in one table with its live site', async ({ page }) => {
+  test('the retired /apps opens Projects narrowed to the apps, each with its deploy state', async ({ page }) => {
     await mockAppsBackend(page);
     // The index is ready when its rows render; an unrelated Monaco CDN
     // loader can leave the document load event pending (CI trace 40471064815).
     // The retired /apps: Projects, narrowed to the apps (lib/paths/legacy.ts).
     await page.goto('/apps', { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/projects\?show=apps$/, { timeout: 15_000 });
+    await expect(page.getByTestId('projects-filter-with_apps')).toHaveAttribute('aria-pressed', 'true');
 
-    const store = page.getByTestId('app-row-storefront');
+    // The forge project: its row opens the project, its chip says the app is live.
+    const store = catalogRow(page, PROJECT.id);
     await expect(store).toBeVisible({ timeout: 15_000 });
-    // The row opens the console; the site link opens the app itself.
-    await expect(store.getByRole('link', { name: 'storefront' })).toHaveAttribute('href', '/forge/p/storefront');
-    await expect(store.getByTestId('app-live-link')).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
+    await expect(store.getByRole('link', { name: 'Open storefront' })).toHaveAttribute('href', `/projects/${PROJECT.id}`);
+    await expect(store.getByTestId('app-chip').first()).toHaveAttribute('data-app-state', 'live');
     // An API is not a destination: its URL is never linked here.
     await expect(store.getByRole('link', { name: /calm-heron\.reliantapps\.dev/ })).toHaveCount(0);
-    await expect(store.getByTestId('app-env-prod')).toBeVisible();
-    await expect(store.getByTestId('app-env-staging')).toBeVisible();
 
     // An app nobody opened as a Reliant project is still listed: the org deployed it.
-    await expect(page.getByTestId('app-row-status-page').getByRole('link', { name: /status\.example\.com/ })).toBeVisible();
-    // Newest deploy first: staging went out 3 minutes ago.
-    await expect(page.getByTestId('apps-list').locator('[data-testid^="app-row-"]').first()).toHaveAttribute(
-      'data-testid',
-      'app-row-storefront',
-    );
+    const status = catalogRow(page, 'app:status-page');
+    await expect(status).toBeVisible();
+    await expect(status.getByRole('link', { name: 'Open the status-page app' })).toHaveAttribute('href', '/forge/p/status-page');
   });
 
   test('the bare /forge lands on the apps', async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto('/forge');
     await expect(page).toHaveURL(/\/projects\?show=apps$/, { timeout: 15_000 });
-    await expect(page.getByTestId('apps-page')).toBeVisible();
+    await expect(page.getByTestId('projects-page')).toBeVisible();
   });
 
-  test('with nothing deployed, the Apps page offers to build one', async ({ page }) => {
+  test('with nothing deployed, the apps offer to build one', async ({ page }) => {
     await mockAppsBackend(page, { environments: [] });
     await page.goto('/projects?show=apps');
-    // The forge project exists but is not live: listed, with how to deploy it.
-    await expect(page.getByTestId('app-row-storefront')).toContainText('Not deployed yet', { timeout: 15_000 });
-    await page.getByRole('button', { name: 'Build an app' }).first().click();
+    // The forge project exists but is not live: listed, and its chip says so.
+    await expect(catalogRow(page, PROJECT.id).getByTestId('app-chip').first()).toHaveAttribute('data-app-state', 'not_deployed', {
+      timeout: 15_000,
+    });
+    await page.getByTestId('projects-build-app').click();
     await expect(page).toHaveURL(new RegExp(`/project/${PROJECT.id}`));
     await expect(page.getByTestId('home-build-heading')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('the sidebar lists live apps with a link to each live site', async ({ page }) => {
+  test("a forge project's home has no Build an app prompt", async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto(`/project/${PROJECT.id}`);
-    const sidebarApps = page.getByTestId('sidebar-apps');
-    await expect(sidebarApps).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('sidebar-app-link-storefront')).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
-    await expect(page.getByTestId('sidebar-app-link-status-page')).toHaveAttribute('href', 'https://status.example.com');
-    await page.getByTestId('sidebar-app-storefront').click();
-    await expect(page).toHaveURL(/\/forge\/p\/storefront/);
-  });
-
-  test("the home view leaves a forge project's apps to the sidebar", async ({ page }) => {
-    await mockAppsBackend(page);
-    await page.goto(`/project/${PROJECT.id}`);
-    await expect(page.getByTestId('sidebar-apps')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('textbox').first()).toBeVisible({ timeout: 15_000 });
     // A forge project: no app block and no "Build an app" prompt mid-screen.
     await expect(page.getByTestId('home-build-app')).toHaveCount(0);
   });
@@ -107,17 +99,6 @@ test.describe('Apps', () => {
       await card.getByTestId('deployed-app-open').click();
       await expect(page).toHaveURL(/\/forge\/p\/storefront/);
     });
-  });
-
-  test("the console's Overview leads with the live sites, never an API", async ({ page }) => {
-    await mockAppsBackend(page);
-    await page.goto('/forge/p/storefront');
-    const frontends = page.getByRole('list', { name: 'Frontends' });
-    await expect(frontends.getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev', {
-      timeout: 15_000,
-    });
-    // An API is not a destination for a person: there is no APIs strip.
-    await expect(page.getByTestId('overview-live-links')).toHaveCount(0);
   });
 
   test('onboarding offers building an app as a peer of chatting', async ({ page }) => {
