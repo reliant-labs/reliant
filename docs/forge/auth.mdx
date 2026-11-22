@@ -4,7 +4,7 @@ sidebarTitle: "Auth"
 description: "Managed identity gives a forge app sign-in for its own users with no auth server to run. How to turn it on, what the Auth page's Users and Sign-in tabs show, and what it doesn't do yet."
 ---
 
-{/* verified: 2026-11-20 · sources: forge skills auth, auth/frontend, auth/dev-loop, deploy/managed-identity (forge v1.6.1 embedded in reliant v1.21.3), forge kcl ManagedIdentity, frontends/web EnvPage/IdentityTab.tsx + IdentityUsers.tsx (on main) and Forge/Users/AuthPage.tsx (proto/u6d-security, unmerged), control-plane IdentityService proto and prod KCL (deploy/kcl/prod/identity.k, main.k) on origin/main, `reliant forge cloud identity --help`. Re-verify the "what is switched on" limits when the control plane's prod switches change. */}
+{/* verified: 2026-11-20 · sources: forge skills auth, auth/frontend, auth/dev-loop, deploy/managed-identity (forge v1.6.1 embedded in reliant v1.21.3), forge kcl ManagedIdentity, frontends/web EnvPage/IdentityTab.tsx + IdentityUsers.tsx (on main) and Forge/Users/AuthPage.tsx and forgeConsoleRoutes.tsx (the one shell, on main 2026-11-21), control-plane IdentityService proto and prod KCL (deploy/kcl/prod/identity.k, main.k) on origin/main, `reliant forge cloud identity --help`. Re-verify the "what is switched on" limits when the control plane's prod switches change. */}
 
 This page is about the people who use the app you deploy: the customers or teammates who open your site and sign in. It is not about signing the `reliant` or `forge` command line in to Reliant, which is [Forge sign-in](/forge/sign-in).
 
@@ -44,7 +44,7 @@ Every RPC then requires a signed-in caller unless its proto sets `auth_required:
 
 ## The Auth page
 
-In the project shell, **Auth** sits beside Data and Storage in the sidebar. It follows the environment control in the top bar and has two tabs, **Users** and **Sign-in**, each a link you can share. Before the shell lands, the same panels are on the project's **Users** page and on an environment's **Identity** tab.
+In the project shell, **Auth** sits beside Data and Storage in the sidebar. It follows the environment control in the top bar and has two tabs, **Users** and **Sign-in**, each a link you can share. An old link to the project's **Users** page opens the Users tab, and the same panels are also on an environment's **Identity** tab.
 
 ### Users
 

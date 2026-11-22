@@ -4,7 +4,7 @@ sidebarTitle: "Services"
 description: "The Services page lists every service, worker, job, cron job, static site and database your forge app runs, with status, instances, CPU, memory, requests, latency and errors per environment."
 ---
 
-{/* verified: 2026-11-20 · sources: frontends/web Forge/Services (servicesModel.ts, ServicesPages.tsx, ServiceDetail.tsx; project shell prototype), project data map (ListWorkloads, GetServiceOverview, GetStatus), docs/hosting/observability/forge-obs.mdx */}
+{/* verified: 2026-11-20 · sources: frontends/web Forge/Services (servicesModel.ts, ServicesPages.tsx, ServiceDetail.tsx; the one shell, on main 2026-11-21), project data map (ListWorkloads, GetServiceOverview, GetStatus), docs/hosting/observability/forge-obs.mdx */}
 
 Services answers "what is my app running right now, and is it healthy?" It is one table with a row for everything a deploy put in an environment: the services and workers (any long-running process), cron jobs and one-off jobs, the static site, and the managed database. It reads from the same telemetry that powers the project Overview and Observability, so the numbers agree across pages.
 

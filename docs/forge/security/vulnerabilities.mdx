@@ -4,7 +4,7 @@ sidebarTitle: "Vulnerabilities"
 description: "How Reliant lists the known vulnerabilities in what your environments run: an SBOM per release artifact, scanned by the control plane. What is live today, what is rolling out, and what is coming."
 ---
 
-{/* verified: 2026-11-20 · sources: forge docs/proposals/sbom-vulnerabilities.md (approved 2026-11-20) and open forge PRs #2480-#2493, control-plane VulnerabilityService (#3147 merged; #3160/#3161/#3167/#3173 open), reliant #3085 (Vulnerabilities page, open), forge `forge ci vuln-scan` and kcl VulnPolicy on main, docs/forge/deploy/releases-and-promotion.mdx. Re-verify the status table when those merge. */}
+{/* verified: 2026-11-20 · sources: forge docs/proposals/sbom-vulnerabilities.md (approved 2026-11-20) and open forge PRs #2480-#2493, control-plane VulnerabilityService (#3147 merged; #3160/#3161/#3167/#3173 open), reliant #3085 (Vulnerabilities page) and #3191 (Security ▾ in the one shell), both merged, forge `forge ci vuln-scan` and kcl VulnPolicy on main, docs/forge/deploy/releases-and-promotion.mdx. Re-verify the status table when those merge. */}
 
 <Warning>
 **This feature is rolling out.** The design is approved and most of it is in review, not released. The [status table](#what-is-live-and-what-is-coming) says which parts exist today. Nothing on this page means your app is free of vulnerabilities, and a page that says "not scanned" means exactly that: unknown, not clean.
@@ -48,7 +48,7 @@ The page never shows "no vulnerabilities" unless that is proven: every artifact 
 | The `vuln_gate` policy in an environment's KCL (`forge.VulnPolicy`) | Declared and recorded in the release, but nothing evaluates it yet, so it blocks no deploy today. |
 | SBOM per artifact at the release cut, scanning, `forge vuln` commands, `vuln_gate` as a real gate | In review in forge, graded warn-first: a project below the release that introduces the gate sees "would block" and nothing is blocked. |
 | Control-plane storage and scanning of SBOMs, the read API, and the daily rescan | Partly merged (the API definition and the findings store); recording, scanning, the read API and the rescan are in review. |
-| The Security pages in the Reliant app | In review. Until a control plane serves findings, the page says it doesn't report vulnerabilities yet and that nothing there means your project is clean. |
+| The Security pages in the Reliant app | Merged: **Security** in the project sidebar, with **Vulnerabilities** and **SBOMs**. Until a control plane serves findings, the page says it doesn't report vulnerabilities yet and that nothing there means your project is clean. |
 | **Patch** and **Patch with agent** | Coming. The buttons are planned: Patch would run a deterministic dependency bump and open a pull request, and Patch with agent would hand a failing build to an agent. Neither automates patching today. |
 
 When the rollout lands, a project does not need setup: SBOMs are generated at every cut. For now, plan on the [source-tree scan](#run-the-scan-you-have-today) and treat the pages above as preview.
