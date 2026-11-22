@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -81,13 +83,7 @@ func ownedProject() *db.Project {
 // GetProjectWithUserCheck answer.
 func ownedProjectRepo(t *testing.T) *project.MockRepository {
 	t.Helper()
-	store := &project.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == "p-1" && userID == "test-user" {
-				return ownedProject(), nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
+	store := projectaccesstest.Bound(&project.MockRepository{
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == "p-1" {
 				return ownedProject(), nil
@@ -101,7 +97,12 @@ func ownedProjectRepo(t *testing.T) *project.MockRepository {
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-	}
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == "p-1" && userID == "test-user" {
+			return ownedProject(), nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 	withTeardowns(store)
 	return store
 }
@@ -166,7 +167,7 @@ func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardow
 // nil builds it without a daemon router.
 func newService(t *testing.T, store project.Repository, router project.Router) *project.Service {
 	t.Helper()
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Router: router}))
+	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Router: router}))
 }
 
 // onDaemon is a store where ownedProject is cloned at /clone on daemon d-1,

@@ -41,9 +41,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -356,6 +357,9 @@ func InboxPendingSQL() string { return listInboxPendingSQL }
 // waiting-for-machine runs, launch-failed automations and paused automation
 // runs, ordered by kind, then waiting time.
 func ListInboxPending(ctx context.Context, db orm.Context, userID string) ([]*core.InboxPending, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	// Paused automation runs are the unattended launch kinds, the rule the
 	// unread write follows.
 	rows, err := db.Query(ctx, listInboxPendingSQL, userID, core.UnattendedEventKinds())
@@ -381,6 +385,9 @@ func ListInboxPending(ctx context.Context, db orm.Context, userID string) ([]*co
 
 // ListDismissedInboxItemIDs returns which of itemIDs the user has dismissed.
 func ListDismissedInboxItemIDs(ctx context.Context, db orm.Context, userID string, itemIDs []string) (map[string]bool, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	out := make(map[string]bool, len(itemIDs))
 	if len(itemIDs) == 0 {
 		return out, nil
@@ -408,6 +415,9 @@ ON CONFLICT (user_id, item_id) DO NOTHING`
 
 // DismissInboxItems hides itemIDs from the user's inbox. It is idempotent.
 func DismissInboxItems(ctx context.Context, db orm.Context, userID string, itemIDs []string, at time.Time) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
 	if len(itemIDs) == 0 {
 		return nil
 	}
@@ -419,6 +429,9 @@ func DismissInboxItems(ctx context.Context, db orm.Context, userID string, itemI
 
 // RestoreInboxItems undoes DismissInboxItems; ids not dismissed are ignored.
 func RestoreInboxItems(ctx context.Context, db orm.Context, userID string, itemIDs []string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
 	if len(itemIDs) == 0 {
 		return nil
 	}
@@ -442,4 +455,72 @@ func RestoreInboxItems(ctx context.Context, db orm.Context, userID string, itemI
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type InboxDismissalExtra struct {
+}
+
+// The Inbox's attention reads: incidents and managed chats are scoped by the
+// owner of the chat and project, never by YAML scope or a request filter.
+
+// ListAttentionIncidents projects expiry at database read time, without a
+// scheduler or a write on the read path. Identity is rechecked against live
+// chat/project ownership so orphaned or reassigned records cannot leak.
+func ListAttentionIncidents(ctx context.Context, db orm.Context, userID string) ([]*core.AttentionIncident, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	rows, err := db.Query(ctx, `SELECT a.user_id,a.project_id,a.incident_key,a.episode_id,
+CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'action_required' ELSE a.state END,
+a.chat_id,a.trigger_id,
+CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'recovery_expired' ELSE a.failure_class END,
+CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'Recovery timed out' ELSE a.detail END,
+a.opened_at,CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN a.lease_until ELSE a.updated_at END,
+CASE WHEN a.state='recovering' AND a.lease_until>statement_timestamp() THEN a.lease_until ELSE NULL END
+FROM attention_incidents a JOIN projects p ON p.id=a.project_id AND p.user_id=a.user_id
+JOIN chats c ON c.id=a.chat_id AND c.user_id=a.user_id AND c.project_id=a.project_id
+WHERE a.user_id=$1 AND a.state IN ('recovering','action_required') ORDER BY a.opened_at,a.episode_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]*core.AttentionIncident, 0)
+	for rows.Next() {
+		a := new(core.AttentionIncident)
+		if err = rows.Scan(&a.UserID, &a.ProjectID, &a.Key, &a.EpisodeID, &a.State, &a.ChatID, &a.TriggerID, &a.FailureClass, &a.Detail, &a.OpenedAt, &a.UpdatedAt, &a.LeaseUntil); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// AttentionManagedChats retains finished registrations even when stale. An
+// unfinished actor needs an explicit start transition and an open durable
+// backstop; a lost observer finish must still surface through legacy failure
+// notifications. This is also the predicate used by unmanaged firing queries.
+func AttentionManagedChats(ctx context.Context, db orm.Context, userID string, chatIDs []string) (map[string]bool, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	out := make(map[string]bool)
+	if len(chatIDs) == 0 {
+		return out, nil
+	}
+	rows, err := db.Query(ctx, `SELECT DISTINCT a.chat_id FROM attention_actors a
+JOIN chats c ON c.id=a.chat_id AND c.user_id=a.user_id AND c.project_id=a.project_id
+JOIN projects p ON p.id=a.project_id AND p.user_id=a.user_id
+WHERE a.user_id=$1 AND a.chat_id=ANY($2::text[])
+AND (a.finished OR (a.start_seen AND a.start_state IN ('recovering','action_required') AND EXISTS (
+SELECT 1 FROM attention_incidents i WHERE i.user_id=a.user_id AND i.project_id=a.project_id
+AND i.incident_key=a.incident_key AND i.state IN ('recovering','action_required'))))`, userID, chatIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
 }

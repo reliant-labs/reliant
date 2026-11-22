@@ -31,6 +31,12 @@ const (
 	mvDst   = "org-mv-dst"
 )
 
+// commit is the move's transaction without the owner's refetch, which the db
+// package's own tests cover.
+func (f *credFixture) commit(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
+	return store.CommitProjectOrgMove(ctx, f.env.ORM, c, nil)
+}
+
 func (f *credFixture) mvProject(id string) {
 	f.t.Helper()
 	now := credT0
@@ -95,13 +101,13 @@ func (f *credFixture) assigned(threadID string) map[string]string {
 func (f *credFixture) mvPrepared(projectID string) *core.ProjectOrgMove {
 	f.t.Helper()
 	ctx := context.Background()
-	m, created, err := f.env.Repo.InsertProjectOrgMove(ctx, &core.ProjectOrgMove{
+	m, created, err := store.InsertProjectOrgMove(ctx, f.env.ORM, &core.ProjectOrgMove{
 		ID: uuid.NewString(), ProjectID: projectID, OwnerUserID: mvOwner, ActorUserID: mvOwner,
 		FromOrgID: mvSrc, ToOrgID: mvDst, RequestKey: uuid.NewString(),
 	})
 	require.NoError(f.t, err)
 	require.True(f.t, created)
-	m, err = f.env.Repo.TransitionProjectOrgMove(ctx, m.ID,
+	m, err = store.TransitionProjectOrgMove(ctx, f.env.ORM, m.ID,
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStatePreparing}, core.ProjectOrgMoveStatePrepared, "", nil)
 	require.NoError(f.t, err)
 	return m
@@ -135,7 +141,7 @@ func TestMoveProjectOrgClearsAssignmentsAnotherOrgFunds(t *testing.T) {
 	f.assign("c-stay", "anthropic", "k-src")
 
 	move := f.mvPrepared("p-move")
-	_, err := f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]string{"openrouter": "k-dst", "openai": "mine"}, f.assigned("c-move"),
@@ -199,24 +205,24 @@ func TestMoveProjectOrgCallsTheTriggerFundingSeam(t *testing.T) {
 	// Refused: nothing of the move is written.
 	refuse = true
 	move := f.mvPrepared("p-move")
-	_, err := f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.ErrorIs(t, err, fail)
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM projects WHERE id = 'p-move' AND org_id = $1`, mvDst))
 	assert.Equal(t, 2, f.count(`SELECT count(*) FROM triggers WHERE project_id = 'p-move' AND enabled AND org_id = $1`, mvSrc))
-	got, err := f.env.Repo.GetProjectOrgMove(ctx, move.ID)
+	got, err := store.GetProjectOrgMove(ctx, f.env.ORM, move.ID)
 	require.NoError(t, err)
 	assert.Equal(t, core.ProjectOrgMoveStatePrepared, got.State, "the move may be retried")
 
 	// Accepted: the move commits.
 	refuse = false
-	_, err = f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	want := call{inTx: true, moveID: move.ID, to: mvDst, commit: move.ID, moved: 2, enabled: 0, otherProjectSrc: 1}
 	assert.Equal(t, []call{want, want}, calls,
 		"called inside the transaction, with every trigger of the project already the target's and paused")
 
 	// A retried commit of a committed move writes nothing and does not stamp again.
-	_, err = f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Len(t, calls, 2)
 }
@@ -242,7 +248,7 @@ func TestMoveProjectOrgClearsPersonalFunding(t *testing.T) {
 	}
 
 	move := f.mvPrepared("p-move")
-	_, err := f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM chat_personal_funding WHERE chat_id = 'c-move'`), "the lease does not follow the chat")
@@ -317,7 +323,7 @@ func TestMoveProjectOrgRestampsTheMovedTriggers(t *testing.T) {
 			_, err := f.env.ORM.Bun().NewRaw(`UPDATE triggers SET unattended_funding = 'org_only' WHERE id = 't-stay'`).Exec(ctx)
 			require.NoError(t, err)
 			move := f.mvPrepared("p-move")
-			_, err = f.env.Repo.MoveProjectOrg(ctx, tc.commit(move.ID))
+			_, err = f.commit(ctx, tc.commit(move.ID))
 			require.NoError(t, err)
 			assert.Equal(t, 1, f.count(`SELECT count(*) FROM triggers WHERE id = 't-1' AND unattended_funding = $1`, tc.want))
 			assert.Equal(t, 1, f.count(`SELECT count(*) FROM triggers WHERE id = 't-stay' AND unattended_funding = 'org_only'`),

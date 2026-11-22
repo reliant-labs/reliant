@@ -19,6 +19,9 @@ func noRecoveries() Recoveries {
 func realDeps(repo *db.Repo) Deps {
 	return Deps{
 		Repo:       repo,
+		Items:      store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:    store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:    store.NewTriggerExtStore(repo.ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      store.NewWorktreeExtStore(repo.ORM()),
 	}
@@ -31,10 +34,10 @@ func mockDeps(repo Repository) Deps {
 	case *inflightRepo:
 		return r.deps()
 	case *MockRepository:
-		return Deps{Repo: r, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}
+		return Deps{Repo: r, Items: &MockItems{}, Firings: &MockFirings{}, Notices: &MockNotices{}, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}
 	}
 	o := repo.(interface{ ORM() *orm.Client }).ORM()
-	return Deps{Repo: repo, Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o)}
+	return Deps{Repo: repo, Items: store.NewInboxDismissalExtStore(o), Firings: store.NewTriggerEventExtStore(o), Notices: store.NewTriggerExtStore(o), Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o)}
 }
 
 // withDeps is WithInboxDeps with the recovery list and marked-worktree store
@@ -46,6 +49,15 @@ func withDeps(d Deps) TestOption {
 	}
 	if d.Marks == nil {
 		d.Marks = fill.Marks
+	}
+	if d.Items == nil {
+		d.Items = fill.Items
+	}
+	if d.Firings == nil {
+		d.Firings = fill.Firings
+	}
+	if d.Notices == nil {
+		d.Notices = fill.Notices
 	}
 	return WithInboxDeps(d)
 }

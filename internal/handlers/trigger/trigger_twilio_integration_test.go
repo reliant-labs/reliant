@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -126,7 +128,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake}))
 
 	// --- three users -----------------------------------------------------
 	type tenant struct {

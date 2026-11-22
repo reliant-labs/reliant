@@ -132,7 +132,7 @@ func (s *Service) CreateWorktree(
 	// "succeeded, reply dropped" — without this the natural retry produces a
 	// second workspace with a second on-disk checkout.
 	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
-		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
+		existing, err := s.deps.Rows.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create worktree"))
 		}

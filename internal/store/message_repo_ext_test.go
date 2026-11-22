@@ -272,9 +272,6 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	if sib, _ = store.ListRecentTranscriptSiblingMessages(ctx, o, f.chat, f.node, 0, 2); ids(sib) != "[m4 m7]" {
 		t.Fatalf("siblings of the node thread, limit 2 = %s; want [m4 m7]", ids(sib))
 	}
-	if twin, _ := f.env.Repo.ListRecentTranscriptSiblingMessages(ctx, f.chat, f.main, 0, 10); ids(twin) != "[n2 n5]" {
-		t.Fatalf("Repo siblings = %s; want [n2 n5]", ids(twin))
-	}
 
 	// Latest message and latest turn: m7 is a system note, so the latest
 	// TURN is m4, a user message — the thread awaits a reply.

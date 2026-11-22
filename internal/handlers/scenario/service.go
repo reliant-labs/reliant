@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -24,6 +26,9 @@ type Deps struct {
 	// scenarios come from db.Repo.GetProjectScenariosJSON, which is not on
 	// Repository; storedProjectScenarios reaches it by assertion.
 	Repo Repository
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
 	// Router writes an uploaded scenario file onto the caller's machine
 	// (UploadScenario). The API server always has one; without it
 	// UploadScenario answers Unavailable.
@@ -42,6 +47,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("scenario: Deps.Repo is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("scenario: Deps.Projects is required")
 	}
 	return nil
 }

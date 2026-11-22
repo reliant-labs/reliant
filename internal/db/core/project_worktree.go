@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -163,6 +164,11 @@ type ProjectDaemonDetachment struct {
 	Path       string    `json:"path"`
 	DetachedAt time.Time `json:"detached_at"`
 }
+
+// ErrNothingToDetach is what a detach guard returns when the checkout is
+// already gone (another detach got there first): the detach ends as a
+// success, recording nothing.
+var ErrNothingToDetach = errors.New("no checkout to detach")
 
 // ProjectInstallState is how far a project's checkout has got on one daemon.
 type ProjectInstallState string

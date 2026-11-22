@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -79,9 +81,7 @@ func TestProjectOwnership_StoreErrorClasses(t *testing.T) {
 	for _, tc := range storeFailures(core.ErrProjectNotFound) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newService(t, &project.MockRepository{
-				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
-			}, nil)
+			svc := newService(t, projectaccesstest.Bound(&project.MockRepository{}, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err }), nil)
 			_, err := svc.GetProjectMetadata(project.AuthedContext(t), connect.NewRequest(&pb.GetProjectMetadataRequest{ProjectId: "p-1"}))
 			requireCode(t, err, tc.code)
 		})
@@ -112,9 +112,7 @@ func TestRemoveProjectFromDaemon_OnlyAMissNotAnOutageIsSuccess(t *testing.T) {
 	for _, tc := range storeFailures(core.ErrProjectNotFound) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newService(t, &project.MockRepository{
-				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
-			}, nil)
+			svc := newService(t, projectaccesstest.Bound(&project.MockRepository{}, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err }), nil)
 			_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
 				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
 			if tc.code == connect.CodeNotFound {
@@ -231,7 +229,7 @@ func TestProjectService_OnTheWire(t *testing.T) {
 			return json.Marshal(map[string]any{"exists": true})
 		},
 	}
-	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Router: router}))
+	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Router: router}))
 
 	_, err := client.CreateProject(context.Background(), connect.NewRequest(&pb.CreateProjectRequest{
 		Name: "proj", Path: "/work",

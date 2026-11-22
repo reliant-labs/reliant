@@ -127,7 +127,7 @@ func (s *Service) triggerFromDefinition(
 		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, a machine_pool_id, or no_machine")
 	}
 
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
 		return nil, tools.RefuseActivation("project not found", svcerr.NotFound("project"))
 	} else if err != nil {
 		return nil, triggerDBError("get project", err)

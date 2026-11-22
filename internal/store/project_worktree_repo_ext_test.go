@@ -422,6 +422,12 @@ func TestWorktreeQueries(t *testing.T) {
 	if w, err := store.GetWorktreeByIdempotencyKey(ctx, env.ORM, "other-project", "key-a"); err != nil || w != nil {
 		t.Fatalf("GetWorktreeByIdempotencyKey(other project) = %v, %v", w, err)
 	}
+	if w, err := store.GetWorktreeByIdempotencyKey(ctx, env.ORM, storetest.SeedProjectID, ""); err != nil || w != nil {
+		t.Fatalf("GetWorktreeByIdempotencyKey(empty key) = %v, %v; want nil: the caller opted out", w, err)
+	}
+	if err := store.RemoveWorktree(ctx, env.ORM, ""); err == nil {
+		t.Fatal("RemoveWorktree(empty id) succeeded")
+	}
 	if w, err := store.GetLiveWorktreeByName(ctx, env.ORM, storetest.SeedProjectID, "beta"); err != nil || w != nil {
 		t.Fatalf("GetLiveWorktreeByName(archived) = %v, %v; want nil", w, err)
 	}

@@ -4,7 +4,7 @@ package handlers
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -34,8 +34,8 @@ type WorkflowCheckpointActivity struct {
 }
 
 // NewWorkflowCheckpointActivity creates a new WorkflowCheckpointActivity.
-func NewWorkflowCheckpointActivity(repo WorkflowCheckpointStore) *WorkflowCheckpointActivity {
-	return &WorkflowCheckpointActivity{repo: repo}
+func NewWorkflowCheckpointActivity(deps WorkflowCheckpointDeps) *WorkflowCheckpointActivity {
+	return &WorkflowCheckpointActivity{repo: deps.Checkpoints}
 }
 
 // Name returns the activity name for registration.
@@ -45,7 +45,7 @@ func (a *WorkflowCheckpointActivity) Name() string {
 
 // Execute upserts the position checkpoint for the workflow ID.
 func (a *WorkflowCheckpointActivity) Execute(ctx context.Context, input WorkflowCheckpointInput) (WorkflowCheckpointOutput, error) {
-	if err := a.repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+	if err := a.repo.SaveWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
 		WorkflowID:    input.WorkflowID,
 		ChatID:        input.ChatID,
 		NodeID:        input.NodeID,

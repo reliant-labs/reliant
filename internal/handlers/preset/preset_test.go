@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -42,7 +44,7 @@ func setupTestPresetService(t *testing.T) (*Service, *db.Repo, string, string) {
 		t.Fatalf("failed to create test project: %v", err)
 	}
 
-	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
+	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	return service, repo, userID, projectID
 }
 

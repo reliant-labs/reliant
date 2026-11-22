@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -27,7 +29,7 @@ func TestInlineEventPreviewIsOwnedReadOnlyAndWorksWhilePaused(t *testing.T) {
 	}}
 	// Unconfigured repository writes, intake or launcher would panic: only the
 	// owned read is installed, proving a preview never starts or enables a run.
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
 	payload, err := structpb.NewStruct(map[string]any{"body": map[string]any{"ref": "release", "user_id": "attacker"}})
 	require.NoError(t, err)
 	id := "mine"

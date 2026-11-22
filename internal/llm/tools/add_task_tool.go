@@ -24,13 +24,15 @@ import (
 
 // AddTaskTool allows agents to add new tasks to an existing plan
 type AddTaskTool struct {
-	repo addTaskStore
+	repo  addTaskStore
+	plans addTaskPlanning
 }
 
 // NewAddTaskTool creates a new task addition tool
-func NewAddTaskTool(repo addTaskStore) Tool {
+func NewAddTaskTool(repo addTaskStore, plans addTaskPlanning) Tool {
 	return NewToolWrapper(&AddTaskTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -115,7 +117,7 @@ func (a *AddTaskTool) RequiresPermission(params AddTaskParams) (bool, error) {
 }
 
 func (a *AddTaskTool) Execute(rctx *rctx.ToolContext, params AddTaskParams) (ToolResponse, error) {
-	if a.repo == nil {
+	if a.repo == nil || a.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -134,10 +136,10 @@ func (a *AddTaskTool) Execute(rctx *rctx.ToolContext, params AddTaskParams) (Too
 	// (list_tasks/get_plan walk up) but has a single writer, so say so rather
 	// than advising create_plan — that advice would fragment the parent's
 	// board into private per-sub-agent copies.
-	plan, err := resolvePlanForWrite(rctx.Context, a.repo, threadID)
+	plan, err := resolvePlanForWrite(rctx.Context, a.plans, threadID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
-			if inherited, resolveErr := resolvePlanForRead(rctx.Context, a.repo, threadID); resolveErr == nil && inherited.inherited {
+			if inherited, resolveErr := resolvePlanForRead(rctx.Context, a.plans, a.repo, threadID); resolveErr == nil && inherited.inherited {
 				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
 			}
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil

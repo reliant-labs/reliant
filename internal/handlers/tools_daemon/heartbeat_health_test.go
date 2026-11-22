@@ -14,10 +14,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// healthRepo records every health write.
-func healthRepo(writes *[]db.MachineHealth) *MockRepository {
-	return &MockRepository{
-		UpdateDaemonAttachmentHealthFunc: func(_ context.Context, _ string, h db.MachineHealth) error {
+// healthLeases records every health write.
+func healthLeases(writes *[]db.MachineHealth) *MockAttachments {
+	return &MockAttachments{
+		SetDaemonAttachmentHealthFunc: func(_ context.Context, _ string, h db.MachineHealth) error {
 			*writes = append(*writes, h)
 			return nil
 		},
@@ -38,7 +38,7 @@ func degradedHB(reason string) *reliantv1.MachineHealth {
 // degraded episode keeps it, and so does a lease the renewer re-created.
 func TestRecordMachineHealth(t *testing.T) {
 	var writes []db.MachineHealth
-	svc := newTestService(healthRepo(&writes))
+	svc := newTestServiceWithLeases(&MockRepository{}, healthLeases(&writes), nil)
 	t.Cleanup(svc.Close)
 	conn := &daemonConnection{daemonID: "daemon-1"}
 	ctx := context.Background()
@@ -84,7 +84,7 @@ func TestRecordMachineHealth(t *testing.T) {
 // the app re-reads the daemon list when that changes; an old daemon's
 // heartbeat reads "ok".
 func TestPublishDaemonHeartbeat_CarriesHealthState(t *testing.T) {
-	svc := newTestService(listChangedRepo(nil))
+	svc := listChangedService(nil)
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
