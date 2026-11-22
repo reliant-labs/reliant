@@ -415,6 +415,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And when it drained for a restart the platform asked for, and the
 	// platform did not restart it (upgrade_drain.go).
 	client.armUpgrade(stopRuntime, opts.BootstrapConfig.DataDir, os.Exit)
+	defer client.upgrade.teardownDone.Store(true)
 	client.selfUpdate = opts.SelfUpdate
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
@@ -1824,6 +1825,14 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 		}
 		return
 	}
+
+	// Admission and the drain transition share a mutex: a command either
+	// contributes to the drain or is refused before it touches the machine.
+	if !d.upgrade.beginCommand() {
+		d.sendCommandFailure(s, req, errors.New("this machine is restarting for an update; retry after the restart"))
+		return
+	}
+	defer d.upgrade.endCommand()
 
 	// Refuse everything while $HOME is not the directory the daemon started
 	// with: whatever the command touches would be the wrong disk.

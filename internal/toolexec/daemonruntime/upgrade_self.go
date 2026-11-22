@@ -161,6 +161,31 @@ func isActivity(msg *reliantv1.ServerMessage) bool {
 	return false
 }
 
+// beginCommand atomically admits work against an upgrade drain.
+func (u *upgradeDrain) beginCommand() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.draining {
+		return false
+	}
+	u.commands++
+	return true
+}
+
+func (u *upgradeDrain) endCommand() {
+	u.mu.Lock()
+	u.commands--
+	u.markActivity()
+	u.mu.Unlock()
+}
+
+func (d *daemonClient) runningWork() int {
+	d.upgrade.mu.Lock()
+	commands := d.upgrade.commands
+	d.upgrade.mu.Unlock()
+	return commands + d.results.runningCount()
+}
+
 // backgroundRunning counts the background processes still alive.
 func (d *daemonClient) backgroundRunning() int {
 	if d.upgrade.backgroundCount != nil {
@@ -289,9 +314,6 @@ func (d *daemonClient) runSelfUpdate(ctx context.Context) {
 		if done := d.installWhenQuiet(ctx, version); done {
 			return
 		}
-		if !d.selfSleep(ctx, retry) {
-			return
-		}
 	}
 }
 
@@ -314,13 +336,15 @@ func (d *daemonClient) selfSleep(ctx context.Context, wait time.Duration) bool {
 // will not fix (false: the caller stages again later).
 func (d *daemonClient) installWhenQuiet(ctx context.Context, version string) bool {
 	u := &d.upgrade
-	_, _, idle, drainFor := u.selfDurations()
+	stageEvery, retry, idle, drainFor := u.selfDurations()
+	refresh := time.NewTimer(stageEvery)
+	defer refresh.Stop()
 	for {
 		d.publishSelf(reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED, version,
 			fmt.Sprintf("%s is downloaded and verified; this daemon keeps serving and installs it at its next quiet moment (no tool call or background process running, and no activity for %s)", version, idle), 0)
-		forced, ok := d.waitForQuiet(ctx, idle)
+		forced, ok := d.waitForQuiet(ctx, idle, refresh.C)
 		if !ok {
-			return true // the runtime stopped
+			return ctx.Err() != nil // otherwise refresh before considering installation
 		}
 		deadline := u.clock().Add(drainFor)
 		u.mu.Lock()
@@ -350,7 +374,7 @@ func (d *daemonClient) installWhenQuiet(ctx context.Context, version string) boo
 			why := fmt.Sprintf("auto-update could not install %s (%v); this daemon keeps serving and tries again later", version, err)
 			logging.WarnContext(ctx, logPrefix+" "+why)
 			d.publishSelf(reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED, version, why, 0)
-			return false
+			return !d.selfSleep(ctx, retry)
 		}
 		logging.InfoContext(ctx, logPrefix+" Auto-update waits for the next quiet moment", "version", version, "reason", err.Error())
 	}
@@ -359,18 +383,27 @@ func (d *daemonClient) installWhenQuiet(ctx context.Context, version string) boo
 // quiet reports whether nothing is going on: no tool call, no background
 // process, and no activity for idle.
 func (d *daemonClient) quiet(idle time.Duration) bool {
-	return d.results.runningCount() == 0 && d.backgroundRunning() == 0 && d.upgrade.idleFor() >= idle
+	return d.runningWork() == 0 && d.backgroundRunning() == 0 && d.upgrade.idleFor() >= idle
 }
 
 // waitForQuiet returns at a quiet moment, or forced when a security request's
-// deadline passed first; ok is false when the runtime stopped.
-func (d *daemonClient) waitForQuiet(ctx context.Context, idle time.Duration) (forced, ok bool) {
+// deadline passed first; ok is false on stop or when staging must refresh.
+func (d *daemonClient) waitForQuiet(ctx context.Context, idle time.Duration, refresh <-chan time.Time) (forced, ok bool) {
 	_, _, poll, _ := d.upgrade.durations()
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
 		if d.upgrade.onPoll != nil {
 			d.upgrade.onPoll()
+		}
+		// Refresh wins over quiet/forced: a restart must not install an old
+		// staged candidate when a newer security release is available.
+		select {
+		case <-refresh:
+			return false, false
+		case <-d.upgrade.wakeCh():
+			return false, false
+		default:
 		}
 		if d.quiet(idle) {
 			return false, true
@@ -380,6 +413,10 @@ func (d *daemonClient) waitForQuiet(ctx context.Context, idle time.Duration) (fo
 		}
 		select {
 		case <-ctx.Done():
+			return false, false
+		case <-refresh:
+			return false, false
+		case <-d.upgrade.wakeCh():
 			return false, false
 		case <-ticker.C:
 		}
@@ -395,7 +432,7 @@ func (d *daemonClient) selfDrain(ctx context.Context, deadline time.Time, forced
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
-		running, bg := d.results.runningCount(), d.backgroundRunning()
+		running, bg := d.runningWork(), d.backgroundRunning()
 		done := running == 0 && (bg == 0 || forced)
 		if done || !d.upgrade.clock().Before(deadline) {
 			if !done && !forced {

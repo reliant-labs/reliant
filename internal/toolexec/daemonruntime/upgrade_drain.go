@@ -95,6 +95,10 @@ type upgradeDrain struct {
 	deadline time.Time
 	exited   bool
 	changed  chan struct{}
+	// commands counts admitted daemon commands, including synchronous exec.run.
+	commands int
+	// teardownDone disarms the exit backstop once Start has finished teardown.
+	teardownDone atomic.Bool
 
 	// stopRuntime stops the runtime for the upgrade exit (armUpgrade).
 	stopRuntime func()
@@ -473,6 +477,9 @@ func (u *upgradeDrain) upgradeExit() {
 	}
 	if exit != nil {
 		afterFunc(backstop, func() {
+			if u.teardownDone.Load() {
+				return
+			}
 			logging.Error(logPrefix+" Shutdown for an upgrade exit did not finish — force-exiting", "backstop", backstop)
 			exit(UpgradeExitCode)
 		})
