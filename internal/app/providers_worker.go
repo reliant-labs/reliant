@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -364,6 +365,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          d.DB,
+		Chats:         chataccess.NewFromORM(d.DB.ORM()),
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),

@@ -26,6 +26,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -1093,6 +1094,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:        g.Log,
 		Config:        g.Cfg,
 		Repo:          g.Database(),
+		Chats:         chataccess.NewFromORM(g.Database().ORM()),
 		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
@@ -1374,6 +1376,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Chats:       chataccess.NewFromORM(g.Database().ORM()),
 		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{

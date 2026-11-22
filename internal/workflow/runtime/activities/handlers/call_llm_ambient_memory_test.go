@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -121,7 +122,7 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata",
 				Skills: []cfgpkg.StoredSkill{{Name: privateSkillPath, SkillPath: privateSkillPath, Description: skillCatalogCanary, Body: skillBodyCanary}},
 			}
-			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
@@ -173,7 +174,7 @@ func TestCallLLM_ExcludeAmbientMemoryProviderBoundary(t *testing.T) {
 			h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata"}
 			driver := &ambientCaptureDriver{failFirst: tc.retry}
-			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
@@ -229,7 +230,7 @@ func TestCallLLM_ExcludeAmbientMemoryDurableRecovery(t *testing.T) {
 	cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private": ambientRepoCanary}}
 	capture := &ambientCaptureDriver{}
 	freshHandler := func() *CallLLMActivity {
-		return NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 			return capture, nil
 		}, MCPBinder: nil})
 	}
@@ -339,7 +340,7 @@ func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testi
 			require.NoError(t, err)
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private": ambientRepoCanary}}
 			driver := &ambientCaptureDriver{}
-			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			}, MCPBinder: nil})
 			// Test both default-false (the reproduced leak) and already-excluded
@@ -382,7 +383,7 @@ func TestCallLLM_ExcludeAmbientMemoryMinimalMachineLessContext(t *testing.T) {
 				cfg.Skills = []cfgpkg.StoredSkill{{Name: "private", SkillPath: "private", Description: skillCatalogCanary, Body: skillBodyCanary}}
 			}
 			driver := &ambientCaptureDriver{}
-			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")

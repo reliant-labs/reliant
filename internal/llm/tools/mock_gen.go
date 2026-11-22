@@ -1527,7 +1527,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=e978244d77f37dc06832a5546b429a0243599d616e45d240ae3208474391f800
+// forge:hash=609804af406e0252e71e9efebbdb4efb8398a117a9f65e4b92de756a79b6e0e6
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1537,7 +1537,6 @@ var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 // "MockspawnStatusStore.<Method>Func not set" error.
 type MockspawnStatusStore struct {
 	contractkit.Recorder
-	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
@@ -1580,15 +1579,6 @@ type MockspawnStatusStore struct {
 	LastThreadActivityByChatFunc                             func(context.Context, string) (map[string]time.Time, error)
 	ListPendingApprovalsByChatFunc                           func(context.Context, string) ([]*db.Approval, error)
 	ProviderBackoffByChatFunc                                func(context.Context, string) (map[string]db.ProviderBackoff, error)
-}
-
-// GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
-func (m *MockspawnStatusStore) GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRowWithUserCheck", ctx, id, userID)
-	if m.GetChatRowWithUserCheckFunc != nil {
-		return m.GetChatRowWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetChatRowWithUserCheck")
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.
@@ -2143,7 +2133,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=aef2d46064479ef9b0705a7cb19318ec71f9dc8fd540848488a2a1fc72f17472
+// forge:hash=195e901ba8a640c8652f0409cc492310b52a4fc86d9a245b87e947f1806f267a
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -2153,7 +2143,6 @@ var _ listRunsStore = (*MocklistRunsStore)(nil)
 // "MockgetRunStore.<Method>Func not set" error.
 type MockgetRunStore struct {
 	contractkit.Recorder
-	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
@@ -2195,15 +2184,6 @@ type MockgetRunStore struct {
 	ListRunNodeExecutionsFunc                                func(context.Context, string, int) ([]*db.StepExecution, error)
 	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
-}
-
-// GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
-func (m *MockgetRunStore) GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRowWithUserCheck", ctx, id, userID)
-	if m.GetChatRowWithUserCheckFunc != nil {
-		return m.GetChatRowWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockgetRunStore", "GetChatRowWithUserCheck")
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.

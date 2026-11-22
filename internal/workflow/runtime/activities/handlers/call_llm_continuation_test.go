@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -275,7 +276,7 @@ func saveHiddenNudge(t *testing.T, h *IdempotencyTestHelper, chatID, kind string
 	t.Helper()
 	text, _ := continuationNudgeText(kind)
 	key := "seed-" + uuid.NewString()
-	_, err := threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}).SaveMessage(context.Background(), threads.SaveMessageOpts{
+	_, err := threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}).SaveMessage(context.Background(), threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       chatID,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
@@ -310,7 +311,7 @@ func TestCallLLM_TruncatedTurnIsContinuedWithANudge(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "Here is the first half of the plan:")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
@@ -353,7 +354,7 @@ func TestCallLLM_TruncationContinuationsStopAtTheCap(t *testing.T) {
 	saveHiddenNudge(t, h, chat.ID, continuationTruncated)
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "part 3")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
@@ -384,7 +385,7 @@ func TestCallLLM_MailboxDeliveryPreservesContinuationTracking(t *testing.T) {
 	}
 	const mailboxText = "Also check the migration."
 	queueHumanMessage(t, h.Repo(), chat.ID, chat.ID, mailboxText)
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	for i := 1; i <= maxTruncationContinuations; i++ {
 		var output CallLLMOutput
@@ -448,7 +449,7 @@ func TestCallLLM_UnsavedNudgeFailsTheAttemptInsteadOfContinuing(t *testing.T) {
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "part 1")
 
 	repo := &nudgeSaveFailingRepo{Repo: h.Repo()}
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	for range maxTruncationContinuations + 1 {
 		var output CallLLMOutput
@@ -483,7 +484,7 @@ func TestCallLLM_PrematureStopIsRetriedOnce(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	// Turn 1: the premature stop. stop_reason stays the provider's "done";
 	// continuation carries the retry.
@@ -524,7 +525,7 @@ func TestCallLLM_ReasoningOnlyStopIsRetried(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	var first CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
@@ -562,7 +563,7 @@ func TestCallLLM_NoPrematureHintNoContinuation(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,

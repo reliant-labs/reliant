@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -36,6 +37,9 @@ type Deps struct {
 	// is what the handlers call plus the roles of launch, threads, runs and
 	// the other callees they hand it to.
 	Repo Repository
+	// Chats reads a chat the caller may write, the owner check and the org
+	// check in one call (chataccess).
+	Chats chataccess.Service
 	// Questions lists the chat's open questions (Questions, deps.go).
 	Questions Questions
 	// Spawns reads the spawn tree (Spawns, deps.go).
@@ -112,6 +116,9 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("chat: Deps.Repo is required")
 	}
+	if d.Chats == nil {
+		return fmt.Errorf("chat: Deps.Chats is required")
+	}
 	if d.Questions == nil {
 		return fmt.Errorf("chat: Deps.Questions is required")
 	}
@@ -177,7 +184,7 @@ func New(deps Deps) (*Service, error) {
 	return &Service{
 		deps:    deps,
 		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause}),
-		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
+		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
 

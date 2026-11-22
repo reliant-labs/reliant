@@ -16,6 +16,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -88,9 +89,9 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	router := newCodePresenceHangingRouter(t, e.router)
 	e.svc = &Service{
 		deps: Deps{
-			Repo:   e.repo,
+			Repo: e.repo, Chats: chataccess.NewFromORM(e.repo.ORM()),
 			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(e.repo.ORM()), Announcer: e.repo}), AgentMessages: store.NewAgentMessageExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
-		}, threads: threads.New(threads.Deps{Repo: e.repo, Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
+		}, threads: threads.New(threads.Deps{Repo: e.repo, Chats: chataccess.NewFromORM(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
 		runs: runs.New(runs.Deps{Repo: e.repo, Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 
@@ -166,7 +167,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	}}
 	svc := &Service{
 		deps: Deps{
-			Repo:   repo,
+			Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
 			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),

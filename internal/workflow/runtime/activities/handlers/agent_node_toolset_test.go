@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	dbstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -117,7 +118,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), IntegrationCredentials: source})
 	return &nestedAgentFixture{
 		h: h, chat: chat, thread: nested, driver: driver,
-		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}), Spawns: dbstore.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}), Spawns: dbstore.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

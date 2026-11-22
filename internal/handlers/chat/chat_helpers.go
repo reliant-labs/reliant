@@ -51,7 +51,7 @@ func activeWorkflowNameForResume(chat *db.Chat, existingWorkflow *db.Workflow) s
 // columns are subqueries over the chat's messages, workflows and threads).
 // A missing chat and another user's are the same core.ErrChatNotFound.
 func (s *Service) requireChatOwner(ctx context.Context, chatID, userID string) error {
-	_, err := s.deps.Repo.GetChatRowWithUserCheck(ctx, chatID, userID)
+	_, err := s.deps.Chats.GetChatRowWithUserCheck(ctx, chatID, userID)
 	return err
 }
 
@@ -59,7 +59,7 @@ func (s *Service) requireChatOwner(ctx context.Context, chatID, userID string) e
 // verifies ownership in a single query. Where only ownership matters, use
 // requireChatOwner, which skips the activity view.
 func (s *Service) getChatForUser(ctx context.Context, chatID, userID string) (*db.Chat, error) {
-	chat, err := s.deps.Repo.GetChatWithUserCheck(ctx, chatID, userID)
+	chat, err := s.deps.Chats.GetChatWithUserCheck(ctx, chatID, userID)
 	if err != nil {
 		return nil, err
 	}

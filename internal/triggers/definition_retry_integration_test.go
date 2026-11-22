@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -42,7 +43,7 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 			starter := &pinRecordingStarter{}
 			starter.setDown(true)
-			launcher := launch.New(launch.Deps{Store: p.repo, Selections: store.NewChatSelectionExtStore(p.repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo, Messages: store.NewMessageExtStore(p.repo.ORM()), Senders: store.NewThreadExtStore(p.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
+			launcher := launch.New(launch.Deps{Store: p.repo, Selections: store.NewChatSelectionExtStore(p.repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo, Chats: chataccess.NewFromORM(p.repo.ORM()), Messages: store.NewMessageExtStore(p.repo.ORM()), Senders: store.NewThreadExtStore(p.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
 			key := "retry-pin-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule
 			fire := func() (*FireOutput, error) {

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -32,7 +34,7 @@ func TestGetChatRowWithUserCheck_ReadsTheRowAndHidesOthersChats(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateChat(ctx, chat))
 
-	row, err := repo.GetChatRowWithUserCheck(ctx, chat.ID, "owner")
+	row, err := store.GetChatRowWithUserCheck(ctx, repo.ORM(), chat.ID, "owner")
 	require.NoError(t, err)
 	require.Equal(t, chat.ID, row.ID)
 	require.Equal(t, "owner", row.UserID)
@@ -41,7 +43,7 @@ func TestGetChatRowWithUserCheck_ReadsTheRowAndHidesOthersChats(t *testing.T) {
 	require.True(t, row.NoMachine)
 	require.Equal(t, ChatStateArchived, row.State)
 
-	_, err = repo.GetChatRowWithUserCheck(ctx, chat.ID, "someone-else")
+	_, err = store.GetChatRowWithUserCheck(ctx, repo.ORM(), chat.ID, "someone-else")
 	require.True(t, errors.Is(err, core.ErrChatNotFound), "another user's chat: %v", err)
 	_, err = repo.GetChatRow(ctx, uuid.NewString())
 	require.True(t, errors.Is(err, core.ErrChatNotFound), "a missing chat: %v", err)

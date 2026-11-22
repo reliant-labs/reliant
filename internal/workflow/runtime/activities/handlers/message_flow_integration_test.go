@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -116,7 +117,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,
@@ -129,7 +130,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	t.Run("Step 1: SaveMessage creates user message", func(t *testing.T) {
 		t.Log("📝 User sends message: 'List all Go files and show me the main.go file'")
 
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		input := SaveMessageInput{
@@ -227,7 +228,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	t.Run("Step 3: SaveMessage creates assistant message with tool calls", func(t *testing.T) {
 		t.Log("💾 Saving assistant message with text + 2 tool_call blocks")
 
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		// Convert CallLLM output to SaveMessage input
@@ -382,7 +383,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	t.Run("Step 5: SaveMessage creates tool message with results", func(t *testing.T) {
 		t.Log("💾 Saving tool message with 2 tool_result blocks")
 
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		// Use tool_results from ExecuteTools output
@@ -624,7 +625,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,
@@ -632,7 +633,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create user message
-	saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+	saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 	env.RegisterActivity(saveActivity.Execute)
 	userInput := SaveMessageInput{
 		ChatID:  chatID,
@@ -726,7 +727,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	t.Run("SaveMessage creates tool message with error result", func(t *testing.T) {
 		t.Log("💾 Saving tool message with error result")
 
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		input := SaveMessageInput{

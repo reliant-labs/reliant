@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -99,7 +100,7 @@ func newFixture(t *testing.T) *fixture {
 	f.addUserProject(f.userID, f.projectID)
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: f.daemonID, UserID: f.userID}))
 
-	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	f.dispatcher = NewDispatcher(repo, launcher, nil)
 	return f
 }

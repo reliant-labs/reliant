@@ -56,7 +56,7 @@ func (s *Service) PauseChat(
 	// scoped to every thread of the chat instead of one, and do it first.
 	threadsSvc := s.threads
 	if threadsSvc == nil {
-		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
+		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Chats: s.deps.Chats, Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
 	}
 	if _, err := threadsSvc.CancelChatToolCalls(ctx, threads.CancelChatToolCallsOpts{
 		UserID: userID,

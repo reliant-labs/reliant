@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -51,7 +52,7 @@ func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
 	)
 
 	// What the branch actually renders.
-	inherited, err := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())}).LoadCurrentMessages(ctx, branchThread.ID)
+	inherited, err := New(Deps{Repo: h.repo, Chats: chataccess.NewFromORM(h.repo.ORM()), Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())}).LoadCurrentMessages(ctx, branchThread.ID)
 	if err != nil {
 		t.Fatalf("load branch messages: %v", err)
 	}

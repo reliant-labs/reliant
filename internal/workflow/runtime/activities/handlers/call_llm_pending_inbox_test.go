@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -54,7 +55,7 @@ func TestPendingInbox_EmptyMailboxReportsFalse(t *testing.T) {
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	var pending bool
 	runInActivity(t, f.h, func(actCtx context.Context) error {
@@ -79,7 +80,7 @@ func TestPendingInbox_DeliveredRowIsNotPending(t *testing.T) {
 
 	queueHumanMessage(t, f.h.Repo(), f.chatID, f.chatID, "already read this")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	// Deliver it, exactly as a turn's drain would.
 	runInActivity(t, f.h, func(actCtx context.Context) error {
@@ -112,7 +113,7 @@ func TestPendingInbox_RealQueuedMessageReportsTrue(t *testing.T) {
 
 	queueHumanMessage(t, f.h.Repo(), f.chatID, f.chatID, "actually, check the migration first")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	var pending bool
 	runInActivity(t, f.h, func(actCtx context.Context) error {
@@ -144,7 +145,7 @@ func TestPendingInbox_SurvivesCancelledContext(t *testing.T) {
 
 	queueHumanMessage(t, f.h.Repo(), f.chatID, f.chatID, "stop, this changes things")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	var pending bool
 	runInActivity(t, f.h, func(actCtx context.Context) error {
@@ -262,7 +263,7 @@ func TestRecovery_AssistantTailYieldsInsteadOfWedging(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, queued, "precondition: the wedged thread's mailbox is empty")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	var output CallLLMOutput
 	err = h.ExecuteActivity(activityInstance.Execute,
@@ -332,7 +333,7 @@ func TestScoping_IdleThreadWithEmptyMailboxEarnsNoExtraTurn(t *testing.T) {
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	var pending bool
 	runInActivity(t, f.h, func(actCtx context.Context) error {

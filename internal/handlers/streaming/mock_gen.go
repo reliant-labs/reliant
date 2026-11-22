@@ -159,7 +159,7 @@ func (m *MockSiblings) ListRecentTranscriptSiblingMessages(ctx context.Context, 
 var _ Siblings = (*MockSiblings)(nil)
 
 // forge:section MockRepository
-// forge:hash=c25c7dcfac5f0f25e7935bc6600e145c40c1ea4bc9f0c16d75ea7bbeaf60b989
+// forge:hash=d615c1a70cb57ee8c2ecf03fd769fa9064bbb0003f245c17b797d926acf31ca9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -181,7 +181,6 @@ type MockRepository struct {
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
-	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
@@ -328,15 +327,6 @@ func (m *MockRepository) ListLiveToolCallsByChat(ctx context.Context, chatID str
 		return m.ListLiveToolCallsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListLiveToolCallsByChat")
-}
-
-// GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
-func (m *MockRepository) GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRowWithUserCheck", ctx, id, userID)
-	if m.GetChatRowWithUserCheckFunc != nil {
-		return m.GetChatRowWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChatRowWithUserCheck")
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.

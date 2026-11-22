@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -98,7 +99,7 @@ func (f *fetchResultFixture) saveAssistant(t *testing.T, text *string, toolName 
 
 func (f *fetchResultFixture) fetch(t *testing.T) FetchThreadResultOutput {
 	t.Helper()
-	activityInstance := NewFetchThreadResultActivity(threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}))
+	activityInstance := NewFetchThreadResultActivity(threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}))
 
 	var output FetchThreadResultOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, FetchThreadResultInput{

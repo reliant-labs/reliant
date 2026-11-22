@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -91,7 +92,7 @@ func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
+	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}
@@ -128,7 +129,7 @@ func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
+	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
@@ -158,7 +159,7 @@ func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
+	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
 	compact.skips = captured.notices()
 
 	var out CompactOutput

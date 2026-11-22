@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -114,7 +115,7 @@ func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	NewCompactActivity(CompactDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), DriverResolver: nil}).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
+	NewCompactActivity(CompactDeps{Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), DriverResolver: nil}).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
 
 	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)
 	require.NoError(t, err)

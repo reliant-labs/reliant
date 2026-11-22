@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -62,7 +63,7 @@ func TestSaveMessageActivity_Idempotency_UserMessage(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID:  chatID,
@@ -158,7 +159,7 @@ func TestSaveMessageActivity_Idempotency_ToolMessage(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID: chatID,
@@ -309,7 +310,7 @@ func TestSaveMessageActivity_CleansUpOnRetry(t *testing.T) {
 
 	t.Run("Retry (attempt 2) should delete and recreate", func(t *testing.T) {
 		// Create activity with same activity_id
-		activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 		input := SaveMessageInput{
 			ChatID:  chatID,
@@ -366,7 +367,7 @@ func TestSaveMessageActivity_MultipleToolResults(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Save tool message with 3 tool results", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -463,7 +464,7 @@ func TestSaveMessageActivity_ValidationErrors(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Empty chat_id returns error", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -597,7 +598,7 @@ func TestSaveMessageActivity_OrdinalIncrement(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("First message has ordinal 0", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -692,7 +693,7 @@ func TestSaveMessageActivity_TransactionRollback(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activityInstance := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Transaction atomicity - partial failure", func(t *testing.T) {
 		// This test verifies that if the transaction fails,

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
 	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
-	launcher := launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	launcher := launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
 	return f, NewEventFirer(f.repo, launcher), NewIntake(f.repo, starter, "test-queue"), starter
 }
@@ -96,7 +97,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f.trigger.Config = json.RawMessage(`{}`)
 			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 			runs := &recordingStarter{}
-			firer := NewEventFirer(f.repo, launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
+			firer := NewEventFirer(f.repo, launch.New(launch.Deps{Store: f.repo, Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}
 			intake := NewIntake(f.repo, fires, "test-queue")
 

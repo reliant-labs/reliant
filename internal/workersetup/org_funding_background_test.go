@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
@@ -59,7 +60,7 @@ func (w *orgFundingWorld) title(first string) (string, error) {
 // compact runs a forced compaction of the chat's root thread once.
 func (w *orgFundingWorld) compact() (*handlers.CompactOutput, error) {
 	w.t.Helper()
-	activity := handlers.NewCompactActivity(handlers.CompactDeps{Store: w.repo, Threads: threads.New(threads.Deps{Repo: w.repo, Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewCompactActivity(handlers.CompactDeps{Store: w.repo, Threads: threads.New(threads.Deps{Repo: w.repo, Chats: chataccess.NewFromORM(w.repo.ORM()), Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{

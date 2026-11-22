@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -47,7 +48,7 @@ func seedMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID, threa
 		})
 		require.NoError(t, cwErr)
 	}
-	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	svc := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  threadID,

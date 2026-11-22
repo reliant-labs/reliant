@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -121,7 +122,7 @@ func (s *Service) MoveChatToProject(
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	chat, err := s.deps.Repo.GetChatWithUserCheck(ctx, chatID, userID)
+	chat, err := s.deps.Chats.GetChatWithUserCheck(ctx, chatID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

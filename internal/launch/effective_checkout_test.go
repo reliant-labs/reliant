@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -21,7 +22,7 @@ import (
 // workflow.path must be the cloud machine's path, never the laptop's.
 func TestGetEffectiveCheckout_IsTheChatMachinesOwnCheckout(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 	project, err := repo.GetProject(ctx, chat.ProjectID)
 	require.NoError(t, err)
 
@@ -52,7 +53,7 @@ func TestGetEffectiveCheckout_IsTheChatMachinesOwnCheckout(t *testing.T) {
 // the run starts and its first machine call is refused with the way out.
 func TestGetEffectiveCheckout_NoCheckoutOnTheChatsMachineIsEmptyNotTheCreationPath(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: "bare-box", UserID: chat.UserID}))
 	pinned := "bare-box"
 	chat.ActiveDaemonID = &pinned

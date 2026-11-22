@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -80,7 +81,7 @@ func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 			captured := &capturedDriverOptions{}
-			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
 
 			input := callLLMInput(chat.ID, chat.ID, tt.modelID)
 			input.Node.GetCallLlm().ThinkingLevel = &reliantv1.CelString{

@@ -55,49 +55,6 @@ func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
 	return store.GetChatRow(ctx, r.ORM(), id)
 }
 
-// GetChatRowWithUserCheck is an ownership check that reads only the chats
-// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
-// another user's. GetChatWithUserCheck is the same check over the activity
-// view, for a caller that needs a derived field.
-//
-// The store read filters on the owner; the row it returns is then confirmed
-// by authz, the one place the rule lives, as a write (the strict question,
-// since these reads back both reads and changes).
-func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	chat, err := store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
-}
-
-func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	chat, err := store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
-}
-
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
 // or an empty string when it is unused.
 func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {

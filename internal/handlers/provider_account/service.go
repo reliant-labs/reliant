@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
@@ -30,7 +31,6 @@ type Store interface {
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
 	DeleteProviderAccount(ctx context.Context, userID, accountID string) error
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
 	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
@@ -52,6 +52,9 @@ type Deps struct {
 	Config *config.Config
 	// Store holds accounts, their limit state and thread assignments.
 	Store Store
+	// Chats reads a chat the caller may write, the owner and org checks in one
+	// call (chataccess).
+	Chats chataccess.Service
 	// Funding holds a chat's question before it moves from its org's accounts
 	// to the person's own (org-provider-accounts §10); store.ChatPersonalFundingExtStore.
 	Funding PersonalFunding

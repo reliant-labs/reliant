@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -36,7 +37,7 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	e := newEnv(t)
 	waker := &wakeRecorder{}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
-		Store: e.repo, Funding: store.NewChatPersonalFundingExtStore(e.repo.ORM()), ChatWaker: waker,
+		Store: e.repo, Chats: chataccess.NewFromORM(e.repo.ORM()), Funding: store.NewChatPersonalFundingExtStore(e.repo.ORM()), ChatWaker: waker,
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
 	}))
 	const user = "u-funding"

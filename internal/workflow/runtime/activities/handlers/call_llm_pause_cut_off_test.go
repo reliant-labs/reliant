@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -138,7 +139,7 @@ func newCutOffFixture(t *testing.T, driver *scriptedDriver) *cutOffFixture {
 		h:        h,
 		chatID:   chat.ID,
 		driver:   driver,
-		activity: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
+		activity: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 
@@ -198,7 +199,7 @@ func (f *cutOffFixture) assistantTexts(t *testing.T) map[string]string {
 // saveTurn persists a completed turn's reply the way its save_message does.
 func (f *cutOffFixture) saveTurn(t *testing.T, messageID, text string) {
 	t.Helper()
-	_, err := threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}).SaveMessage(context.Background(), threads.SaveMessageOpts{
+	_, err := threads.New(threads.Deps{Repo: f.h.Repo(), Chats: chataccess.NewFromORM(f.h.Repo().ORM()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}).SaveMessage(context.Background(), threads.SaveMessageOpts{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		Role:      int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),

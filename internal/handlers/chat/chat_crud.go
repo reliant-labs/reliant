@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.temporal.io/api/serviceerror"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
@@ -17,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"go.temporal.io/api/serviceerror"
 )
 
 // startChatIDNamespace derives the id of a chat a client named its first
