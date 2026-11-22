@@ -165,19 +165,16 @@ describe.each(['google', 'github', 'apple'] as const)('%s sign-in', (provider) =
     })
   })
 
-  it('falls back to the hosted callback in builds with no desktop bridge', async () => {
+  it('asks for a desktop update in builds whose bridge has no loopback receiver', async () => {
     // Every build shipped before the loopback receiver existed: electronAPI is
-    // present but startOAuthRedirect is undefined.
+    // present but startOAuthRedirect is undefined. The hosted-callback fallback
+    // for these builds was removed (#2989): sign-in there cannot hand the
+    // session back to the renderer, so it asks for a newer desktop app instead.
     ;(window as unknown as { electronAPI?: unknown }).electronAPI = {}
 
-    await call(provider)
-
-    expect(signInWithOAuthMock).toHaveBeenCalledWith({
-      provider,
-      options: {
-        redirectTo: 'https://app.reliantlabs.io/auth/callback',
-        skipBrowserRedirect: true,
-      },
-    })
+    // Matched by name: vi.resetModules gives each test a fresh copy of the
+    // error class, so instanceof against a top-level import would not hold.
+    await expect(call(provider)).rejects.toMatchObject({ name: 'DesktopUpdateRequiredError' })
+    expect(signInWithOAuthMock).not.toHaveBeenCalled()
   })
 })

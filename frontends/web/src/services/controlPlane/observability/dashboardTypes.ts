@@ -105,8 +105,8 @@ export interface DashboardSummary {
   category: string;
   /**
    * The page group the spec declares (overview, services, jobs, product,
-   * platform, releases, custom), defaulted by the server. Absent from a
-   * control plane that predates it: the page infers one (dashboardGroups.ts).
+   * platform, releases, custom), defaulted by the server. Absent or unknown
+   * reads as custom (dashboardGroups.ts).
    */
   group?: string;
   /** The spec's tags (lowercase, at most eight); search matches them. */

@@ -53,7 +53,7 @@ describe("heartbeatHealthDisagrees", () => {
     expect(heartbeatHealthDisagrees(machine(DaemonStatus.ACTIVE, MachineHealthState.DEGRADED), "ok")).toBe(true);
   });
 
-  it("is false when they agree, or the heartbeat carries no health (an older gateway)", () => {
+  it("is false when they agree, or the heartbeat carries no health", () => {
     expect(heartbeatHealthDisagrees(machine(DaemonStatus.ACTIVE, MachineHealthState.OK), "ok")).toBe(false);
     expect(heartbeatHealthDisagrees(machine(DaemonStatus.ACTIVE), "ok")).toBe(false);
     expect(heartbeatHealthDisagrees(machine(DaemonStatus.ACTIVE, MachineHealthState.DEGRADED), "degraded")).toBe(false);

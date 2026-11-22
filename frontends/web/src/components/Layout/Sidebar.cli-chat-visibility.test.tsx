@@ -27,6 +27,11 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "./sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 // The machine filter's daemon list: no machines, so the filter is hidden.
 vi.mock("../../hooks/useOnboardingQueries", async (importOriginal) => ({
@@ -130,7 +135,7 @@ function renderSidebar() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <Sidebar />
+      <Sidebar pathname="/" />
     </QueryClientProvider>
   );
 }

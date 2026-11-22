@@ -490,7 +490,15 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge test begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`reliant forge test capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
 | [`reliant forge test coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
+| [`reliant forge test flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
+| [`reliant forge test flakes confirm`](#reliant-forge-test-flakes-confirm) | Rerun a red run's failing tests once to tell flakes from breaks (always exits 0) |
+| [`reliant forge test flakes gate`](#reliant-forge-test-flakes-gate) | Run every test the change adds or edits three times (the flake gate) |
 | [`reliant forge test ingest`](#reliant-forge-test-ingest) | Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run |
+| [`reliant forge test quarantine`](#reliant-forge-test-quarantine) | Manage the flaky-test quarantine list (ci/quarantine/) |
+| [`reliant forge test quarantine add`](#reliant-forge-test-quarantine-add) | Quarantine a test: write its ci/quarantine/ entry |
+| [`reliant forge test quarantine list`](#reliant-forge-test-quarantine-list) | List the quarantined tests, overdue ones flagged |
+| [`reliant forge test quarantine remove`](#reliant-forge-test-quarantine-remove) | Remove a test's quarantine entry |
+| [`reliant forge test quarantine skip-regex`](#reliant-forge-test-quarantine-skip-regex) | Print the -skip pattern that skips every quarantined test (go) |
 | [`reliant forge test report`](#reliant-forge-test-report) | Summarise a commit's recorded test runs: results, merged coverage, diff coverage (runs nothing) |
 | [`reliant forge test runs`](#reliant-forge-test-runs) | List the recorded test runs, newest first (runs nothing) |
 | [`reliant forge tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
@@ -580,6 +588,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
 | [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
+| [`reliant update`](#reliant-update) | Update this reliant to the newest signed release |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
@@ -21926,7 +21935,9 @@ reliant forge test [flags]
 | [`begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
 | [`coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
+| [`flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
 | [`ingest`](#reliant-forge-test-ingest) | Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run |
+| [`quarantine`](#reliant-forge-test-quarantine) | Manage the flaky-test quarantine list (ci/quarantine/) |
 | [`report`](#reliant-forge-test-report) | Summarise a commit's recorded test runs: results, merged coverage, diff coverage (runs nothing) |
 | [`runs`](#reliant-forge-test-runs) | List the recorded test runs, newest first (runs nothing) |
 
@@ -22045,6 +22056,156 @@ reliant forge test coverage [<path>] [flags]
 
 ---
 
+#### reliant forge test flakes
+
+Flaky tests in the local test record, with the quarantine command for each
+
+Computes each test's flake state from the local test record
+(.forge/tests/runs/: the project's own lanes, `forge test flakes gate` and
+`forge test flakes confirm` runs) and prints it with the command that
+quarantines it.
+
+A confirmed flake event is a failure the same tree also passed: a retry pass
+within a run (go test -count=N), a confirm rerun that passed, or another run
+of the same tree. Failures matching a host signature (network, rate limits,
+disk, ports, docker, timeouts under load) never score and are reported as
+host health; three or more failures of one run that share a package, a
+harness or a signature are one infra event.
+
+States: suspected (one confirmed event: the state the delete-on-first-flake
+policy acts on), flaky (events on two or more commits in 30 days),
+quarantined (an entry under ci/quarantine/; an expired one stays applied and
+is reported overdue), removed, fixed. The flake rate is the Wilson 95% lower
+bound with its n: a ranking, never a trigger.
+
+--issues files one flake:suspected issue per suspected or flaky test with gh
+(the test's body, its failure signature and its runs), comments on an
+existing one, and closes an open one whose test left those states.
+
+--json prints a forge.test.flakes/v1 document.
+
+```
+reliant forge test flakes [--state suspected|flaky|quarantined|removed|fixed] [--issues] [--json] [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`confirm`](#reliant-forge-test-flakes-confirm) | Rerun a red run's failing tests once to tell flakes from breaks (always exits 0) |
+| [`gate`](#reliant-forge-test-flakes-gate) | Run every test the change adds or edits three times (the flake gate) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | Include healthy tests that have flake history |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | With --issues: say what would be filed, commented and closed, and do none of it |
+| `--issues` | `bool` | - | File, update and close flake:suspected issues with gh |
+| `--json` | `bool` | - | Print a forge.test.flakes/v1 document |
+| `--repo` | `string` | - | With --issues: the owner/name to file in (default $GITHUB_REPOSITORY, else the current repository) |
+| `--state` | `stringSlice` | `[]` | Only tests in these states (suspected, flaky, quarantined, removed, fixed, healthy); default every state but healthy |
+
+---
+
+#### reliant forge test flakes confirm
+
+Rerun a red run's failing tests once to tell flakes from breaks (always exits 0)
+
+Reads the failing Go tests of a red run and reruns each once, alone, under
+-race, at the run's commit (run it from the module root of a checkout of that
+commit), then classifies every failure:
+
+  confirmed     failed, then passed on the rerun: a flake
+  real          failed again (or did not run): a break, not a flake
+  raced         the output reports a data race: a bug, never retried
+  host          the output matches a host signature: host health, never retried
+  correlated    one of 3+ failures sharing a package, harness or signature:
+                one infra event, never retried
+  inconclusive  the rerun could not tell (skipped, its package failed, over
+                the --max budget, not in this module)
+  unattributed  no test owns the failure (a build failure, TestMain)
+
+The source is a GitHub Actions run (--run, read with `gh run view --log-failed`
+and its gate-logs / test-short-* artifacts; Windows and macOS jobs are
+ignored), a local gate's log directory (--logs: its *.log files and go test
+-json *.json streams), or a results file (--from: go test -json, JUnit or
+Vitest; a lane of .forge/tests/runs/ keeps its run's commit and tree).
+
+At most --max (15) distinct tests are rerun. The reruns are recorded as lane
+confirm of a new run, with every verdict in confirm/confirm.json, so
+`forge test flakes` sees a confirmed flake. It always exits 0 and never changes
+the verdict of the run it read.
+
+```
+reliant forge test flakes confirm --run <ci-run-id> | --logs <dir> | --from <results.json> [-- <go test command>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--from` | `string` | - | A results file: go test -json, JUnit XML or Vitest JSON |
+| `--json` | `bool` | - | Print a forge.test.confirm/v1 document on stdout (progress goes to stderr) |
+| `--list` | `bool` | - | Print the failing tests found and stop: nothing is rerun or recorded |
+| `--logs` | `string` | - | A local gate's log directory (*.log, and go test -json *.json) |
+| `--max` | `int` | `15` | Most distinct tests to rerun |
+| `--repo` | `string` | - | With --run: owner/name (default $GITHUB_REPOSITORY, else the current repository) |
+| `--run` | `string` | - | GitHub Actions run id to read (gh run view --log-failed) |
+| `--run-url` | `string` | - | With --logs: a link to the run, for the record |
+| `--sha` | `string` | - | With --logs: the commit the logs are of (default HEAD) |
+
+---
+
+#### reliant forge test flakes gate
+
+Run every test the change adds or edits three times (the flake gate)
+
+Finds the top-level Test and Fuzz functions the diff from --base to HEAD
+adds or edits (a +func line, or a hunk inside the function) and runs them
+three times, in one invocation of the project's own `go test`:
+
+  go test -json -short -count=3 -timeout 10m [-race] -run '^(TestA|TestB)$' ./pkg...
+
+--full adds -race. --cpu 1,2,4 runs each test once per GOMAXPROCS value
+instead of -count=3, which Go's test cache keeps. A command after -- replaces
+`go test` (a project wrapper such as scripts/ci-go-test.sh); the gate adds
+nothing to it beyond those flags, the -run pattern and the packages. Test
+files under the e2e or integration build tag, and files outside the module's
+own packages, are skipped.
+
+The run is recorded as lane flake-gate of a run under .forge/tests/runs/
+($FORGE_TEST_RUN joins an existing one), so its retry passes feed
+`forge test flakes`.
+
+--base defaults to $CI_BASE, else the merge-base of HEAD with
+origin/<default branch>.
+
+Exit status: 0 every changed test passed every run; 1 a changed test failed
+at least once; 2 no changed test could be identified (none in the diff, or
+the diff could not be read). It reports; it blocks nothing by itself.
+--graded exits as forge ci gate's flake-check step does: 1 only when
+lint.rules grades flake-check error (for customers it is a warning), and 0
+when there were no changed tests.
+
+```
+reliant forge test flakes gate [--base <rev>] [--full] [--cpu 1,2,4] [--graded] [-- <go test command>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base` | `string` | - | Revision the change is measured from (default $CI_BASE, else the merge-base with origin/<default branch>) |
+| `--cpu` | `string` | - | Run each test once per GOMAXPROCS value (e.g. 1,2,4) instead of -count=3 |
+| `--full` | `bool` | - | Add -race (the main-branch and release tier) |
+| `--graded` | `bool` | - | Exit as the flake-check gate step: fail only when lint.rules grades flake-check error |
+
+---
+
 #### reliant forge test ingest
 
 Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run
@@ -22073,6 +22234,143 @@ reliant forge test ingest --lane <name> --format <format> <file>... [flags]
 | `--format` | `string` | - | Report format: junit, go-json, vitest, lcov, cobertura, istanbul |
 | `--lane` | `string` | - | Lane to record the reports under (letters, digits, '-' and '_') |
 | `--run` | `string` | - | Run directory to add the lane to (default: $FORGE_TEST_RUN, else a new run) |
+
+---
+
+#### reliant forge test quarantine
+
+Manage the flaky-test quarantine list (ci/quarantine/)
+
+The quarantine list is one file per quarantined test,
+ci/quarantine/<lang>/<package dir>/<Test>.yaml (`_root` for the module's root
+package), so two quarantine changes never conflict. Each holds flat
+`key: value` lines: lang, package, test, issue, reason, signature,
+quarantined_at, expires_at, commit, run.
+
+The project's lanes skip every quarantined Go test:
+
+  go test -skip "$(forge test quarantine skip-regex go)" ./...
+
+An entry expires 48h after it is written: the quarantine is the gap between
+detection and deletion. An expired entry stays applied and is reported
+overdue (list, forge test flakes). Delete the entry in the change that deletes
+the test or rewrites it as a deterministic test.
+
+```
+reliant forge test quarantine [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`add`](#reliant-forge-test-quarantine-add) | Quarantine a test: write its ci/quarantine/ entry |
+| [`list`](#reliant-forge-test-quarantine-list) | List the quarantined tests, overdue ones flagged |
+| [`remove`](#reliant-forge-test-quarantine-remove) | Remove a test's quarantine entry |
+| [`skip-regex`](#reliant-forge-test-quarantine-skip-regex) | Print the -skip pattern that skips every quarantined test (go) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge test quarantine add
+
+Quarantine a test: write its ci/quarantine/ entry
+
+Writes ci/quarantine/go/<package dir>/<Test>.yaml for the test.
+
+<test-id> is the id forge prints (go:example.com/shop/internal/billing:TestRefund)
+or <package>:<Test>, where <package> is the import path or the directory
+relative to the module root (./internal/billing:TestRefund). A subtest
+quarantines its top-level test, which is what -skip addresses.
+
+A test already quarantined is left as it is (--force rewrites the entry).
+--expires 0 writes an entry that is never overdue.
+
+```
+reliant forge test quarantine add <test-id> [--issue <url>] [--reason <text>] [--expires 48h] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--commit` | `string` | - | The commit the flake was seen on |
+| `--expires` | `duration` | `48h0m0s` | How long until the entry is overdue (0: never) |
+| `--force` | `bool` | - | Rewrite an existing entry |
+| `--issue` | `string` | - | The issue tracking the flake (its URL) |
+| `--reason` | `string` | - | Why the test is quarantined, in a few words |
+| `--run` | `string` | - | The run that showed it (a URL or run id) |
+| `--signature` | `string` | - | The failure signature it was quarantined for |
+
+---
+
+#### reliant forge test quarantine list
+
+List the quarantined tests, overdue ones flagged
+
+Lists every entry under ci/quarantine/: one row per test with its expiry and
+issue. An entry past its expires_at is OVERDUE: it stays applied (the test
+is still skipped) until the change that deletes or rewrites the test removes
+it. --overdue lists only those (the port of quarantine.sh expired).
+
+```
+reliant forge test quarantine list [--overdue] [--json] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print the entries as JSON |
+| `--overdue` | `bool` | - | Only entries past their expires_at |
+
+---
+
+#### reliant forge test quarantine remove
+
+Remove a test's quarantine entry
+
+Deletes the test's ci/quarantine/ entry, and the package directories it leaves empty. Exit status 1 when the test is not quarantined.
+
+```
+reliant forge test quarantine remove <test-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge test quarantine skip-regex
+
+Print the -skip pattern that skips every quarantined test (go)
+
+Prints the `go test -skip` value that skips every quarantined Go test,
+^(TestA|TestB)$, or nothing when none is quarantined (the port of
+quarantine.sh go-skip). The names come from the entry file names alone. An
+overlay file named by $CI_QUARANTINE_EXTRA ("<package>\t<Test>" lines) adds
+to them. It always exits 0 for go: an unreadable list is an empty one, and the
+lanes then run every test, the safe direction.
+
+```
+reliant forge test quarantine skip-regex <lang> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -24515,6 +24813,52 @@ reliant trigger update <id-or-name> [flags]
 | `--timezone` | `string` | - | IANA zone the cron expressions are read in (default: UTC) |
 | `--workflow` | `string` | - | Workflow to run (default: your default workflow) |
 | `--worktree` | `string` | - | Worktree id to run in (default: the project's main worktree) |
+
+---
+
+## reliant update
+
+Update this reliant to the newest signed release
+
+Replaces this reliant binary with the newest release on its channel, after
+checking the release's Sigstore signature: release.yml at a release tag of
+reliant-labs/reliant must have signed it, for that tag. An unsigned or
+mis-signed release is refused, and nothing is replaced.
+
+The channel is the one this build came from: alpha for a release candidate,
+latest otherwise. --channel picks one. A client on alpha takes the newer of
+alpha and latest, so a stable release that follows an RC train reaches it.
+
+Only a reliant that nothing else owns updates itself: one you unpacked from a
+release archive into a directory you can write. A reliant that the desktop
+app, Homebrew, a system package or a Reliant cloud machine installed is left
+alone, and the command says what updates it instead. Nothing is replaced on
+Windows yet; --check works there.
+
+The new binary is checked before anything changes (it must run 'version'),
+and the old one is kept under ~/.reliant/upgrade/previous. After the swap the
+new binary starts and confirms itself; one that does not is put back. A
+running daemon keeps its version until it restarts, or updates itself when it
+was started with --auto-update.
+
+--check reports what an update would do, and changes nothing.
+
+  reliant update --check
+  reliant update --yes
+  reliant update --channel alpha --json --yes
+
+```
+reliant update [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--channel` | `string` | - | Release channel: latest or alpha (default: the channel this build came from) |
+| `--check` | `bool` | - | Report whether an update is available and whether this install can take it; change nothing |
+| `--json` | `bool` | - | Print the report as JSON (with --check, or with --yes) |
+| `--yes` | `bool` | - | Update without asking |
 
 ---
 

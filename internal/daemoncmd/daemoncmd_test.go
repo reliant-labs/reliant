@@ -46,5 +46,6 @@ func TestDispatch_LocalCodecFailuresAreInternalAndRedacted(t *testing.T) {
 func TestDispatch_SenderFailureKeepsItsDispatchCode(t *testing.T) {
 	err := New(Deps{Sender: fakeSender{err: errors.New("no daemon connected")}}).Dispatch(context.Background(), "u", "fs.list", struct{}{}, nil, 1000)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, "daemon command fs.list failed", svcerr.ToConnect(err).Message())
 }

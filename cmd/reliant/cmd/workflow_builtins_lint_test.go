@@ -22,6 +22,8 @@ var lintCleanBuiltins = map[string]bool{
 	"build-workflow":            true,
 	"forge-migrate":             true,
 	"forge-one-shot":            true,
+	"vuln-patch":                true,
+	"vuln-patch-agent":          true,
 }
 
 func TestLintCleanBuiltinsStayClean(t *testing.T) {

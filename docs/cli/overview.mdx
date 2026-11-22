@@ -58,6 +58,7 @@ Daemons are the exception. A daemon authenticates with its **own** credential, m
 | `~/.config/forge/credentials.json` (under `$XDG_CONFIG_HOME` if set) | Your CLI login, one entry per server. Shared with Forge, which is why `reliant forge` needs no second login. |
 | `~/.reliant/daemon.json` | Daemon credentials, one per server and account. |
 | `~/.reliant/instances/` | One folder per daemon instance, holding its runtime record (`daemon-state.json`) and logs (`logs/tools-daemon.log`). |
+| `~/.reliant/upgrade/` | What `reliant update` staged and verified, the binary it replaced (`previous/`), and its record of each swap (`state.json`). |
 | `~/.reliant/forge-token-cache.json` | Short-lived Forge deploy tokens exchanged from your session. |
 
 You rarely need to open these files. `reliant auth status` and `reliant daemon status` print the path they read, so you can see which file a command used.

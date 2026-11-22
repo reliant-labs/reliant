@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 )
@@ -24,42 +24,70 @@ const (
 	missingID     = "missing"
 )
 
-// newPlanRepo returns a StubRepo answering the fixture's chat, thread and
-// plan lookups and accepting refetch notifications. Rows program the writes
-// they reach.
-func newPlanRepo() *plan.MockRepository {
-	chats := map[string]*db.Chat{
+// planMocks is the mock of every dependency the plan handlers take.
+type planMocks struct {
+	Plans   *plan.MockPlanStore
+	Tasks   *plan.MockTaskStore
+	Threads *plan.MockThreadStore
+	Chats   *plan.MockChatStore
+	Refetch *plan.MockChatRefetcher
+	Tx      *plan.MockTxRunner
+}
+
+// Deps is the Deps the mocks stand in for.
+func (m *planMocks) Deps() plan.Deps {
+	return plan.Deps{Plans: m.Plans, Tasks: m.Tasks, Threads: m.Threads, Chats: m.Chats, Refetch: m.Refetch, Tx: m.Tx}
+}
+
+// newPlanMocks answers the fixture's chat, thread and plan lookups, runs a
+// transaction's body in place and accepts refetch notifications. Tests
+// program the writes they reach.
+func newPlanMocks() *planMocks {
+	chats := map[string]*core.ChatRow{
 		ownChatID:   {ID: ownChatID, UserID: "test-user"},
 		otherChatID: {ID: otherChatID, UserID: "someone-else"},
 	}
-	threads := map[string]*db.Thread{
+	threads := map[string]*core.Thread{
 		ownThreadID:   {ID: ownThreadID, ChatID: ownChatID},
 		otherThreadID: {ID: otherThreadID, ChatID: otherChatID},
 	}
-	plans := map[string]*db.Plan{
+	plans := map[string]*core.Plan{
 		ownPlanID:   {ID: ownPlanID, ThreadID: ownThreadID, Title: "Own plan"},
 		otherPlanID: {ID: otherPlanID, ThreadID: otherThreadID, Title: "Other plan"},
 	}
-	return &plan.MockRepository{
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			if c, ok := chats[id]; ok {
-				return &db.ChatRow{ID: c.ID, UserID: c.UserID, ProjectID: c.ProjectID, WorkflowID: c.WorkflowID}, nil
-			}
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	return &planMocks{
+		Plans: &plan.MockPlanStore{
+			GetPlanFunc: func(_ context.Context, id string) (*core.Plan, error) {
+				if p, ok := plans[id]; ok {
+					cp := *p
+					return &cp, nil
+				}
+				return nil, fmt.Errorf("%w: %s", svcerr.NotFound("plan"), id)
+			},
 		},
-		GetThreadFunc: func(_ context.Context, id string) (*db.Thread, error) {
-			if th, ok := threads[id]; ok {
-				return th, nil
-			}
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("thread"), id)
+		Tasks: &plan.MockTaskStore{},
+		Threads: &plan.MockThreadStore{
+			GetThreadFunc: func(_ context.Context, id string) (*core.Thread, error) {
+				if th, ok := threads[id]; ok {
+					return th, nil
+				}
+				return nil, fmt.Errorf("%w: %s", svcerr.NotFound("thread"), id)
+			},
 		},
-		GetPlanFunc: func(_ context.Context, id string) (*db.Plan, error) {
-			if p, ok := plans[id]; ok {
-				cp := *p
-				return &cp, nil
-			}
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("plan"), id)
+		Chats: &plan.MockChatStore{
+			GetChatRowFunc: func(_ context.Context, id string) (*core.ChatRow, error) {
+				if c, ok := chats[id]; ok {
+					cp := *c
+					return &cp, nil
+				}
+				return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+			},
 		},
-		EmitChatRefetchFunc: func(context.Context, string, db.RefetchType) error { return nil },
+		Refetch: &plan.MockChatRefetcher{
+			EmitChatRefetchFunc: func(context.Context, string, core.RefetchType) error { return nil },
+		},
+		Tx: &plan.MockTxRunner{
+			RunTxFunc: func(ctx context.Context, _ orm.TxPolicy, fn func(context.Context) error) error { return fn(ctx) },
+		},
 	}
 }

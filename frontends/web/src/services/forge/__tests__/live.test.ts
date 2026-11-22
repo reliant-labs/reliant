@@ -35,6 +35,26 @@ import {
   DeploySourceProvenanceSchema,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
+/**
+ * The placement fields the control plane sends for each kind:
+ * DeployEnvironment.kind left the wire with control-plane#3095, so a test
+ * environment of a kind is built from what replaced it.
+ */
+function placement(kind: DeployEnvironmentKind) {
+  switch (kind) {
+    case DeployEnvironmentKind.LOCAL:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE };
+    case DeployEnvironmentKind.PREVIEW:
+      return { lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+    case DeployEnvironmentKind.PERSISTENT:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+    case DeployEnvironmentKind.SELF_MANAGED:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
+    default:
+      return {};
+  }
+}
+
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
   hasControlPlane: true,
@@ -222,7 +242,7 @@ describe("kinds", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
+          ...placement(DeployEnvironmentKind.SELF_MANAGED),
         }),
       })
     );
@@ -239,7 +259,7 @@ describe("kinds", () => {
           id: "cp-x",
           name: "x",
           project: "hounders",
-          kind: 99 as DeployEnvironmentKind,
+          ...placement(99 as DeployEnvironmentKind),
         }),
       })
     );
@@ -252,15 +272,6 @@ describe("kinds", () => {
   const live = (fields: MessageInitShape<typeof DeployEnvironmentSchema>) =>
     toLiveEnv(create(DeployLiveEnvironmentSchema, { environment: create(DeployEnvironmentSchema, { id: "e", name: "prod", project: "hounders", ...fields }) }));
 
-  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", () => {
-    const env = live({
-      kind: DeployEnvironmentKind.SELF_MANAGED,
-      lifetime: DeployEnvironmentLifetime.PERSISTENT,
-      secretPosture: DeploySecretPosture.WRITE_ONLY,
-      hostedSlot: true,
-    });
-    expect(env?.kind).toBe("self_managed");
-  });
 
   it.each([
     ["local", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE }],
@@ -306,7 +317,7 @@ describe("kinds", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
+          ...placement(DeployEnvironmentKind.SELF_MANAGED),
         }),
         phase: DeployRolloutPhase.SUCCEEDED,
       })
@@ -321,7 +332,7 @@ describe("kinds", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...placement(DeployEnvironmentKind.PERSISTENT),
         }),
         phase: DeployRolloutPhase.DEGRADED,
       })
@@ -426,7 +437,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...placement(DeployEnvironmentKind.PERSISTENT),
           declaredBy: provenanceMsg({ branch: "feat-x", commit: "def5678aa", dirty: true }),
         }),
         // The roster carries no release: the promotion names its version and
@@ -458,7 +469,7 @@ describe("the states that are not errors", () => {
           id: "cp-staging",
           name: "staging",
           project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
+          ...placement(DeployEnvironmentKind.SELF_MANAGED),
           declaredBy: provenanceMsg({ branch: "feat-x", commit: "def5678" }),
           declaredAt: timestampFromDate(new Date("2026-10-02T09:00:00Z")),
         }),
@@ -480,7 +491,7 @@ describe("the states that are not errors", () => {
           id: "cp-new",
           name: "new",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...placement(DeployEnvironmentKind.PERSISTENT),
         }),
       })
     );
@@ -507,7 +518,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...placement(DeployEnvironmentKind.PERSISTENT),
         }),
         currentPromotion: create(DeployPromotionSchema, { id: "p", releaseVersion: "v1" }),
       })
@@ -522,7 +533,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...placement(DeployEnvironmentKind.PERSISTENT),
         }),
         currentPromotion: create(DeployPromotionSchema, {
           id: "promo-1",
@@ -558,7 +569,7 @@ describe("observed convergence", () => {
         id: "cp-prod",
         name: "prod",
         project: "hounders",
-        kind: args.kind ?? DeployEnvironmentKind.PERSISTENT,
+        ...placement(args.kind ?? DeployEnvironmentKind.PERSISTENT),
       }),
       currentPromotion:
         args.promotion === false
@@ -673,7 +684,7 @@ describe("a queued deploy", () => {
         id: "cp-prod",
         name: "prod",
         project: "hounders",
-        kind: DeployEnvironmentKind.PERSISTENT,
+        ...placement(DeployEnvironmentKind.PERSISTENT),
         holds:
           args.holds === false
             ? []

@@ -72,6 +72,7 @@ export function AISettings() {
       <>
         <SettingsPageHeader
           title="Personal accounts"
+          learn="ai-providers"
           description="The AI accounts you connect yourself. Your agents run on them, and on any your organization gives you."
           actions={
             <Button variant="primary" size="lg" leftIcon={<Plus />} aria-expanded={pickerOpen} onClick={() => setPickerOpen(true)}>

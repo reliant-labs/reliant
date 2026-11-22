@@ -10,8 +10,8 @@
  * stream's snapshot and replay) asks with this mode, and chat.open records it
  * as `chat.tool_bodies`. Set it to "full" to go back to full payloads; nothing
  * else needs to change, because the client acts on each block's `bodyElided`,
- * never on the mode it asked for (a server that predates the option, or one
- * with RELIANT_TRANSCRIPT_TOOL_BODY_STUBS=off, sends full bodies either way).
+ * never on the mode it asked for (a server with
+ * RELIANT_TRANSCRIPT_TOOL_BODY_STUBS=off sends full bodies either way).
  */
 
 import type { ToolBodies } from "@reliantlabs/sdk/client";

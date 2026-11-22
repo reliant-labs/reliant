@@ -27,3 +27,5 @@ engineStrict: true
 allowBuilds:
   electron: true
   electron-winstaller: false
+minimumReleaseAgeExclude:
+  - '@reliantlabs/forge-web-runtime@0.13.21'
