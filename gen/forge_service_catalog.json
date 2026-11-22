@@ -37,6 +37,7 @@
         "DaemonEventsConsumer",
         "DaemonRegistry",
         "DaemonStatePublisher",
+        "Daemonmirror",
         "Database",
         "FileSystem",
         "Forge",
@@ -452,6 +453,7 @@
         "DaemonListener",
         "DaemonRoutes",
         "DaemonStatePublisher",
+        "Daemonmirror",
         "Database",
         "DisconnectSubscriber",
         "FlowHealth",
@@ -500,6 +502,7 @@
         "ChatUpdateHub",
         "ConnectionVault",
         "DBRepo",
+        "Daemonmirror",
         "Database",
         "DebugServer",
         "IntegrationSettings",
@@ -54182,6 +54185,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Daemonmirror",
+      "name": "Daemonmirror",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "source": {
+        "path": "internal/daemonmirror/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.MockService",
+          "source": {
+            "path": "internal/daemonmirror/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.forgeMiddlewareService",
+          "source": {
+            "path": "internal/daemonmirror/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.service",
+          "source": {
+            "path": "internal/daemonmirror/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Database",
       "name": "Database",
       "kind": "provider",
@@ -56188,6 +56228,19 @@
     },
     {
       "consumer": "DaemonRegistry",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Mirror",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "DaemonRegistry",
       "field": "Names",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
       "methods": [],
@@ -56230,6 +56283,54 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Daemons",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Lifecycle",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Lifecycle",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.UserUpdates",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57678,6 +57779,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "StateDerivation",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Streaming",
       "field": "ChatUpdates",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.ChatUpdateSubscriber",
@@ -58540,6 +58654,19 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -58846,6 +58973,14 @@
       "component": "DaemonRegistry.Names",
       "source": {
         "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Daemonmirror.Daemons",
+      "source": {
+        "path": "internal/daemonmirror/service.go",
         "symbol": "New"
       }
     },
