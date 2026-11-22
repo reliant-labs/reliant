@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -217,13 +218,13 @@ func TestRunTelemetry_CheckpointCarriesTheRunIDToARestart(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", RunID: "run-interrupted",
 	}))
 	resume := ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id")
 	assert.Equal(t, "run-interrupted", resume.RunID)
 
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", LoopIteration: 2, RunID: "run-interrupted",
 	}))
 	assert.Equal(t, "run-interrupted", ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id").RunID,

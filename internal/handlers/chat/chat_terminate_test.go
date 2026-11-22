@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // terminateTestTemporalClient reports one live execution and records terminates.
@@ -127,7 +128,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	newWorkflow(spawnID, &rootID, db.Active())
 	newWorkflow(nestedSpawnID, &spawnID, db.Active())
 	newWorkflow(pausedSpawnID, &rootID, db.Paused())
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &db.WorkflowCheckpoint{
 		WorkflowID: rootID,
 		ChatID:     chatID,
 		NodeID:     "implement",

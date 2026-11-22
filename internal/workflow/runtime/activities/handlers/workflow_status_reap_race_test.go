@@ -106,7 +106,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	}
 
 	// Turn 1 runs and completes; both halves end terminal.
-	plain := NewWorkflowStatusActivity(h.Repo())
+	plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("started"), &output))
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("completed"), &output))
@@ -116,7 +116,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 
 	// Turn 2 starts with a reconciler pass between every write.
 	repo := &reapingRepo{Repo: h.Repo(), t: t}
-	interleaved := NewWorkflowStatusActivity(repo)
+	interleaved := NewWorkflowStatusActivity(workflowStatusDeps(repo))
 	require.NoError(t, h.ExecuteActivity(interleaved.Execute, turn("started"), &output))
 
 	assert.Empty(t, repo.reapedIn(chatID),
@@ -163,7 +163,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 				ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",
 				Status: "started", Thread: chatID,
 			}
-			plain := NewWorkflowStatusActivity(h.Repo())
+			plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 			var output WorkflowStatusOutput
 			require.NoError(t, h.ExecuteActivity(plain.Execute, input, &output))
 
@@ -183,7 +183,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 			require.NoError(t, err)
 
 			repo := &reapingRepo{Repo: h.Repo(), t: t}
-			interleaved := NewWorkflowStatusActivity(repo)
+			interleaved := NewWorkflowStatusActivity(workflowStatusDeps(repo))
 			input.Status = tc.status
 			require.NoError(t, h.ExecuteActivity(interleaved.Execute, input, &output))
 
