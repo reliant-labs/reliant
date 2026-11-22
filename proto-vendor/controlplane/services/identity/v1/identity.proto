@@ -66,6 +66,20 @@ service IdentityService {
     };
   }
 
+  // ListIdentities lists the environment's managed identities by name: each
+  // one it declares and each instance the control plane holds for it (a
+  // withdrawn one included, until it is deleted). Read from the reconciler's
+  // rows and the deployed shape; it dials no Zitadel. Admission is
+  // GetIdentityStatus's: any member, or a machine credential with
+  // identity:read.
+  rpc ListIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // ListUsers lists the instance's human users with their state and roles.
   rpc ListUsers(ListIdentityUsersRequest) returns (ListIdentityUsersResponse) {
     option (forge.v1.method) = {
@@ -105,6 +119,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -122,6 +137,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -139,6 +155,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -155,6 +172,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -170,6 +188,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -187,6 +206,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -204,6 +224,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -227,6 +248,7 @@ service IdentityService {
         }
         env: "environment_id"
         scope: "org_id"
+        detail: "identity"
       }
     };
   }
@@ -246,6 +268,13 @@ service IdentityService {
 message GetIdentityStatusRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   string environment_id = 2 [(buf.validate.field).required = true];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 3 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message GetIdentityStatusResponse {
@@ -306,6 +335,9 @@ message GetIdentityStatusResponse {
   // Declared owners with no credential yet who were not invited on the last
   // pass (no mail, invited recently, or invited the most times allowed).
   repeated string owners_pending = 27;
+  // The ManagedIdentity.name this answer is for: the request's identity, or
+  // the name "" resolved to. Empty when there is no instance to name.
+  string identity = 28;
 }
 
 message ListIdentityUsersRequest {
@@ -319,6 +351,13 @@ message ListIdentityUsersRequest {
     lte: 100
   }];
   string page_token = 6 [(buf.validate.field).string.max_len = 64];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 7 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message ListIdentityUsersResponse {
@@ -339,6 +378,13 @@ message GetIdentityUserRequest {
   string user_id = 3 [(buf.validate.field).string = {
     min_len: 1
     max_len: 128
+  }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 4 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
   }];
 }
 
@@ -367,6 +413,13 @@ message InviteIdentityUserRequest {
   // identity:manage; see the service comment). The only way to invite where
   // mail_delivery is NONE.
   bool return_code = 5;
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 6 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message InviteIdentityUserResponse {
@@ -397,6 +450,13 @@ message SetIdentityUserRolesRequest {
       }
     }
   }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 5 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message SetIdentityUserRolesResponse {
@@ -414,6 +474,13 @@ message SendIdentityPasswordResetRequest {
   // identity:manage; see the service comment). The only way to reset where
   // mail_delivery is NONE.
   bool return_code = 4;
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 5 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message SendIdentityPasswordResetResponse {
@@ -428,6 +495,13 @@ message LockIdentityUserRequest {
     min_len: 1
     max_len: 128
   }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 4 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message LockIdentityUserResponse {}
@@ -438,6 +512,13 @@ message UnlockIdentityUserRequest {
   string user_id = 3 [(buf.validate.field).string = {
     min_len: 1
     max_len: 128
+  }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 4 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
   }];
 }
 
@@ -450,6 +531,13 @@ message DeleteIdentityUserRequest {
     min_len: 1
     max_len: 128
   }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 4 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message DeleteIdentityUserResponse {}
@@ -461,6 +549,13 @@ message RevokeIdentitySessionsRequest {
     min_len: 1
     max_len: 128
   }];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 4 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message RevokeIdentitySessionsResponse {
@@ -470,6 +565,13 @@ message RevokeIdentitySessionsResponse {
 message RequestIdentityExportRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   string environment_id = 2 [(buf.validate.field).required = true];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 3 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message RequestIdentityExportResponse {
@@ -482,6 +584,13 @@ message RequestIdentityExportResponse {
 message GetIdentityExportURLRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   string environment_id = 2 [(buf.validate.field).required = true];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 3 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
 }
 
 message GetIdentityExportURLResponse {
@@ -489,4 +598,14 @@ message GetIdentityExportURLResponse {
   // (written when the identity was withdrawn).
   string export_url = 1;
   google.protobuf.Timestamp expires_at = 2;
+}
+
+message ListIdentitiesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+}
+
+message ListIdentitiesResponse {
+  // Sorted by name.
+  repeated IdentitySummary identities = 1;
 }

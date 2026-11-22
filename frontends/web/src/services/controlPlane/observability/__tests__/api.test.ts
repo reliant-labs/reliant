@@ -687,22 +687,11 @@ describe("usage", () => {
     });
   });
 
-  it("falls back to ObservabilityService's copy when the billing service is Unimplemented", async () => {
-    client.getObservabilityUsage
-      .mockRejectedValueOnce(new ConnectError("no such service", Code.Unimplemented))
-      .mockResolvedValueOnce(create(GetObservabilityUsageResponseSchema, { usedBytes: 4n, state: ObservabilityQuotaState.OK }));
-    const usage = await getObservabilityUsage("org-1");
-    expect(services).toEqual([
-      "observability_billing.v1.ObservabilityBillingService",
-      "controlplane.v1.ObservabilityService",
-    ]);
-    expect(client.getObservabilityUsage.mock.calls[1][0]).toEqual({ orgId: "org-1" });
-    expect(usage).toMatchObject({ usedBytes: 4, state: "ok" });
-  });
-
-  it("does not fall back on any other error", async () => {
-    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
-    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code: Code.PermissionDenied });
+  // control-plane#3095 removed ObservabilityService's copy of the rpc, so no
+  // error, Unimplemented included, sends the read anywhere else.
+  it.each([Code.Unimplemented, Code.PermissionDenied])("surfaces error code %s without falling back", async (code) => {
+    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("failed", code));
+    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code });
     expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
     expect(client.getObservabilityUsage).toHaveBeenCalledTimes(1);
   });

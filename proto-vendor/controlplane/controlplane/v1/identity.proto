@@ -180,3 +180,17 @@ message IdentityUser {
   // who has never signed in.
   google.protobuf.Timestamp last_sign_in_at = 7;
 }
+
+// IdentitySummary is one managed identity of an environment, by name: what
+// ListIdentities returns, so a console or CLI can address each one.
+message IdentitySummary {
+  // ManagedIdentity.name ("identity" unless the declaration names another).
+  string name = 1;
+  // Empty until the instance is recorded.
+  string issuer = 2;
+  // UNSPECIFIED when the identity is declared and its instance not yet
+  // recorded.
+  IdentityState state = 3;
+  // Whether the control plane holds an instance for it.
+  bool has_instance = 4;
+}

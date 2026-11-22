@@ -883,6 +883,81 @@ func (x *IdentityUser) GetLastSignInAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// IdentitySummary is one managed identity of an environment, by name: what
+// ListIdentities returns, so a console or CLI can address each one.
+type IdentitySummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ManagedIdentity.name ("identity" unless the declaration names another).
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Empty until the instance is recorded.
+	Issuer string `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// UNSPECIFIED when the identity is declared and its instance not yet
+	// recorded.
+	State IdentityState `protobuf:"varint,3,opt,name=state,proto3,enum=controlplane.v1.IdentityState" json:"state,omitempty"`
+	// Whether the control plane holds an instance for it.
+	HasInstance   bool `protobuf:"varint,4,opt,name=has_instance,json=hasInstance,proto3" json:"has_instance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentitySummary) Reset() {
+	*x = IdentitySummary{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentitySummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentitySummary) ProtoMessage() {}
+
+func (x *IdentitySummary) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentitySummary.ProtoReflect.Descriptor instead.
+func (*IdentitySummary) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *IdentitySummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetState() IdentityState {
+	if x != nil {
+		return x.State
+	}
+	return IdentityState_IDENTITY_STATE_UNSPECIFIED
+}
+
+func (x *IdentitySummary) GetHasInstance() bool {
+	if x != nil {
+		return x.HasInstance
+	}
+	return false
+}
+
 var File_controlplane_v1_identity_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_identity_proto_rawDesc = "" +
@@ -929,7 +1004,12 @@ const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\x05roles\x18\x05 \x03(\tR\x05roles\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12A\n" +
-	"\x0flast_sign_in_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\flastSignInAt*\xcd\x02\n" +
+	"\x0flast_sign_in_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\flastSignInAt\"\x96\x01\n" +
+	"\x0fIdentitySummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x124\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1e.controlplane.v1.IdentityStateR\x05state\x12!\n" +
+	"\fhas_instance\x18\x04 \x01(\bR\vhasInstance*\xcd\x02\n" +
 	"\rIdentityState\x12\x1e\n" +
 	"\x1aIDENTITY_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16IDENTITY_STATE_PENDING\x10\x01\x12\x1b\n" +
@@ -984,7 +1064,7 @@ func file_controlplane_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_controlplane_v1_identity_proto_goTypes = []any{
 	(IdentityState)(0),            // 0: controlplane.v1.IdentityState
 	(IdentityNotEnabledReason)(0), // 1: controlplane.v1.IdentityNotEnabledReason
@@ -998,23 +1078,25 @@ var file_controlplane_v1_identity_proto_goTypes = []any{
 	(*IdentityDelivery)(nil),      // 9: controlplane.v1.IdentityDelivery
 	(*IdentityRole)(nil),          // 10: controlplane.v1.IdentityRole
 	(*IdentityUser)(nil),          // 11: controlplane.v1.IdentityUser
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*IdentitySummary)(nil),       // 12: controlplane.v1.IdentitySummary
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_controlplane_v1_identity_proto_depIdxs = []int32{
-	12, // 0: controlplane.v1.IdentitySocialStatus.applied_at:type_name -> google.protobuf.Timestamp
-	12, // 1: controlplane.v1.IdentityPasswordCode.expires_at:type_name -> google.protobuf.Timestamp
-	12, // 2: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
+	13, // 0: controlplane.v1.IdentitySocialStatus.applied_at:type_name -> google.protobuf.Timestamp
+	13, // 1: controlplane.v1.IdentityPasswordCode.expires_at:type_name -> google.protobuf.Timestamp
+	13, // 2: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: controlplane.v1.IdentityDelivery.state:type_name -> controlplane.v1.IdentityDeliveryState
-	12, // 4: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
-	12, // 5: controlplane.v1.IdentityDelivery.last_written_at:type_name -> google.protobuf.Timestamp
+	13, // 4: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
+	13, // 5: controlplane.v1.IdentityDelivery.last_written_at:type_name -> google.protobuf.Timestamp
 	4,  // 6: controlplane.v1.IdentityUser.state:type_name -> controlplane.v1.IdentityUserState
-	12, // 7: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
-	12, // 8: controlplane.v1.IdentityUser.last_sign_in_at:type_name -> google.protobuf.Timestamp
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	13, // 7: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
+	13, // 8: controlplane.v1.IdentityUser.last_sign_in_at:type_name -> google.protobuf.Timestamp
+	0,  // 9: controlplane.v1.IdentitySummary.state:type_name -> controlplane.v1.IdentityState
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_identity_proto_init() }
@@ -1028,7 +1110,7 @@ func file_controlplane_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_identity_proto_rawDesc), len(file_controlplane_v1_identity_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

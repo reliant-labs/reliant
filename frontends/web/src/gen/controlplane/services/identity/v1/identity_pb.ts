@@ -6,7 +6,7 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { IdentityApp, IdentityDelivery, IdentityEnvironment, IdentityMailDelivery, IdentityNotEnabledReason, IdentityPasswordCode, IdentityRole, IdentitySocialStatus, IdentityState, IdentityUser, IdentityUserState } from "../../../controlplane/v1/identity_pb";
+import type { IdentityApp, IdentityDelivery, IdentityEnvironment, IdentityMailDelivery, IdentityNotEnabledReason, IdentityPasswordCode, IdentityRole, IdentitySocialStatus, IdentityState, IdentitySummary, IdentityUser, IdentityUserState } from "../../../controlplane/v1/identity_pb";
 import { file_controlplane_v1_identity } from "../../../controlplane/v1/identity_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/identity/v1/identity.proto.
  */
 export const file_services_identity_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("CiNzZXJ2aWNlcy9pZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIPY29udHJvbHBsYW5lLnYxIlIKGEdldElkZW50aXR5U3RhdHVzUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBIvoHChlHZXRJZGVudGl0eVN0YXR1c1Jlc3BvbnNlEhQKDGhhc19pbnN0YW5jZRgBIAEoCBItCgVzdGF0ZRgCIAEoDjIeLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVN0YXRlEg4KBmlzc3VlchgDIAEoCRIOCgZkb21haW4YBCABKAkSDgoGcHVibGljGAUgASgIEg8KB2Fkb3B0ZWQYBiABKAgSKgoEYXBwcxgHIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eUFwcBI1CgpkZWxpdmVyaWVzGAggAygLMiEuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnkSHAoUb3duZXJfZW52aXJvbm1lbnRfaWQYCSABKAkSHgoWc2hhcmVyX2Vudmlyb25tZW50X2lkcxgKIAMoCRI2ChJsYXN0X3JlY29uY2lsZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKD25leHRfYXR0ZW1wdF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgNIAEoCRIQCghmYWlsdXJlcxgOIAEoBRIvCgtncmFjZV91bnRpbBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHAoUZXhwb3J0X3VybF9hdmFpbGFibGUYECABKAgSDwoHcmVmdXNlZBgRIAEoCRIZChFjYWxsZXJfY2FuX21hbmFnZRgSIAEoCBIWCg5leHBvcnRfZW5hYmxlZBgTIAEoCBI8Cg1tYWlsX2RlbGl2ZXJ5GBQgASgOMiUuY29udHJvbHBsYW5lLnYxLklkZW50aXR5TWFpbERlbGl2ZXJ5EkUKEm5vdF9lbmFibGVkX3JlYXNvbhgVIAEoDjIpLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eU5vdEVuYWJsZWRSZWFzb24SGwoTbm90X2VuYWJsZWRfbWVzc2FnZRgWIAEoCRI/ChFvd25lcl9lbnZpcm9ubWVudBgXIAEoCzIkLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eUVudmlyb25tZW50EkEKE3NoYXJlcl9lbnZpcm9ubWVudHMYGCADKAsyJC5jb250cm9scGxhbmUudjEuSWRlbnRpdHlFbnZpcm9ubWVudBIbChNzb2NpYWxfY2FsbGJhY2tfdXJsGBkgASgJEjUKBnNvY2lhbBgaIAMoCzIlLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVNvY2lhbFN0YXR1cxIWCg5vd25lcnNfcGVuZGluZxgbIAMoCSL3AQoYTGlzdElkZW50aXR5VXNlcnNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESHAoFcXVlcnkYAyABKAlCCLpIBXIDGMgBSACIAQESNgoFc3RhdGUYBCABKA4yIi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyU3RhdGVIAYgBARIcCglwYWdlX3NpemUYBSABKAVCCbpIBhoEGGQoABIbCgpwYWdlX3Rva2VuGAYgASgJQge6SARyAhhAQggKBl9xdWVyeUIICgZfc3RhdGUipAEKGUxpc3RJZGVudGl0eVVzZXJzUmVzcG9uc2USLAoFdXNlcnMYASADKAsyHS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIsCgVyb2xlcxgDIAMoCzIdLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVJvbGUSEgoKdG90YWxfc2l6ZRgEIAEoBSJtChZHZXRJZGVudGl0eVVzZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGwoHdXNlcl9pZBgDIAEoCUIKukgHcgUQARiAASJGChdHZXRJZGVudGl0eVVzZXJSZXNwb25zZRIrCgR1c2VyGAEgASgLMh0uY29udHJvbHBsYW5lLnYxLklkZW50aXR5VXNlciKlAQoZSW52aXRlSWRlbnRpdHlVc2VyUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBEhkKBWVtYWlsGAMgASgJQgq6SAdyBRj+AWABEiAKBXJvbGVzGAQgAygJQhG6SA6SAQsQFCIHcgUQARjIARITCgtyZXR1cm5fY29kZRgFIAEoCCJzChpJbnZpdGVJZGVudGl0eVVzZXJSZXNwb25zZRIPCgd1c2VyX2lkGAEgASgJEg8KB2NyZWF0ZWQYAiABKAgSMwoEY29kZRgDIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVBhc3N3b3JkQ29kZSKUAQobU2V0SWRlbnRpdHlVc2VyUm9sZXNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGwoHdXNlcl9pZBgDIAEoCUIKukgHcgUQARiAARIgCgVyb2xlcxgEIAMoCUIRukgOkgELEBQiB3IFEAEYyAEiSwocU2V0SWRlbnRpdHlVc2VyUm9sZXNSZXNwb25zZRIrCgR1c2VyGAEgASgLMh0uY29udHJvbHBsYW5lLnYxLklkZW50aXR5VXNlciKMAQogU2VuZElkZW50aXR5UGFzc3dvcmRSZXNldFJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABEhMKC3JldHVybl9jb2RlGAQgASgIIlgKIVNlbmRJZGVudGl0eVBhc3N3b3JkUmVzZXRSZXNwb25zZRIzCgRjb2RlGAEgASgLMiUuY29udHJvbHBsYW5lLnYxLklkZW50aXR5UGFzc3dvcmRDb2RlIm4KF0xvY2tJZGVudGl0eVVzZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGwoHdXNlcl9pZBgDIAEoCUIKukgHcgUQARiAASIaChhMb2NrSWRlbnRpdHlVc2VyUmVzcG9uc2UicAoZVW5sb2NrSWRlbnRpdHlVc2VyUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBEhsKB3VzZXJfaWQYAyABKAlCCrpIB3IFEAEYgAEiHAoaVW5sb2NrSWRlbnRpdHlVc2VyUmVzcG9uc2UicAoZRGVsZXRlSWRlbnRpdHlVc2VyUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBEhsKB3VzZXJfaWQYAyABKAlCCrpIB3IFEAEYgAEiHAoaRGVsZXRlSWRlbnRpdHlVc2VyUmVzcG9uc2UidAodUmV2b2tlSWRlbnRpdHlTZXNzaW9uc1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABIjoKHlJldm9rZUlkZW50aXR5U2Vzc2lvbnNSZXNwb25zZRIYChBzZXNzaW9uc19yZXZva2VkGAEgASgFIlYKHFJlcXVlc3RJZGVudGl0eUV4cG9ydFJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBASJjCh1SZXF1ZXN0SWRlbnRpdHlFeHBvcnRSZXNwb25zZRISCgpleHBvcnRfdXJsGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlUKG0dldElkZW50aXR5RXhwb3J0VVJMUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBImIKHEdldElkZW50aXR5RXhwb3J0VVJMUmVzcG9uc2USEgoKZXhwb3J0X3VybBgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcDLYDwoPSWRlbnRpdHlTZXJ2aWNlEnQKEUdldElkZW50aXR5U3RhdHVzEikuY29udHJvbHBsYW5lLnYxLkdldElkZW50aXR5U3RhdHVzUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5HZXRJZGVudGl0eVN0YXR1c1Jlc3BvbnNlIgiiuxgECAEYARJsCglMaXN0VXNlcnMSKS5jb250cm9scGxhbmUudjEuTGlzdElkZW50aXR5VXNlcnNSZXF1ZXN0GiouY29udHJvbHBsYW5lLnYxLkxpc3RJZGVudGl0eVVzZXJzUmVzcG9uc2UiCKK7GAQIARgBEmkKB0dldFVzZXISJy5jb250cm9scGxhbmUudjEuR2V0SWRlbnRpdHlVc2VyUmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5HZXRJZGVudGl0eVVzZXJSZXNwb25zZSILkAIBorsYBAgBGAEStAEKCkludml0ZVVzZXISKi5jb250cm9scGxhbmUudjEuSW52aXRlSWRlbnRpdHlVc2VyUmVxdWVzdBorLmNvbnRyb2xwbGFuZS52MS5JbnZpdGVJZGVudGl0eVVzZXJSZXNwb25zZSJNorsYSQgBOkUKBmludml0ZRIjCghhcHBfdXNlchIQcmVzcG9uc2UudXNlcl9pZBoFZW1haWwaDmVudmlyb25tZW50X2lkIgZvcmdfaWQSrQEKDFNldFVzZXJSb2xlcxIsLmNvbnRyb2xwbGFuZS52MS5TZXRJZGVudGl0eVVzZXJSb2xlc1JlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU2V0SWRlbnRpdHlVc2VyUm9sZXNSZXNwb25zZSJAorsYPAgBOjgKCXNldF9yb2xlcxITCghhcHBfdXNlchIHdXNlcl9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZBLGAQoRU2VuZFBhc3N3b3JkUmVzZXQSMS5jb250cm9scGxhbmUudjEuU2VuZElkZW50aXR5UGFzc3dvcmRSZXNldFJlcXVlc3QaMi5jb250cm9scGxhbmUudjEuU2VuZElkZW50aXR5UGFzc3dvcmRSZXNldFJlc3BvbnNlIkqiuxhGCAE6QgoTc2VuZF9wYXNzd29yZF9yZXNldBITCghhcHBfdXNlchIHdXNlcl9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZBKcAQoITG9ja1VzZXISKC5jb250cm9scGxhbmUudjEuTG9ja0lkZW50aXR5VXNlclJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuTG9ja0lkZW50aXR5VXNlclJlc3BvbnNlIjuiuxg3CAE6MwoEbG9jaxITCghhcHBfdXNlchIHdXNlcl9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZBKkAQoKVW5sb2NrVXNlchIqLmNvbnRyb2xwbGFuZS52MS5VbmxvY2tJZGVudGl0eVVzZXJSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLlVubG9ja0lkZW50aXR5VXNlclJlc3BvbnNlIj2iuxg5CAE6NQoGdW5sb2NrEhMKCGFwcF91c2VyEgd1c2VyX2lkGg5lbnZpcm9ubWVudF9pZCIGb3JnX2lkEqQBCgpEZWxldGVVc2VyEiouY29udHJvbHBsYW5lLnYxLkRlbGV0ZUlkZW50aXR5VXNlclJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuRGVsZXRlSWRlbnRpdHlVc2VyUmVzcG9uc2UiPaK7GDkIATo1CgZkZWxldGUSEwoIYXBwX3VzZXISB3VzZXJfaWQaDmVudmlyb25tZW50X2lkIgZvcmdfaWQSuQEKDlJldm9rZVNlc3Npb25zEi4uY29udHJvbHBsYW5lLnYxLlJldm9rZUlkZW50aXR5U2Vzc2lvbnNSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLlJldm9rZUlkZW50aXR5U2Vzc2lvbnNSZXNwb25zZSJGorsYQggBOj4KD3Jldm9rZV9zZXNzaW9ucxITCghhcHBfdXNlchIHdXNlcl9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZBLDAQoNUmVxdWVzdEV4cG9ydBItLmNvbnRyb2xwbGFuZS52MS5SZXF1ZXN0SWRlbnRpdHlFeHBvcnRSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLlJlcXVlc3RJZGVudGl0eUV4cG9ydFJlc3BvbnNlIlOiuxhPCAE6SwoOcmVxdWVzdF9leHBvcnQSIQoPaWRlbnRpdHlfZXhwb3J0Eg5lbnZpcm9ubWVudF9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZBJ1CgxHZXRFeHBvcnRVUkwSLC5jb250cm9scGxhbmUudjEuR2V0SWRlbnRpdHlFeHBvcnRVUkxSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLkdldElkZW50aXR5RXhwb3J0VVJMUmVzcG9uc2UiCKK7GAQIARgBGmCCtRhcCg9JZGVudGl0eVNlcnZpY2USBTEuMC4wGkJNYW5hZ2VkLWlkZW50aXR5IHN0YXR1cyBhbmQgdXNlciBhZG1pbmlzdHJhdGlvbiBmb3IgYW4gZW52aXJvbm1lbnRC1wEKE2NvbS5jb250cm9scGxhbmUudjFCDUlkZW50aXR5UHJvdG9QAVpUZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2lkZW50aXR5L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_controlplane_v1_identity, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiNzZXJ2aWNlcy9pZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIPY29udHJvbHBsYW5lLnYxIpEBChhHZXRJZGVudGl0eVN0YXR1c1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARI9CghpZGVudGl0eRgDIAEoCUIrukgociYYKDIiXihbYS16MC05XShbLWEtejAtOV0qW2EtejAtOV0pPyk/JCKMCAoZR2V0SWRlbnRpdHlTdGF0dXNSZXNwb25zZRIUCgxoYXNfaW5zdGFuY2UYASABKAgSLQoFc3RhdGUYAiABKA4yHi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlTdGF0ZRIOCgZpc3N1ZXIYAyABKAkSDgoGZG9tYWluGAQgASgJEg4KBnB1YmxpYxgFIAEoCBIPCgdhZG9wdGVkGAYgASgIEioKBGFwcHMYByADKAsyHC5jb250cm9scGxhbmUudjEuSWRlbnRpdHlBcHASNQoKZGVsaXZlcmllcxgIIAMoCzIhLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eURlbGl2ZXJ5EhwKFG93bmVyX2Vudmlyb25tZW50X2lkGAkgASgJEh4KFnNoYXJlcl9lbnZpcm9ubWVudF9pZHMYCiADKAkSNgoSbGFzdF9yZWNvbmNpbGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIzCg9uZXh0X2F0dGVtcHRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxhc3RfZXJyb3IYDSABKAkSEAoIZmFpbHVyZXMYDiABKAUSLwoLZ3JhY2VfdW50aWwYDyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhwKFGV4cG9ydF91cmxfYXZhaWxhYmxlGBAgASgIEg8KB3JlZnVzZWQYESABKAkSGQoRY2FsbGVyX2Nhbl9tYW5hZ2UYEiABKAgSFgoOZXhwb3J0X2VuYWJsZWQYEyABKAgSPAoNbWFpbF9kZWxpdmVyeRgUIAEoDjIlLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eU1haWxEZWxpdmVyeRJFChJub3RfZW5hYmxlZF9yZWFzb24YFSABKA4yKS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlOb3RFbmFibGVkUmVhc29uEhsKE25vdF9lbmFibGVkX21lc3NhZ2UYFiABKAkSPwoRb3duZXJfZW52aXJvbm1lbnQYFyABKAsyJC5jb250cm9scGxhbmUudjEuSWRlbnRpdHlFbnZpcm9ubWVudBJBChNzaGFyZXJfZW52aXJvbm1lbnRzGBggAygLMiQuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RW52aXJvbm1lbnQSGwoTc29jaWFsX2NhbGxiYWNrX3VybBgZIAEoCRI1CgZzb2NpYWwYGiADKAsyJS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlTb2NpYWxTdGF0dXMSFgoOb3duZXJzX3BlbmRpbmcYGyADKAkSEAoIaWRlbnRpdHkYHCABKAkitgIKGExpc3RJZGVudGl0eVVzZXJzUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBEhwKBXF1ZXJ5GAMgASgJQgi6SAVyAxjIAUgAiAEBEjYKBXN0YXRlGAQgASgOMiIuY29udHJvbHBsYW5lLnYxLklkZW50aXR5VXNlclN0YXRlSAGIAQESHAoJcGFnZV9zaXplGAUgASgFQgm6SAYaBBhkKAASGwoKcGFnZV90b2tlbhgGIAEoCUIHukgEcgIYQBI9CghpZGVudGl0eRgHIAEoCUIrukgociYYKDIiXihbYS16MC05XShbLWEtejAtOV0qW2EtejAtOV0pPyk/JEIICgZfcXVlcnlCCAoGX3N0YXRlIqQBChlMaXN0SWRlbnRpdHlVc2Vyc1Jlc3BvbnNlEiwKBXVzZXJzGAEgAygLMh0uY29udHJvbHBsYW5lLnYxLklkZW50aXR5VXNlchIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSLAoFcm9sZXMYAyADKAsyHS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlSb2xlEhIKCnRvdGFsX3NpemUYBCABKAUirAEKFkdldElkZW50aXR5VXNlclJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABEj0KCGlkZW50aXR5GAQgASgJQiu6SChyJhgoMiJeKFthLXowLTldKFstYS16MC05XSpbYS16MC05XSk/KT8kIkYKF0dldElkZW50aXR5VXNlclJlc3BvbnNlEisKBHVzZXIYASABKAsyHS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyIuQBChlJbnZpdGVJZGVudGl0eVVzZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGQoFZW1haWwYAyABKAlCCrpIB3IFGP4BYAESIAoFcm9sZXMYBCADKAlCEbpIDpIBCxAUIgdyBRABGMgBEhMKC3JldHVybl9jb2RlGAUgASgIEj0KCGlkZW50aXR5GAYgASgJQiu6SChyJhgoMiJeKFthLXowLTldKFstYS16MC05XSpbYS16MC05XSk/KT8kInMKGkludml0ZUlkZW50aXR5VXNlclJlc3BvbnNlEg8KB3VzZXJfaWQYASABKAkSDwoHY3JlYXRlZBgCIAEoCBIzCgRjb2RlGAMgASgLMiUuY29udHJvbHBsYW5lLnYxLklkZW50aXR5UGFzc3dvcmRDb2RlItMBChtTZXRJZGVudGl0eVVzZXJSb2xlc1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABEiAKBXJvbGVzGAQgAygJQhG6SA6SAQsQFCIHcgUQARjIARI9CghpZGVudGl0eRgFIAEoCUIrukgociYYKDIiXihbYS16MC05XShbLWEtejAtOV0qW2EtejAtOV0pPyk/JCJLChxTZXRJZGVudGl0eVVzZXJSb2xlc1Jlc3BvbnNlEisKBHVzZXIYASABKAsyHS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyIssBCiBTZW5kSWRlbnRpdHlQYXNzd29yZFJlc2V0UmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBEhsKB3VzZXJfaWQYAyABKAlCCrpIB3IFEAEYgAESEwoLcmV0dXJuX2NvZGUYBCABKAgSPQoIaWRlbnRpdHkYBSABKAlCK7pIKHImGCgyIl4oW2EtejAtOV0oWy1hLXowLTldKlthLXowLTldKT8pPyQiWAohU2VuZElkZW50aXR5UGFzc3dvcmRSZXNldFJlc3BvbnNlEjMKBGNvZGUYASABKAsyJS5jb250cm9scGxhbmUudjEuSWRlbnRpdHlQYXNzd29yZENvZGUirQEKF0xvY2tJZGVudGl0eVVzZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGwoHdXNlcl9pZBgDIAEoCUIKukgHcgUQARiAARI9CghpZGVudGl0eRgEIAEoCUIrukgociYYKDIiXihbYS16MC05XShbLWEtejAtOV0qW2EtejAtOV0pPyk/JCIaChhMb2NrSWRlbnRpdHlVc2VyUmVzcG9uc2UirwEKGVVubG9ja0lkZW50aXR5VXNlclJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABEj0KCGlkZW50aXR5GAQgASgJQiu6SChyJhgoMiJeKFthLXowLTldKFstYS16MC05XSpbYS16MC05XSk/KT8kIhwKGlVubG9ja0lkZW50aXR5VXNlclJlc3BvbnNlIq8BChlEZWxldGVJZGVudGl0eVVzZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESGwoHdXNlcl9pZBgDIAEoCUIKukgHcgUQARiAARI9CghpZGVudGl0eRgEIAEoCUIrukgociYYKDIiXihbYS16MC05XShbLWEtejAtOV0qW2EtejAtOV0pPyk/JCIcChpEZWxldGVJZGVudGl0eVVzZXJSZXNwb25zZSKzAQodUmV2b2tlSWRlbnRpdHlTZXNzaW9uc1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHgoOZW52aXJvbm1lbnRfaWQYAiABKAlCBrpIA8gBARIbCgd1c2VyX2lkGAMgASgJQgq6SAdyBRABGIABEj0KCGlkZW50aXR5GAQgASgJQiu6SChyJhgoMiJeKFthLXowLTldKFstYS16MC05XSpbYS16MC05XSk/KT8kIjoKHlJldm9rZUlkZW50aXR5U2Vzc2lvbnNSZXNwb25zZRIYChBzZXNzaW9uc19yZXZva2VkGAEgASgFIpUBChxSZXF1ZXN0SWRlbnRpdHlFeHBvcnRSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESPQoIaWRlbnRpdHkYAyABKAlCK7pIKHImGCgyIl4oW2EtejAtOV0oWy1hLXowLTldKlthLXowLTldKT8pPyQiYwodUmVxdWVzdElkZW50aXR5RXhwb3J0UmVzcG9uc2USEgoKZXhwb3J0X3VybBgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKUAQobR2V0SWRlbnRpdHlFeHBvcnRVUkxSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh4KDmVudmlyb25tZW50X2lkGAIgASgJQga6SAPIAQESPQoIaWRlbnRpdHkYAyABKAlCK7pIKHImGCgyIl4oW2EtejAtOV0oWy1hLXowLTldKlthLXowLTldKT8pPyQiYgocR2V0SWRlbnRpdHlFeHBvcnRVUkxSZXNwb25zZRISCgpleHBvcnRfdXJsGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIk8KFUxpc3RJZGVudGl0aWVzUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIeCg5lbnZpcm9ubWVudF9pZBgCIAEoCUIGukgDyAEBIk4KFkxpc3RJZGVudGl0aWVzUmVzcG9uc2USNAoKaWRlbnRpdGllcxgBIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVN1bW1hcnkymBEKD0lkZW50aXR5U2VydmljZRJ0ChFHZXRJZGVudGl0eVN0YXR1cxIpLmNvbnRyb2xwbGFuZS52MS5HZXRJZGVudGl0eVN0YXR1c1JlcXVlc3QaKi5jb250cm9scGxhbmUudjEuR2V0SWRlbnRpdHlTdGF0dXNSZXNwb25zZSIIorsYBAgBGAESbgoOTGlzdElkZW50aXRpZXMSJi5jb250cm9scGxhbmUudjEuTGlzdElkZW50aXRpZXNSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLkxpc3RJZGVudGl0aWVzUmVzcG9uc2UiC5ACAaK7GAQIARgBEmwKCUxpc3RVc2VycxIpLmNvbnRyb2xwbGFuZS52MS5MaXN0SWRlbnRpdHlVc2Vyc1JlcXVlc3QaKi5jb250cm9scGxhbmUudjEuTGlzdElkZW50aXR5VXNlcnNSZXNwb25zZSIIorsYBAgBGAESaQoHR2V0VXNlchInLmNvbnRyb2xwbGFuZS52MS5HZXRJZGVudGl0eVVzZXJSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkdldElkZW50aXR5VXNlclJlc3BvbnNlIguQAgGiuxgECAEYARK+AQoKSW52aXRlVXNlchIqLmNvbnRyb2xwbGFuZS52MS5JbnZpdGVJZGVudGl0eVVzZXJSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkludml0ZUlkZW50aXR5VXNlclJlc3BvbnNlIleiuxhTCAE6TwoGaW52aXRlEiMKCGFwcF91c2VyEhByZXNwb25zZS51c2VyX2lkGgVlbWFpbBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZCoIaWRlbnRpdHkStwEKDFNldFVzZXJSb2xlcxIsLmNvbnRyb2xwbGFuZS52MS5TZXRJZGVudGl0eVVzZXJSb2xlc1JlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU2V0SWRlbnRpdHlVc2VyUm9sZXNSZXNwb25zZSJKorsYRggBOkIKCXNldF9yb2xlcxITCghhcHBfdXNlchIHdXNlcl9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZCoIaWRlbnRpdHkS0AEKEVNlbmRQYXNzd29yZFJlc2V0EjEuY29udHJvbHBsYW5lLnYxLlNlbmRJZGVudGl0eVBhc3N3b3JkUmVzZXRSZXF1ZXN0GjIuY29udHJvbHBsYW5lLnYxLlNlbmRJZGVudGl0eVBhc3N3b3JkUmVzZXRSZXNwb25zZSJUorsYUAgBOkwKE3NlbmRfcGFzc3dvcmRfcmVzZXQSEwoIYXBwX3VzZXISB3VzZXJfaWQaDmVudmlyb25tZW50X2lkIgZvcmdfaWQqCGlkZW50aXR5EqYBCghMb2NrVXNlchIoLmNvbnRyb2xwbGFuZS52MS5Mb2NrSWRlbnRpdHlVc2VyUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5Mb2NrSWRlbnRpdHlVc2VyUmVzcG9uc2UiRaK7GEEIATo9CgRsb2NrEhMKCGFwcF91c2VyEgd1c2VyX2lkGg5lbnZpcm9ubWVudF9pZCIGb3JnX2lkKghpZGVudGl0eRKuAQoKVW5sb2NrVXNlchIqLmNvbnRyb2xwbGFuZS52MS5VbmxvY2tJZGVudGl0eVVzZXJSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLlVubG9ja0lkZW50aXR5VXNlclJlc3BvbnNlIkeiuxhDCAE6PwoGdW5sb2NrEhMKCGFwcF91c2VyEgd1c2VyX2lkGg5lbnZpcm9ubWVudF9pZCIGb3JnX2lkKghpZGVudGl0eRKuAQoKRGVsZXRlVXNlchIqLmNvbnRyb2xwbGFuZS52MS5EZWxldGVJZGVudGl0eVVzZXJSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUlkZW50aXR5VXNlclJlc3BvbnNlIkeiuxhDCAE6PwoGZGVsZXRlEhMKCGFwcF91c2VyEgd1c2VyX2lkGg5lbnZpcm9ubWVudF9pZCIGb3JnX2lkKghpZGVudGl0eRLDAQoOUmV2b2tlU2Vzc2lvbnMSLi5jb250cm9scGxhbmUudjEuUmV2b2tlSWRlbnRpdHlTZXNzaW9uc1JlcXVlc3QaLy5jb250cm9scGxhbmUudjEuUmV2b2tlSWRlbnRpdHlTZXNzaW9uc1Jlc3BvbnNlIlCiuxhMCAE6SAoPcmV2b2tlX3Nlc3Npb25zEhMKCGFwcF91c2VyEgd1c2VyX2lkGg5lbnZpcm9ubWVudF9pZCIGb3JnX2lkKghpZGVudGl0eRLNAQoNUmVxdWVzdEV4cG9ydBItLmNvbnRyb2xwbGFuZS52MS5SZXF1ZXN0SWRlbnRpdHlFeHBvcnRSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLlJlcXVlc3RJZGVudGl0eUV4cG9ydFJlc3BvbnNlIl2iuxhZCAE6VQoOcmVxdWVzdF9leHBvcnQSIQoPaWRlbnRpdHlfZXhwb3J0Eg5lbnZpcm9ubWVudF9pZBoOZW52aXJvbm1lbnRfaWQiBm9yZ19pZCoIaWRlbnRpdHkSdQoMR2V0RXhwb3J0VVJMEiwuY29udHJvbHBsYW5lLnYxLkdldElkZW50aXR5RXhwb3J0VVJMUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5HZXRJZGVudGl0eUV4cG9ydFVSTFJlc3BvbnNlIgiiuxgECAEYARpggrUYXAoPSWRlbnRpdHlTZXJ2aWNlEgUxLjAuMBpCTWFuYWdlZC1pZGVudGl0eSBzdGF0dXMgYW5kIHVzZXIgYWRtaW5pc3RyYXRpb24gZm9yIGFuIGVudmlyb25tZW50QtcBChNjb20uY29udHJvbHBsYW5lLnYxQg1JZGVudGl0eVByb3RvUAFaVGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9pZGVudGl0eS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_controlplane_v1_identity, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.GetIdentityStatusRequest
@@ -32,6 +32,15 @@ export type GetIdentityStatusRequest = Message<"controlplane.v1.GetIdentityStatu
    * @generated from field: string environment_id = 2;
    */
   environmentId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 3;
+   */
+  identity: string;
 };
 
 /**
@@ -226,6 +235,14 @@ export type GetIdentityStatusResponse = Message<"controlplane.v1.GetIdentityStat
    * @generated from field: repeated string owners_pending = 27;
    */
   ownersPending: string[];
+
+  /**
+   * The ManagedIdentity.name this answer is for: the request's identity, or
+   * the name "" resolved to. Empty when there is no instance to name.
+   *
+   * @generated from field: string identity = 28;
+   */
+  identity: string;
 };
 
 /**
@@ -270,6 +287,15 @@ export type ListIdentityUsersRequest = Message<"controlplane.v1.ListIdentityUser
    * @generated from field: string page_token = 6;
    */
   pageToken: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 7;
+   */
+  identity: string;
 };
 
 /**
@@ -337,6 +363,15 @@ export type GetIdentityUserRequest = Message<"controlplane.v1.GetIdentityUserReq
    * @generated from field: string user_id = 3;
    */
   userId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 4;
+   */
+  identity: string;
 };
 
 /**
@@ -397,6 +432,15 @@ export type InviteIdentityUserRequest = Message<"controlplane.v1.InviteIdentityU
    * @generated from field: bool return_code = 5;
    */
   returnCode: boolean;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 6;
+   */
+  identity: string;
 };
 
 /**
@@ -465,6 +509,15 @@ export type SetIdentityUserRolesRequest = Message<"controlplane.v1.SetIdentityUs
    * @generated from field: repeated string roles = 4;
    */
   roles: string[];
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 5;
+   */
+  identity: string;
 };
 
 /**
@@ -518,6 +571,15 @@ export type SendIdentityPasswordResetRequest = Message<"controlplane.v1.SendIden
    * @generated from field: bool return_code = 4;
    */
   returnCode: boolean;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 5;
+   */
+  identity: string;
 };
 
 /**
@@ -564,6 +626,15 @@ export type LockIdentityUserRequest = Message<"controlplane.v1.LockIdentityUserR
    * @generated from field: string user_id = 3;
    */
   userId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 4;
+   */
+  identity: string;
 };
 
 /**
@@ -604,6 +675,15 @@ export type UnlockIdentityUserRequest = Message<"controlplane.v1.UnlockIdentityU
    * @generated from field: string user_id = 3;
    */
   userId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 4;
+   */
+  identity: string;
 };
 
 /**
@@ -644,6 +724,15 @@ export type DeleteIdentityUserRequest = Message<"controlplane.v1.DeleteIdentityU
    * @generated from field: string user_id = 3;
    */
   userId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 4;
+   */
+  identity: string;
 };
 
 /**
@@ -684,6 +773,15 @@ export type RevokeIdentitySessionsRequest = Message<"controlplane.v1.RevokeIdent
    * @generated from field: string user_id = 3;
    */
   userId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 4;
+   */
+  identity: string;
 };
 
 /**
@@ -723,6 +821,15 @@ export type RequestIdentityExportRequest = Message<"controlplane.v1.RequestIdent
    * @generated from field: string environment_id = 2;
    */
   environmentId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 3;
+   */
+  identity: string;
 };
 
 /**
@@ -770,6 +877,15 @@ export type GetIdentityExportURLRequest = Message<"controlplane.v1.GetIdentityEx
    * @generated from field: string environment_id = 2;
    */
   environmentId: string;
+
+  /**
+   * The managed identity this request is for, by ManagedIdentity.name. Empty
+   * is the environment's only identity, or the one named "identity" when it
+   * declares several. A name it does not declare is NotFound.
+   *
+   * @generated from field: string identity = 3;
+   */
+  identity: string;
 };
 
 /**
@@ -803,6 +919,47 @@ export type GetIdentityExportURLResponse = Message<"controlplane.v1.GetIdentityE
  */
 export const GetIdentityExportURLResponseSchema: GenMessage<GetIdentityExportURLResponse> = /*@__PURE__*/
   messageDesc(file_services_identity_v1_identity, 23);
+
+/**
+ * @generated from message controlplane.v1.ListIdentitiesRequest
+ */
+export type ListIdentitiesRequest = Message<"controlplane.v1.ListIdentitiesRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string environment_id = 2;
+   */
+  environmentId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListIdentitiesRequest.
+ * Use `create(ListIdentitiesRequestSchema)` to create a new message.
+ */
+export const ListIdentitiesRequestSchema: GenMessage<ListIdentitiesRequest> = /*@__PURE__*/
+  messageDesc(file_services_identity_v1_identity, 24);
+
+/**
+ * @generated from message controlplane.v1.ListIdentitiesResponse
+ */
+export type ListIdentitiesResponse = Message<"controlplane.v1.ListIdentitiesResponse"> & {
+  /**
+   * Sorted by name.
+   *
+   * @generated from field: repeated controlplane.v1.IdentitySummary identities = 1;
+   */
+  identities: IdentitySummary[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListIdentitiesResponse.
+ * Use `create(ListIdentitiesResponseSchema)` to create a new message.
+ */
+export const ListIdentitiesResponseSchema: GenMessage<ListIdentitiesResponse> = /*@__PURE__*/
+  messageDesc(file_services_identity_v1_identity, 25);
 
 /**
  * === IdentityService (controlplane.v1.IdentityService) ===
@@ -860,6 +1017,21 @@ export const IdentityService: GenService<{
     methodKind: "unary";
     input: typeof GetIdentityStatusRequestSchema;
     output: typeof GetIdentityStatusResponseSchema;
+  },
+  /**
+   * ListIdentities lists the environment's managed identities by name: each
+   * one it declares and each instance the control plane holds for it (a
+   * withdrawn one included, until it is deleted). Read from the reconciler's
+   * rows and the deployed shape; it dials no Zitadel. Admission is
+   * GetIdentityStatus's: any member, or a machine credential with
+   * identity:read.
+   *
+   * @generated from rpc controlplane.v1.IdentityService.ListIdentities
+   */
+  listIdentities: {
+    methodKind: "unary";
+    input: typeof ListIdentitiesRequestSchema;
+    output: typeof ListIdentitiesResponseSchema;
   },
   /**
    * ListUsers lists the instance's human users with their state and roles.

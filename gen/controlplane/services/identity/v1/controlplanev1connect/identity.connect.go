@@ -36,6 +36,9 @@ const (
 	// IdentityServiceGetIdentityStatusProcedure is the fully-qualified name of the IdentityService's
 	// GetIdentityStatus RPC.
 	IdentityServiceGetIdentityStatusProcedure = "/controlplane.v1.IdentityService/GetIdentityStatus"
+	// IdentityServiceListIdentitiesProcedure is the fully-qualified name of the IdentityService's
+	// ListIdentities RPC.
+	IdentityServiceListIdentitiesProcedure = "/controlplane.v1.IdentityService/ListIdentities"
 	// IdentityServiceListUsersProcedure is the fully-qualified name of the IdentityService's ListUsers
 	// RPC.
 	IdentityServiceListUsersProcedure = "/controlplane.v1.IdentityService/ListUsers"
@@ -76,6 +79,13 @@ type IdentityServiceClient interface {
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	// ListIdentities lists the environment's managed identities by name: each
+	// one it declares and each instance the control plane holds for it (a
+	// withdrawn one included, until it is deleted). Read from the reconciler's
+	// rows and the deployed shape; it dials no Zitadel. Admission is
+	// GetIdentityStatus's: any member, or a machine credential with
+	// identity:read.
+	ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
 	// GetUser reads one human user of the instance by its identity-provider
@@ -137,6 +147,13 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceGetIdentityStatusProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		listIdentities: connect.NewClient[v1.ListIdentitiesRequest, v1.ListIdentitiesResponse](
+			httpClient,
+			baseURL+IdentityServiceListIdentitiesProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ListIdentities")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listUsers: connect.NewClient[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse](
@@ -212,6 +229,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 // identityServiceClient implements IdentityServiceClient.
 type identityServiceClient struct {
 	getIdentityStatus *connect.Client[v1.GetIdentityStatusRequest, v1.GetIdentityStatusResponse]
+	listIdentities    *connect.Client[v1.ListIdentitiesRequest, v1.ListIdentitiesResponse]
 	listUsers         *connect.Client[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse]
 	getUser           *connect.Client[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse]
 	inviteUser        *connect.Client[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse]
@@ -228,6 +246,11 @@ type identityServiceClient struct {
 // GetIdentityStatus calls controlplane.v1.IdentityService.GetIdentityStatus.
 func (c *identityServiceClient) GetIdentityStatus(ctx context.Context, req *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
 	return c.getIdentityStatus.CallUnary(ctx, req)
+}
+
+// ListIdentities calls controlplane.v1.IdentityService.ListIdentities.
+func (c *identityServiceClient) ListIdentities(ctx context.Context, req *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error) {
+	return c.listIdentities.CallUnary(ctx, req)
 }
 
 // ListUsers calls controlplane.v1.IdentityService.ListUsers.
@@ -291,6 +314,13 @@ type IdentityServiceHandler interface {
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	// ListIdentities lists the environment's managed identities by name: each
+	// one it declares and each instance the control plane holds for it (a
+	// withdrawn one included, until it is deleted). Read from the reconciler's
+	// rows and the deployed shape; it dials no Zitadel. Admission is
+	// GetIdentityStatus's: any member, or a machine credential with
+	// identity:read.
+	ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
 	// GetUser reads one human user of the instance by its identity-provider
@@ -348,6 +378,13 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceGetIdentityStatusProcedure,
 		svc.GetIdentityStatus,
 		connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceListIdentitiesHandler := connect.NewUnaryHandler(
+		IdentityServiceListIdentitiesProcedure,
+		svc.ListIdentities,
+		connect.WithSchema(identityServiceMethods.ByName("ListIdentities")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceListUsersHandler := connect.NewUnaryHandler(
@@ -421,6 +458,8 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		switch r.URL.Path {
 		case IdentityServiceGetIdentityStatusProcedure:
 			identityServiceGetIdentityStatusHandler.ServeHTTP(w, r)
+		case IdentityServiceListIdentitiesProcedure:
+			identityServiceListIdentitiesHandler.ServeHTTP(w, r)
 		case IdentityServiceListUsersProcedure:
 			identityServiceListUsersHandler.ServeHTTP(w, r)
 		case IdentityServiceGetUserProcedure:
@@ -454,6 +493,10 @@ type UnimplementedIdentityServiceHandler struct{}
 
 func (UnimplementedIdentityServiceHandler) GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetIdentityStatus is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ListIdentities is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
