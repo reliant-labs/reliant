@@ -707,6 +707,7 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:       g.TokenAuthority(),
 		Integrations: g.IntegrationSettings(),
 		OAuthIssuers: g.ApiServerConfig.GetMcpOauthIssuers(),
+		OAuthScopes:  g.ApiServerConfig.GetMcpOauthScopes(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
 		Membership:   g.OrgResolver(),
