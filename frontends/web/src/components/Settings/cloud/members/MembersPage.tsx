@@ -15,6 +15,8 @@
  *                adopt, offer to a member, or fork (admins and owners;
  *                OrphanedAutomations). A member offered one sees it on the
  *                Members tab (TriggerOffers).
+ *   Shared       the chats and projects other members shared with the org,
+ *                each with Make private (admins and owners; SharedItems)
  *
  * Membership administration is gated on the caller's ROLE in the org (admin or
  * owner), never on a grant; only an owner touches owners. The controls a
@@ -45,6 +47,7 @@ import { PendingInvitations } from "./PendingInvitations";
 import { LeaveOrganization } from "./LeaveOrganization";
 import { useMembers } from "./useMembers";
 import { SeatCount } from "./SeatCount";
+import { SharedItems } from "./SharedItems";
 import { TriggerOffers } from "./TriggerOffers";
 
 export function MembersPage() {
@@ -62,7 +65,7 @@ export function MembersPage() {
   return <OrgMembersPage key={active.id} org={active} />;
 }
 
-type TabId = "members" | "permissions" | "activity" | "automations";
+type TabId = "members" | "permissions" | "activity" | "automations" | "shared";
 
 function OrgMembersPage({ org }: { org: MyOrg }) {
   const isAdmin = canAdministerMembers(org.role);
@@ -75,7 +78,13 @@ function OrgMembersPage({ org }: { org: MyOrg }) {
   const tabs = [
     { id: "members", label: "Members" },
     { id: "permissions", label: "Permissions" },
-    ...(isAdmin ? [{ id: "activity", label: "Activity" }, { id: "automations", label: "Automations" }] : []),
+    ...(isAdmin
+      ? [
+          { id: "activity", label: "Activity" },
+          { id: "automations", label: "Automations" },
+          { id: "shared", label: "Shared" },
+        ]
+      : []),
   ];
 
   return (
@@ -111,6 +120,7 @@ function OrgMembersPage({ org }: { org: MyOrg }) {
       )}
       {tab === "activity" && isAdmin && <MembershipActivity org={org} members={roster} />}
       {tab === "automations" && isAdmin && <OrphanedAutomations org={org} members={roster} />}
+      {tab === "shared" && isAdmin && <SharedItems org={org} />}
 
       {isAdmin && <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} org={org} seats={seats} />}
     </div>

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/messageconv"
 )
 
@@ -29,7 +30,7 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
 	f := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 
 	const ciphertext = "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpPkNRj2YfWXGmKDxH4mUcR0FnMPF3A=="

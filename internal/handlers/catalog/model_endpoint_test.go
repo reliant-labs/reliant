@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -28,10 +29,11 @@ import (
 func newModelEndpoint(t *testing.T, repo *db.Repo, allowPrivateEgress bool) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
-		Logger:  slog.New(slog.DiscardHandler),
-		Config:  &typedconfig.Config{},
-		Repo:    repo,
-		Network: &configv1.NetworkConfig{AllowPrivateEgress: allowPrivateEgress},
+		Logger:    slog.New(slog.DiscardHandler),
+		Config:    &typedconfig.Config{},
+		Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
+		Machines:  repo,
+		Network:   &configv1.NetworkConfig{AllowPrivateEgress: allowPrivateEgress},
 	})
 	require.NoError(t, err)
 	return svc
@@ -135,7 +137,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		_, err := svc.UpdateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.UpdateModelEndpointRequest{Id: ep.GetId(), Endpoint: upd}))
 		require.NoError(t, err)
 
-		catalog := NewTestCatalog(t, WithCatalogDeps(Deps{LocalModels: local.NewRepoDirectory(repo)}))
+		catalog := NewTestCatalog(t, WithCatalogDeps(Deps{LocalModels: local.NewRepoDirectory(repo, store.NewModelEndpointExtStore(repo.ORM()))}))
 		infos := localModelInfos(catalog.listLocalModels(ctxFor("svc-user-a"), "svc-user-a"))
 		require.Len(t, infos, 1)
 		got := infos[0]

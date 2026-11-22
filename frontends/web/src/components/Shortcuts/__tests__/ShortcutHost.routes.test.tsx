@@ -396,7 +396,7 @@ describe("on /settings", () => {
   it("closes the page on Close Tab, back to the workspace", async () => {
     const router = await mountAt("/settings");
 
-    // Cmd+K X in a browser (Cmd+W belongs to it).
+    // Cmd+K X: Close Tab everywhere (a browser keeps Cmd+W for itself).
     press({ key: "k", code: "KeyK", metaKey: true });
     press({ key: "x", code: "KeyX" });
 

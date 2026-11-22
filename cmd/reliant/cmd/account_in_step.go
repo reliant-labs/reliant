@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -117,12 +116,6 @@ func instanceAccountOf(c *auth.DaemonCredentials) string {
 	return c.Sub
 }
 
-// isManagedMachine reports a Reliant cloud machine, whose daemon sign-in is a
-// Secret the platform mounts read-only: no login of this machine's owns it.
-func isManagedMachine() bool {
-	return os.Getenv("RELIANT_DAEMON_TYPE") == "managed" //nolint:forbidigo // describes the host this process runs on, as in loopbackUnreachable
-}
-
 // retiredSignIns is what `reliant auth login` removed to keep the machine to
 // one account.
 type retiredSignIns struct {
@@ -134,10 +127,10 @@ type retiredSignIns struct {
 // server that belongs to an account other than login's, and names the daemons
 // still running as one of them. A sign-in whose account cannot be told is
 // left: unknown is not "someone else". A cloud machine's sign-in is the
-// platform's and is never touched.
-func retireOtherAccountsDaemonSignIns(ctx context.Context, conn *connection, login cliauth.Account) (retiredSignIns, error) {
+// platform's (managed) and is never touched.
+func retireOtherAccountsDaemonSignIns(ctx context.Context, conn *connection, login cliauth.Account, managed bool) (retiredSignIns, error) {
 	var out retiredSignIns
-	if !login.Known() || isManagedMachine() {
+	if !login.Known() || managed {
 		return out, nil
 	}
 	saved, err := auth.ListDaemonCredentialsForServer(conn.ServerURL)

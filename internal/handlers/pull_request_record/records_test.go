@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/pull_request_record"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -58,7 +59,7 @@ func grant(t *testing.T, env *storetest.Env, userID string, at time.Time, repoID
 	for _, id := range repoIDs {
 		grants = append(grants, core.IntegrationAccessGrant{AccountKey: "inst", ResourceKey: id})
 	}
-	if err := env.Repo.ReplaceIntegrationAccess(context.Background(), userID, "github", "gh-"+userID, at, grants); err != nil {
+	if err := store.ReplaceIntegrationAccess(context.Background(), env.Repo.ORM(), userID, "github", "gh-"+userID, at, grants); err != nil {
 		t.Fatal(err)
 	}
 }

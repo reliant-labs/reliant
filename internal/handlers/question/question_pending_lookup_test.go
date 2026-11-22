@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestListPendingQuestionsRejectsUnknownChat is the regression behind
@@ -50,7 +51,7 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
 
 	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &id}))
@@ -127,7 +128,7 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	ask(qBDone, spawnB, db.QuestionStatusResolved, now.Add(-time.Hour))
 	ask(qB, spawnB, db.QuestionStatusPending, now.Add(-time.Minute))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
 	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &chatID}))
 	require.NoError(t, err)
 
@@ -178,7 +179,7 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 	ask(chatB, db.QuestionStatusResolved, now.Add(-3*time.Minute))
 	ask(othersChat, db.QuestionStatusPending, now.Add(-4*time.Minute))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
 	ids := func(req *reliantv1.ListPendingQuestionsRequest) []string {
 		t.Helper()
 		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(req))

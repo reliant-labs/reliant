@@ -151,14 +151,15 @@ type fakeStore struct {
 	at       map[string]time.Time
 	owners   []string
 	claimed  map[string]bool
-	finished map[string]error
+	finished map[string]string // user -> the last_error recorded; "" on success
+	oks      map[string]bool
 	pruned   int
 	replaces int
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{grants: map[string][]core.IntegrationAccessGrant{}, subjects: map[string]string{},
-		at: map[string]time.Time{}, claimed: map[string]bool{}, finished: map[string]error{}}
+		at: map[string]time.Time{}, claimed: map[string]bool{}, finished: map[string]string{}, oks: map[string]bool{}}
 }
 
 func (s *fakeStore) ReplaceIntegrationAccess(_ context.Context, userID, integrationID, subjectID string, at time.Time, grants []core.IntegrationAccessGrant) error {
@@ -190,10 +191,11 @@ func (s *fakeStore) ClaimIntegrationAccessRefresh(_ context.Context, userID, _ s
 	return true, nil
 }
 
-func (s *fakeStore) FinishIntegrationAccessRefresh(_ context.Context, userID, _ string, _ time.Time, err error) error {
+func (s *fakeStore) FinishIntegrationAccessRefresh(_ context.Context, userID, _ string, _ time.Time, ok bool, lastError string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.finished[userID] = err
+	s.finished[userID] = lastError
+	s.oks[userID] = ok
 	delete(s.claimed, userID)
 	return nil
 }
@@ -220,7 +222,7 @@ func (s staticTokens) Token(_ context.Context, userID string) (string, error) {
 
 func newTestRefresher(t *testing.T, gh *fakeGitHub, store *fakeStore, tokens TokenSource) *Refresher {
 	t.Helper()
-	r := New(store, tokens, Options{APIBaseURL: gh.srv.URL, HTTPClient: gh.srv.Client()})
+	r := New(store, store, tokens, Options{APIBaseURL: gh.srv.URL, HTTPClient: gh.srv.Client()})
 	r.now = func() time.Time { return time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC) }
 	return r
 }
@@ -339,8 +341,10 @@ func TestRefreshDueRefreshesEachOwnerOnce(t *testing.T) {
 	r := newTestRefresher(t, gh, store, staticTokens{"alice": "tok-a"})
 	r.RefreshDue(context.Background())
 	assert.Len(t, store.grants["alice"], 1)
-	assert.NoError(t, store.finished["alice"])
-	assert.ErrorIs(t, store.finished["nobody"], ErrNotConnected)
+	assert.True(t, store.oks["alice"])
+	assert.Empty(t, store.finished["alice"])
+	assert.False(t, store.oks["nobody"])
+	assert.Contains(t, store.finished["nobody"], ErrNotConnected.Error())
 	assert.Equal(t, 1, store.pruned)
 }
 

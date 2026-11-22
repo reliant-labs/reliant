@@ -58,7 +58,7 @@ func TestReconciler_OperatorTerminate_ChatNoticeCarriesNoTemporalReason(t *testi
 		t.Run(tc.name, func(t *testing.T) {
 			logs := captureLogs(t)
 			repo := newTerminationRepo(terminatedChatWorkflow())
-			reconciler := NewReconciler(repo, terminatedRunClient(operatorJargonReason), DefaultConfig())
+			reconciler := New(Deps{Store: repo, Questions: repo, Temporal: terminatedRunClient(operatorJargonReason), Config: DefaultConfig()})
 			reconciler.SetQueuedDelivery(&fakeQueuedDelivery{start: tc.start})
 
 			_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
@@ -102,7 +102,7 @@ func TestReconciler_TimedOutRun_ChatNoticeSaysItRanPastItsTimeLimit(t *testing.T
 					"wf-1": {resp: makeTerminalDescribeResp(enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)},
 				},
 			}
-			reconciler := NewReconciler(repo, client, DefaultConfig())
+			reconciler := New(Deps{Store: repo, Questions: repo, Temporal: client, Config: DefaultConfig()})
 			reconciler.SetQueuedDelivery(&fakeQueuedDelivery{start: tc.start})
 
 			_, errs := reconciler.ReconcileRunningWorkflows(context.Background())

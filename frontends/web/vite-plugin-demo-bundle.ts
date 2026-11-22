@@ -35,7 +35,12 @@ export interface ReliantOnlyRule {
 export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   // Sign-in and sessions.
   { match: "node_modules/@supabase/", why: "Supabase sign-in" },
-  { match: "src/lib/auth/", why: "Reliant auth" },
+  {
+    match: "src/lib/auth/",
+    why: "Reliant auth",
+    // An import-free constant (the API-key principal's id) the org store compares against.
+    except: ["src/lib/auth/apiKeyUser.ts"],
+  },
   { match: "src/lib/supabase.ts", why: "Supabase sign-in" },
   { match: "src/components/Auth/", why: "Reliant sign-in screens" },
   { match: "src/components/AuthGuard.tsx", why: "Reliant sign-in" },
@@ -67,7 +72,13 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/lib/daemon-wait.ts", why: "Reliant daemon" },
   { match: "src/lib/daemon-retry.ts", why: "Reliant daemon" },
   { match: "src/lib/daemon-resume.ts", why: "Reliant daemon" },
-  { match: "src/lib/chat", why: "Reliant chat" },
+  {
+    match: "src/lib/chat",
+    why: "Reliant chat",
+    // Pure: which page names a chat (the one shell's project scope reads it),
+    // and the chat list's project filter as URL/ids.
+    except: ["src/lib/chatRoute.ts", "src/lib/chatProjectFilter.ts"],
+  },
   { match: "src/store/chat", why: "Reliant chat" },
   { match: "src/store/authStore.ts", why: "Reliant auth" },
   { match: "src/api/authProvider.ts", why: "Reliant auth" },
@@ -94,6 +105,9 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
       "src/components/Projects/ProjectSelector.tsx",
       "src/components/Projects/AppChip.tsx",
       "src/components/Projects/ProjectRowSummary.tsx",
+      // The console Overview's form for an app with nothing deployed (U6c);
+      // its chats are twinned (ProjectChats.demo.tsx).
+      "src/components/Projects/NoAppLanding.tsx",
     ],
   },
   { match: "src/components/Claim/", why: "the forge shell's claim flow" },

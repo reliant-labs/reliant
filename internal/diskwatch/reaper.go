@@ -48,6 +48,11 @@ import (
 // space now. Between full passes, the Go-cache pass (GoCacheInterval) also
 // runs the work-dir pass: killed builds leak faster than an hourly pass reaps.
 //
+// With the reaper off (a person's own machine, by default) the daemon still
+// removes what it alone creates: its per-command GOTMPDIR roots, on the same
+// Go-cache cadence (runReaperOff, ownGoTmpTick). Nothing of the person's is
+// judged there.
+//
 // The cadence is anchored on forge's own record of its last pass
 // (last-auto-gc.json, beside the policy), not on process memory: a restarting
 // daemon, several daemons on one machine and a `forge env up` all share one
@@ -197,6 +202,9 @@ type reaperState struct {
 	lastRun time.Time
 	// lastGoCache is this process's last Go-cache pass.
 	lastGoCache time.Time
+	// lastOwnGoTmp is the last pass over the daemon's own GOTMPDIR roots
+	// with the reaper off (ownGoTmpTick).
+	lastOwnGoTmp time.Time
 }
 
 // ConfigureReaper sets the routine's schedule. Call before RunReaper.
@@ -215,8 +223,9 @@ func (w *Watcher) reaperConfig() ReaperConfig {
 	return w.reaper.cfg
 }
 
-// RunReaper runs the scheduled routine until ctx is done. It returns at once
-// when the routine is disabled. Nil-safe.
+// RunReaper runs the scheduled routine until ctx is done. With the routine
+// disabled it runs only what the daemon owns whatever the mode
+// (runReaperOff). Nil-safe.
 func (w *Watcher) RunReaper(ctx context.Context) {
 	if w == nil {
 		return
@@ -230,8 +239,9 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 			// (worktreereap.go).
 			logging.InfoContext(ctx, "[diskwatch] Worktree reclaim scheduled on its own (RELIANT_WORKTREE_RECLAIM=on)", "interval", WorktreeReapInterval,
 				"pressure_interval", WorktreeReapPressureInterval)
-			w.runWorktreeSweepAlone(ctx)
 		}
+		logging.InfoContext(ctx, "[diskwatch] Reclaiming the daemon's own per-command GOTMPDIR roots on their own schedule", "interval", w.ownGoTmpInterval())
+		w.runReaperOff(ctx)
 		return
 	}
 	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval,
@@ -284,7 +294,7 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		// Killed builds' work dirs on the same cadence: on 2026-11-03/04 they
 		// took 113 GB of free space to zero in about six hours, ~19 GB an
 		// hour, and an hourly full pass let a whole hour's worth pile up.
-		w.goWorkDirTick(ctx, trigger)
+		w.goWorkDirTick(ctx, trigger, false)
 		return true
 	}
 	// The caches forge does not own (npm, the module cache's ceiling, killed
@@ -292,6 +302,76 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 	// budgets.
 	w.trimNativeCaches(ctx, trigger == "pressure", false, trigger)
 	w.reaperPass(ctx, policy, trigger)
+	return true
+}
+
+// runReaperOff is RunReaper with the storage reaper off: on the reaper's
+// poll, the in-process worktree sweep when it runs alone (worktreereap.go)
+// and the pass over the daemon's own per-command GOTMPDIR roots
+// (ownGoTmpTick), in the same single-flight, until ctx is done. Nothing else:
+// no cache pass, no forge subprocess.
+func (w *Watcher) runReaperOff(ctx context.Context) {
+	ticker := time.NewTicker(reaperPollInterval)
+	defer ticker.Stop()
+	for {
+		w.reaperOffTick(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// reaperOffTick is one poll of runReaperOff. It reports whether it ran a pass.
+func (w *Watcher) reaperOffTick(ctx context.Context) (ran bool) {
+	if ctx.Err() != nil {
+		return false
+	}
+	if w.worktreeSweepRunsAlone() {
+		ran = w.worktreeTick(ctx, false)
+	}
+	if ctx.Err() == nil && w.ownGoTmpTick(ctx) {
+		ran = true
+	}
+	return ran
+}
+
+// ownGoTmpInterval is the cadence of the pass over the daemon's own GOTMPDIR
+// roots with the reaper off: the Go-cache cadence, the one the work-dir pass
+// rides with the reaper on. RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL=off turns
+// off forge's Go-cache trim, not the daemon's clean-up of its own roots.
+func (w *Watcher) ownGoTmpInterval() time.Duration {
+	if d := w.reaperConfig().GoCacheInterval; d > 0 {
+		return d
+	}
+	return DefaultGoCacheInterval
+}
+
+// ownGoTmpTick runs the go_work_dirs pass over only the daemon's own
+// per-command GOTMPDIR roots (gowork.go, daemonOnly) when ownGoTmpInterval
+// has passed since the last and no other pass holds the single-flight. It
+// reports whether it ran.
+//
+// This is what removes those roots on a daemon whose storage reaper is off:
+// proctree removes one at its command's end only on a cgroup's proof, so
+// without cgroup delegation every root a command leaves is this pass's.
+func (w *Watcher) ownGoTmpTick(ctx context.Context) bool {
+	now := w.now()
+	w.mu.Lock()
+	last := w.reaper.lastOwnGoTmp
+	w.mu.Unlock()
+	if !last.IsZero() && now.Sub(last) < w.ownGoTmpInterval() {
+		return false
+	}
+	if !w.tryAcquireReaper() {
+		return false
+	}
+	defer w.releaseReaper()
+	w.mu.Lock()
+	w.reaper.lastOwnGoTmp = now
+	w.mu.Unlock()
+	w.goWorkDirTick(ctx, "scheduled", true)
 	return true
 }
 

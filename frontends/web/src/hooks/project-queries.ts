@@ -44,7 +44,7 @@ import {
   type ProjectDaemon as ProtoProjectDaemon,
   type Prompt as ProtoPrompt,
 } from "../gen/reliant/v1/project_pb";
-import type { FileChangeStatus } from "../gen/reliant/v1/common_pb";
+import { ResourceVisibility, type FileChangeStatus } from "../gen/reliant/v1/common_pb";
 import { trackEvent } from "../lib/analytics";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
@@ -92,6 +92,16 @@ export interface Project {
   // The org the project belongs to (Project.org_id). Absent only for a row
   // written before orgs and not yet stamped (an org-scoped list stamps it).
   org_id?: string;
+  // True when the caller reads the project as a viewer (Project.viewer_access):
+  // shared with them to read, so every write, a run started in it included,
+  // is refused.
+  viewer_access?: boolean;
+  // "org" when its owner shared it with its org (Project.visibility ORG);
+  // absent while it is private.
+  visibility?: "org";
+  // When it was last shared with its org (Project.shared_at, RFC 3339);
+  // absent while it is private.
+  shared_at?: string;
 }
 
 // ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
@@ -155,6 +165,9 @@ export function projectFromProto(proto: ProtoProject): Project {
     is_forge: proto.isForge,
     forge_project_name: proto.forgeProjectName || undefined,
     org_id: proto.orgId || undefined,
+    viewer_access: proto.viewerAccess || undefined,
+    visibility: proto.visibility === ResourceVisibility.ORG ? "org" : undefined,
+    shared_at: proto.visibility === ResourceVisibility.ORG ? proto.sharedAt || undefined : undefined,
   };
 }
 
@@ -212,7 +225,10 @@ export function sameProject(a: Project, b: Project): boolean {
     a.remote_url === b.remote_url &&
     a.is_forge === b.is_forge &&
     a.forge_project_name === b.forge_project_name &&
-    a.org_id === b.org_id
+    a.org_id === b.org_id &&
+    a.viewer_access === b.viewer_access &&
+    a.visibility === b.visibility &&
+    a.shared_at === b.shared_at
   );
 }
 

@@ -8,12 +8,14 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
 )
 
 // liveSpawnFixture is a chat whose latest assistant message requested a spawn
@@ -158,7 +160,7 @@ func TestBranchChat_LiveSpawn_DoesNotRepairSourceThread(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -201,7 +203,7 @@ func TestBranchChat_LiveSpawn_BranchDoesNotShowSpawnAsRunning(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -240,7 +242,7 @@ func TestBranchChat_LiveSpawn_SourceStillShowsSpawnRunning(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -350,7 +352,7 @@ func TestBranchChat_DeadToolCall_StillRepaired(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threadsSvc}
 
 	_, err = service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    chatID,

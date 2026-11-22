@@ -345,16 +345,24 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog).toBeVisible();
 
     // First step is Compute — verify the heading is visible.
-    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your agent sandbox' })).toBeVisible();
     // Both answers are on offer: the free one, preselected (#2657), and the
     // hosted machines one click away.
     await expect(dialog.getByRole('button', { name: /^Your own computer/ })).toBeVisible();
     await expect(dialog.getByTestId('compute-cloud-toggle')).toBeVisible();
   });
 
-  test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
+  // The daemonless home (U6, onboardingGate.ts homeTarget): a person who has
+  // not onboarded lands on their projects with a "Set up chats" card, and the
+  // card is what walks them through onboarding.
+  test('landing on / sends a not-yet-onboarded user to their projects, where Set up chats opens onboarding', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+
+    await expect(page).toHaveURL(/\/projects$/, { timeout: 15_000 });
+    const card = page.getByTestId('projects-page').getByTestId('set-up-chats-card');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await card.getByTestId('set-up-chats-link').click();
 
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
@@ -616,7 +624,7 @@ test.describe('Onboarding Flow', () => {
     await expect(backButton).toBeVisible();
     await backButton.click();
 
-    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your agent sandbox' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -638,7 +646,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your agent sandbox' })).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -733,7 +741,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
     // Still on Compute — the step did not navigate away.
-    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Choose your agent sandbox' })).toBeVisible();
   });
 });
 
@@ -985,7 +993,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
-    await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible({
+    await expect(dialog.getByRole('heading', { name: 'Choose your agent sandbox' })).toBeVisible({
       timeout: 5_000,
     });
 

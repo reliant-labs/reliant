@@ -331,7 +331,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
 		TagPrefs:           g.Database(),
-		LocalModels:        local.NewRepoDirectory(g.Database()),
+		LocalModels:        local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -1010,10 +1010,10 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 // newAttachment constructs the attachment handler (internal/handlers/attachment).
 func (g *Graph) newAttachment() (*attachment.Service, error) {
 	return attachment.New(attachment.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		API:    g.ApiServerConfig,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Attachments: store.NewAttachmentExtStore(g.Database().ORM()),
+		API:         g.ApiServerConfig,
 	})
 }
 
@@ -1059,6 +1059,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
 		Settler:        g.WorktreeSweep(),
@@ -1071,10 +1072,11 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database()),
+		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:        g.OrgResolver(),
 	})
 }
@@ -1110,6 +1112,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		OrgMoves:     store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1185,11 +1188,13 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.Database(),
-		Sweeper: g.WorktreeSweep(),
-		Orgs:    g.OrgResolver(),
+		Logger:     g.Log,
+		Config:     g.Cfg,
+		Repo:       g.Database(),
+		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Sweeper:    g.WorktreeSweep(),
+		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1227,7 +1232,8 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
+		Machines:    g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),
@@ -1249,19 +1255,31 @@ func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 
 // newTask constructs the task handler (internal/handlers/task).
 func (g *Graph) newTask() (*task.Service, error) {
+	repo := g.Database()
 	return task.New(task.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Tasks:   store.NewTaskExtStore(repo.ORM()),
+		Plans:   store.NewPlanExtStore(repo.ORM()),
+		Threads: store.NewThreadExtStore(repo.ORM()),
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Refetch: repo,
+		Tx:      repo.ORM(),
 	})
 }
 
 // newPlan constructs the plan handler (internal/handlers/plan).
 func (g *Graph) newPlan() (*plan.Service, error) {
+	repo := g.Database()
 	return plan.New(plan.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Plans:   store.NewPlanExtStore(repo.ORM()),
+		Tasks:   store.NewTaskExtStore(repo.ORM()),
+		Threads: store.NewThreadExtStore(repo.ORM()),
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Refetch: repo,
+		Tx:      repo.ORM(),
 	})
 }
 
@@ -1278,10 +1296,13 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 // a deployment WITH a control plane can clone from GitHub on the user's
 // behalf; self-hosted leaves ControlPlane nil.
 func (g *Graph) newProject() (*project.Service, error) {
+	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Ledger:       store.NewProjectOrgMoveExtStore(o),
+		Shared:       store.NewShareEventExtStore(o),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil
@@ -1310,6 +1331,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{
 			Store:  g.Database(),
@@ -1326,11 +1348,12 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Signals:  g.PauseService(),
-		Messages: g.Chat(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Signals:   g.PauseService(),
+		Messages:  g.Chat(),
 	})
 }
 
@@ -1476,11 +1499,15 @@ func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 // newSharing constructs the sharing handler (internal/handlers/sharing):
 // read-only sharing of chats and projects with their org's live members.
 func (g *Graph) newSharing() (*sharing.Service, error) {
+	o := g.Database().ORM()
 	return sharing.New(sharing.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Orgs:   g.OrgResolver(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Chats:    store.NewChatsWithActivityExtStore(o),
+		Projects: store.NewProjectExtStore(o),
+		Shares:   store.NewShareEventExtStore(o),
+		Tx:       o,
+		Orgs:     g.OrgResolver(),
 	})
 }
 

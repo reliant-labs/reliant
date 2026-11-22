@@ -32,7 +32,7 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { ENV_ALL } from "../Console/envScope";
-import { Frame, IdentityTab } from "../EnvPage/IdentityTab";
+import { Frame, IdentityTab, type IdentityLayout } from "../EnvPage/IdentityTab";
 import { CloudNotice } from "../SourceNotices";
 
 function PageFrame({ children }: { children: ReactNode }) {
@@ -61,15 +61,28 @@ function UserActivitySlot(_props: { env: string; environmentId: string | null })
 }
 
 export function UsersPage() {
+  return (
+    <PageFrame>
+      <ScopedIdentity layout="page" />
+    </PageFrame>
+  );
+}
+
+/**
+ * The scoped environment's identity, in `layout`, with the states the scope
+ * can be in (loading, every environment, an unknown name). The Users page and
+ * the Auth page's tabs (AuthPage.tsx, U6d) both draw it.
+ */
+export function ScopedIdentity({ layout }: { layout: IdentityLayout }) {
   const { env, roster, setEnv, href } = useForgeConsole();
 
   if (roster.isLoading || roster.resolvingName) {
     return (
-      <PageFrame>
+      <>
         <Card padding="none" aria-label="Loading" aria-busy="true">
           <SkeletonLoader variant="table-row" count={4} />
         </Card>
-      </PageFrame>
+      </>
     );
   }
 
@@ -78,7 +91,7 @@ export function UsersPage() {
   if (env === ENV_ALL) {
     const choices = roster.envs.filter((candidate) => !!candidate.live || candidate.lifecycle === "local");
     return (
-      <PageFrame>
+      <>
         <CloudNotice availability={availability} detail={roster.live.data?.detail} />
         <Frame icon={<Layers className="h-4 w-4" />} title="Choose an environment" testId="users-choose-env">
           <p>Each environment signs people in on its own, with users of its own. Pick one here or in the top bar; every link you share keeps it.</p>
@@ -99,14 +112,14 @@ export function UsersPage() {
             </div>
           )}
         </Frame>
-      </PageFrame>
+      </>
     );
   }
 
   const scoped = roster.envs.find((candidate) => candidate.name === env) ?? null;
   if (!scoped) {
     return (
-      <PageFrame>
+      <>
         <CloudNotice availability={availability} detail={roster.live.data?.detail} />
         <Frame icon={<Users className="h-4 w-4" />} title={`There is no environment named ${env}`} testId="users-env-unknown">
           <p>
@@ -117,13 +130,13 @@ export function UsersPage() {
             .
           </p>
         </Frame>
-      </PageFrame>
+      </>
     );
   }
 
   return (
-    <PageFrame>
-      <UserActivitySlot env={scoped.name} environmentId={scoped.live?.id ?? null} />
+    <>
+      {layout !== "service" && <UserActivitySlot env={scoped.name} environmentId={scoped.live?.id ?? null} />}
       <CloudNotice availability={availability} detail={roster.live.data?.detail} />
       <IdentityTab
         key={scoped.live?.id ?? scoped.name}
@@ -131,8 +144,8 @@ export function UsersPage() {
         lifecycle={scoped.lifecycle}
         live={scoped.live}
         liveLoading={roster.live.isLoading}
-        layout="page"
+        layout={layout}
       />
-    </PageFrame>
+    </>
   );
 }

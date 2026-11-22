@@ -185,8 +185,9 @@ func userImageReference(attachmentID, mimeType string) string {
 // before it is left to ContentBlockToPart, as any other message's block is.
 // A block whose attachment cannot be loaded is not dropped silently: the
 // result gains a note naming the attachment, so the model knows media is
-// missing and can ask for it again. Generated video is consumed without a
-// note: it is for the user, never the model, and the result's text names it.
+// missing and can ask for it again. Generated video and a presented image
+// (attachment.TypeDisplay) are consumed without a note: they are for the
+// user, never the model, and the result's text names them.
 func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageContentBlock, parts []message.ContentPart, repo AttachmentReader) bool {
 	if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE &&
 		block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT {
@@ -211,8 +212,10 @@ func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageCo
 		parts[last] = result
 		return true
 	}
-	// Generated video is for the user, never the model (see ContentBlockToPart).
-	if strings.HasPrefix(attachment.MimeType, "video/") {
+	// Generated video and presented images are for the user, never the
+	// model (see ContentBlockToPart). The result's text already tells the
+	// model what the user was shown.
+	if userOnlyMedia(attachment) {
 		return true
 	}
 	result.BinaryParts = append(result.BinaryParts, message.BinaryContent{
@@ -251,7 +254,8 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			}
 			// Generated video is for the user, never the model: no chat model
 			// we route accepts it, and the bytes would bloat every replay.
-			if strings.HasPrefix(attachment.MimeType, "video/") {
+			// A presented image is the same: it was shown to a person.
+			if userOnlyMedia(attachment) {
 				return nil
 			}
 			return message.BinaryContent{
@@ -371,7 +375,18 @@ func LoadAttachment(ctx context.Context, chatID string, attachmentID string, rep
 		FileName: att.Filename,
 		MimeType: att.MimeType,
 		Content:  att.Content,
+		Type:     att.AttachmentType,
 	}, nil
+}
+
+// userOnlyMedia reports whether an attachment is shown to the user and never
+// replayed to a model: a generated video (by MIME, which predates its type),
+// or an image a tool presented to the user (attachment.TypeDisplay). A
+// presented image may be far larger than a model accepts, and replaying it
+// would charge its tokens on every later turn for a picture the model never
+// asked to see.
+func userOnlyMedia(att *message.Attachment) bool {
+	return strings.HasPrefix(att.MimeType, "video/") || attachutil.AttachmentType(att.Type).IsDisplay()
 }
 
 // LoadFileReference loads a file reference and returns its text content.

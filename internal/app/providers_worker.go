@@ -53,7 +53,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -276,7 +278,12 @@ type WriteLedgerDeps struct {
 // node or an agent tool, before it is made, so the event it causes can be
 // attributed.
 func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: d.DB.IntegrationWrites(), Runs: d.DB}), nil
+	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB}), nil
+}
+
+// newWriteLedger is the integration write ledger over repo's database.
+func newWriteLedger(repo *db.Repo) *writeledger.Ledger {
+	return writeledger.NewLedger(store.NewIntegrationWriteExtStore(repo.ORM()))
 }
 
 // StoredConfigProviderDeps is where project configs are stored.
@@ -303,7 +310,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.NewService(d.DB, d.Temporal.Client, d.Pause), nil
+	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -346,10 +353,11 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
-		LocalModels: local.NewRepoDirectory(d.DB),
+		LocalModels: local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
@@ -452,6 +460,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          repo,
+		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Syncer:        syncer,
 		Fires:         fires,
 		ControlPlane:  hostedControlPlane(d.ControlPlane),
@@ -462,7 +471,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -512,8 +521,18 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	if err != nil {
 		return nil, err
 	}
+	planner, err := newToolPlanning(d.Logger, d.Config, repo)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
+		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
+		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
+		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
+		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
@@ -694,6 +713,14 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
+// projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
+// owner, written in the commit's own transaction (the ctx it is called with).
+type projectMoveAnnouncer struct{ repo *db.Repo }
+
+func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
+	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+}
+
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
 // no orgs (a nil *orgs.Resolver would be a non-nil interface).
 func orgMembers(r *orgs.Resolver) orgmove.Members {
@@ -714,9 +741,12 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 	if ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret == "" {
 		return nil, nil
 	}
+	o := d.DB.ORM()
 	svc, err := orgmove.New(orgmove.Deps{
 		Logger:       slog.Default(),
-		Store:        d.DB,
+		Store:        store.NewProjectOrgMoveExtStore(o),
+		Projects:     store.NewProjectExtStore(o),
+		Announcer:    projectMoveAnnouncer{repo: d.DB},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),
@@ -883,7 +913,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-		WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
@@ -926,7 +956,7 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 		}
 	}
 	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
-		Store:  d.DB,
+		Store:  store.NewWorkflowCheckRunExtStore(d.DB.ORM()),
 		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
 		RunURL: workflowcheck.HostedRunURL,
 	})
@@ -989,7 +1019,7 @@ type WriteLedgerPruneDeps struct {
 //
 //forge:root-only worker
 func NewWriteLedgerPrune(d WriteLedgerPruneDeps) (*WriteLedgerPrune, error) {
-	return &WriteLedgerPrune{ledger: d.Ledger, writes: d.DB.IntegrationWrites()}, nil
+	return &WriteLedgerPrune{ledger: d.Ledger, writes: newWriteLedger(d.DB)}, nil
 }
 
 // Run prunes until ctx ends.
@@ -1187,4 +1217,16 @@ func (p *ProjectPurge) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// newToolPlanning is the plan, task and dependency store the planning tools
+// write through.
+func newToolPlanning(logger *slog.Logger, cfg *config.Config, repo *db.Repo) (planning.Service, error) {
+	return planning.NewInstrumented(planning.Deps{
+		Logger:       logger,
+		Config:       cfg,
+		Plans:        store.NewPlanExtStore(repo.ORM()),
+		Tasks:        store.NewTaskExtStore(repo.ORM()),
+		Dependencies: store.NewTaskDependencyExtStore(repo.ORM()),
+	})
 }

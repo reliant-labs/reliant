@@ -1196,6 +1196,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
+	nameRunOrg(ctx, loadedWf.OrgID)
 
 	// Parse the placeholder-resolved workflow to get input schemas
 	wfWithPlaceholders, err := LoadWorkflow(loadedWf.WorkflowJSON)
@@ -3588,6 +3589,9 @@ type LoadedWorkflow struct {
 	// CatalogPin is the project catalog the load resolved against
 	// (catalog_pin.go); empty from a worker that predates pins.
 	CatalogPin string `json:"catalog_pin,omitempty"`
+	// OrgID is the org of the run's chat, for the run's own span
+	// (nameRunOrg); empty from a worker that predates it.
+	OrgID string `json:"org_id,omitempty"`
 }
 
 // loadWorkflowDefinition loads the workflow YAML definition and returns both raw YAML

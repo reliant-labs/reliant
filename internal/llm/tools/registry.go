@@ -15,6 +15,7 @@ const (
 	ToolFindReplace    = "find_replace"
 	ToolReadAttachment = "read_attachment"
 	ToolSaveAttachment = "save_attachment"
+	ToolPresentImage   = "present_image"
 
 	// Execution tools
 	// Note: the shell tool's own name is ShellToolName, in shell_platform.go.
@@ -616,6 +617,11 @@ func GetToolRegistry() []ToolDefinition {
 		// are in the database; the file still reaches the user's disk through
 		// the daemon client on the tool context.
 		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagCodingDefault}, PlacementServer, false},
+		// Shows a file from the machine to the USER. Server-located because
+		// the image becomes an attachment row; the bytes are read from the
+		// user's disk through the daemon client, as view reads them. Read-only
+		// and in plan mode: it changes nothing on the machine.
+		{ToolPresentImage, (*ToolsFactory).PresentImage, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer, false},
 		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagCodingDefault}, PlacementAny, false},
 		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagCodingDefault}, PlacementAny, false},
 		// Not TagCodingDefault: ~4KB of schema for something edit plus a shell

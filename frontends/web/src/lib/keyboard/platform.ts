@@ -5,7 +5,8 @@
  *   isMac    — which physical modifier "Cmd" means (Meta vs Control).
  *   isDesktop — whether we are in Electron, where no browser owns any chord.
  *
- * A Mac user in Chrome is isMac + !isDesktop and needs the web bindings.
+ * A Mac user in Chrome is isMac + !isDesktop: the same bindings as the desktop
+ * app, minus its desktop aliases (chords the browser keeps for itself).
  */
 
 // `Window.RELIANT_CONFIG` is declared in src/types/electron.d.ts — the single

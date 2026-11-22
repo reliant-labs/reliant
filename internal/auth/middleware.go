@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	forgeauth "github.com/reliant-labs/forge/pkg/auth"
+	"github.com/reliant-labs/forge/pkg/authn"
+
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // TokenValidator defines the interface for token validation.
@@ -45,7 +47,45 @@ type Settings struct {
 	// accepted beside the session key in ModeSupabase; empty is none. See
 	// WithDevSigner, which refuses it outside the dev tier.
 	DevJWTSecret string
+	// SupabaseIssuer and SupabaseAudience (SUPABASE_JWT_ISSUER,
+	// SUPABASE_JWT_AUDIENCE) are the iss and aud a Supabase JWT must carry;
+	// empty checks nothing (ExpectIssuer, ExpectAudience).
+	SupabaseIssuer   string
+	SupabaseAudience string
+	// Identity is the managed identity (forge.ManagedIdentity) whose tokens
+	// ModeSupabase accepts beside Supabase's. Inert until its Issuer is set.
+	Identity IdentitySettings
+	// Sessions resolves a server-side sign-in session id (forge/pkg/session)
+	// to its access token. nil: a session id is an unknown token.
+	Sessions forgeauth.SessionResolver
 }
+
+// IdentitySettings is where the managed identity's tokens are verified:
+// forge's standard jwt_* config fields, which forge.IdentityRef fills from
+// the env's forge.ManagedIdentity.
+type IdentitySettings struct {
+	// Issuer is the exact iss of the identity's tokens (JWT_ISSUER). Empty
+	// turns the identity validator off.
+	Issuer string
+	// Audience is an aud the token must carry (JWT_AUDIENCE): the identity
+	// project's id, so a token another project of the same instance was
+	// issued is refused. Required with Issuer.
+	Audience string
+	// JWKSURL is the issuer's key set (JWT_JWKS_URL); empty discovers it
+	// from the issuer's OpenID configuration.
+	JWKSURL string
+	// SigningMethod is the alg the tokens are signed with (JWT_SIGNING_METHOD,
+	// RS256 when empty).
+	SigningMethod string
+	// RolesClaim is where roles are read from (JWT_ROLES_CLAIM).
+	RolesClaim string
+	// Snapshot is the out-of-band key set the validator starts on when the
+	// issuer is down at boot (JWT_JWKS_SNAPSHOT_FILE, JWT_JWKS_SNAPSHOT).
+	Snapshot forgeauth.JWKSSnapshot
+}
+
+// Configured reports whether s names an identity to accept tokens from.
+func (s IdentitySettings) Configured() bool { return s.Issuer != "" }
 
 // ModeName is s's effective mode: ModeAPIKey or ModeSupabase.
 func (s Settings) ModeName() string {
@@ -57,62 +97,31 @@ func (s Settings) ModeName() string {
 
 // JWTOptions are the JWT validator options s implies.
 func (s Settings) JWTOptions() []ValidatorOption {
-	return []ValidatorOption{RequireEmailVerifiedClaim(s.RequireEmailVerifiedClaim)}
+	return []ValidatorOption{
+		RequireEmailVerifiedClaim(s.RequireEmailVerifiedClaim),
+		ExpectIssuer(s.SupabaseIssuer),
+		ExpectAudience(s.SupabaseAudience),
+	}
 }
 
 // Middleware provides token authentication for HTTP requests
 type Middleware struct {
-	validator TokenValidator
+	authenticator *Authenticator
 }
 
 // NewMiddleware creates a new auth middleware for settings' mode:
 //   - "apikey":   validate bearer tokens against settings.APIKey
-//   - "supabase": validate JWTs using settings.PublicKeyPEM or JWKSURL (default)
+//   - "supabase": validate Supabase JWTs (settings.PublicKeyPEM or JWKSURL)
+//     and, when settings.Identity names one, the managed identity's tokens
+//     (default)
 func NewMiddleware(settings Settings) (*Middleware, error) {
-	publicKeyPEM, jwksURL := settings.PublicKeyPEM, settings.JWKSURL
-	switch settings.ModeName() {
-	case ModeAPIKey:
-		apiKey := settings.APIKey
-		if apiKey == "" {
-			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
-		}
-		validator, err := NewAPIKeyValidator(apiKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create API key validator: %w", err)
-		}
-		logging.Info("[HTTP Auth] API key auth mode enabled",
-			"user_id", validator.userID)
-		return &Middleware{
-			validator: validator,
-		}, nil
-
-	default: // "supabase"
-		var validator *JWTValidator
-		switch {
-		case publicKeyPEM != "":
-			var err error
-			validator, err = NewJWTValidator(publicKeyPEM, settings.JWTOptions()...)
-			if err != nil {
-				return nil, err
-			}
-		case jwksURL != "":
-			var err error
-			validator, err = LoadJWKS(context.Background(), jwksURL, settings.JWTOptions()...)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
-			}
-		default:
-			return nil, ErrInvalidPublicKey
-		}
-		withDev, err := WithDevSigner(validator, settings)
-		if err != nil {
-			return nil, err
-		}
-		logging.Info("[HTTP Auth] Supabase JWT auth mode enabled")
-		return &Middleware{
-			validator: withDev,
-		}, nil
+	a, err := NewAuthenticator(context.Background(), settings)
+	if err != nil {
+		return nil, err
 	}
+	logging.Info("[HTTP Auth] auth mode enabled", "mode", settings.ModeName(),
+		"managed_identity", settings.Identity.Issuer)
+	return &Middleware{authenticator: a}, nil
 }
 
 // RequireAuth is a middleware that requires authentication via the configured
@@ -139,6 +148,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get token from Authorization header first
 		var tokenString string
+		channel := authn.ChannelAuthorization
 		authHeader := r.Header.Get("Authorization")
 		if authHeader != "" {
 			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
@@ -148,6 +158,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 		// This is necessary because browser WebSocket API doesn't support custom headers
 		if tokenString == "" && isWebSocketUpgrade(r) {
 			tokenString = r.URL.Query().Get("token")
+			channel = authn.ChannelUnknown
 		}
 
 		if tokenString == "" {
@@ -158,24 +169,28 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 
 		// Shape dispatch: `rlat_` bearers are access tokens (resolved by the
 		// token authority, reliant:api only); anything else goes through the
-		// JWT/apikey validator.
+		// authenticator's token chain.
 		isAccessToken := IsAccessTokenFormat(tokenString)
-		var claims *JWTClaims
-		var principal *fat.Principal
+		var verified *Verified
 		var err error
 		switch {
 		case isAccessToken && tokens != nil:
+			var claims *JWTClaims
+			var principal *fat.Principal
 			claims, principal, err = ClaimsForAPIToken(r.Context(), tokens, tokenString)
+			if err == nil {
+				verified = VerifiedAccessToken(claims, principal, channel)
+			}
 		case isAccessToken:
-			err = fmt.Errorf("access tokens are not accepted on this endpoint")
+			err = fmt.Errorf("%w: access tokens are not accepted on this endpoint", ErrInvalidToken)
 		default:
-			claims, err = m.validator.ValidateToken(tokenString)
+			verified, err = m.authenticator.Verify(r.Context(), tokenString, channel)
 		}
 		if err != nil {
 			// An authority that could not be reached has rejected nothing:
 			// 503, so the client retries instead of discarding a good token.
-			if isAccessToken && tokens != nil && !IsCredentialRejection(err) {
-				logging.ErrorContext(r.Context(), "Access token verification unavailable", "error", err, "path", r.URL.Path, "method", r.Method)
+			if !IsCredentialRejection(err) {
+				logging.ErrorContext(r.Context(), "Token verification unavailable", "error", err, "path", r.URL.Path, "method", r.Method)
 				http.Error(w, `{"error": "unavailable", "message": "Token verification unavailable"}`, http.StatusServiceUnavailable)
 				return
 			}
@@ -184,15 +199,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 			return
 		}
 
-		// Add claims to context
-		ctx := WithUser(r.Context(), claims.Sub, claims.Role, claims.Email)
-		ctx = WithCredential(ctx, claims.Credential)
-		if principal != nil {
-			ctx = WithMachineToken(ctx, principal)
-		}
-
-		ctx = telemetry.BindUser(ctx, claims.Sub)
-
+		ctx := verified.Bind(r.Context())
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

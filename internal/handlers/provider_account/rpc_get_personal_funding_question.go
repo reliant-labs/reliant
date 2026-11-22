@@ -29,7 +29,7 @@ func (s *Service) GetPersonalFundingQuestion(
 	if _, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID); err != nil {
 		return nil, notFoundOr(err, "chat")
 	}
-	q, err := s.deps.Store.GetChatPersonalFunding(ctx, chatID)
+	q, err := s.deps.Funding.GetChatPersonalFunding(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

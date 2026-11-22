@@ -64,9 +64,9 @@ const ROWS: Record<string, Row> = {
   },
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
-  appsPath: { build: () => paths.appsPath(), url: "/apps", template: "/apps" },
-  sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
+  usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
+  connectorsPath: { build: () => paths.connectorsPath(), url: "/connectors", template: "/connectors" },
   forgeLandingPath: { build: () => paths.forgeLandingPath(), url: "/forge", template: "/forge" },
   forgeDemoPath: { build: () => paths.forgeDemoPath(), url: "/forge/demo", template: "/forge/demo" },
   workflowsPath: { build: () => paths.workflowsPath(), url: "/workflows", template: "/workflows" },
@@ -99,6 +99,12 @@ const ROWS: Record<string, Row> = {
     url: "/settings/org-ai-accounts",
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
+  },
+  sandboxesPath: {
+    build: () => paths.sandboxesPath(),
+    url: "/settings/machines",
+    template: "/settings/$section",
+    params: { section: "machines" },
   },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
@@ -187,9 +193,9 @@ const ORG_URLS: Record<string, string> = {
   threadPath: "/o/acme/c/c-1/t/t-1",
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
-  appsPath: "/o/acme/apps",
-  sitesPath: "/o/acme/sites",
   usagePath: "/o/acme/usage",
+  usageBillingPath: "/o/acme/usage",
+  connectorsPath: "/o/acme/connectors",
   forgeLandingPath: "/o/acme/forge",
   workflowsPath: "/o/acme/workflows",
   workflowLibraryPath: "/o/acme/workflows/library",
@@ -270,6 +276,17 @@ describe("lib/paths", () => {
 
   it("names only rows that exist in the org table", () => {
     expect(Object.keys(ORG_URLS).filter((name) => !(name in ROWS))).toEqual([]);
+  });
+
+  it("narrows Projects to its apps or its sites, the way the router writes the search", () => {
+    expect(paths.projectsHref()).toBe("/projects");
+    expect(paths.projectsHref("apps")).toBe(hrefOf({ to: "/projects", search: { show: "apps" } } as never));
+    expect(paths.projectsHref("sites")).toBe("/projects?show=sites");
+  });
+
+  it("opens Connectors on a tab, Integrations by default", () => {
+    expect(paths.connectorsPath("integrations")).toBe("/connectors");
+    expect(paths.connectorsPath("mcp")).toBe(hrefOf({ to: "/connectors", search: { tab: "mcp" } } as never));
   });
 
   it("joins a search the way the router writes one", () => {
@@ -367,8 +384,8 @@ describe("the org segment", () => {
 
     it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/o/acme/apps");
-      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(paths.projectsHref("apps")).toBe("/o/acme/projects?show=apps");
+      expect(paths.projectsHref("sites")).toBe("/o/acme/projects?show=sites");
       expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 

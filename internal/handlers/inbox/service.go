@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -24,6 +25,11 @@ type Deps struct {
 	// Repo reads what waits on the caller (pending rows, automation
 	// health, machines and their storage) and records dismissals.
 	Repo Repository
+	// Recoveries lists the caller's worktree recoveries.
+	Recoveries Recoveries
+	// Marks lists the caller's worktrees marked for reclaim and records keep /
+	// reclaim now. store.WorktreeExtStore satisfies it.
+	Marks worktreesweep.MarkDecisionStore
 	// Sweeper runs the confirmed storage clean-up on a machine's daemon.
 	// nil when no daemon router is wired; CleanupStorage then reports
 	// unavailable.
@@ -56,6 +62,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("inbox: Deps.Repo is required")
+	}
+	if d.Recoveries == nil {
+		return fmt.Errorf("inbox: Deps.Recoveries is required")
+	}
+	if d.Marks == nil {
+		return fmt.Errorf("inbox: Deps.Marks is required")
 	}
 	return nil
 }

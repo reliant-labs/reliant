@@ -33,7 +33,7 @@ func (s *Service) ListSharedProjects(
 		return connect.NewResponse(out), nil
 	}
 	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
-	projects, err := s.deps.Repo.ListSharedProjects(ctx, core.SharedProjectFilters{
+	projects, err := s.deps.Shares.ListSharedProjects(ctx, core.SharedProjectFilters{
 		OrgID: org, ViewerUserID: userID, Limit: limit, Offset: offset,
 	})
 	if err != nil {

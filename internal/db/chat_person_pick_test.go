@@ -38,7 +38,7 @@ func TestChatPersonPickDriver(t *testing.T) {
 	}
 	driver := func(org string) string {
 		t.Helper()
-		d, err := repo.ChatPersonPickDriver(ctx, chatID, org)
+		d, err := store.ChatPersonPickDriver(ctx, repo.ORM(), chatID, org)
 		require.NoError(t, err)
 		return d
 	}
@@ -83,7 +83,7 @@ func TestChatPersonPickDriver(t *testing.T) {
 	// A branch copies the selection, never the pick.
 	branch := seedChatForRun(t, repo, ctx, "alice")
 	require.NoError(t, repo.CopyChatSelection(ctx, chatID, branch, "alice"))
-	d, err := repo.ChatPersonPickDriver(ctx, branch, "org-acme")
+	d, err := store.ChatPersonPickDriver(ctx, repo.ORM(), branch, "org-acme")
 	require.NoError(t, err)
 	assert.Empty(t, d, "a branch starts with no pick")
 
@@ -116,12 +116,12 @@ func TestChatPersonPickDriver_SupersedingWriteBetweenReads(t *testing.T) {
 	// The reader saw the person's selection ...
 	seen, err := repo.GetChatSelection(ctx, chatID)
 	require.NoError(t, err)
-	key, _ := RootModelPick(seen.Params)
+	key, _ := chatselection.RootModelPick(seen.Params)
 	require.Equal(t, "gpt-5.6-sol@codex", key)
 	// ... then a workflow's write commits ...
 	set(ctx, "gpt-5.6-sol@codex")
 	// ... and the reader's consent read finds the pick void.
-	d, err := repo.ChatPersonPickDriver(ctx, chatID, "org-acme")
+	d, err := store.ChatPersonPickDriver(ctx, repo.ORM(), chatID, "org-acme")
 	require.NoError(t, err)
 	assert.Empty(t, d, "no personal spend on a pick a later write superseded")
 }
@@ -142,7 +142,7 @@ func TestRootModelPick(t *testing.T) {
 		{"gpt-5.6-sol@codex", "gpt-5.6-sol@codex", "codex"},
 		{nil, "", ""},
 	} {
-		key, driver := RootModelPick(map[string]any{"model": tc.model})
+		key, driver := chatselection.RootModelPick(map[string]any{"model": tc.model})
 		assert.Equal(t, tc.key, key, "%v", tc.model)
 		assert.Equal(t, tc.driver, driver, "%v", tc.model)
 	}

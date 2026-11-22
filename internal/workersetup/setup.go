@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -330,7 +331,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// only record; the worker's check syncer writes GitHub.
 	var checks workflowcheck.Service
 	if cfg.Database != nil {
-		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: cfg.Database})
+		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
 		reports := workflowcheck.Activities{Service: checks}
 		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
 		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})

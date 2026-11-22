@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/planningtest"
 )
 
 // TestUpdateTask_OrdinalIsOneIndexed pins update_task's ordinal against the
@@ -32,7 +34,7 @@ func TestUpdateTask_OrdinalIsOneIndexed(t *testing.T) {
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
 
-	_, err := (&CreatePlanTool{repo: repo}).Execute(ctx, CreatePlanParams{
+	_, err := (&CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, CreatePlanParams{
 		Title:       "Ordinal check",
 		Description: "Three tasks with distinct titles",
 		Complexity:  "simple",
@@ -45,7 +47,7 @@ func TestUpdateTask_OrdinalIsOneIndexed(t *testing.T) {
 	require.NoError(t, err)
 
 	// "1" must mean the task list's item 1.
-	resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+	resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 		TaskID: "1",
 		Status: "completed",
 	})
@@ -56,7 +58,7 @@ func TestUpdateTask_OrdinalIsOneIndexed(t *testing.T) {
 		"0-indexing here silently updates the task after the one the agent named")
 
 	// The last item must be reachable at its displayed number.
-	last, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+	last, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 		TaskID: "3",
 		Status: "completed",
 	})
@@ -66,7 +68,7 @@ func TestUpdateTask_OrdinalIsOneIndexed(t *testing.T) {
 
 	// Position 0 is not a label any surface shows, so it is a mistake worth
 	// naming rather than silently treating as the first task.
-	zero, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+	zero, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 		TaskID: "0",
 		Status: "completed",
 	})
