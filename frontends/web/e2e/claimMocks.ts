@@ -297,6 +297,16 @@ export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {
       environments: [{ id: 'env_sf_prod', name: 'prod', project: SITE.project, lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: hours(-72) }],
     }),
   );
+  // The project catalog Projects lists (the claim lands on its apps): the
+  // claimed site is an org app with no code here.
+  await page.route('**/reliant.v1.ProjectService/ListProjectsWithApps', (route) =>
+    json(route, {
+      orgId: ((route.request().postDataJSON() ?? {}) as { orgId?: string }).orgId ?? 'org_own',
+      hostedAppsState: 'HOSTED_APPS_STATE_OK',
+      projects: [],
+      unlinkedApps: [{ name: SITE.project, createdAt: hours(-72), lastDeployedAt: hours(-70), environments: ['prod'], hasStaticSite: true, sources: [], warning: '' }],
+    }),
+  );
   await page.route('**/controlplane.v1.DeployService/GetStatus', (route) =>
     json(route, {
       environmentVerdict: 'DEPLOY_VERDICT_CONVERGED',

@@ -1,13 +1,19 @@
-# Fixture for cmd/reliant/cmd TestIntegrationsLoadsCLIConfigThroughKCL: a `reliant
-# integrations` workload declared with no cli_config. The integrations group loads CLIConfig,
-# so reliantProcessEnvMap refuses it rather than render a process with no
-# connection. Kept apart from cli_config_integrations.k because the refusal fails the
-# whole file's evaluation.
+# Fixture for cmd/reliant/cmd TestIntegrationsLoadsCLIConfigThroughKCL: a `reliant integrations`
+# workload declared with no cli_config. The integrations group loads CLIConfig, which has
+# no required field, so reliantProcessEnvMap projects it as its defaults (forge
+# #2659): the same env as an explicit `cli_config = config_gen.CLIConfig {}`.
 #
 # Not an environment: there is no main.k here, and nothing imports this file.
 
 import config_gen
 
+_argv = ["reliant", "integrations", "list"]
+
 missing_cli_config = config_gen.reliantProcessEnvMap(config_gen.ReliantProcess {
     reliant_config = config_gen.ReliantConfig {}
-}, ["reliant", "integrations", "list"], [])
+}, _argv, [])
+
+default_cli_config = config_gen.reliantProcessEnvMap(config_gen.ReliantProcess {
+    reliant_config = config_gen.ReliantConfig {}
+    cli_config = config_gen.CLIConfig {}
+}, _argv, [])

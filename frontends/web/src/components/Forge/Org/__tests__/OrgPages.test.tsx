@@ -113,7 +113,7 @@ beforeEach(() => {
 });
 
 describe("OrgConsoleLayout", () => {
-  it("draws the org chrome around the page, with Apps opening onto /apps and each app", async () => {
+  it("draws the org chrome around the page, with Apps opening onto the apps list and each app", async () => {
     available([app("api", ["e1", "prod"]), app("shop", ["e2", "prod"])]);
     const user = userEvent.setup();
     await mount("/forge/observability");
@@ -122,7 +122,7 @@ describe("OrgConsoleLayout", () => {
     const nav = screen.getByRole("navigation", { name: "Organization console" });
     expect(nav).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Apps" })[0]!);
-    expect(screen.getAllByRole("link", { name: "All apps" }).some((a) => a.getAttribute("href") === "/apps")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "All apps" }).some((a) => a.getAttribute("href") === "/projects?show=apps")).toBe(true);
     expect(screen.getAllByRole("link", { name: "api" }).some((a) => a.getAttribute("href") === "/forge/p/api")).toBe(true);
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Observability");
   });

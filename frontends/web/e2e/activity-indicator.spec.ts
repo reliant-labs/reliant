@@ -88,7 +88,8 @@ test.describe('Activity Indicator Synchronization', () => {
     if (testInfo.title === 'child thread activity should propagate to main indicators') return;
     await mockAppsBackend(page);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('navigation', { name: 'Chat sidebar navigation' })).toBeVisible();
+    // The one shell's nav (U6): at the chat home it is drilled into Agents, the chat list.
+    await expect(page.getByTestId('shell-nav').getByRole('navigation', { name: 'Agents' })).toBeVisible();
   });
 
   test('thinking indicator should not show when activity is IDLE', async ({ page }) => {

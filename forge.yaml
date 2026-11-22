@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.9.1-0.20261121174558-7c571e1f7b46
+forge_version: v1.10.1-0.20261121231614-3b80ee2f5755
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -213,6 +213,12 @@ upgrade:
           commands:
               - [task, "contract:controlplane:sync"]
 ci:
+    workflows:
+        # Declined (forge v1.10.0 playbook pgo-default-on): reliant's binary
+        # gets PGO from control-plane's ShellBuild `pgo` (forge #2577 +
+        # control-plane #3282), and control-plane's weekly refresh writes
+        # cmd/reliant/default.pgo, so a reliant pgo-refresh.yml would duplicate it.
+        pgo-refresh: false
     vuln_scan:
         # Exemptions only: no scanner is named, so the derived default scanners
         # still run (forge's CIVulnConfig.UsesDefaultScanners).

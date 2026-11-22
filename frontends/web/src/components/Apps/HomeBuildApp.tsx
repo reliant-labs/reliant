@@ -5,7 +5,7 @@
  * the way to build an app.
  *
  * A forge project gets nothing here. What it has shipped, and where it is
- * live, is the sidebar's to show (SidebarApps); repeating it in the middle of
+ * live, is the nav's to show (its Apps section); repeating it in the middle of
  * the new-chat screen only pushed the composer down.
  */
 

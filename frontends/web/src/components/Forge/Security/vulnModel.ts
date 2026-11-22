@@ -225,3 +225,26 @@ export function releaseTrust(read: {
 export function untrustedEnvs(envs: readonly EnvVulnSummary[]): EnvVulnSummary[] {
   return deployedEnvs(envs).filter((env) => env.scanState !== "scanned");
 }
+
+// ── The Overview's card ─────────────────────────────────────────────────────
+
+/**
+ * What the Overview's Vulnerabilities card says about the environments it
+ * covers (every one, or the top bar's), from the summary alone:
+ *
+ *   not-scanned  nothing in them has a scanned release (scopeTrust)
+ *   clean        every one fully scanned against a current database, and no
+ *                finding: the card's only "no known vulnerabilities"
+ *   findings     one line per deployed environment, each with its own state
+ */
+export type OverviewVulns = { kind: "not-scanned" } | { kind: "clean" } | { kind: "findings"; envs: EnvVulnSummary[] };
+
+/** `envName`: the top bar's environment, or null for every environment. */
+export function overviewVulns(summary: { environments: readonly EnvVulnSummary[]; database: { stale: boolean } | null }, envName: string | null): OverviewVulns {
+  const envs = envName === null ? summary.environments : summary.environments.filter((env) => env.environmentName === envName);
+  const trust = scopeTrust(envs, summary.database?.stale ?? false);
+  if (trust === "not-scanned-yet") return { kind: "not-scanned" };
+  const deployed = deployedEnvs(envs);
+  if (trust === "trusted" && deployed.every((env) => totalFindings(env.counts) === 0)) return { kind: "clean" };
+  return { kind: "findings", envs: deployed };
+}

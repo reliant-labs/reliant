@@ -200,8 +200,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       '@reliantlabs/forge-web-runtime':
-        specifier: ^0.13.20
-        version: 0.13.20(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)
+        specifier: ^0.13.21
+        version: 0.13.21(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)
       '@reliantlabs/sdk':
         specifier: workspace:*
         version: link:../../sdk/ts
@@ -1079,8 +1079,8 @@ packages:
       react:
         optional: true
 
-  '@reliantlabs/forge-web-runtime@0.13.20':
-    resolution: {integrity: sha512-GUXbISX5xSj1MuXhAB0mI6glnZU9eg6er0cSJp2E0g5jYBSl39AtpV7DmOTOGDiNvndYwnatpcY+GQlnQh6+tg==}
+  '@reliantlabs/forge-web-runtime@0.13.21':
+    resolution: {integrity: sha512-KBAHGeF8mWa6x/A6QQHOW6JGNax8yLKYK6leqZUVu6d1UDSgi64zgQaIijo7ZR0kLf0Rtm+iCVPhiPqGW+t8uA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.5.0
@@ -4117,7 +4117,7 @@ snapshots:
       - supports-color
       - zone.js
 
-  '@reliantlabs/forge-web-runtime@0.13.20(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)':
+  '@reliantlabs/forge-web-runtime@0.13.21(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)':
     dependencies:
       '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@opentelemetry/api': 1.9.1

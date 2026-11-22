@@ -204,11 +204,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // and the renderer holding the PKCE verifier was stranded on the old route.
   // Sign-in could not complete on the desktop app at all.
   //
-  // electron.d.ts declares this `startOAuthRedirect?:` — OPTIONAL, so the
+  // electron.d.ts declared this `startOAuthRedirect?:` — OPTIONAL, so the
   // compiler could never catch its absence. That is the same trap that made
-  // `onOAuthCallback` inert before it (see main.js's handler comment); the
-  // optional marker is load-bearing for old shipped builds, so the guard
-  // against a third occurrence has to be a test, not a type.
+  // `onOAuthCallback` inert before it (see main.js's handler comment). The
+  // declaration is required now, but the type describes this file rather than
+  // checking it, so the guard against a third occurrence is still a test.
   //
   // Rejects rather than resolving falsy when the listener cannot start: the
   // renderer's fallback lives in one catch block, and a falsy resolve would
@@ -229,9 +229,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // down the request tore down the listener, so the redirect landed on a
   // closed port. Start binds the port and returns immediately; wait spans
   // human time over IPC, where no proxy or gateway can time it out.
-  //
-  // Optional in electron.d.ts like every bridge here, so the renderer keeps a
-  // working fallback on builds that predate it.
   startProviderOAuth: async (authorizeUrlTemplate) => {
     const result = await ipcRenderer.invoke('oauth:provider-login-start', authorizeUrlTemplate);
     if (!result?.success) {
@@ -264,8 +261,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Stripe checkout, kept inside the app. Resolves with the outcome Stripe
   // reported ('success' / 'cancelled'), or 'dismissed' if the user just closed
-  // the window. Optional in electron.d.ts like every bridge here: a build that
-  // predates it falls back to the plain redirect.
+  // the window.
   openStripeCheckout: async ({ checkoutUrl, returnUrl }) => {
     const result = await ipcRenderer.invoke('billing:open-checkout', {
       checkoutUrl,

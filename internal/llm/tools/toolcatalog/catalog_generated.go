@@ -867,6 +867,15 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"present_image": {
+		Bindable: map[string]struct{}{
+			"caption": {},
+			"repo":    {},
+		},
+		Unbindable: map[string]string{
+			"paths": "names the files to show, which are chosen per call; bound, every call would show the same files",
+		},
+	},
 	"project_analyzer": {
 		Bindable: map[string]struct{}{
 			"action": {},

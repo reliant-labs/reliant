@@ -93,6 +93,7 @@ LIMITATIONS:
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
 - Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
+- Viewing an image shows it to YOU, not the user; to show the user an image, use present_image
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:

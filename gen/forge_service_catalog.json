@@ -29,6 +29,7 @@
         "Connection",
         "Connector",
         "ConnectorGrants",
+        "CoverageSource",
         "DBRepo",
         "Daemon",
         "DaemonEventsConsumer",
@@ -170,6 +171,13 @@
         {
           "component": "Connector",
           "service": "reliant.v1.ConnectorService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "CoverageSource",
+          "service": "reliant.v1.CoverageSourceService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -12241,6 +12249,152 @@
           "reliant.v1.ConnectorKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorKind"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.CoverageSourceService",
+      "proto_file": "reliant/v1/coverage_source.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.CoverageSourceService/GetCoverageSource",
+          "name": "GetCoverageSource",
+          "input": "reliant.v1.GetCoverageSourceRequest",
+          "output": "reliant.v1.GetCoverageSourceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "CoverageSourceService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetCoverageSource",
+            "InputType": "GetCoverageSourceRequest",
+            "OutputType": "GetCoverageSourceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetCoverageSourceRequest",
+            "OutputTypeFQ": "reliant.v1.GetCoverageSourceResponse",
+            "InputProtoFile": "reliant/v1/coverage_source.proto",
+            "OutputProtoFile": "reliant/v1/coverage_source.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: one covered file's source from GitHub; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/coverage_source.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetCoverageSourceRequest": [
+            {
+              "Name": "project",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "blob_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "GetCoverageSourceResponse": [
+            {
+              "Name": "content",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            },
+            {
+              "Name": "unavailable",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetCoverageSourceRequest": [
+            {
+              "name": "project",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 256
+              }
+            },
+            {
+              "name": "blob_id",
+              "kind": "string",
+              "validate": {
+                "pattern": "^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+              }
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetCoverageSourceResponse": [
+            {
+              "name": "content",
+              "kind": "bytes",
+              "oneof": "result"
+            },
+            {
+              "name": "unavailable",
+              "kind": "enum",
+              "type_name": "reliant.v1.CoverageSourceUnavailable",
+              "oneof": "result"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetCoverageSourceRequest": "reliant/v1/coverage_source.proto",
+          "reliant.v1.GetCoverageSourceResponse": "reliant/v1/coverage_source.proto"
+        },
+        "Enums": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            "COVERAGE_SOURCE_UNAVAILABLE_UNSPECIFIED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NO_REPO",
+            "COVERAGE_SOURCE_UNAVAILABLE_UNCOMMITTED",
+            "COVERAGE_SOURCE_UNAVAILABLE_GONE",
+            "COVERAGE_SOURCE_UNAVAILABLE_REVOKED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NOT_YET_AVAILABLE",
+            "COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.CoverageSourceUnavailable": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "CoverageSourceUnavailable"
           }
         }
       }
@@ -53824,6 +53978,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "CoverageSource",
+      "name": "CoverageSource",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/coverage_source.Service",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "DBRepo",
       "name": "DBRepo",
       "kind": "provider",
@@ -55315,12 +55481,10 @@
     },
     {
       "consumer": "Attachment",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.Repository",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.AttachmentStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -55565,6 +55729,50 @@
         "TokenAuthority"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Blobs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Blobs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Projects",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Reports",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Daemon",
@@ -56066,16 +56274,67 @@
     },
     {
       "consumer": "Plan",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.PlanStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatRefetcher",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TaskStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Preset",
@@ -56590,16 +56849,67 @@
     },
     {
       "consumer": "Task",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.PlanStore",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatRefetcher",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TaskStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "TemporalClient",
@@ -57189,6 +57499,22 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "CoverageSource.Blobs",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "CoverageSource.Reports",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "DaemonEventPublisher.Ctx",
       "source": {
         "path": "internal/app/nodes_gateway.go",
@@ -57245,6 +57571,54 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Plan.Chats",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Plans",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Refetch",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tasks",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Threads",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tx",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Apps",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -57280,6 +57654,54 @@
       "component": "Settings.ControlPlane",
       "source": {
         "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Chats",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Plans",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Refetch",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tasks",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Threads",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tx",
+      "source": {
+        "path": "internal/handlers/task/service.go",
         "symbol": "New"
       }
     },

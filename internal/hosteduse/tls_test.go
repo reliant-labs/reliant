@@ -51,3 +51,24 @@ func TestPrivateControllerTLSVerifiesTrustAndName(t *testing.T) {
 	err = conn.HandshakeContext(context.Background())
 	require.ErrorContains(t, err, "certificate")
 }
+
+// The controller is cluster-internal, so its transport never reads the proxy
+// environment, with or without a dedicated trust bundle. It is built from
+// scratch, so neither is it http.DefaultTransport's (whose Proxy reads
+// HTTP(S)_PROXY / NO_PROXY).
+func TestPrivateControllerTransportNeverUsesAProxy(t *testing.T) {
+	t.Parallel()
+	ca := filepath.Join(t.TempDir(), "ca.pem")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600))
+	for name, file := range map[string]string{"system roots": "", "dedicated bundle": ca} {
+		transport, err := privateControllerTransport(file)
+		require.NoError(t, err, name)
+		require.Nil(t, transport.Proxy, name)
+		require.NotSame(t, http.DefaultTransport, transport, name)
+		require.NotNil(t, transport.TLSClientConfig, name)
+		require.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MinVersion, name)
+		require.False(t, transport.TLSClientConfig.InsecureSkipVerify, name)
+	}
+}

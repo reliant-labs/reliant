@@ -25,8 +25,10 @@
  * deadline on it. Starting BEFORE waiting also closes the race the old design
  * could not: the port is bound before the browser is ever opened.
  */
+import { DesktopUpdateRequiredError } from '@/lib/desktopUpdate'
 import type { OAuthStartResult } from '@/lib/oauth-local'
 
+// Optional: a desktop build whose preload predates the receiver lacks them.
 type ProviderOAuthBridge = {
   startProviderOAuth?: (
     authorizeUrlTemplate: string,
@@ -43,18 +45,6 @@ const bridge = (): ProviderOAuthBridge | undefined =>
     : (window as unknown as { electronAPI?: ProviderOAuthBridge }).electronAPI
 
 /**
- * Whether this build can run the flow locally.
- *
- * Both halves are checked because they ship together and a build with only one
- * is a build that would strand the user halfway through. Builds predating the
- * bridge have neither and fall back to the daemon RPC.
- */
-export const supportsLocalProviderOAuth = (): boolean => {
-  const api = bridge()
-  return Boolean(api?.startProviderOAuth && api?.waitForProviderOAuth)
-}
-
-/**
  * Run a provider sign-in through the desktop app's own loopback receiver.
  *
  * @param authorizeUrlTemplate Authorize URL carrying the literal
@@ -67,8 +57,13 @@ export async function startOAuthViaDesktop(
   signal?: AbortSignal,
 ): Promise<OAuthStartResult> {
   const api = bridge()
-  if (!api?.startProviderOAuth || !api?.waitForProviderOAuth) {
-    throw new Error('This build cannot run provider sign-in locally')
+  if (!api) {
+    throw new Error('Provider sign-in through the desktop app needs the desktop app')
+  }
+  // Both halves ship together; a build with only one would strand the user
+  // halfway through, so either missing means the build is too old.
+  if (!api.startProviderOAuth || !api.waitForProviderOAuth) {
+    throw new DesktopUpdateRequiredError('Signing in to this provider')
   }
 
   const { flowId } = await api.startProviderOAuth(authorizeUrlTemplate)
