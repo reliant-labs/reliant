@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -2411,6 +2412,111 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 }
 
 // ==================== Task Dependencies ====================
+
+// ==================== Planning (deprecated forwarders) ====================
+//
+// The plan, task and dependency calls of the agent planning tools live in
+// internal/planning. These stay as forwarding wrappers so code that calls them
+// through the Repo keeps compiling within v1.
+
+func (r *Repo) planning() (planning.Service, error) {
+	r.planningOnce.Do(func() {
+		r.planningSvc, r.planningErr = planning.NewInstrumented(planning.Deps{
+			Plans:        store.NewPlanExtStore(r.ORM()),
+			Tasks:        store.NewTaskExtStore(r.ORM()),
+			Dependencies: store.NewTaskDependencyExtStore(r.ORM()),
+		})
+	})
+	return r.planningSvc, r.planningErr
+}
+
+// GetPlanByThreadID returns the plan a thread works on.
+//
+// Deprecated: use planning.Service.GetPlanByThreadID.
+func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetPlanByThreadID(ctx, threadID)
+}
+
+// UpdatePlan rewrites a plan row.
+//
+// Deprecated: use planning.Service.UpdatePlan.
+func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.UpdatePlan(ctx, plan)
+}
+
+// GetTaskByPosition returns the plan's task at a 0-indexed position.
+//
+// Deprecated: use planning.Service.GetTaskByPosition.
+func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskByPosition(ctx, planID, position)
+}
+
+// GetTaskStatsByPlan counts the plan's tasks by status.
+//
+// Deprecated: use planning.Service.GetTaskStatsByPlan.
+func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskStatsByPlan(ctx, planID)
+}
+
+// UpdateTask rewrites a task row.
+//
+// Deprecated: use planning.Service.UpdateTask.
+func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.UpdateTask(ctx, task)
+}
+
+// CreateTaskDependency links two tasks.
+//
+// Deprecated: use planning.Service.CreateTaskDependency.
+func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.CreateTaskDependency(ctx, dep)
+}
+
+// ListDependenciesByPlan lists every dependency among the plan's tasks.
+//
+// Deprecated: use planning.Service.ListDependenciesByPlan.
+func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListDependenciesByPlan(ctx, planID)
+}
+
+// DeleteTaskDependencyByPair removes the dependency of one type between two tasks.
+//
+// Deprecated: use planning.Service.DeleteTaskDependencyByPair.
+func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
+}
 
 // ==================== Background Processes ====================
 

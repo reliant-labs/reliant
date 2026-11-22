@@ -4,6 +4,8 @@ package db
 import (
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/planning"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -136,6 +138,11 @@ const (
 	TaskStatusCancelled  TaskStatus = reliantv1.TaskStatus_TASK_STATUS_CANCELLED
 	TaskStatusSkipped    TaskStatus = reliantv1.TaskStatus_TASK_STATUS_SKIPPED
 )
+
+// TaskStats represents statistics about tasks in a plan.
+//
+// Deprecated: use planning.TaskStats.
+type TaskStats = planning.TaskStats
 
 // ToolCall is an alias to the shared core tool call model.
 type ToolCall = core.ToolCall
