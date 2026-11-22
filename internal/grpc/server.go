@@ -129,7 +129,10 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// the listener's drain ends it (with a reconnect close code) when it
 	// begins.
 	handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Repo))))
+		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Repo),
+			// forge sign-in: the browser's session cookie rides the
+			// same-origin upgrade, and no token is put in the URL.
+			terminal.WithSessionCookie(deps.Auth.AuthenticateHTTP))))
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
 	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(deps.Repo, deps.Auth.AuthenticateHTTP))
 	deps.OAuth.Register(handle)
