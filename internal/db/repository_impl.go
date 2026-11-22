@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -1035,31 +1036,7 @@ func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteUR
 }
 
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
-	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	// The store read filters on the owner; authz confirms the row it returns,
-	// as GetChatRowWithUserCheck does.
-	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
-	case denial == nil:
-		return project, nil
-	case errors.Is(denial, authz.ErrDenied):
-		return nil, core.ErrProjectNotFound
-	default:
-		// Still NotFound to every caller, with why as the withheld cause:
-		// the launcher tells a creator who left the project's org
-		// (authz.ErrNotOrgMember) from a membership outage, which must not
-		// be mistaken for an answer.
-		return nil, svcerr.WithCause(core.ErrProjectNotFound, denial)
-	}
+	return projectaccess.NewFromORM(r.ORM()).GetProjectWithUserCheck(ctx, id, userID)
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet

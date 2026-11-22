@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -17,7 +19,7 @@ func TestDiscoverRepos_Generated(t *testing.T) {
 	t.Parallel()
 
 	// Without a daemon router nothing can scan the filesystem.
-	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t)}))
+	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t), Projects: projectaccesstest.For(ownedProjectRepo(t))}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DiscoverReposRequest, pb.DiscoverReposResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
@@ -36,7 +38,7 @@ func TestDiscoverRepos_Generated(t *testing.T) {
 	// The daemon scans the project's own path and finds one nested repo.
 	var scanned string
 	routed := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{
-		Repo: ownedProjectRepo(t),
+		Repo: ownedProjectRepo(t), Projects: projectaccesstest.For(ownedProjectRepo(t)),
 		Router: daemonFunc(func(commandType string, payload []byte) ([]byte, error) {
 			var p struct {
 				Path string `json:"path"`

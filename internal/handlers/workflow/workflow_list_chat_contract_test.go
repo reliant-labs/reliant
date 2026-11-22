@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -93,7 +95,7 @@ nodes:
 		Version:    1,
 	}))
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
@@ -196,7 +198,7 @@ nodes:
 		}))
 	}
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
