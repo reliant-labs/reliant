@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -223,8 +224,10 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
-			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
+		func(ctx context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
+			// The org, as the real activity reports it: the run scope the
+			// worker's interceptor put on its context (empty without one).
+			return LoadedWorkflow{WorkflowJSON: wfJSON, OrgID: telemetry.RunScopeFromContext(ctx).OrgID}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)

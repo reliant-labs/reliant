@@ -409,7 +409,9 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		if out != nil {
 			out.TraceParent = turn.TraceParent()
 		}
-		turn.End(retErr)
+		// The turn's failure is classed as its provider call's is: a
+		// code, never the error's text (the activity's failure log keeps it).
+		turn.EndAs(retErr, llm.ErrorType(retErr))
 	}()
 
 	// A running workflow may predate launch-time pinning. Its inputs are a
