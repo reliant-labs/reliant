@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -353,19 +354,21 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Temporal: s.Temporal,
-		Pause:    pause,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Temporal:  s.Temporal,
+		Pause:     pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Signals:  pause,
-		Messages: chatSvc,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Signals:   pause,
+		Messages:  chatSvc,
 	})
 	require.NoError(t, err, "question service")
 
@@ -599,7 +602,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 	var q *db.Question
 	h.eventually("pending question on chat "+chatID, func() (bool, string) {
 		// Oldest first: the newest pending question is the last.
-		pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+		pending, err := store.NewQuestionExtStore(h.Stack.Repo.ORM()).ListPendingQuestionsByChat(h.Ctx, chatID)
 		if err != nil || len(pending) == 0 {
 			return false, fmt.Sprintf("pending questions: %d, %v", len(pending), err)
 		}

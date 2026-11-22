@@ -13,6 +13,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -20,8 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/runs"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A send whose params SendMessage refuses must leave nothing behind.
@@ -101,10 +103,11 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:     repo,
-					Temporal: temporal,
+					Repo:      repo,
+					Questions: store.NewQuestionExtStore(repo.ORM()),
+					Temporal:  temporal,
 				},
-				runs: runs.NewService(repo, temporal, tc.pauseController),
+				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
 			}
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))

@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // countingPause records resumes and, like PauseService, marks the run running.
@@ -52,7 +53,7 @@ func newPausedFixture(t *testing.T) pausedFixture {
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Paused()))
 	pause := &countingPause{resetPause: resetPause{repo: f.repo, replays: true}}
 	f.temporal.status = 1 // RUNNING
-	f.svc = &Service{deps: Deps{Repo: f.repo, Temporal: f.temporal}, runs: runs.NewService(f.repo, f.temporal, pause)}
+	f.svc = &Service{deps: Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal}, runs: runs.New(runs.Deps{Repo: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal, Pause: pause})}
 	return pausedFixture{continueFixture: f, pause: pause}
 }
 
