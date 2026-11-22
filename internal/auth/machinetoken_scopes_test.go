@@ -31,6 +31,9 @@ func TestClaimsForAccessTokenAdmitsNarrowTokensButClaimsForAPITokenDoesNot(t *te
 		{"questions:answer", []fat.Scope{fat.ScopeQuestionsAnswer}, "u1", true, false},
 		{"daemon credential", []fat.Scope{fat.ScopeDaemonConnect}, "u1", false, false},
 		{"connector credential", []fat.Scope{fat.ScopeMCPConnector}, "u1", false, false},
+		// An MCP client's OAuth token acts only at the MCP connector it was
+		// issued for (internal/mcpserver), never on the reliant API.
+		{"mcp:oauth", []fat.Scope{fat.ScopeMCPOAuth}, "u1", false, false},
 		{"no acting user", []fat.Scope{fat.ScopeReliantAPI}, "", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
