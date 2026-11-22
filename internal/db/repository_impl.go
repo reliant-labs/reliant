@@ -3433,36 +3433,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
-// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
-// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
-func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListInboxPending(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
-}
-
-func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
-}
-
-func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
-}
-
 // CreateRunEvent inserts the event, doing nothing when its DedupeKey
 // already exists. created=false means the transition was already recorded.
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
@@ -3542,15 +3512,6 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies
-// (payload, sender, origin), for health that is judged but never shown.
-func (r *Repo) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerOutcomes(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
@@ -3565,9 +3526,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 // Attention-managed actors are excluded before the success boundary and cap;
 // callers needing diagnostic health continue to use the unfiltered reads.
 func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
 	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
@@ -4476,18 +4434,6 @@ func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider stri
 	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
 
-// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
-// (store.HasNoOrgAccountPauses).
-func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
-	return store.HasNoOrgAccountPauses(ctx, r.ORM())
-}
-
-// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
-// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
-func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
-	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
-}
-
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
 // moving each one's next attempt lease on (store.ClaimDuePauseNotices).
 func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
@@ -4503,10 +4449,4 @@ func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt
 // ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
 func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
 	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
-// accounts (store.ListPersonallyFundedTriggers).
-func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
-	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

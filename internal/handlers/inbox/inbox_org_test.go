@@ -53,7 +53,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 			}
 			return &db.Project{ID: id, UserID: "user-1", OrgID: projectOrgs[id]}, nil
 		}
-		repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+		repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
 			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.InboxPending{
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-acme", ChatID: "c-acme", ProjectID: "p-acme", WaitingSince: now},
@@ -119,7 +119,7 @@ func TestListInbox_LeavesOutAttentionIncidentsOfAnOrgTheCallerMayNotRead(t *test
 		repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
 			return &db.Project{ID: id, UserID: "user-1", OrgID: orgOf[id]}, nil
 		}
-		repo.ListAttentionIncidentsFunc = func(context.Context, string) ([]*core.AttentionIncident, error) {
+		repo.items.ListAttentionIncidentsFunc = func(context.Context, string) ([]*core.AttentionIncident, error) {
 			opened := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			incident := func(name string) *core.AttentionIncident {
 				return &core.AttentionIncident{
@@ -187,7 +187,7 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 			}
 			return &db.Project{ID: id, UserID: "user-1", OrgID: org("acme")}, nil
 		}
-		repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+		repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
 			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.InboxPending{
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-acme", ChatID: "c-acme", ProjectID: "p-acme", WaitingSince: now},

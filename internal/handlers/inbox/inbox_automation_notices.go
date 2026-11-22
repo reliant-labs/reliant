@@ -59,7 +59,7 @@ func (s *Service) automationNoticeItems(ctx context.Context, userID string) ([]*
 // that userID owns, and, for a person, those of the orgs they administer
 // (control-plane's live answer, as for rejected keys: orgKeyItems).
 func (s *Service) noOrgAccountItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	any, err := s.deps.Repo.HasNoOrgAccountPauses(ctx)
+	any, err := s.deps.Notices.HasNoOrgAccountPauses(ctx)
 	if err != nil || !any {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (s *Service) noOrgAccountItems(ctx context.Context, userID string) ([]*reli
 			adminOrgs = ids
 		}
 	}
-	triggers, err := s.deps.Repo.ListNoOrgAccountPauses(ctx, userID, adminOrgs)
+	triggers, err := s.deps.Notices.ListNoOrgAccountPauses(ctx, userID, adminOrgs)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (s *Service) noOrgAccountItems(ctx context.Context, userID string) ([]*reli
 	items := make([]*reliantv1.InboxItem, 0, len(triggers))
 	for _, t := range triggers {
 		detail := ""
-		if ev, err := s.deps.Repo.GetLatestTriggerEvent(ctx, t.ID, &failed); err == nil && ev != nil {
+		if ev, err := s.deps.Firings.GetLatestTriggerEvent(ctx, t.ID, &failed); err == nil && ev != nil {
 			detail = ev.OutcomeDetail
 		}
 		items = append(items, noOrgAccountItem(t, userID, detail))
@@ -134,7 +134,7 @@ func (s *Service) onPersonalAccountsItems(ctx context.Context, userID string) ([
 	if s.deps.Members == nil {
 		return nil, nil
 	}
-	triggers, err := s.deps.Repo.ListPersonallyFundedTriggers(ctx, userID)
+	triggers, err := s.deps.Notices.ListPersonallyFundedTriggers(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
