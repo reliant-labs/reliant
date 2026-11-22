@@ -56087,6 +56087,28 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Firings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Firings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Items",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Items",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Marks",
       "interface": "github.com/reliant-labs/reliant/internal/worktreesweep.MarkDecisionStore",
       "methods": [],
@@ -56117,6 +56139,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Notices",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Notices",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Inbox",

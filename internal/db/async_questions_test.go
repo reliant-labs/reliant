@@ -35,7 +35,7 @@ func (c *liveGateChat) askAsync(id, rowID, thread string) {
 
 func (c *liveGateChat) inboxQuestionKeys() map[string]int32 {
 	c.t.Helper()
-	items, err := c.repo.ListInboxPending(context.Background(), "test-user")
+	items, err := store.ListInboxPending(context.Background(), c.repo.ORM(), "test-user")
 	require.NoError(c.t, err)
 	keys := map[string]int32{}
 	for _, it := range items {
