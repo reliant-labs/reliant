@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -164,7 +165,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
+	var modelEndpoints local.EndpointSource
+	if deps.Repo != nil {
+		modelEndpoints = store.NewModelEndpointExtStore(deps.Repo.ORM())
+	}
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES

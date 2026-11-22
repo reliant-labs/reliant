@@ -25,8 +25,10 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores the caller's endpoints.
-	Repo modelendpoints.Store
+	// Endpoints stores the caller's endpoints (store.ModelEndpointExtStore).
+	Endpoints modelendpoints.Store
+	// Machines looks up the machine a VIA_DAEMON endpoint names.
+	Machines modelendpoints.Machines
 	// Router relays VIA_DAEMON endpoints to the caller's machine. Without it
 	// (no daemon router configured) those report the relay unavailable.
 	// forge:optional-dep
@@ -60,8 +62,11 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("model_endpoint: Deps.Config is required")
 	}
-	if d.Repo == nil {
-		return fmt.Errorf("model_endpoint: Deps.Repo is required")
+	if d.Endpoints == nil {
+		return fmt.Errorf("model_endpoint: Deps.Endpoints is required")
+	}
+	if d.Machines == nil {
+		return fmt.Errorf("model_endpoint: Deps.Machines is required")
 	}
 	if d.Network == nil {
 		return fmt.Errorf("model_endpoint: Deps.Network is required (an empty NetworkConfig refuses private targets)")
@@ -85,7 +90,8 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	cfg := modelendpoints.Config{
-		Store:       deps.Repo,
+		Store:       deps.Endpoints,
+		Machines:    deps.Machines,
 		Credentials: deps.Credentials,
 		Policy:      netguard.ForDeployment(deps.Network.GetAllowPrivateEgress()),
 	}

@@ -56110,8 +56110,19 @@
     },
     {
       "consumer": "ModelEndpoint",
-      "field": "Repo",
+      "field": "Endpoints",
       "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ModelEndpoint",
+      "field": "Machines",
+      "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Machines",
       "methods": [],
       "candidates": [
         "Database"
