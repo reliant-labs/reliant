@@ -11,6 +11,8 @@ events:
     output: {"path": "/w/ws", "branch": "worktree/x", "id": "w1", "name": "n", "base_branch": "main", "status": "active"}
   - node: dir
     output: {"exit_code": 0, "stdout": "/w/ws"}
+  - node: pkgcheck
+    output: {"exit_code": 0, "stdout": "github.com/acme/shop"}
   - node: quarantine
     output: {"exit_code": 0, "stdout": "{\"entries\": [{\"test\": \"go:github.com/acme/shop/internal/billing:TestRefund\", \"path\": \"ci/quarantine/go/internal/billing/TestRefund.yaml\", \"overdue\": false}]}"}
   - node: flakes

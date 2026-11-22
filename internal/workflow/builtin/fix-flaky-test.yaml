@@ -177,6 +177,41 @@ nodes:
       display_style: warning
       content: "No forge project of {{ inputs.repo }} was found in the worktree {{ nodes.wt.path }}: {{ nodes.dir.stderr }}"
 
+  # The test's package must belong to the selected module: `go test <import path>` resolves it only
+  # then, and a package from another module (or from a module nested below this one) fails as
+  # "[setup failed]", which the verify would read as a flake that is still failing. Prints the module path.
+  - id: pkgcheck
+    type: run
+    timeout: 5m
+    args:
+      command: |
+        cd '{{ nodes.paths.module }}' || exit 1
+        mod=$(GOWORK=off go list -m 2>&1) || { echo "go list -m failed in {{ nodes.paths.module }}: $mod"; exit 3; }
+        pkg='{{ nodes.check.package }}'
+        case "$pkg" in
+          "$mod") rel=. ;;
+          "$mod"/*) rel="./${pkg#"$mod"/}" ;;
+          *) echo "the test's package $pkg is not in the module $mod, at {{ nodes.check.project_path }} in {{ inputs.repo }}; set project_dir to the directory of the module that has it"; exit 2 ;;
+        esac
+        [ -d "$rel" ] || { echo "the module $mod has no directory $rel, so it has no package $pkg"; exit 2; }
+        d="$rel"
+        while [ "$d" != . ]; do
+          if [ -f "$d/go.mod" ]; then
+            echo "the test's package $pkg is in the module nested at $d, not in $mod; set project_dir to $d below {{ nodes.check.project_path }}"; exit 2
+          fi
+          d=$(dirname "$d")
+        done
+        printf '%s' "$mod"
+      credentials: none
+
+  - id: package_mismatch
+    type: save_message
+    outcome: failure
+    args:
+      role: assistant
+      display_style: warning
+      content: "Refusing to run `{{ inputs.test_id }}`: {{ nodes.pkgcheck.stdout }}"
+
   # The quarantine list doubles as the check that this forge has `forge test`: everything after it needs it.
   - id: quarantine
     type: run
@@ -612,7 +647,13 @@ edges:
         condition: "true"
         label: missing
   - from: paths
-    default: [quarantine]
+    default: [pkgcheck]
+  - from: pkgcheck
+    cases:
+      - to: [quarantine]
+        condition: "nodes.pkgcheck.exit_code == 0"
+        label: in_module
+    default: [package_mismatch]
   - from: quarantine
     cases:
       - to: [flakes]
