@@ -53,7 +53,8 @@ type sessionResolveResponse struct {
 // {"session_id": "fs_…"} answers {"access_token", "subject"} — the access
 // token the session holds, renewed first when it is near expiry
 // (session.Manager.AccessToken), and verified here as the managed identity's
-// before it is handed out — or 404 for a session that is unknown, ended or
+// — with an expiry: a token with none is never handed out — before it is
+// handed out — or 404 for a session that is unknown, ended or
 // revoked (a revocation on another replica reaches this one within the
 // session cache's TTL, 15 seconds by default). 503 means the store or the
 // issuer could not be reached: the session may be fine.
@@ -112,7 +113,7 @@ func NewSessionResolveHandler(sessions SessionResolveSessions, verifier SessionR
 			return
 		}
 		claims, err := verifier.VerifyIdentityToken(token)
-		if err != nil || claims.Sub == "" || claims.Sub != info.Subject {
+		if err != nil || claims.Sub == "" || claims.Sub != info.Subject || claims.Exp <= 0 {
 			// The store holds only what the issuer issued for this
 			// session's subject, so this is a server-side fault, never the
 			// caller's: refuse it, loudly.

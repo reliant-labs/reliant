@@ -212,6 +212,13 @@ func (c *TokenChain) ValidateToken(token string) (*forgeauth.Claims, error) {
 		if claims == nil || claims.UserID == "" {
 			return nil, fmt.Errorf("%w: the identity's token names no subject", ErrInvalidToken)
 		}
+		// forge's validator enforces an exp that is present (5s leeway) but
+		// accepts a token with none, which would be valid forever
+		// (forge#2681 adds RequireExpiry; until reliant pins it, this is the
+		// check). A token with no exp, exp 0 or a non-numeric one is refused.
+		if exp, ok := claims.Raw["exp"].(float64); !ok || exp <= 0 {
+			return nil, fmt.Errorf("%w: the identity's token carries no expiry", ErrInvalidToken)
+		}
 		return withVerdict(claims, verdict{source: SourceIdentity}), nil
 	}
 	if c.legacy == nil {

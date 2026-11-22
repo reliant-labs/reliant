@@ -211,6 +211,11 @@ func TestSessionResolverVerifiesWhatItHandsOut(t *testing.T) {
 		"a Supabase token":       {AccessToken: h.supa.Sign(t, "user-1", nil)},
 		"another person's token": {AccessToken: h.id.Sign(t, "user-2", nil)},
 		"another project's":      {AccessToken: h.id.Sign(t, "user-1", map[string]any{"aud": []string{"other"}})},
+		// Never a token with no expiry: it would be valid forever.
+		"a token with no exp": {AccessToken: h.id.Sign(t, "user-1", map[string]any{"exp": nil})},
+		"a token with exp 0":  {AccessToken: h.id.Sign(t, "user-1", map[string]any{"exp": 0})},
+		// The session thinks it is fresh, the token says it has expired.
+		"an expired token": {AccessToken: h.id.Sign(t, "user-1", map[string]any{"exp": time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()})},
 	} {
 		t.Run(name, func(t *testing.T) {
 			tokens.Expiry = resolveNow.Add(time.Hour)

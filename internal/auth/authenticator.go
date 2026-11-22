@@ -166,7 +166,7 @@ func (t tokenValidator) ValidateToken(token string) (*JWTClaims, error) {
 }
 
 // VerifyIdentityToken checks token as a token of the managed identity, and
-// only of it: alg, iss, aud, exp and signature, by the identity's validator
+// only of it: alg, iss, aud, a present and unexpired exp, and signature, by the identity's validator
 // (TokenChain). A Supabase token, the shared key, a session id or an
 // unconfigured identity is refused (ErrInvalidToken). The session resolver
 // verifies what a server-side session holds before handing it out.
@@ -183,6 +183,11 @@ func (a *Authenticator) VerifyIdentityToken(token string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("%w: not a token of the managed identity", ErrInvalidToken)
 	}
 	jc := identityClaims(claims)
+	if jc.Exp <= 0 {
+		// The chain refuses this already; what is handed out on the
+		// strength of this check must never be a token valid forever.
+		return nil, fmt.Errorf("%w: the identity's token carries no expiry", ErrInvalidToken)
+	}
 	jc.Credential = CredentialIdentityToken
 	return jc, nil
 }
