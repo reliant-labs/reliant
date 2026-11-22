@@ -33,14 +33,17 @@ type OrgMemberCounter interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
+// Recoveries lists a user's worktree recoveries. store.WorktreeRecoveryExtStore
+// satisfies it.
+type Recoveries interface {
+	ListWorktreeRecoveries(ctx context.Context, owner, project string) ([]*core.WorktreeRecovery, error)
+}
+
 // Repository is the slice of *db.Repo the inbox handlers use. It
 // includes worktreesweep.StorageStore because the storage view and the
 // clean-up read through the same store.
 type Repository interface {
-	ListWorktreeRecoveries(context.Context, string, string) ([]*core.WorktreeRecovery, error)
 	worktreesweep.StorageStore
-	// MarkDecisionStore lists marked worktrees and records keep / reclaim now.
-	worktreesweep.MarkDecisionStore
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.
 	launch.WorkflowResolver
