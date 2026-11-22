@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // imageFileDaemon serves files from memory through the two calls present_image
@@ -66,11 +68,69 @@ func jpegOf(t *testing.T, w, h int) []byte {
 	return encodedImage(t, w, h, func(b *bytes.Buffer, i image.Image) error { return jpeg.Encode(b, i, nil) })
 }
 
+type presentImageTestRepo struct {
+	*fakeAttachmentRepo
+	chat    *db.Chat
+	chatErr error
+	chatIDs []string
+}
+
+func (r *presentImageTestRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
+	r.chatIDs = append(r.chatIDs, id)
+	return r.chat, r.chatErr
+}
+
+func TestPresentImage_ChatOwnership(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		chatID  string
+		chat    *db.Chat
+		chatErr error
+		wantErr bool
+	}{
+		{name: "context identity cannot override owner", chatID: "active-chat", chat: &db.Chat{UserID: "chat-owner"}},
+		{name: "missing chat id", wantErr: true},
+		{name: "missing chat", chatID: "active-chat", wantErr: true},
+		{name: "lookup fails", chatID: "active-chat", chatErr: errors.New("lookup failed"), wantErr: true},
+		{name: "missing owner", chatID: "active-chat", chat: &db.Chat{}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &presentImageTestRepo{fakeAttachmentRepo: newFakeAttachmentRepo(), chat: tt.chat, chatErr: tt.chatErr}
+			ctx := saveAttachmentCtx(t)
+			ctx.ChatID = tt.chatID
+			// saveAttachmentCtx carries test-user, not chat-owner.
+			d := &imageFileDaemon{}
+			if !tt.wantErr {
+				d.files = map[string][]byte{"/image.png": pngOf(t, 1, 1)}
+			}
+			resp, err := (&presentImageTool{repo: repo}).Execute(ctx.WithDaemon(d), PresentImageParams{Paths: []string{"/image.png"}})
+			require.NoError(t, err)
+			require.Equal(t, tt.wantErr, resp.IsError, resp.Content)
+			if tt.chatID != "" {
+				assert.Equal(t, []string{tt.chatID}, repo.chatIDs)
+			}
+			if tt.wantErr {
+				assert.Empty(t, repo.stored)
+				assert.Empty(t, resp.Metadata)
+				return
+			}
+			require.Len(t, repo.stored, 1)
+			for _, att := range repo.stored {
+				assert.Equal(t, "chat-owner", att.UserID)
+				assert.Contains(t, att.FilePath, "chat-owner/")
+			}
+		})
+	}
+}
+
 func presentImageRun(t *testing.T, d daemon.Client, params PresentImageParams) (*fakeAttachmentRepo, ToolResponse, PresentImageOutput) {
 	t.Helper()
 	repo := newFakeAttachmentRepo()
-	tool := &presentImageTool{repo: repo}
+	tool := &presentImageTool{repo: &presentImageTestRepo{fakeAttachmentRepo: repo, chat: &db.Chat{UserID: "test-user"}}}
 	ctx := saveAttachmentCtx(t)
+	ctx.ChatID = "active-chat"
 	if d != nil {
 		ctx = ctx.WithDaemon(d)
 	}

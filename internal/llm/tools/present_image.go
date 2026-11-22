@@ -20,7 +20,6 @@ import (
 	_ "golang.org/x/image/webp" // register the WebP decoder for image.DecodeConfig
 
 	"github.com/reliant-labs/reliant/internal/attachment"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -342,13 +341,10 @@ func presentImageSummary(output PresentImageOutput) string {
 	return b.String()
 }
 
-// userID reads the caller from the request context, falling back to the chat's
-// owner. The server executor puts the id on the context for every tool call;
-// the chat lookup covers paths that construct a context by hand.
+// userID resolves the owner of the chat receiving the attachment reference.
+// Never substitute the request-context identity: it may belong to another
+// user, and a missing chat or failed lookup must not create an attachment.
 func (t *presentImageTool) userID(tc *rctx.ToolContext) string {
-	if userID, ok := auth.GetUserIDFromContext(tc.Context); ok && userID != "" {
-		return userID
-	}
 	if tc.ChatID == "" {
 		return ""
 	}
