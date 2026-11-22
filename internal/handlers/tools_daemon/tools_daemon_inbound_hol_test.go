@@ -51,7 +51,13 @@ func (l stallingLeases) RenewDaemonAttachment(context.Context, *core.DaemonAttac
 
 func (stallingLeases) SetDaemonAttachmentPorts(context.Context, string, []uint32) error { return nil }
 
-func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
+func (r *stallingRepo) GetProjectByRemoteURLAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
+}
+
+var _ ProjectLookups = (*stallingRepo)(nil)
+
+func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
 	r.stall("GetProjectByPathAndUserInScope")
 	return nil, nil
 }

@@ -111,7 +111,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	everythingExists := func(context.Context, string) (projectPathState, error) {
 		return projectPathState{Exists: true}, nil
 	}
-	missing, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", everythingExists)
+	missing, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 	assert.Empty(t, missing, "a detached project is not missing either: nothing restores it")
@@ -121,7 +121,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	assert.Equal(t, f.cloud, rows[0].DaemonID)
 
 	// Another machine is unaffected.
-	_, added, err = reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM())}, f.cloud, f.userID, nil, "", everythingExists)
+	_, added, err = reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.cloud, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added, "the cloud machine already had its row")
 }
@@ -262,7 +262,7 @@ func TestReconcile_DetachDuringTheProbeStaysDetached(t *testing.T) {
 		require.NoError(t, store.DetachProjectFromDaemon(ctx, f.repo.ORM(), f.project.ID, f.laptop, path, nil))
 		return projectPathState{Exists: true}, nil
 	}
-	_, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", detachDuringProbe)
+	_, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", detachDuringProbe)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 
