@@ -107,7 +107,7 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 
 	recorder := accountlimits.NewRecorder(db.TestAccounts(t, repo), nil)
 	t.Cleanup(recorder.Close)
-	routing := accountRouting(db.TestAccounts(t, repo), repo, recorder)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, recorder)
 	require.NotNil(t, routing.DriverFor)
 
 	// A chat of the org with the member's first message: its first turn.
@@ -160,7 +160,7 @@ func (w *orgFundingWorld) pause(acct core.ProviderAccount, paused bool) {
 
 func (w *orgFundingWorld) access(acct core.ProviderAccount, access string) {
 	w.t.Helper()
-	_, err := w.repo.SetOrgAccountAccess(w.ctx, w.org, acct.ID, access)
+	_, err := db.TestOrgAccounts(w.t, w.repo).SetOrgAccountAccess(w.ctx, w.org, acct.ID, access)
 	require.NoError(w.t, err)
 }
 
@@ -211,7 +211,7 @@ func limitedOrgChat(t *testing.T) (w *orgFundingWorld, team, backup, mine core.P
 	team = w.orgKey("Team Anthropic", core.OrgAccessMembers)
 	w.pause(team, true)
 	backup = w.orgKey("Backup Anthropic EU", core.OrgAccessSelected)
-	require.NoError(t, w.repo.SetOrgAccountGrants(w.ctx, w.org, backup.ID, []string{w.member}, "owner"))
+	require.NoError(t, db.TestOrgAccounts(w.t, w.repo).SetOrgAccountGrants(w.ctx, w.org, backup.ID, []string{w.member}, "owner"))
 	reset := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	require.NoError(t, db.TestAccounts(w.t, w.repo).BenchAccount(w.ctx, core.OrgAccountOwner(w.org), backup.ID, reset, "five_hour", false))
 	mine = db.SeedProviderAccount(t, w.repo, w.member, "anthropic", "sk-ant-api03-member-own-"+uuid.NewString())

@@ -33,6 +33,13 @@ type OrgMemberCounter interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
+// OrgKeys lists the org-owned API keys a provider rejected: the inbox shows them to the org's
+// owners and admins. credentials/orgaccounts.Service satisfies it.
+type OrgKeys interface {
+	HasRejectedOrgKeys(ctx context.Context) (bool, error)
+	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
+}
+
 // Recoveries lists a user's worktree recoveries. store.WorktreeRecoveryExtStore
 // satisfies it.
 type Recoveries interface {
@@ -92,11 +99,6 @@ type Repository interface {
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
-
-	// HasRejectedOrgKeys and ListRejectedOrgKeysIn are the rejected org-owned API keys the
-	// inbox lists to their orgs' owners and admins.
-	HasRejectedOrgKeys(ctx context.Context) (bool, error)
-	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
 
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)

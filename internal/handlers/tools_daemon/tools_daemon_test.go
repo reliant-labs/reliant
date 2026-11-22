@@ -54,6 +54,7 @@ func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
 		co = checkouts[0]
 	}
 	deps.Checkouts = co
+	deps.Pools = poolsOf(repo)
 	return newService(deps)
 }
 
@@ -78,13 +79,22 @@ func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalM
 	if p, ok := repo.(ProjectLookups); ok {
 		projects = p
 	}
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}})
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
 }
 
 // realLeases is the generated stores over a real database: what the composition
 // root hands the gateway.
 func realLeases(repo interface{ ORM() *orm.Client }) (Attachments, LocalModels) {
 	return store.NewDaemonAttachmentExtStore(repo.ORM()), store.NewDaemonExtStore(repo.ORM())
+}
+
+// poolsOf is the generated machine pool store over repo when it is a database,
+// else an empty stub.
+func poolsOf(repo Repository) MachinePools {
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		return store.NewMachinePoolExtStore(r.ORM())
+	}
+	return &StubPools{}
 }
 
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
