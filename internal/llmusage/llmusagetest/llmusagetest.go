@@ -19,7 +19,7 @@ type DB interface {
 // New is the ledger over repo's database.
 func New(tb testing.TB, repo DB) llmusage.Service {
 	tb.Helper()
-	svc, err := llmusage.New(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(repo.ORM()), Tx: repo})
+	svc, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(repo.ORM()), Tx: repo})
 	if err != nil {
 		tb.Fatalf("llmusagetest: %v", err)
 	}
