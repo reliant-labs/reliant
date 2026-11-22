@@ -267,10 +267,10 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesAgentMessagesDrained(t *tes
 	ctx := context.Background()
 	chatID := seedChatForUpdates(t, repo, ctx)
 
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, AgentMessagesDrainedUpdate{
+	require.NoError(t, EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"agent-msg-1"},
 	}))
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, AgentMessagesDrainedUpdate{
+	require.NoError(t, EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"agent-msg-2"},
 	}))
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeApproval, "approval-1", `{"k":"v"}`))

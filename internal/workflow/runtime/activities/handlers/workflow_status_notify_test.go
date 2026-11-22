@@ -202,7 +202,7 @@ func TestApprovalCreate_MarksScheduleLaunchedChatUnread(t *testing.T) {
 	require.NoError(t, err)
 
 	var output ApprovalCreateOutput
-	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, ApprovalCreateInput{
 		ChatID:             chatID,
 		WorkflowID:         workflowID,
 		TemporalWorkflowID: workflowID,

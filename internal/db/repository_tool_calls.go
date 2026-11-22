@@ -82,20 +82,6 @@ func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 	return call, nil
 }
 
-// GetToolCallResult reads the recorded result for a single call, or nil if
-// none was ever written (e.g. a terminal call whose result write lost a race,
-// or a historical Cancelled row that predates durable status).
-func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error) {
-	if toolCallID == "" {
-		return nil, fmt.Errorf("tool call ID cannot be empty")
-	}
-	result, err := store.FindToolCallResult(ctx, r.ORM(), toolCallID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tool call result: %w", err)
-	}
-	return result, nil
-}
-
 // ListToolCallsByMessageIDs batches the message read path's tool-call lookup:
 // loading a page of messages must not issue one query per message.
 func (r *Repo) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error) {

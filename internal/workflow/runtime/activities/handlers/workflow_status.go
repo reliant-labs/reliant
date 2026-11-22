@@ -115,6 +115,7 @@ type WorkflowStatusActivity struct {
 	repo      WorkflowStatusStore
 	runs      RunRecords
 	workflows WorkflowRuns
+	attention AttentionRecorder
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
@@ -126,6 +127,7 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 		repo:       deps.Repo,
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
+		attention:  deps.Attention,
 		trackerFor: analytics.ForUser,
 	}
 }

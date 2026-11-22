@@ -297,7 +297,7 @@ func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := newMockToolExecutor()
-			activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+			activity := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
 			shellID, viewID := "call-shell-"+uuid.NewString(), "call-view-"+uuid.NewString()
 
 			var output ExecuteToolsOutput
@@ -334,7 +334,7 @@ func TestExecuteTools_NoMachineRunStillRunsServerToolsOnAMarkedContext(t *testin
 
 	f := setupNoMachineFixture(t, true)
 	executor := &contextRecordingExecutor{}
-	activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activity := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
