@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +39,7 @@ func TestCreateWorkflowReportsTriggerErrors(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	content := workflowWithTriggers(`  - name: nightly
@@ -82,7 +84,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 `)
 	complete := true
 	input, _ := json.Marshal(CreateWorkflowParams{Content: &content, Complete: &complete})
-	created, err := NewCreateWorkflowTool(repo).Run(ctx, ToolCall{ID: "c", Name: CreateWorkflowToolName, Input: string(input)})
+	created, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: CreateWorkflowToolName, Input: string(input)})
 	require.NoError(t, err)
 	require.False(t, created.IsError, created.Content)
 	var meta CreateWorkflowResult
