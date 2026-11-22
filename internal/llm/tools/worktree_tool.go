@@ -154,14 +154,15 @@ const worktreeSettleTimeout = 2 * time.Minute
 
 type worktreeTool struct {
 	repo    worktreeStore
+	chats   WorktreeChatLister
 	machine RunMachine
 	settler WorktreeSettler
 }
 
 const WorktreeToolName = "worktree"
 
-func NewWorktreeTool(repo worktreeStore, machine RunMachine, settler WorktreeSettler) Tool {
-	tool := &worktreeTool{repo: repo, machine: machine, settler: settler}
+func NewWorktreeTool(repo worktreeStore, chats WorktreeChatLister, machine RunMachine, settler WorktreeSettler) Tool {
+	tool := &worktreeTool{repo: repo, chats: chats, machine: machine, settler: settler}
 	return NewToolWrapper(tool)
 }
 
@@ -804,7 +805,10 @@ func (w *worktreeTool) chatsIn(ctx context.Context, worktreeID string) ([]Worktr
 	if !ok || userID == "" {
 		return nil, errors.New("the calling user is unknown")
 	}
-	rows, err := w.repo.ListChatsForWorktree(ctx, userID, worktreeID, worktreeGetChats)
+	if w.chats == nil {
+		return nil, errors.New("chats are not available in this runtime")
+	}
+	rows, err := w.chats.ListChatsForWorktree(ctx, userID, worktreeID, worktreeGetChats)
 	if err != nil {
 		return nil, fmt.Errorf("look up chats bound to the worktree: %w", err)
 	}

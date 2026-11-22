@@ -1132,6 +1132,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Syncer:         syncer,
 		Fires:          fires,
 		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1316,10 +1317,13 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 // a deployment WITH a control plane can clone from GitHub on the user's
 // behalf; self-hosted leaves ControlPlane nil.
 func (g *Graph) newProject() (*project.Service, error) {
+	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Ledger:       store.NewProjectOrgMoveExtStore(o),
+		Shared:       store.NewShareEventExtStore(o),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil

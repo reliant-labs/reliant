@@ -204,7 +204,7 @@ echo "$slot_wait" >"$L/slot_wait"
 if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; elif [ "$queue" = 1 ]; then echo queue >"$L/tier"; fi
 [ "$skip_golangci" = 1 ] && echo "a golangci (changed) job beside the gate runs it" >"$L/golangci-elsewhere"
 # The pinned forge of the checkout it runs in: FORGE_BIN, a forge on PATH at
-# the pin, `reliant forge`, or `go run …@<pin>` (scripts/forge.sh).
+# the pin, `reliant forge`, or the pin go-installed once (scripts/forge.sh).
 forge=("$PWD/scripts/forge.sh")
 # Paths generators write. A regenerate in --amend mode may change only these.
 gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^frontends/web/src/gen/|^\.forge/|^deploy/observability/|_gen(_test)?\.(go|json|ndjson|ts|k)$|^frontends/web/src/store/shortcutsData\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'

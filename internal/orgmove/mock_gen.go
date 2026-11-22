@@ -84,7 +84,7 @@ func (m *MockService) ResumeTriggers(ctx context.Context, moveID string) error {
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=62bf8ee53de901ffa30b585932cc17e0f2ef03764f2dc4e11e8e26d75fd7bdca
+// forge:hash=6c0e753aad8c19479f5b576fc1b6b5aa9a04ff6678eff7d47dfa22863f18cab7
 
 // MockStore is a test mock for the Store interface.
 //
@@ -96,8 +96,7 @@ type MockStore struct {
 	contractkit.Recorder
 	GetProjectOrgMoveFunc               func(context.Context, string) (*core.ProjectOrgMove, error)
 	TransitionProjectOrgMoveFunc        func(context.Context, string, []core.ProjectOrgMoveState, core.ProjectOrgMoveState, string, *core.ProjectOrgMoveCounts) (*core.ProjectOrgMove, error)
-	MoveProjectOrgFunc                  func(context.Context, core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error)
-	GetProjectFunc                      func(context.Context, string) (*core.Project, error)
+	CommitProjectOrgMoveFunc            func(context.Context, core.ProjectOrgMoveCommit, func(ctx context.Context, result *core.ProjectOrgMoveResult) error) (*core.ProjectOrgMoveResult, error)
 	ListProjectTriggersPausedByFunc     func(context.Context, string, string) ([]*core.Trigger, error)
 	ListProjectTriggersResumedSinceFunc func(context.Context, string, time.Time) ([]*core.Trigger, error)
 }
@@ -120,22 +119,13 @@ func (m *MockStore) TransitionProjectOrgMove(ctx context.Context, id string, fro
 	return nil, contractkit.MockNotSet("MockStore", "TransitionProjectOrgMove")
 }
 
-// MoveProjectOrg records the call and delegates to MoveProjectOrgFunc when set.
-func (m *MockStore) MoveProjectOrg(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
-	m.Recorder.Record("MoveProjectOrg", ctx, c)
-	if m.MoveProjectOrgFunc != nil {
-		return m.MoveProjectOrgFunc(ctx, c)
+// CommitProjectOrgMove records the call and delegates to CommitProjectOrgMoveFunc when set.
+func (m *MockStore) CommitProjectOrgMove(p0 context.Context, c core.ProjectOrgMoveCommit, inTx func(ctx context.Context, result *core.ProjectOrgMoveResult) error) (*core.ProjectOrgMoveResult, error) {
+	m.Recorder.Record("CommitProjectOrgMove", p0, c, inTx)
+	if m.CommitProjectOrgMoveFunc != nil {
+		return m.CommitProjectOrgMoveFunc(p0, c, inTx)
 	}
-	return nil, contractkit.MockNotSet("MockStore", "MoveProjectOrg")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockStore) GetProject(ctx context.Context, id string) (*core.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "GetProject")
+	return nil, contractkit.MockNotSet("MockStore", "CommitProjectOrgMove")
 }
 
 // ListProjectTriggersPausedBy records the call and delegates to ListProjectTriggersPausedByFunc when set.
@@ -204,6 +194,58 @@ func (m *MockControlPlane) RecordProjectOrgMove(ctx context.Context, s controlpl
 
 // Compile-time check.
 var _ ControlPlane = (*MockControlPlane)(nil)
+
+// forge:section MockProjects
+// forge:hash=4bce02abdcb112411f67d44496c8f64c6543e2b42c8f55561cd6adc41375eced
+
+// MockProjects is a test mock for the Projects interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjects.<Method>Func not set" error.
+type MockProjects struct {
+	contractkit.Recorder
+	GetProjectFunc func(context.Context, string) (*core.Project, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjects) GetProject(ctx context.Context, id string) (*core.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjects", "GetProject")
+}
+
+// Compile-time check.
+var _ Projects = (*MockProjects)(nil)
+
+// forge:section MockAnnouncer
+// forge:hash=a568c6bb8f347969a8f0095057e419bc27d51026eda69ba7823ad48573ee1b0d
+
+// MockAnnouncer is a test mock for the Announcer interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAnnouncer.<Method>Func not set" error.
+type MockAnnouncer struct {
+	contractkit.Recorder
+	AnnounceProjectMovedFunc func(context.Context, string, string) error
+}
+
+// AnnounceProjectMoved records the call and delegates to AnnounceProjectMovedFunc when set.
+func (m *MockAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID string, projectID string) error {
+	m.Recorder.Record("AnnounceProjectMoved", ctx, ownerUserID, projectID)
+	if m.AnnounceProjectMovedFunc != nil {
+		return m.AnnounceProjectMovedFunc(ctx, ownerUserID, projectID)
+	}
+	return contractkit.MockNotSet("MockAnnouncer", "AnnounceProjectMoved")
+}
+
+// Compile-time check.
+var _ Announcer = (*MockAnnouncer)(nil)
 
 // forge:section MockMembers
 // forge:hash=6ed04c002fea60d0e1be3ef158ae0a6575b05bec1a21fc08b750562f6695789e

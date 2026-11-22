@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/planning"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
@@ -32,11 +33,71 @@ type runCallerStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
-// planLookupStore is what resolvePlanForRead and resolvePlanForWrite read to
-// find the plan a thread works on.
-type planLookupStore interface {
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
+// threadReader is the thread read the plan walk makes up the spawn tree with.
+type threadReader interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
+}
+
+// planByThread is the plan read the tools make by thread.
+// planning.Service satisfies it.
+type planByThread interface {
+	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
+}
+
+// createPlanPlanning is create_plan's planning role.
+type createPlanPlanning interface {
+	planByThread
+	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
+}
+
+// addTaskPlanning is add_task's planning role.
+type addTaskPlanning interface {
+	planByThread
+}
+
+// updatePlanPlanning is update_plan's planning role.
+type updatePlanPlanning interface {
+	planByThread
+	UpdatePlan(ctx context.Context, plan *db.Plan) error
+}
+
+// getPlanPlanning is get_plan's planning role.
+type getPlanPlanning interface {
+	planByThread
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+}
+
+// listTasksPlanning is list_tasks' planning role.
+type listTasksPlanning interface {
+	planByThread
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+}
+
+// updateTaskPlanning is update_task's planning role.
+type updateTaskPlanning interface {
+	planByThread
+	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
+	GetTaskStatsByPlan(ctx context.Context, planID string) (*planning.TaskStats, error)
+	UpdateTask(ctx context.Context, task *db.Task) error
+}
+
+// addDependencyPlanning is add_dependency's planning role.
+type addDependencyPlanning interface {
+	planByThread
+	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
+	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
+}
+
+// removeDependencyPlanning is remove_dependency's planning role.
+type removeDependencyPlanning interface {
+	DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error
+}
+
+// listReadyTasksPlanning is list_ready_tasks' planning role.
+type listReadyTasksPlanning interface {
+	planByThread
+	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
 }
 
 // workflowDraftLookup is what resolveWorkflowDraft reads to find a draft by
@@ -79,11 +140,41 @@ type scenarioLoaderStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
-// scenarioExecStore is what runScenarioByName reads and writes: the scenario,
-// its recorded result, and the loader the run resolves refs with.
+// ScenarioStore is the scenario rows the scenario tools find and rewrite.
+// store.WorkflowScenarioExtStore satisfies it.
+type ScenarioStore interface {
+	FindWorkflowScenarioByName(ctx context.Context, draftID string, name string) (*db.WorkflowScenario, error)
+	ReplaceWorkflowScenario(ctx context.Context, s *db.WorkflowScenario) error
+}
+
+// scenarioFinder is the scenario read of view_scenario, delete_scenario and
+// run_scenario.
+type scenarioFinder interface {
+	FindWorkflowScenarioByName(ctx context.Context, draftID string, name string) (*db.WorkflowScenario, error)
+}
+
+// LaunchedRunCounter counts the runs a user's agents have launched and that
+// are still live. store.TriggerEventExtStore satisfies it.
+type LaunchedRunCounter interface {
+	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
+}
+
+// WorktreeChatLister lists the chats bound to a worktree.
+// store.ChatExtStore satisfies it.
+type WorktreeChatLister interface {
+	ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]db.WorktreeChat, error)
+}
+
+// WorkflowSlugChecker reports whether a user already has a workflow with a
+// slug. store.WorkflowDraftExtStore satisfies it.
+type WorkflowSlugChecker interface {
+	WorkflowSlugExists(ctx context.Context, userID string, slug string) (bool, error)
+}
+
+// scenarioExecStore is what runScenarioByName writes and loads with: the
+// scenario's recorded result and the loader the run resolves refs with.
 type scenarioExecStore interface {
 	scenarioLoaderStore
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 	UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error
 }
 
@@ -93,36 +184,30 @@ type scenarioExecStore interface {
 type createPlanStore interface {
 	CreatePlan(ctx context.Context, plan *db.Plan) error
 	CreateTask(ctx context.Context, task *db.Task) error
-	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
 }
 
 // updatePlanStore is update_plan's store.
 type updatePlanStore interface {
-	planLookupStore
+	threadReader
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	UpdatePlan(ctx context.Context, plan *db.Plan) error
 }
 
 // getPlanStore is get_plan's store.
 type getPlanStore interface {
-	planLookupStore
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
+	threadReader
 }
 
 // addTaskStore is add_task's store.
 type addTaskStore interface {
-	planLookupStore
+	threadReader
 	CreateTask(ctx context.Context, task *db.Task) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listTasksStore is list_tasks' store.
 type listTasksStore interface {
-	planLookupStore
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+	threadReader
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
@@ -135,14 +220,11 @@ type taskScopeStore interface {
 
 // updateTaskStore is update_task's store.
 type updateTaskStore interface {
-	planLookupStore
+	threadReader
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
-	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
-	GetTaskStatsByPlan(ctx context.Context, planID string) (*db.TaskStats, error)
-	UpdateTask(ctx context.Context, task *db.Task) error
 }
 
 // createSubtaskStore is create_subtask's store.
@@ -155,23 +237,18 @@ type createSubtaskStore interface {
 
 // addDependencyStore is add_dependency's store.
 type addDependencyStore interface {
-	CreateTaskDependency(ctx context.Context, dep *db.TaskDependency) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	GetPlanByThreadID(ctx context.Context, threadID string) (*db.Plan, error)
 	GetTask(ctx context.Context, id string) (*db.Task, error)
-	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
 }
 
 // removeDependencyStore is remove_dependency's store.
 type removeDependencyStore interface {
-	DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listReadyTasksStore is list_ready_tasks' store.
 type listReadyTasksStore interface {
-	planLookupStore
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]*db.TaskDependency, error)
+	threadReader
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
@@ -257,7 +334,6 @@ type spawnStopStore interface {
 type startRunStore interface {
 	runCallerStore
 	startRunLineageReader
-	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 }
 
@@ -308,7 +384,6 @@ type getWorkflowStore interface {
 type createWorkflowStore interface {
 	workflowsource.Store
 	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
-	WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error)
 }
 
 // workflowWriteStore is the store of edit_workflow and write_workflow, which
@@ -333,14 +408,11 @@ type listScenariosStore interface {
 // viewScenarioStore is view_scenario's store.
 type viewScenarioStore interface {
 	workflowDraftLookup
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 }
 
 // editScenarioStore is edit_scenario's store.
 type editScenarioStore interface {
 	workflowDraftLookup
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
-	UpdateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 }
 
 // writeScenarioStore is write_scenario's store; it runs the scenario it saves.
@@ -348,14 +420,12 @@ type writeScenarioStore interface {
 	workflowDraftLookup
 	scenarioExecStore
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
-	UpdateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 }
 
 // deleteScenarioStore is delete_scenario's store.
 type deleteScenarioStore interface {
 	workflowDraftLookup
 	DeleteWorkflowScenario(ctx context.Context, id string) error
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*db.WorkflowScenario, error)
 }
 
 // runScenarioStore is run_scenario's store.
@@ -375,7 +445,6 @@ type worktreeStore interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
-	ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]db.WorktreeChat, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
