@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	dbstore "github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -116,7 +116,7 @@ func testCoordinatedDrains(t *testing.T, serializable bool) {
 		arrived:                 make(chan struct{}, threadsInChat),
 		release:                 make(chan struct{}),
 	}
-	act := NewDrainAgentMessagesActivity(DrainAgentMessagesDeps{Store: store, Mailbox: store, Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
+	act := NewDrainAgentMessagesActivity(DrainAgentMessagesDeps{Store: store, Mailbox: store, Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	start := make(chan struct{})
 	outputs := make([]DrainAgentMessagesOutput, threadsInChat)
 	errs := make([]error, threadsInChat)

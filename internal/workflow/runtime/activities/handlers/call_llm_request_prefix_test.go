@@ -98,7 +98,7 @@ func TestCallLLM_RequestHasNoTransientTailAndGrowsAsAPrefix(t *testing.T) {
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	})
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: skillCatalogConfigProvider{skills: catalog}, DriverResolver: resolver, MCPBinder: nil})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: skillCatalogConfigProvider{skills: catalog}, DriverResolver: resolver, MCPBinder: nil})
 
 	var out CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &out))
