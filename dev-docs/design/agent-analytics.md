@@ -1,13 +1,16 @@
 # Agent analytics: Agents › Insights, per-chat traces, tenant export
 
-Status: **draft for owner review.** The direction is settled (owner, 2026-11-22):
+Status: **direction and sections 6 and 7 decided; the rest is a draft for owner
+review.** The direction is settled (owner, 2026-11-22):
 emit standard `gen_ai` OpenTelemetry, do not build a competing OTEL LLM backend,
 and build the analytics only Reliant can compute. Agents › Insights and a
 per-chat Trace/Cost tab are the approved placements; Usage & billing keeps the
 money. Everything else here is a design for the owner to accept or change.
-Sections 6 and 7 are **recommendations pending the owner's confirmation**
-(asked 2026-11-22); nothing in them is decided, and the PR plan marks the phases
-that wait on them.
+Sections 6 and 7 are **decided (owner, 2026-11-22)**: the owner accepted both
+recommendations as written. The per-node `observe:` block (user-declared
+attributes, events and metrics) is being designed separately in
+`dev-docs/design/workflow-observe.md` (its own PR); analytics will consume those
+declared events and metrics once it lands (see §3.3 and §9).
 
 Code references are `file:line` at **reliant `3b8d3b81f`** (paths without a repo
 prefix are reliant's), **control-plane `cda41ff24`** (marked `cp:`) and the forge
@@ -350,7 +353,7 @@ key lost. `reliant.cost_usd` stays beside `forge.ai.cost.usd`. The daemon-side
 behaviour, no spans, is unchanged. Doing this first removes two code paths for
 every later PR in this document.
 
-## 6. Tenant export (recommendation, pending the owner's confirmation)
+## 6. Tenant export (decided, owner, 2026-11-22)
 
 The goal: an org can see its agents' telemetry outside Reliant. It is phased
 because each step is useful alone and each adds a way to leak.
@@ -405,7 +408,7 @@ audit that every span creation site stamps `org.id`, with a test that opens each
 kind of span and asserts the attribute. The third is **content**: nothing in this
 section sends content; see §7.
 
-## 7. Content capture (recommendation, pending the owner's confirmation)
+## 7. Content capture (decided, owner, 2026-11-22)
 
 Spans carry no prompts, completions or tool arguments, and
 `TestLLMUsageTablesHoldNoContent` keeps analytics tables free of them. That stays
@@ -426,9 +429,10 @@ The recommendation:
 - **Audited.** An `org_telemetry_settings` row and an append-only audit row for
   every change: who, when, which scope (prompts and completions; tool arguments),
   and the destination it applies to. Capture without a destination does nothing.
-- **Tool results are a separate, second opt-in.** Tool results embed file and
-  command output read off the owner's disk and are exactly what a viewer is not
-  allowed to see (cp `docs/design/org-sharing.md` D2). One switch must never imply the other.
+- **Tool results and attachment bytes are a separate, second opt-in** (owner,
+  2026-11-22). Tool results embed file and command output read off the owner's
+  disk, and attachments are files the user supplied; both are exactly what a
+  viewer is not allowed to see (cp `docs/design/org-sharing.md` D2). One switch must never imply the other.
 - **Never on the staff copy.** Content attributes are added only on the tenant
   destination's branch of the pipeline and stripped from the staff copy by a
   processor, with a test that a content attribute never reaches the staff
@@ -489,6 +493,11 @@ Raindrop's "signals" are plain-language behaviours labelled over production runs
 Reliant has the structured data to start without a model, and the transcript to go
 further.
 
+Declared events and metrics from a workflow's per-node `observe:` block
+(`dev-docs/design/workflow-observe.md`, separate PR) are a natural input to both:
+a user-declared event can be a signal's trigger, and a declared metric can be an
+Insights series, once that design lands.
+
 **9a, deterministic signals from structured data**, no new model cost: the same
 command run more than N times failing (repeated failing `step_executions` for one
 node), a run that hit `rate_limit` or `usage_limit` and ended `failed`, a run
@@ -522,9 +531,9 @@ and `forge lint --scope <paths>`. Migrations are backward-compatible
 | **C1** | reliant | `InsightsService`: team RPC (org role), member drill-down (admin, fresh role, audited), self RPC | Team RPC never returns a person; floor merges buckets under five contributors; drill-down writes an audit row, is refused for a machine credential and a non-admin; a member reads their own row; personal-funded cost is blank, not zero |
 | **C2** | reliant web | Agents › Insights page and "My analytics" tab, with the unpriced-share disclosure | Vitest; browser pass for member, admin and non-member; empty and partial states |
 | **C3** | reliant | Cost per merged PR and per release (approximate label), wasted-spend buckets, GitHub-API series | Cost-per-PR fixture with managed, BYOK and subscription calls and the displayed split; release join marked approximate; buckets are never summed |
-| **D1** | reliant, control-plane | §6 phase 2: route by `org.id` to the org's tenant; fail closed; org-coverage audit. *Pending owner confirmation; needs the cross-org parenting fix* | Spans of org A never reach org B; no-`org.id` span dropped and counted; every span creation site stamps `org.id`; staff copy unchanged |
-| **D2** | control-plane, reliant | §6 phase 3: BYO OTLP destination, vault-sealed headers, SSRF-safe validation, caps, test-send. *Pending owner confirmation* | Private and link-local targets refused; header never in a column or a log; slow endpoint does not block the pipeline; per-org rate cap |
-| **D3** | reliant, control-plane | §7: capture settings, audit, tenant-branch-only content, redaction. *Pending owner confirmation* | A content attribute never reaches the staff exporter; tool results need their own switch; every change audited; capture without a destination is inert |
+| **D1** | reliant, control-plane | §6 phase 2: route by `org.id` to the org's tenant; fail closed; org-coverage audit. *Decided 2026-11-22; needs the cross-org parenting fix* | Spans of org A never reach org B; no-`org.id` span dropped and counted; every span creation site stamps `org.id`; staff copy unchanged |
+| **D2** | control-plane, reliant | §6 phase 3: BYO OTLP destination, vault-sealed headers, SSRF-safe validation, caps, test-send. *Decided 2026-11-22* | Private and link-local targets refused; header never in a column or a log; slow endpoint does not block the pipeline; per-org rate cap |
+| **D3** | reliant, control-plane | §7: capture settings, audit, tenant-branch-only content, redaction. *Decided 2026-11-22* | A content attribute never reaches the staff exporter; tool results and attachment bytes need their own switch; every change audited; capture without a destination is inert |
 | **E1** | reliant, control-plane | §8: member ingest tokens, mapper, `external_agent_usage`, "External agents" series | Identity from the token, not the email attribute; Gemini prompts stripped by default; external cost never in org spend; unknown attributes kept |
 | **F1** | reliant | §9a deterministic signals, alerts | One test per signal on fixture runs; thresholds configurable; no content read |
 | **F2** | reliant | §9b classified signals. *Later; needs §7* | Org-funded and attributed to its own `purpose`; hits and counts only, no quoted text |
@@ -539,7 +548,7 @@ A0 to A4 plus C1 and C2 (team Insights, tokens and rates, no dollars beyond
 ## Decisions for the owner
 
 The direction (§1) is settled. These are the choices inside it. Items 7 and 8 are
-the two asked on 2026-11-22 and are recommendations, not decisions.
+**decided (owner, 2026-11-22)**, accepted as recommended; the rest await review.
 
 1. **Where the Trace tab reads spans (§2.3).** Recommend a typed, allowlisted
    control-plane RPC over tenant zero's ClickStack, with the Cost tab from Postgres,
@@ -568,15 +577,15 @@ the two asked on 2026-11-22 and are recommendations, not decisions.
    org-funded calls only, and outcome counts include the chat with a blank cost.
    Trade-off: cost per merged PR is "org-funded cost per PR", against disclosing
    what a member spent on their own subscription.
-7. **Tenant export mechanism and phasing (§6), pending confirmation.** Recommend
+7. **Tenant export mechanism and phasing (§6). Decided (owner, 2026-11-22).** Recommended and accepted:
    collector routing by `org.id` (B), in-product first, then the org's tenant, then
    BYO OTLP, fail closed on org-less spans, and the parenting fix first. Alternative:
    per-org exporters in the worker. Trade-off: isolation and one enforcement point, at
    the cost of dynamic per-org config in control-plane.
-8. **Content capture (§7), pending confirmation.** Recommend off by default,
-   org-admin opt-in, audited, tool results a separate second opt-in, never on the
+8. **Content capture (§7). Decided (owner, 2026-11-22).** Recommended and accepted: off by default,
+   org-admin opt-in, audited, tool results and attachment bytes a separate second opt-in, never on the
    staff copy, and no capture needed in product. Alternative: one switch for both.
-   Trade-off: an exporting org must opt in twice for tool results, against secrets
+   Trade-off: an exporting org must opt in twice for tool results and attachments, against secrets
    read off a disk landing in a third-party log by one click.
 9. **Who administers (§3.6, §6, §7).** Recommend the org role (admin or owner),
    person credentials only, read fresh, as org-sharing.md D8 decided for org
