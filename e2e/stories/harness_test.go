@@ -436,6 +436,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Repo:     s.Repo,
 		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
 		Syncer:   triggerSyncer,
 		Fires:    triggerFires,
 	})

@@ -449,7 +449,7 @@ func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
 	selected, selectedKey := chatOnOrgKey(core.OrgAccessSelected)
 	assert.Nil(t, get(selected), "a member without a grant is not shown the key")
 	// Granted in their current membership, it is theirs.
-	require.NoError(t, e.repo.SetOrgAccountGrants(ctx, orgID, selectedKey.ID, []string{user}, "admin"))
+	require.NoError(t, db.TestOrgAccounts(e.t, e.repo).SetOrgAccountGrants(ctx, orgID, selectedKey.ID, []string{user}, "admin"))
 	require.NotNil(t, get(selected))
 
 	// Removed from the org: the stale assignments name nothing, whatever the key's access.

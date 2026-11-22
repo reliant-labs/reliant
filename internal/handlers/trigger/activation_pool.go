@@ -63,13 +63,13 @@ func (s *Service) agentPoolChoice(ctx context.Context, user string, p tools.Acti
 		if id == "" {
 			return "", true, nil
 		}
-		pool, err = s.deps.Repo.GetMachinePoolForUser(ctx, user, id)
+		pool, err = s.deps.Pools.GetMachinePoolForUser(ctx, user, id)
 	case p.MachinePool != nil:
 		name := strings.TrimSpace(*p.MachinePool)
 		if name == "" {
 			return "", true, nil
 		}
-		pool, err = s.deps.Repo.GetMachinePoolByName(ctx, user, name)
+		pool, err = s.deps.Pools.GetMachinePoolByName(ctx, user, name)
 	default:
 		return "", false, nil
 	}
@@ -112,14 +112,14 @@ func (p *agentPool) detail() string {
 // ownAgentPool reads user's pool id and its members, refusing a pool that is
 // not user's or holds a machine that is not user's.
 func (s *Service) ownAgentPool(ctx context.Context, user, id string) (*agentPool, error) {
-	pool, err := s.deps.Repo.GetMachinePoolForUser(ctx, user, id)
+	pool, err := s.deps.Pools.GetMachinePoolForUser(ctx, user, id)
 	switch {
 	case errors.Is(err, core.ErrMachinePoolNotFound) || (err == nil && (pool == nil || !authz.CanAccessPersonal(user, pool.UserID))):
 		return nil, tools.RefuseActivation(poolNotFound, svcerr.NotFound("machine pool"))
 	case err != nil:
 		return nil, tools.RefuseActivation("the machine pool could not be read; try again", triggerDBError("get machine pool", err))
 	}
-	members, err := s.deps.Repo.ListMachinePoolMembers(ctx, pool, "")
+	members, err := s.deps.Pools.ListMachinePoolMembers(ctx, pool, "")
 	if err != nil {
 		return nil, tools.RefuseActivation("the machine pool's members could not be read; try again", triggerDBError("list machine pool members", err))
 	}
@@ -144,7 +144,7 @@ func (s *Service) workflowMachine(ctx context.Context, user string, def *pb.Trig
 	if def.GetMachinePoolId() == "" {
 		return def.GetDaemonId()
 	}
-	if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Repo, user, def.GetMachinePoolId(), def.GetProjectId()); err == nil {
+	if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Pools, user, def.GetMachinePoolId(), def.GetProjectId()); err == nil {
 		return member
 	}
 	return ""

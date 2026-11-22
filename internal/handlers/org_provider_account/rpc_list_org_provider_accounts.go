@@ -24,7 +24,7 @@ func (s *Service) ListOrgProviderAccounts(
 	if err != nil {
 		return nil, err
 	}
-	accounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, core.OrgAccountOwner(orgID))
+	accounts, err := s.deps.Accounts.ListOwnedProviderAccounts(ctx, core.OrgAccountOwner(orgID))
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

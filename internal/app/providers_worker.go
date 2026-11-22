@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -483,6 +484,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Config:        d.Config,
 		Repo:          repo,
 		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Pools:         store.NewMachinePoolExtStore(repo.ORM()),
 		Syncer:        syncer,
 		Fires:         fires,
 		ControlPlane:  hostedControlPlane(d.ControlPlane),
@@ -492,7 +494,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Catalog:       d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
@@ -536,7 +538,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	// The registry service is a library here, not a mount: the label and
 	// pool tools call its rpcs in-process, as the run's owner. Its
 	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo}
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM())}
 	if d.Router != nil && d.Router.ControlPlane != nil {
 		registryDeps.IdleTimeouts = d.Router.ControlPlane
 	}
@@ -591,7 +593,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), store.NewMachinePoolExtStore(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
 		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
@@ -697,6 +699,7 @@ func (a *AccountRecorder) Close(context.Context) error {
 type TemporalWorkerDeps struct {
 	DB               *db.Repo
 	ProviderAccounts provideraccounts.Service
+	OrgAccounts      orgaccounts.Service
 	Temporal         *TemporalClient
 	Streaming        *StreamingHub
 	Tools            *WorkerToolsFactory
@@ -889,6 +892,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
 		ProviderAccounts:       d.ProviderAccounts,
+		OrgAccounts:            d.OrgAccounts,
 		StreamingHub:           d.Streaming.Hub,
 		ToolsFactory:           d.Tools.ToolsFactory,
 		ToolExecutor:           d.Executor,
@@ -953,7 +957,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	repo := d.DB
 	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {

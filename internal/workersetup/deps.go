@@ -64,6 +64,4 @@ type AccountRoutingStore interface {
 	// ORM is the handle the funding stores (the chat's question before it moves
 	// from its org's accounts to the person's own, org-provider-accounts §10) bind.
 	ORM() *orm.Client
-	// ConfirmOrgKeyNotice records that a rejected org key's notice started.
-	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
 }

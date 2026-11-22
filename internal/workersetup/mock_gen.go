@@ -289,7 +289,7 @@ func (m *MockAccountStore) RecentAssignmentCounts(ctx context.Context, accountID
 var _ AccountStore = (*MockAccountStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=48b03d70199ae1d5fb2bef7ea5760e5a628f09384a496c7ebee42d28cb0ade30
+// forge:hash=2bd1ed2f756fd34f0c127d3cd7953dc2040af67cec267a8f0c14c81b1a584045
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -299,9 +299,8 @@ var _ AccountStore = (*MockAccountStore)(nil)
 // "MockAccountRoutingStore.<Method>Func not set" error.
 type MockAccountRoutingStore struct {
 	contractkit.Recorder
-	GetSettingValueFunc     func(context.Context, string, string) (string, bool)
-	ORMFunc                 func() *orm.Client
-	ConfirmOrgKeyNoticeFunc func(context.Context, string, string, time.Time) error
+	GetSettingValueFunc func(context.Context, string, string) (string, bool)
+	ORMFunc             func() *orm.Client
 }
 
 // GetSettingValue records the call and delegates to GetSettingValueFunc when set.
@@ -320,15 +319,6 @@ func (m *MockAccountRoutingStore) ORM() *orm.Client {
 		return m.ORMFunc()
 	}
 	return nil
-}
-
-// ConfirmOrgKeyNotice records the call and delegates to ConfirmOrgKeyNoticeFunc when set.
-func (m *MockAccountRoutingStore) ConfirmOrgKeyNotice(ctx context.Context, orgID string, accountID string, markedAt time.Time) error {
-	m.Recorder.Record("ConfirmOrgKeyNotice", ctx, orgID, accountID, markedAt)
-	if m.ConfirmOrgKeyNoticeFunc != nil {
-		return m.ConfirmOrgKeyNoticeFunc(ctx, orgID, accountID, markedAt)
-	}
-	return contractkit.MockNotSet("MockAccountRoutingStore", "ConfirmOrgKeyNotice")
 }
 
 // Compile-time check.

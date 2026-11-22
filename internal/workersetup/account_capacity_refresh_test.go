@@ -92,7 +92,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	_, err = db.TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: agentThread, Provider: "claude", AccountID: alice.ID, AssignedAt: now, Reason: accountrouter.ReasonInitial}, "")
 	require.NoError(t, err)
 
-	routing := accountRouting(db.TestAccounts(t, repo), repo, nil)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, nil)
 	assign := func() (accountrouter.Result, error) {
 		avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(user))
 		return routing.Router.Assign(ctx, accountrouter.Request{

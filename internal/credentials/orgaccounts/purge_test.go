@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package orgaccounts_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -25,8 +26,8 @@ import (
 // Another org's and the person's own still open.
 func TestPurgeOrgCredentials_LeavesNoOpenableCiphertext(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	rawRepo, raw, cleanup := db.SetupTestDBWithRawDB(t)
+	t.Cleanup(cleanup)
 	ctx := context.Background()
 
 	// One KEK and one clock for the repo's vault, a second warmed vault (a
@@ -40,10 +41,10 @@ func TestPurgeOrgCredentials_LeavesNoOpenableCiphertext(t *testing.T) {
 	now := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
 	fresh := func() vault.Service {
-		return vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring), Now: clock})
+		return vault.NewInstrumented(vault.Deps{DB: rawRepo.ORM(), Keys: vault.NewEnvKeyWrapper(ring), Now: clock})
 	}
 	own := fresh()
-	repo.EnableCredentialSealing(own)
+	repo := newEnvOver(t, rawRepo, own)
 	replica := fresh()
 
 	gone := mustUpsert(t, repo, orgKeyUpsert("org-gone", "admin", "acme", "sk-ant-gone-0001"))
@@ -52,7 +53,7 @@ func TestPurgeOrgCredentials_LeavesNoOpenableCiphertext(t *testing.T) {
 
 	// An org connection's secret, sealed under the gone org's tenant.
 	connAAD := []byte("connection_secrets\x00c-gone\x00api_key")
-	connBlob, err := repo.accounts.sealer.Seal(ctx, vault.OrgTenant("org-gone"), []byte("xoxb-gone"), connAAD)
+	connBlob, err := own.Seal(ctx, vault.OrgTenant("org-gone"), []byte("xoxb-gone"), connAAD)
 	require.NoError(t, err)
 	keyID, err := vault.KeyIDOf(connBlob)
 	require.NoError(t, err)
@@ -105,6 +106,6 @@ func TestPurgeOrgCredentials_LeavesNoOpenableCiphertext(t *testing.T) {
 	plain, err = v.Open(ctx, vault.UserTenant("admin"), mineBlob, ProviderAccountAAD(mine.ID, accountColSecret))
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-mine-0003", string(plain), "the creator's own key still opens")
-	_, err = TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, core.OrgAccountOwner("org-gone"), gone.ID)
+	_, err = repo.accounts.GetOwnedProviderAccountWithSecrets(ctx, core.OrgAccountOwner("org-gone"), gone.ID)
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
 }

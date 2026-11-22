@@ -14,7 +14,7 @@ import (
 
 type restoreStore struct {
 	labels    map[string]string
-	pools     []*db.MachinePool
+	pools     []*core.MachinePool
 	rows      []*core.ProjectDaemon
 	repos     map[string][]*core.Repo
 	installed []string          // projects recorded installed (verified) again
@@ -26,7 +26,7 @@ func (s *restoreStore) GetDaemon(_ context.Context, id string) (*db.Daemon, erro
 	return &db.Daemon{ID: id, Labels: s.labels}, nil
 }
 
-func (s *restoreStore) ListMachinePoolsForUser(context.Context, string) ([]*db.MachinePool, error) {
+func (s *restoreStore) ListMachinePoolsForUser(context.Context, string) ([]*core.MachinePool, error) {
 	return s.pools, nil
 }
 
@@ -68,7 +68,7 @@ func strp(s string) *string { return &s }
 func newRestoreWorld() (*restoreStore, []*db.Project) {
 	s := &restoreStore{
 		labels: map[string]string{"pool": "cicd"},
-		pools:  []*db.MachinePool{{Name: "cicd", Selector: map[string]string{"pool": "cicd"}}},
+		pools:  []*core.MachinePool{{Name: "cicd", Selector: map[string]string{"pool": "cicd"}}},
 		rows: []*core.ProjectDaemon{
 			{ProjectID: "p-multi", Path: "/home/workspace/projects/reliant-labs", InstallState: core.ProjectInstallInstalled},
 			{ProjectID: "p-single", Path: "/home/workspace/projects/app", InstallState: core.ProjectInstallInstalled, DefaultBranch: strp("trunk")},
@@ -98,7 +98,7 @@ func TestRestorePoolMemberCheckouts_ReclonesInstalledProjects(t *testing.T) {
 	var ran []cloneStep
 	run := func(_ context.Context, step cloneStep) error { ran = append(ran, step); return nil }
 
-	restorePoolMemberCheckouts(context.Background(), s, run, "d-1", "user-1", nil, missing)
+	restorePoolMemberCheckouts(context.Background(), s, s, run, "d-1", "user-1", nil, missing)
 
 	want := []cloneStep{
 		{Repo: "https://github.com/reliant-labs/control-plane.git", Path: "/home/workspace/projects/reliant-labs/control-plane"},
@@ -122,7 +122,7 @@ func TestRestorePoolMemberCheckouts_LeavesNonMembersAlone(t *testing.T) {
 	s, missing := newRestoreWorld()
 	s.labels = map[string]string{"pool": "gpu"}
 	ran := 0
-	restorePoolMemberCheckouts(context.Background(), s, func(context.Context, cloneStep) error { ran++; return nil }, "d-1", "user-1", nil, missing)
+	restorePoolMemberCheckouts(context.Background(), s, s, func(context.Context, cloneStep) error { ran++; return nil }, "d-1", "user-1", nil, missing)
 	if ran != 0 || len(s.installed) != 0 || len(s.failed) != 0 {
 		t.Fatalf("ran %d clones, installed %v, failed %v on a machine in no pool; want nothing", ran, s.installed, s.failed)
 	}
@@ -139,7 +139,7 @@ func TestRestorePoolMemberCheckouts_FailureIsRecorded(t *testing.T) {
 		}
 		return nil
 	}
-	restorePoolMemberCheckouts(context.Background(), s, run, "d-1", "user-1", nil, missing)
+	restorePoolMemberCheckouts(context.Background(), s, s, run, "d-1", "user-1", nil, missing)
 	if got := s.failed["p-multi"]; !strings.Contains(got, "authentication failed") {
 		t.Fatalf("p-multi failure = %q, want the clone's error", got)
 	}
@@ -153,7 +153,7 @@ func TestRestorePoolMemberCheckouts_FailureIsRecorded(t *testing.T) {
 func TestRestorePoolMemberCheckouts_NoRemoteIsAFailure(t *testing.T) {
 	s, _ := newRestoreWorld()
 	s.repos = map[string][]*core.Repo{}
-	restorePoolMemberCheckouts(context.Background(), s, func(context.Context, cloneStep) error { return nil }, "d-1", "user-1", nil,
+	restorePoolMemberCheckouts(context.Background(), s, s, func(context.Context, cloneStep) error { return nil }, "d-1", "user-1", nil,
 		[]*db.Project{{ID: "p-multi", Path: "/home/workspace/projects/reliant-labs"}})
 	if got := s.failed["p-multi"]; !strings.Contains(got, "no remote") {
 		t.Fatalf("failure = %q, want it to say there is no remote", got)
@@ -194,7 +194,7 @@ func TestRestorePoolMemberCheckouts_KeepsToTheMachinesOrg(t *testing.T) {
 	var ran []string
 	run := func(_ context.Context, step cloneStep) error { ran = append(ran, step.Repo); return nil }
 
-	restorePoolMemberCheckouts(context.Background(), s, run, "d-1", "user-1", &core.OrgScope{OrgID: globex}, missing)
+	restorePoolMemberCheckouts(context.Background(), s, s, run, "d-1", "user-1", &core.OrgScope{OrgID: globex}, missing)
 
 	if !reflect.DeepEqual(ran, []string{"https://github.com/acme/app.git"}) {
 		t.Fatalf("cloned %v, want only p-single's repository (p-multi is another org's)", ran)
@@ -216,7 +216,7 @@ func TestRestorePoolMemberCheckouts_FailureOfAProjectMovedOutIsNotRecorded(t *te
 	s.movedOut = map[string]string{"p-single": acme}
 	run := func(context.Context, cloneStep) error { return errors.New("authentication failed") }
 
-	restorePoolMemberCheckouts(context.Background(), s, run, "d-1", "user-1", &core.OrgScope{OrgID: globex}, missing)
+	restorePoolMemberCheckouts(context.Background(), s, s, run, "d-1", "user-1", &core.OrgScope{OrgID: globex}, missing)
 
 	if _, ok := s.failed["p-single"]; ok {
 		t.Fatalf("failed = %v; p-single moved out of the machine's org while it was cloned", s.failed)

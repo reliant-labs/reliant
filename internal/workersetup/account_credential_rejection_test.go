@@ -66,7 +66,7 @@ func TestAccountRouting_RealWiring_RejectedAPIKeyLeavesRotation(t *testing.T) {
 	}
 	t.Cleanup(func() { accountDriverFor = prevFor })
 
-	routing := accountRouting(db.TestAccounts(t, repo), repo, nil)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, nil)
 	projectID, chatID := "project-"+uuid.NewString(), "chat-"+uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: user, Name: "p", Path: t.TempDir()}))
 	require.NoError(t, repo.CreateChat(ctx, &db.Chat{ID: chatID, ProjectID: projectID, UserID: user}))

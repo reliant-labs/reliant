@@ -102,7 +102,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=c7f8cc9a21c78357f5b3750604a2eac4e763788de8799387d013a32f5670d18d
+// forge:hash=efb11f96f71c0010e5150e065afd8036a04a6f40a74dddcaddc411a49ffabe0d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -132,7 +132,6 @@ type MockRepository struct {
 	ListWorkflowDraftsByUserFunc     func(context.Context, string) ([]*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
-	GetMachinePoolByNameFunc         func(context.Context, string, string) (*core.MachinePool, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
@@ -317,15 +316,6 @@ func (m *MockRepository) GetProjectWorkflowsJSON(ctx context.Context, projectID 
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWorkflowsJSON")
 }
 
-// GetMachinePoolByName records the call and delegates to GetMachinePoolByNameFunc when set.
-func (m *MockRepository) GetMachinePoolByName(ctx context.Context, userID string, name string) (*core.MachinePool, error) {
-	m.Recorder.Record("GetMachinePoolByName", ctx, userID, name)
-	if m.GetMachinePoolByNameFunc != nil {
-		return m.GetMachinePoolByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetMachinePoolByName")
-}
-
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
 func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
 	m.Recorder.Record("GetDaemon", ctx, id)
@@ -346,6 +336,32 @@ func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, proje
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockPools
+// forge:hash=63939cb0a3a6fbadc883717d9432161dd7215bb4dcbffa1a672195b0ea850497
+
+// MockPools is a test mock for the Pools interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPools.<Method>Func not set" error.
+type MockPools struct {
+	contractkit.Recorder
+	GetMachinePoolByNameFunc func(context.Context, string, string) (*core.MachinePool, error)
+}
+
+// GetMachinePoolByName records the call and delegates to GetMachinePoolByNameFunc when set.
+func (m *MockPools) GetMachinePoolByName(ctx context.Context, userID string, name string) (*core.MachinePool, error) {
+	m.Recorder.Record("GetMachinePoolByName", ctx, userID, name)
+	if m.GetMachinePoolByNameFunc != nil {
+		return m.GetMachinePoolByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "GetMachinePoolByName")
+}
+
+// Compile-time check.
+var _ Pools = (*MockPools)(nil)
 
 // forge:section MockSender
 // forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241

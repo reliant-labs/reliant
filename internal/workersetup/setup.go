@@ -73,12 +73,14 @@ type Config struct {
 	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
 	// routing reads and writes (credentials/provideraccounts).
 	ProviderAccounts AccountStore
-	StreamingHub     streaming.StreamingHub
-	ToolsFactory     *tools.ToolsFactory
-	ToolExecutor     toolexec.ToolExecutor
-	DaemonRouter     toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
-	MCPBinder        toolexec.MCPContextBinder
-	ConfigProvider   config.ConfigProvider
+	// OrgAccounts holds the org key notices the sweep claims and confirms (credentials/orgaccounts).
+	OrgAccounts    OrgKeyNoticeStore
+	StreamingHub   streaming.StreamingHub
+	ToolsFactory   *tools.ToolsFactory
+	ToolExecutor   toolexec.ToolExecutor
+	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
+	MCPBinder      toolexec.MCPContextBinder
+	ConfigProvider config.ConfigProvider
 
 	// TriggerLauncher is the one door a scheduled fire launches through,
 	// normally *launch.Launcher.
@@ -304,7 +306,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		activityDeps.ProviderBackoff = backoff
 	}
 	if cfg.ProviderAccounts != nil && cfg.Database != nil {
-		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 	}
 
 	// Register all activities
@@ -365,11 +367,13 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		// {labels: …}` places its run (or a node) through this, on every
 		// worker with a database: a run is not a trigger fire, so it needs
 		// no launcher.
-		runs := machinepool.NewRunPlacer(cfg.Database)
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
+		placements := store.NewRunMachinePlacementExtStore(cfg.Database.ORM())
+		runs := machinepool.NewRunPlacer(poolStore, placements, cfg.Database)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			runs = runs.WithWaker(poolMemberWaker{w: w})
 		}
-		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: cfg.Database, Placer: runs}.Execute,
+		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: placements, Placer: runs}.Execute,
 			activity.RegisterOptions{Name: machinepool.PlaceRunActivityName})
 	}
 	if cfg.TriggerPollers != nil {
@@ -377,7 +381,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
@@ -385,7 +389,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	if cfg.TriggerLauncher != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
-		pools := machinepool.NewPlacer(cfg.Database)
+		var poolStore machinepool.Store
+		if cfg.Database != nil {
+			poolStore = store.NewMachinePoolExtStore(cfg.Database.ORM())
+		}
+		pools := machinepool.NewPlacer(poolStore)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
@@ -466,7 +474,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
 		out.background = append(out.background, func(ctx context.Context) {
 			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
 				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
 		})
 	}

@@ -28,7 +28,7 @@ func (s *Service) DeleteMachinePool(
 	if req.Msg.GetName() == "" {
 		return nil, svcerr.InvalidArgument("name is required")
 	}
-	err := s.deps.Repo.DeleteMachinePoolByName(ctx, userID, req.Msg.GetName())
+	err := s.deps.Pools.DeleteMachinePoolByName(ctx, userID, req.Msg.GetName())
 	switch {
 	case errors.Is(err, core.ErrMachinePoolNotFound):
 		return nil, svcerr.NotFound("machine pool")
