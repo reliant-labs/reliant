@@ -203,7 +203,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
