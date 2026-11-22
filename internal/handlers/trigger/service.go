@@ -38,6 +38,8 @@ type Deps struct {
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// Pools reads the machine pool a pool-bound trigger names.
+	Pools Pools
 
 	// OrgMoves turns the triggers a project move paused back on.
 	OrgMoves OrgMoveResumer
@@ -202,6 +204,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.OrgMoves == nil {
 		return fmt.Errorf("trigger: Deps.OrgMoves is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("trigger: Deps.Pools is required")
 	}
 	return nil
 }

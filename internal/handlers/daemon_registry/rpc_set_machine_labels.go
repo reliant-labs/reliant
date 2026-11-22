@@ -36,7 +36,7 @@ func (s *Service) SetMachineLabels(
 	if err := machinepool.ValidateLabels(msg.GetLabels(), "labels"); err != nil {
 		return nil, err
 	}
-	found, err := s.deps.Repo.SetDaemonLabels(ctx, userID, msg.GetDaemonId(), msg.GetLabels())
+	found, err := s.deps.Pools.SetDaemonLabels(ctx, userID, msg.GetDaemonId(), msg.GetLabels())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to set machine labels"))
 	}

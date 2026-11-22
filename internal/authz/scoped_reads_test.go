@@ -102,15 +102,12 @@ var userScopedReads = map[string]string{
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":   readPersonal,
 	"GetLatestUserUpdateSequence": readPersonal,
-	"GetMachinePoolByName":        readPersonal,
-	"GetMachinePoolForUser":       readPersonal,
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
 	"ListCommandFavorites":        readPersonal,
 	"ListLLMUsageDaily":           readPersonal,
 	"ListLLMUsageDetail":          readPersonal,
-	"ListMachinePoolsForUser":     readPersonal,
 	"ListSettings":                readPersonal,
 	"ListSettingsByKey":           readPersonal,
 	"ListVisibilityOverrides":     readPersonal,
@@ -123,12 +120,11 @@ var userScopedReads = map[string]string{
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountTriggerCapacityHeldByMember": readBackground,
-	"HasEnabledTriggerOfKind":          readBackground,
-	"ListCapacityWakeTargets":          readBackground,
-	"ListChatsPausedForMachine":        readBackground,
-	"ListChatsQueuedForMachine":        readBackground,
-	"ListChatsWaitingForMachine":       readBackground,
+	"HasEnabledTriggerOfKind":    readBackground,
+	"ListCapacityWakeTargets":    readBackground,
+	"ListChatsPausedForMachine":  readBackground,
+	"ListChatsQueuedForMachine":  readBackground,
+	"ListChatsWaitingForMachine": readBackground,
 }
 
 var (
