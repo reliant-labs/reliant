@@ -14,6 +14,24 @@ import {
   type PendingMachine,
 } from "@/services/controlPlane/pairing";
 import { authPath, oauthDevicePath } from "@/lib/paths";
+import { isForgeAuth } from "@/lib/auth/forge-api";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
+import { useAuthStore } from "@/store/authStore";
+
+/**
+ * Whether someone is signed in to answer. Supabase: its session. forge: the
+ * login broker's session, as the auth store restored it from the cookie.
+ */
+async function isSignedIn(): Promise<boolean> {
+  if (isForgeAuth()) {
+    await useAuthStore.getState().initialize();
+    return getAuthIdentity() !== null;
+  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return !!session;
+}
 
 /**
  * The page a device-code CLI command links to (RFC 8628's verification URI,
@@ -99,11 +117,9 @@ export function DevicePairing() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const signedIn = await isSignedIn();
       if (cancelled) return;
-      if (!session) {
+      if (!signedIn) {
         const back = `${oauthDevicePath()}${window.location.search}`;
         window.location.href = `${authPath()}?redirect=${encodeURIComponent(back)}`;
         return;

@@ -84,9 +84,13 @@ vi.mock("@/store/projectStore", () => {
   return { useProjectStore };
 });
 
-vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} }, session: { access_token: "t" } }),
-}));
+vi.mock("@/store/authStore", async () => {
+  const { identityOf } = await import("@/lib/auth/identity");
+  const user = { id: "user-1", email: "ada@example.com", user_metadata: {} };
+  // The real store derives identity from user; one object, as there.
+  const state = { user, identity: identityOf(user as never), session: { access_token: "t" } };
+  return { useAuthStore: (selector: (s: unknown) => unknown) => selector(state) };
+});
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({

@@ -20,7 +20,7 @@ import {
   type OrgRole,
 } from "@/services/controlPlane/members";
 import { orgKeys, type MyOrg } from "@/services/controlPlane/orgs";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 
 import { useRefreshMembers, type MembersQuery } from "./useMembers";
 
@@ -31,7 +31,7 @@ export function memberLabel(m: Pick<OrgMember, "name" | "email" | "userId">): st
 
 /** Whether the signed-in person is `m`. */
 function useIsSelf(): (m: OrgMember) => boolean {
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthIdentity();
   return (m) => !!user && (m.userId === user.id || (!!user.email && m.email.toLowerCase() === user.email.toLowerCase()));
 }
 

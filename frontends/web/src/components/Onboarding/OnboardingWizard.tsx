@@ -20,7 +20,7 @@ import { useLocation } from "@tanstack/react-router";
 import { isClaimPath } from "../../lib/claimLink";
 import { isAcceptInvitePath } from "../../lib/inviteLink";
 import { trackEvent } from "../../lib/analytics";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useSurface } from "../../lib/surfaceContext";
@@ -80,7 +80,7 @@ export function OnboardingWizard() {
   // Onboarding is per-USER state, so none of it may render to a signed-out
   // visitor (a forced sign-out drops the user on the sign-in screen without
   // unmounting this wizard).
-  const user = useAuthStore((state) => state.user);
+  const user = useAuthIdentity();
 
   // The tour spotlights desktop chrome by DOM selector; the mobile surface
   // has none of it (mobile users still get the setup flow at /onboarding).

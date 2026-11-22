@@ -15,11 +15,13 @@
  * — and records the answer. The CLI, polling, receives its credential.
  *
  * These are plain HTTP routes on the control plane, authenticated with the
- * session JWT the same way the CLI-login consent page approves a login. They
- * are not Connect RPCs because the CLI's half is standard OAuth.
+ * session JWT the same way the CLI-login consent page approves a login (forge
+ * sign-in: the broker's session cookie, same-origin, no Authorization header).
+ * They are not Connect RPCs because the CLI's half is standard OAuth.
  */
 import { supabase } from "@/lib/supabase";
 import { getControlPlaneURL } from "@/lib/constants";
+import { controlPlaneForgeBase, credentialedFetch, isForgeAuth } from "@/lib/auth/forge-api";
 
 /**
  * What a pending request is for. The control plane derives it from the
@@ -62,18 +64,33 @@ export function formatPairingCode(typed: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
+const SESSION_ENDED = "Your session ended. Sign in again to approve.";
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const base = getControlPlaneURL();
-  if (!base) throw new PairingError("Pairing needs the Reliant control plane, which this build is not connected to.");
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new PairingError("Your session ended. Sign in again to approve.");
-  const response = await fetch(`${base}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify(body),
-  });
+  const configured = getControlPlaneURL();
+  if (!configured) throw new PairingError("Pairing needs the Reliant control plane, which this build is not connected to.");
+  let response: Response;
+  if (isForgeAuth()) {
+    // forge sign-in: the session cookie is the credential. Same-origin under
+    // /_api/@cp, so it is first-party and passes the control plane's
+    // cross-origin check; no Authorization header, which would decide instead.
+    response = await credentialedFetch(`${controlPlaneForgeBase()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (response.status === 401) throw new PairingError(SESSION_ENDED);
+  } else {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) throw new PairingError(SESSION_ENDED);
+    response = await fetch(`${configured}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+  }
   const data = (await response.json().catch(() => ({}))) as T & { error_description?: string };
   if (!response.ok) {
     throw new PairingError(

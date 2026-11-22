@@ -34,7 +34,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { openProjectSwitcher } from "../../lib/projectSwitcher";
@@ -435,7 +435,7 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   const routeIds = useRouterState({
     select: (s) => s.matches.map((match) => match.routeId).join(" "),
   });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useAuthIdentity() !== null;
   const { enabled, workspace } = shortcutScope({
     routeIds: routeIds.split(" "),
     pathname,

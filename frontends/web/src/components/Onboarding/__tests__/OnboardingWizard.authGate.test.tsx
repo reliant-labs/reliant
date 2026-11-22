@@ -29,7 +29,8 @@ import { z } from "zod";
 // ─── Auth store double ───────────────────────────────────────────────────────
 
 const authState = vi.hoisted(() => ({
-  current: { user: null as unknown } as { user: unknown },
+  // identity: what the real store derives from user on every write.
+  current: { user: null as unknown, identity: null as unknown } as { user: unknown; identity: unknown },
 }));
 
 vi.mock("../../../store/authStore", () => ({
@@ -212,7 +213,7 @@ function makeRouter(initialEntries: string[]) {
 describe("OnboardingWizard — authentication gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authState.current = { user: null };
+    authState.current = { user: null, identity: null };
   });
 
   it("renders no checklist on the login screen when signed out", async () => {
@@ -240,7 +241,7 @@ describe("OnboardingWizard — authentication gate", () => {
 
   it("renders the checklist once a user is signed in", async () => {
     // The gate must not suppress the feature for its actual audience.
-    authState.current = { user: { id: "user-1" } };
+    authState.current = { user: { id: "user-1" }, identity: { id: "user-1" } };
     const router = makeRouter(["/"]);
     render(React.createElement(RouterProvider as any, { router }));
 

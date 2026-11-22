@@ -93,6 +93,7 @@ const FORKS_POOL_FILES = [
   "src/api/__tests__/transport.test.ts",
   "src/api/__tests__/transport.trace.test.ts",
   "src/api/__tests__/unauthInterceptor.signout.test.ts",
+  "src/api/__tests__/unauthInterceptor.forgeCookie.test.ts",
   "src/components/Auth/__tests__/CliLogin.test.tsx",
   "src/components/Auth/__tests__/DevicePairing.test.tsx",
   "src/components/Billing/__tests__/LinkIdentityModal.test.tsx",
@@ -407,6 +408,10 @@ const appConfig: ViteUserConfig = {
         changeOrigin: true,
         ws: false,
       },
+      // forge sign-in (AUTH_PROVIDER "forge", src/lib/auth/forge-api.ts): both
+      // APIs on this origin under forge's named-API paths, so the login
+      // broker's session cookie is first-party to every request.
+      ...namedApiRoutes(),
       // Interactive terminal is a RAW WebSocket (not a Connect RPC), served by
       // reliant-api at /api/v2/terminal/ws (internal/grpc/server.go). It needs
       // its own entry with ws:true so Vite upgrades + forwards the connection;
@@ -539,6 +544,64 @@ function demoConfig(app: ViteUserConfig): ViteUserConfig {
       },
     },
   };
+}
+
+// ── Named same-origin APIs (forge#2669), for forge sign-in ─────────────
+//
+// /_api/@reliant → reliant-api and /_api/@cp → the control plane's
+// admin-server, each with its prefix stripped, exactly as a hosted site's
+// origin serves them. Upstreams: `forge env up`'s FORGE_DEV_APIS
+// ({"<name>": "<upstream>"}) once the env declares `apis` on this frontend,
+// else the stack's VITE_API_URL / VITE_CONTROL_PLANE_API_URL. A name with no
+// upstream is not proxied (the SPA answers it, and the RPC fails loudly).
+// The client's X-Forwarded-* / Forwarded headers are dropped, as at the hosted
+// origin, so an API never trusts a forwarding claim the browser made up. The
+// terminal WebSocket rides the same route (ws: true).
+function parseDevApis(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (e): e is [string, string] => /^[a-z][a-z0-9-]{0,30}$/.test(e[0]) && typeof e[1] === "string" && e[1] !== "",
+      ),
+    );
+  } catch {
+    console.warn("[vite] FORGE_DEV_APIS is not a JSON object; named APIs fall back to VITE_API_URL / VITE_CONTROL_PLANE_API_URL");
+    return {};
+  }
+}
+
+// A function declaration: appConfig (above) calls namedApiRoutes while it is built.
+function stripClientForwarded(proxy: { on: (event: "proxyReq", fn: (req: { removeHeader: (h: string) => void }) => void) => void }) {
+  proxy.on("proxyReq", (proxyReq) => {
+    for (const h of ["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-port", "x-forwarded-proto"]) {
+      proxyReq.removeHeader(h);
+    }
+  });
+}
+
+function namedApiRoutes() {
+  const declared = parseDevApis(process.env.FORGE_DEV_APIS);
+  const upstreams: Record<string, string | undefined> = {
+    reliant: declared.reliant ?? (process.env.VITE_API_URL || "http://127.0.0.1:3090"),
+    cp: declared.cp ?? (process.env.VITE_CONTROL_PLANE_API_URL || undefined),
+  };
+  const routes: Record<string, object> = {};
+  for (const [name, target] of Object.entries(upstreams)) {
+    if (!target) continue;
+    const prefix = `/_api/@${name}`;
+    // A RegExp key, so /_api/@cp never also matches /_api/@cp-v2.
+    routes[`^${prefix}(?=[/?]|$)`] = {
+      target: target.replace(/\/+$/, ""),
+      changeOrigin: true,
+      ws: true,
+      configure: stripClientForwarded,
+      rewrite: (p: string) => p.slice(prefix.length) || "/",
+    };
+  }
+  return routes;
 }
 
 export default defineConfig(({ mode }) => (isDemoBuild(mode) ? demoConfig(appConfig) : appConfig));

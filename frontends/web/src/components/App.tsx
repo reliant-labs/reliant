@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, type AnyRouter } from "@tanstack/react-router";
 import { queryClient } from "../lib/query-client";
@@ -10,9 +10,10 @@ import { useThemeInitialization } from "../hooks/useThemeInitialization";
 import { useSettingsHydration } from "../hooks/useSettingsHydration";
 import { AuthContextProvider } from "../lib/auth/context";
 import { createSupabaseAuthProvider } from "../lib/auth/supabase-provider";
+import { createForgeAuthProvider } from "../lib/auth/forge-provider";
+import { isForgeAuth } from "../lib/auth/forge-api";
 import { EventBusProvider } from "../lib/event-context";
 
-const authProvider = createSupabaseAuthProvider();
 
 // The route tree (lib/shell.ts): the app's one tree (routes.tsx) on both the
 // app host and the forge host — the forge host is a brand of it, decided
@@ -32,6 +33,10 @@ const ShellRouter = lazy(async () => {
 });
 
 export function App() {
+  // Chosen once the config is in (App renders after configReady), never at
+  // module load, where config.js may not have run yet.
+  const [authProvider] = useState(() => (isForgeAuth() ? createForgeAuthProvider() : createSupabaseAuthProvider()));
+
   // Initialize theme from database
   useThemeInitialization();
   

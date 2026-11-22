@@ -5,7 +5,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { resetAfterLeavingOrg } from "@/lib/orgScope";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthUserId } from "@/lib/auth/use-auth";
 import {
   ORG_SCOPED_QUERY_ROOTS,
   bindActiveOrgUser,
@@ -55,7 +55,7 @@ export interface OrgChange {
 export function ActiveOrgBinding({
   onSwitch,
 }: { onSwitch?: (orgId: string | null, client: QueryClient, change: OrgChange) => void } = {}) {
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const userId = useAuthUserId();
   bindActiveOrgUser(userId);
 
   const qc = useQueryClient();

@@ -38,9 +38,15 @@ const initialize = vi.fn()
 type MockUser = { is_anonymous?: boolean; email?: string } | null
 let mockUser: MockUser = { is_anonymous: true }
 
-vi.mock('@/store/authStore', () => ({
-  useAuthStore: () => ({
+vi.mock('@/store/authStore', async () => {
+  const { identityOf } = await import('@/lib/auth/identity')
+  let identityFor: { user: MockUser; identity: ReturnType<typeof identityOf> } = { user: null, identity: null }
+  const state = () => {
+    // The real store derives identity from user; one object per user.
+    if (identityFor.user !== mockUser) identityFor = { user: mockUser, identity: identityOf({ id: 'u1', ...mockUser } as never) }
+    return {
     user: mockUser,
+    identity: mockUser ? identityFor.identity : null,
     initialized: true,
     loading: false,
     initialize,
@@ -48,8 +54,12 @@ vi.mock('@/store/authStore', () => ({
     linkEmailIdentity,
     sendEmailIdentityVerification: vi.fn(),
     verifyEmailIdentityOTP: vi.fn(),
-  }),
-}))
+    }
+  }
+  return {
+    useAuthStore: (selector?: (s: ReturnType<typeof state>) => unknown) => (selector ? selector(state()) : state()),
+  }
+})
 
 import { UpgradeAccount } from '../UpgradeAccount'
 

@@ -80,7 +80,8 @@ vi.mock("../../../store/tourStore", () => ({
 // checklist (see OnboardingWizard.authGate.test.tsx). These routing tests are
 // about URL gating, so stand up a signed-in user and let the URL decide.
 vi.mock("../../../store/authStore", () => {
-  const authState = { user: { id: "user-1" } };
+  // identity: what the real store derives from user on every write.
+  const authState = { user: { id: "user-1" }, identity: { id: "user-1" } };
   return {
     useAuthStore: Object.assign(
       (selector?: any) => (selector ? selector(authState) : authState),

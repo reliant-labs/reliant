@@ -20,7 +20,15 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
   getControlPlaneURL: () => "https://admin.example.test",
 }));
 
+// forge sign-in is switched per test; everything else in forge-api is real.
+const forge = vi.hoisted(() => ({ on: false }));
+vi.mock("@/lib/auth/forge-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/forge-api")>()),
+  isForgeAuth: () => forge.on,
+}));
+
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { forgeUserOf } from "@/lib/auth/forge-session";
 import { DevicePairing } from "../DevicePairing";
 
 const listMyOrganizations = vi.fn();
@@ -57,6 +65,8 @@ beforeEach(() => {
   listMyOrganizations.mockResolvedValue({ orgs: [org("org-a", "Acme", true)], defaultOrgId: "org-a" });
 });
 afterEach(() => {
+  forge.on = false;
+  useAuthStore.setState({ initialized: false });
   vi.unstubAllGlobals();
 });
 
@@ -165,5 +175,57 @@ describe("DevicePairing", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: "Not my machine" }));
     await screen.findByText("Machine declined");
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ user_code: "BDFGHJKL", approved: false });
+  });
+});
+
+// AUTH_PROVIDER "forge": the broker's session cookie is the credential, read
+// by the control plane only on a same-origin request with no Authorization.
+describe("DevicePairing with forge sign-in", () => {
+  const ORIGIN = "https://app.example.test";
+  beforeEach(() => {
+    forge.on = true;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        origin: ORIGIN,
+        search: "?user_code=BDFG-HJKL",
+        get href() {
+          return href;
+        },
+        set href(v: string) {
+          href = v;
+        },
+      },
+    });
+  });
+
+  it("looks up and approves same-origin with the session cookie and no Authorization header", async () => {
+    useAuthStore.setState({ user: forgeUserOf({ authenticated: true, subject: "alice" }), initialized: true });
+    fetchMock
+      .mockResolvedValueOnce(ok({ user_code: "BDFG-HJKL", hostname: "build-box", scopes: [] }))
+      .mockResolvedValueOnce(ok({ approved: true }));
+    renderWithQuery(<DevicePairing />);
+    expect(await screen.findByText("Approve machine build-box?")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("Machine approved")).toBeInTheDocument();
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls.map(([url]) => url)).toEqual([
+      `${ORIGIN}/_api/@cp/oauth/device/lookup`,
+      `${ORIGIN}/_api/@cp/oauth/device/approve`,
+    ]);
+    for (const [, init] of calls) {
+      expect(init.credentials).toBe("include");
+      expect(new Headers(init.headers).has("Authorization")).toBe(false);
+    }
+    expect(JSON.parse(calls[1][1].body as string)).toEqual({ user_code: "BDFGHJKL", approved: true, org_id: "org-a" });
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("sends a person with no broker session to sign in and back with the code", async () => {
+    useAuthStore.setState({ user: null, initialized: true });
+    renderWithQuery(<DevicePairing />);
+    await waitFor(() => expect(href).toBe(`/auth?redirect=${encodeURIComponent("/oauth/device?user_code=BDFG-HJKL")}`));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

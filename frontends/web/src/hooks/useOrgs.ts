@@ -13,8 +13,8 @@ import {
   type MyOrgs,
 } from "@/services/controlPlane/orgs";
 import { switchTabOrg } from "@/lib/orgSwitch";
-import { chooseActiveOrg, isMachineCredentialUser, useActiveOrgStore } from "@/store/activeOrgStore";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
+import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 
 /**
  * Every org the caller belongs to (human sessions; a machine credential gets
@@ -25,7 +25,8 @@ export function useMyOrgs(client?: QueryClient) {
   // ListMyOrganizations is authenticated: signed out it can only answer 401.
   // It is a person's list: a machine credential (an API-key session) is
   // refused, and acts in its own org with none named (store/activeOrgStore).
-  const person = useAuthStore((s) => s.user !== null && !isMachineCredentialUser(s.user.id));
+  const identity = useAuthIdentity();
+  const person = identity !== null && !identity.isApiKey;
   return useQuery<MyOrgs>({
     queryKey: orgKeys.mine,
     queryFn: listMyOrganizations,
