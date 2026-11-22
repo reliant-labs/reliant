@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -117,6 +118,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -1375,6 +1377,7 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Drafts:   g.Workflowdrafts(),
 	})
 }
 
@@ -1467,6 +1470,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Drafts:   g.Workflowdrafts(),
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1555,6 +1559,23 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	})
 }
 
+// newWorkflowdrafts constructs the workflowdrafts package
+// (internal/workflowdrafts): the one writer of saved workflows, which reads
+// them scoped to what a caller may see. The Repo is its transaction runner,
+// org locker and user-update publisher, so each write runs in the Repo's
+// retry ladder, as it did on the facade.
+func (g *Graph) newWorkflowdrafts() (workflowdrafts.Service, error) {
+	repo := g.Database()
+	return workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Tx:      repo,
+		Locks:   repo,
+		Updates: repo,
+		Drafts:  store.NewWorkflowDraftExtStore(repo.ORM()),
+	})
+}
+
 // newWorkflow constructs the workflow handler (internal/handlers/workflow).
 // The trigger handler stops the schedules of automations deleted with a
 // workflow.
@@ -1565,6 +1586,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Config:      g.Cfg,
 		Repo:        g.Database(),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
+		Drafts:      g.Workflowdrafts(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
 		Orgs:        g.OrgResolver(),

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -44,7 +45,7 @@ func setupTestPresetService(t *testing.T) (*Service, *db.Repo, string, string) {
 		t.Fatalf("failed to create test project: %v", err)
 	}
 
-	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	return service, repo, userID, projectID
 }
 

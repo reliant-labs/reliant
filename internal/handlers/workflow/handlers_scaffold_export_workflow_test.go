@@ -3,8 +3,6 @@ package workflow_test
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
-
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -17,7 +15,7 @@ import (
 func TestExportWorkflow_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: draftsRepo(callerDraft(t, "mine")), Projects: projectaccesstest.For(draftsRepo(callerDraft(t, "mine")))}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(draftsRepo(callerDraft(t, "mine")).deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ExportWorkflowRequest, pb.ExportWorkflowResponse]{
 		{

@@ -26,8 +26,24 @@ import (
 // Reads is what a Catalog is loaded from: the caller's
 // workflows in one query and the project's synced workflows in one column.
 type Reads interface {
+	DraftLister
+	workflowsource.ProjectStore
+}
+
+// DraftLister lists a user's own workflows (workflowdrafts.Service).
+type DraftLister interface {
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+}
+
+type loadReads struct {
+	DraftLister
+	workflowsource.ProjectStore
+}
+
+// NewReads is the Reads made of a user's own workflows and a project's synced
+// ones.
+func NewReads(drafts DraftLister, projects workflowsource.ProjectStore) Reads {
+	return loadReads{DraftLister: drafts, ProjectStore: projects}
 }
 
 // Catalog is one request's snapshot of every workflow a ref can name
