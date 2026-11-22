@@ -28,6 +28,7 @@
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
         "Connection",
+        "ConnectionVault",
         "Connector",
         "ConnectorGrants",
         "CoverageSource",
@@ -494,6 +495,7 @@
         "AgentRuns",
         "AutomationTokens",
         "ChatUpdateHub",
+        "ConnectionVault",
         "DBRepo",
         "Database",
         "DebugServer",
@@ -53974,6 +53976,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ConnectionVault",
+      "name": "ConnectionVault",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewConnectionVault"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Connector",
       "name": "Connector",
       "kind": "component",
@@ -55465,6 +55479,32 @@
   ],
   "bindings": [
     {
+      "consumer": "APICatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "APIConnections",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "APIConnections",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -56018,6 +56058,19 @@
     },
     {
       "consumer": "GitHubAccess",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GitHubAccess",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
       "methods": [],
@@ -56148,6 +56201,19 @@
       ],
       "providers": [
         "WorktreeSweep"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "InputOptions",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -57203,6 +57269,19 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "OrgAccounts",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Service",
       "methods": [],
@@ -57532,6 +57611,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "TriggerDeliveryRelay",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "TriggerInbound",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -57541,6 +57633,19 @@
       ],
       "providers": [
         "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TriggerSenders",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -57593,6 +57698,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "WorkerCatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "WorkerDaemonRouter",
       "field": "AutomationTokens",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
@@ -57602,6 +57720,19 @@
       ],
       "providers": [
         "AutomationTokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerIntegrationCredentials",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -57620,6 +57751,19 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -57628,6 +57772,19 @@
       ],
       "providers": [
         "WriteLedger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },

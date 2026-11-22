@@ -139,7 +139,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, mine, nil,
+	require.NoError(t, db.TestConnections(t, repo).CreateConnection(ctx, mine, nil,
 		core.ConnectionEvent{ConnectionID: mine.ID, UserID: userID, Kind: core.ConnectionEventCreated, Actor: "user:" + userID}))
 	intDef := base("on issue")
 	intDef.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{

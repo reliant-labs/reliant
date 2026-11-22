@@ -112,7 +112,10 @@ var userScopedReads = map[string]string{
 	"RecentTriggerOutcomes": readParentAuthorized,
 	"WorkflowSlugExists":    readParentAuthorized,
 
-	"GetAnalyticsEnabled":         readPersonal,
+	"GetAnalyticsEnabled": readPersonal,
+	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
+	// alone): the trigger paths resolve an activation's owner and its connection through it.
+	"GetConnection":               readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":   readPersonal,

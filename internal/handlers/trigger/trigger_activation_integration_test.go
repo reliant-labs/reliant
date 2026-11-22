@@ -164,7 +164,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, conn, nil,
+	require.NoError(t, db.TestConnections(t, repo).CreateConnection(ctx, conn, nil,
 		core.ConnectionEvent{ConnectionID: conn.ID, UserID: userID, Kind: core.ConnectionEventCreated, Actor: "user:" + userID}))
 	issue := activate("my new issue", "new-issue", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID })
 	assert.Equal(t, conn.ID, issue.GetConnectionId())

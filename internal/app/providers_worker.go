@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -162,10 +163,11 @@ type WorkerIntegrationCredentials struct{ Source httpaction.CredentialSource }
 // WorkerIntegrationCredentialsDeps is where saved connections and their
 // secrets live, and the control plane delegated credentials come from.
 type WorkerIntegrationCredentialsDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	Integrations *IntegrationSettings
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	Integrations    *IntegrationSettings
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewWorkerIntegrationCredentials builds the source. It fails boot when a
@@ -173,7 +175,7 @@ type WorkerIntegrationCredentialsDeps struct {
 //
 //forge:root-only worker
 func NewWorkerIntegrationCredentials(d WorkerIntegrationCredentialsDeps) (*WorkerIntegrationCredentials, error) {
-	resolver, err := newWorkerConnectionResolver(d.DB, d.Vault, d.Integrations.Webhooks.OAuthClients)
+	resolver, err := newWorkerConnectionResolver(d.DB, d.ConnectionVault, d.Vault, d.Integrations.Webhooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -202,12 +204,11 @@ func checkExecutors() error {
 // vault key with the api-server: the worker is the only process that reads
 // secrets, and the only one besides the api-server that writes them (on
 // refresh).
-func newWorkerConnectionResolver(repo *db.Repo, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
+func newWorkerConnectionResolver(repo *db.Repo, store connectionvault.Service, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, keys, providers, nil)
 	return connections.NewResolver(repo, store, tokens), nil
 }
@@ -237,15 +238,16 @@ type WorkerCatalogSearch struct{ *catalogindex.Service }
 // WorkerCatalogSearchDeps is the connections it reports on and the
 // credential source that decides what "connected" means here.
 type WorkerCatalogSearchDeps struct {
-	DB          *db.Repo
-	Credentials *WorkerIntegrationCredentials
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Credentials     *WorkerIntegrationCredentials
 }
 
 // NewWorkerCatalogSearch builds the search.
 //
 //forge:root-only worker
 func NewWorkerCatalogSearch(d WorkerCatalogSearchDeps) (*WorkerCatalogSearch, error) {
-	svc, err := newWorkerCatalogSearch(d.DB.Connections(), d.Credentials.Source)
+	svc, err := newWorkerCatalogSearch(d.ConnectionVault, d.Credentials.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -420,14 +422,15 @@ type WorkerTrigger struct{ *trigger.Service }
 // and the control plane, which hosts the GitHub App and mints the tokens an
 // unattended fire wakes its machine with.
 type WorkerTriggerDeps struct {
-	Logger       *slog.Logger
-	Config       *config.Config
-	DB           *db.Repo
-	Temporal     *TemporalClient
-	Vault        vault.Service
-	Pollers      *webhook.Registry
-	Integrations *IntegrationSettings
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	Logger          *slog.Logger
+	Config          *config.Config
+	DB              *db.Repo
+	Temporal        *TemporalClient
+	Vault           vault.Service
+	Pollers         *webhook.Registry
+	Integrations    *IntegrationSettings
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -444,7 +447,7 @@ type WorkerTriggerDeps struct {
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
-	githubAccess, err := wireGitHubAccess(repo, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	githubAccess, err := wireGitHubAccess(repo, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
 	}
@@ -488,15 +491,16 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // WorkerToolsFactoryDeps is everything a tool executing on the worker
 // reaches.
 type WorkerToolsFactoryDeps struct {
-	DB            *db.Repo
-	Network       *configv1.NetworkConfig
-	Temporal      *TemporalClient
-	AgentRuns     *agentruns.Runs
-	Triggers      *WorkerTrigger
-	Credentials   *WorkerIntegrationCredentials
-	WriteLedger   writeledger.Service
-	CatalogSearch *WorkerCatalogSearch
-	Router        *WorkerDaemonRouter
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Network         *configv1.NetworkConfig
+	Temporal        *TemporalClient
+	AgentRuns       *agentruns.Runs
+	Triggers        *WorkerTrigger
+	Credentials     *WorkerIntegrationCredentials
+	WriteLedger     writeledger.Service
+	CatalogSearch   *WorkerCatalogSearch
+	Router          *WorkerDaemonRouter
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -564,7 +568,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ChangeController: newChangeController(repo, d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
-		ConnectionProposer: newConnectionProposer(repo, d.Membership),
+		ConnectionProposer: newConnectionProposer(repo, d.ConnectionVault, d.Membership),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -662,6 +666,7 @@ func (a *AccountRecorder) Close(context.Context) error {
 // TemporalWorkerDeps is everything the worker's workflows and activities
 // reach.
 type TemporalWorkerDeps struct {
+	ConnectionVault  connectionvault.Service
 	DB               *db.Repo
 	ProviderAccounts provideraccounts.Service
 	OrgAccounts      orgaccounts.Service
@@ -834,6 +839,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
 		ProviderAccounts:       d.ProviderAccounts,
+		Connections:            d.ConnectionVault,
 		OrgAccounts:            d.OrgAccounts,
 		StreamingHub:           d.Streaming.Hub,
 		ToolsFactory:           d.Tools.ToolsFactory,
@@ -877,11 +883,12 @@ func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, erro
 }
 
 type TriggerDeliveryRelayDeps struct {
-	DB           *db.Repo
-	Temporal     *TemporalClient
-	Integrations *IntegrationSettings
-	Membership   *orgs.Resolver
-	Policies     *orgpolicy.Resolver
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Temporal        *TemporalClient
+	Integrations    *IntegrationSettings
+	Membership      *orgs.Resolver
+	Policies        *orgpolicy.Resolver
 }
 
 // TriggerDeliveryRelay gives the inbox live membership and policy context.
@@ -904,7 +911,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, repo.Connections(), triggers.NewAutoPause(repo, nil)),
+	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
 		membership: membership, policies: d.Policies}, nil
 }
 
