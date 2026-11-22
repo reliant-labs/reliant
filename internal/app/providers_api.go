@@ -592,7 +592,7 @@ type optionsChecker struct{ svc inputoptions.Service }
 func (c optionsChecker) CheckValues(ctx context.Context, check trigger.ValueCheck) (trigger.ValueCheckResult, error) {
 	res, err := c.svc.Resolve(ctx, inputoptions.ResolveRequest{
 		UserID: check.UserID, Type: check.Type, ConnectionID: check.ConnectionID, Scope: check.Scope,
-		Values: check.Values, ActingIdentity: string(check.ActingIdentity),
+		Values: check.Values, ActingIdentity: string(check.ActingIdentity), OrgID: check.OrgID,
 	})
 	if err != nil {
 		var upstream *inputoptions.UpstreamError
