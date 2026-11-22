@@ -615,6 +615,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Backoff:         g.Providerbackoff(),
+		WorkflowDrafts:  g.Workflowdrafts(),
 	})
 }
 

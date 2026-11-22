@@ -21,7 +21,7 @@ import (
 )
 
 // forge:section MockrunCallerStore
-// forge:hash=86204bb777b8a3091d079d94e323bc3152a9a3683a549d351e6a46a3522eed29
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockrunCallerStore is a test mock for the runCallerStore interface.
 //
@@ -47,7 +47,7 @@ func (m *MockrunCallerStore) GetChat(ctx context.Context, id string) (*db.Chat, 
 var _ runCallerStore = (*MockrunCallerStore)(nil)
 
 // forge:section MockthreadReader
-// forge:hash=963fde9eca9917dcb59e80c47979d8c5b0fa2b7c34c9e4d78bd202ab0f9ff1e3
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockthreadReader is a test mock for the threadReader interface.
 //
@@ -73,7 +73,7 @@ func (m *MockthreadReader) GetThread(ctx context.Context, id string) (*db.Thread
 var _ threadReader = (*MockthreadReader)(nil)
 
 // forge:section MockplanByThread
-// forge:hash=e27b021e61ebda6b062963c603bbaf7aa7fa34b1cddc1b78c1bbd6c77aab3625
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockplanByThread is a test mock for the planByThread interface.
 //
@@ -99,7 +99,7 @@ func (m *MockplanByThread) GetPlanByThreadID(ctx context.Context, threadID strin
 var _ planByThread = (*MockplanByThread)(nil)
 
 // forge:section MockcreatePlanPlanning
-// forge:hash=976fbd50b4f95a924cfe7ed3daa39c81406e9144144d82d530fdfe648d8b1ab9
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockcreatePlanPlanning is a test mock for the createPlanPlanning interface.
 //
@@ -135,7 +135,7 @@ func (m *MockcreatePlanPlanning) GetPlanByThreadID(ctx context.Context, threadID
 var _ createPlanPlanning = (*MockcreatePlanPlanning)(nil)
 
 // forge:section MockaddTaskPlanning
-// forge:hash=454747081bb9e4f8db560a214ca55f8ef0aa30a026b0dfbfa4c027fa9edc86ca
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockaddTaskPlanning is a test mock for the addTaskPlanning interface.
 //
@@ -161,7 +161,7 @@ func (m *MockaddTaskPlanning) GetPlanByThreadID(ctx context.Context, threadID st
 var _ addTaskPlanning = (*MockaddTaskPlanning)(nil)
 
 // forge:section MockupdatePlanPlanning
-// forge:hash=2f3c607a6f9e83334aff68d57d875938903629f36b7a0a7a8d5ecd7055c099d1
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockupdatePlanPlanning is a test mock for the updatePlanPlanning interface.
 //
@@ -197,7 +197,7 @@ func (m *MockupdatePlanPlanning) GetPlanByThreadID(ctx context.Context, threadID
 var _ updatePlanPlanning = (*MockupdatePlanPlanning)(nil)
 
 // forge:section MockgetPlanPlanning
-// forge:hash=af8bd0257ea93c4fbfb56731ab7a068952f39bfe3c893a4e5ed9ec74e7d7944a
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgetPlanPlanning is a test mock for the getPlanPlanning interface.
 //
@@ -233,7 +233,7 @@ func (m *MockgetPlanPlanning) GetPlanByThreadID(ctx context.Context, threadID st
 var _ getPlanPlanning = (*MockgetPlanPlanning)(nil)
 
 // forge:section MocklistTasksPlanning
-// forge:hash=3a39ef527fa6b204d3bf316438aee41cb528edb5810612285220843b45ecbffe
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistTasksPlanning is a test mock for the listTasksPlanning interface.
 //
@@ -279,7 +279,7 @@ func (m *MocklistTasksPlanning) GetPlanByThreadID(ctx context.Context, threadID 
 var _ listTasksPlanning = (*MocklistTasksPlanning)(nil)
 
 // forge:section MockupdateTaskPlanning
-// forge:hash=e49889ffaaa8bc18879498ed37c620cc113d6753a4670364ef6fe2f7d8976a32
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockupdateTaskPlanning is a test mock for the updateTaskPlanning interface.
 //
@@ -335,7 +335,7 @@ func (m *MockupdateTaskPlanning) GetPlanByThreadID(ctx context.Context, threadID
 var _ updateTaskPlanning = (*MockupdateTaskPlanning)(nil)
 
 // forge:section MockaddDependencyPlanning
-// forge:hash=885e23e3741ccc297fdf12e3ac170461627925c4c619ab8df6353806b4bfc59d
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockaddDependencyPlanning is a test mock for the addDependencyPlanning interface.
 //
@@ -381,7 +381,7 @@ func (m *MockaddDependencyPlanning) GetPlanByThreadID(ctx context.Context, threa
 var _ addDependencyPlanning = (*MockaddDependencyPlanning)(nil)
 
 // forge:section MockremoveDependencyPlanning
-// forge:hash=323da68f59364c797b509f663d077eb8100f06302ac76582d9f438447d0556ae
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockremoveDependencyPlanning is a test mock for the removeDependencyPlanning interface.
 //
@@ -407,7 +407,7 @@ func (m *MockremoveDependencyPlanning) DeleteTaskDependencyByPair(ctx context.Co
 var _ removeDependencyPlanning = (*MockremoveDependencyPlanning)(nil)
 
 // forge:section MocklistReadyTasksPlanning
-// forge:hash=00f49731aaae5ebc47f4fb42c93147109b0c456ecdf31e6530573ed85bedf3d4
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistReadyTasksPlanning is a test mock for the listReadyTasksPlanning interface.
 //
@@ -443,7 +443,7 @@ func (m *MocklistReadyTasksPlanning) GetPlanByThreadID(ctx context.Context, thre
 var _ listReadyTasksPlanning = (*MocklistReadyTasksPlanning)(nil)
 
 // forge:section MockworkflowDraftLookup
-// forge:hash=f4899f1509814f657f7d96c14d4214e600844de7e7915154477862113fbe885e
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockworkflowDraftLookup is a test mock for the workflowDraftLookup interface.
 //
@@ -489,7 +489,7 @@ func (m *MockworkflowDraftLookup) GetWorkflowDraftBySlug(ctx context.Context, us
 var _ workflowDraftLookup = (*MockworkflowDraftLookup)(nil)
 
 // forge:section MockinheritedSpawnLookup
-// forge:hash=4a75335acab7082f26afd59e278a82678067796f1b48e48182730c6c97cc4374
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockinheritedSpawnLookup is a test mock for the inheritedSpawnLookup interface.
 //
@@ -515,7 +515,7 @@ func (m *MockinheritedSpawnLookup) ListInheritedSpawnChildren(ctx context.Contex
 var _ inheritedSpawnLookup = (*MockinheritedSpawnLookup)(nil)
 
 // forge:section MockspawnChildLister
-// forge:hash=00cf1d2f6ce861eda179523e1f8362ba89060673b9be488331b16e55c84b44c8
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockspawnChildLister is a test mock for the spawnChildLister interface.
 //
@@ -541,7 +541,7 @@ func (m *MockspawnChildLister) ListSpawnChildren(ctx context.Context, threadID s
 var _ spawnChildLister = (*MockspawnChildLister)(nil)
 
 // forge:section MockspawnRelationStore
-// forge:hash=70091bf3a1fc485dff62a6694fd75b46e6bf74e8c6569d9f19fa0b9360fb7a2a
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockspawnRelationStore is a test mock for the spawnRelationStore interface.
 //
@@ -567,7 +567,7 @@ func (m *MockspawnRelationStore) GetThread(ctx context.Context, id string) (*db.
 var _ spawnRelationStore = (*MockspawnRelationStore)(nil)
 
 // forge:section MockSpawnTree
-// forge:hash=c8fee7121f2bf5e56d398146a3cb71b606dad5df6444fa43ba8f6bf74ee66aa4
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockSpawnTree is a test mock for the SpawnTree interface.
 //
@@ -603,7 +603,7 @@ func (m *MockSpawnTree) ListInheritedSpawnChildren(ctx context.Context, threadID
 var _ SpawnTree = (*MockSpawnTree)(nil)
 
 // forge:section MockstartRunLineageReader
-// forge:hash=5850fcc17c8fc1acdbdb59bf44a8d8e11eb0c8f0d188fb9e990de9c1b93417c9
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockstartRunLineageReader is a test mock for the startRunLineageReader interface.
 //
@@ -629,7 +629,7 @@ func (m *MockstartRunLineageReader) GetTriggerEventByChat(ctx context.Context, k
 var _ startRunLineageReader = (*MockstartRunLineageReader)(nil)
 
 // forge:section MockscenarioLoaderStore
-// forge:hash=6082416e71874fcd3240a672bfb1cb9639e81bf3b70c4cfe3f67b4d9d8d173de
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockscenarioLoaderStore is a test mock for the scenarioLoaderStore interface.
 //
@@ -640,8 +640,6 @@ var _ startRunLineageReader = (*MockstartRunLineageReader)(nil)
 type MockscenarioLoaderStore struct {
 	contractkit.Recorder
 	GetProjectWorkflowsJSONFunc func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
 }
 
@@ -652,24 +650,6 @@ func (m *MockscenarioLoaderStore) GetProjectWorkflowsJSON(ctx context.Context, p
 		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockscenarioLoaderStore", "GetProjectWorkflowsJSON")
-}
-
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockscenarioLoaderStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockscenarioLoaderStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockscenarioLoaderStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockscenarioLoaderStore", "GetWorkflowDraftBySlug")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -684,8 +664,384 @@ func (m *MockscenarioLoaderStore) GetChat(ctx context.Context, id string) (*db.C
 // Compile-time check.
 var _ scenarioLoaderStore = (*MockscenarioLoaderStore)(nil)
 
+// forge:section MocklistWorkflowsDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MocklistWorkflowsDrafts is a test mock for the listWorkflowsDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MocklistWorkflowsDrafts.<Method>Func not set" error.
+type MocklistWorkflowsDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc   func(context.Context, string, string) (*db.WorkflowDraft, error)
+	ListWorkflowDraftsByUserFunc func(context.Context, string) ([]*db.WorkflowDraft, error)
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MocklistWorkflowsDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MocklistWorkflowsDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MocklistWorkflowsDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MocklistWorkflowsDrafts", "GetWorkflowDraftBySlug")
+}
+
+// ListWorkflowDraftsByUser records the call and delegates to ListWorkflowDraftsByUserFunc when set.
+func (m *MocklistWorkflowsDrafts) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error) {
+	m.Recorder.Record("ListWorkflowDraftsByUser", ctx, userID)
+	if m.ListWorkflowDraftsByUserFunc != nil {
+		return m.ListWorkflowDraftsByUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MocklistWorkflowsDrafts", "ListWorkflowDraftsByUser")
+}
+
+// Compile-time check.
+var _ listWorkflowsDrafts = (*MocklistWorkflowsDrafts)(nil)
+
+// forge:section MockgetWorkflowDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MockgetWorkflowDrafts is a test mock for the getWorkflowDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockgetWorkflowDrafts.<Method>Func not set" error.
+type MockgetWorkflowDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftFunc        func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockgetWorkflowDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockgetWorkflowDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockgetWorkflowDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockgetWorkflowDrafts", "GetWorkflowDraftBySlug")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockgetWorkflowDrafts) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockgetWorkflowDrafts", "GetWorkflowDraft")
+}
+
+// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
+func (m *MockgetWorkflowDrafts) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
+	if m.GetWorkflowDraftByNameFunc != nil {
+		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockgetWorkflowDrafts", "GetWorkflowDraftByName")
+}
+
+// Compile-time check.
+var _ getWorkflowDrafts = (*MockgetWorkflowDrafts)(nil)
+
+// forge:section MockcreateWorkflowDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MockcreateWorkflowDrafts is a test mock for the createWorkflowDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockcreateWorkflowDrafts.<Method>Func not set" error.
+type MockcreateWorkflowDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+	CreateWorkflowDraftFunc     func(context.Context, *db.WorkflowDraft) error
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockcreateWorkflowDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockcreateWorkflowDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockcreateWorkflowDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockcreateWorkflowDrafts", "GetWorkflowDraftBySlug")
+}
+
+// CreateWorkflowDraft records the call and delegates to CreateWorkflowDraftFunc when set.
+func (m *MockcreateWorkflowDrafts) CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
+	m.Recorder.Record("CreateWorkflowDraft", ctx, draft)
+	if m.CreateWorkflowDraftFunc != nil {
+		return m.CreateWorkflowDraftFunc(ctx, draft)
+	}
+	return contractkit.MockNotSet("MockcreateWorkflowDrafts", "CreateWorkflowDraft")
+}
+
+// Compile-time check.
+var _ createWorkflowDrafts = (*MockcreateWorkflowDrafts)(nil)
+
+// forge:section MockwriteWorkflowDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MockwriteWorkflowDrafts is a test mock for the writeWorkflowDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockwriteWorkflowDrafts.<Method>Func not set" error.
+type MockwriteWorkflowDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc                func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+	UpdateWorkflowDraftDefinitionFunc          func(context.Context, string, string, string, string, db.WorkflowDraftStatus) error
+	UpdateWorkflowDraftDefinitionAtVersionFunc func(context.Context, string, int64, string, string, string, db.WorkflowDraftStatus) error
+	GetWorkflowDraftFunc                       func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockwriteWorkflowDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockwriteWorkflowDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockwriteWorkflowDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockwriteWorkflowDrafts", "GetWorkflowDraftBySlug")
+}
+
+// UpdateWorkflowDraftDefinition records the call and delegates to UpdateWorkflowDraftDefinitionFunc when set.
+func (m *MockwriteWorkflowDrafts) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
+	m.Recorder.Record("UpdateWorkflowDraftDefinition", ctx, id, name, slug, definition, status)
+	if m.UpdateWorkflowDraftDefinitionFunc != nil {
+		return m.UpdateWorkflowDraftDefinitionFunc(ctx, id, name, slug, definition, status)
+	}
+	return contractkit.MockNotSet("MockwriteWorkflowDrafts", "UpdateWorkflowDraftDefinition")
+}
+
+// UpdateWorkflowDraftDefinitionAtVersion records the call and delegates to UpdateWorkflowDraftDefinitionAtVersionFunc when set.
+func (m *MockwriteWorkflowDrafts) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
+	m.Recorder.Record("UpdateWorkflowDraftDefinitionAtVersion", ctx, id, version, name, slug, definition, status)
+	if m.UpdateWorkflowDraftDefinitionAtVersionFunc != nil {
+		return m.UpdateWorkflowDraftDefinitionAtVersionFunc(ctx, id, version, name, slug, definition, status)
+	}
+	return contractkit.MockNotSet("MockwriteWorkflowDrafts", "UpdateWorkflowDraftDefinitionAtVersion")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockwriteWorkflowDrafts) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockwriteWorkflowDrafts", "GetWorkflowDraft")
+}
+
+// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
+func (m *MockwriteWorkflowDrafts) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
+	if m.GetWorkflowDraftByNameFunc != nil {
+		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockwriteWorkflowDrafts", "GetWorkflowDraftByName")
+}
+
+// Compile-time check.
+var _ writeWorkflowDrafts = (*MockwriteWorkflowDrafts)(nil)
+
+// forge:section MockWorkflowDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MockWorkflowDrafts is a test mock for the WorkflowDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowDrafts.<Method>Func not set" error.
+type MockWorkflowDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc                func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+	ListWorkflowDraftsByUserFunc               func(context.Context, string) ([]*db.WorkflowDraft, error)
+	GetWorkflowDraftFunc                       func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+	CreateWorkflowDraftFunc                    func(context.Context, *db.WorkflowDraft) error
+	UpdateWorkflowDraftDefinitionFunc          func(context.Context, string, string, string, string, db.WorkflowDraftStatus) error
+	UpdateWorkflowDraftDefinitionAtVersionFunc func(context.Context, string, int64, string, string, string, db.WorkflowDraftStatus) error
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockWorkflowDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockWorkflowDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowDrafts", "GetWorkflowDraftBySlug")
+}
+
+// ListWorkflowDraftsByUser records the call and delegates to ListWorkflowDraftsByUserFunc when set.
+func (m *MockWorkflowDrafts) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error) {
+	m.Recorder.Record("ListWorkflowDraftsByUser", ctx, userID)
+	if m.ListWorkflowDraftsByUserFunc != nil {
+		return m.ListWorkflowDraftsByUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowDrafts", "ListWorkflowDraftsByUser")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockWorkflowDrafts) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowDrafts", "GetWorkflowDraft")
+}
+
+// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
+func (m *MockWorkflowDrafts) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
+	if m.GetWorkflowDraftByNameFunc != nil {
+		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowDrafts", "GetWorkflowDraftByName")
+}
+
+// CreateWorkflowDraft records the call and delegates to CreateWorkflowDraftFunc when set.
+func (m *MockWorkflowDrafts) CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
+	m.Recorder.Record("CreateWorkflowDraft", ctx, draft)
+	if m.CreateWorkflowDraftFunc != nil {
+		return m.CreateWorkflowDraftFunc(ctx, draft)
+	}
+	return contractkit.MockNotSet("MockWorkflowDrafts", "CreateWorkflowDraft")
+}
+
+// UpdateWorkflowDraftDefinition records the call and delegates to UpdateWorkflowDraftDefinitionFunc when set.
+func (m *MockWorkflowDrafts) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
+	m.Recorder.Record("UpdateWorkflowDraftDefinition", ctx, id, name, slug, definition, status)
+	if m.UpdateWorkflowDraftDefinitionFunc != nil {
+		return m.UpdateWorkflowDraftDefinitionFunc(ctx, id, name, slug, definition, status)
+	}
+	return contractkit.MockNotSet("MockWorkflowDrafts", "UpdateWorkflowDraftDefinition")
+}
+
+// UpdateWorkflowDraftDefinitionAtVersion records the call and delegates to UpdateWorkflowDraftDefinitionAtVersionFunc when set.
+func (m *MockWorkflowDrafts) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
+	m.Recorder.Record("UpdateWorkflowDraftDefinitionAtVersion", ctx, id, version, name, slug, definition, status)
+	if m.UpdateWorkflowDraftDefinitionAtVersionFunc != nil {
+		return m.UpdateWorkflowDraftDefinitionAtVersionFunc(ctx, id, version, name, slug, definition, status)
+	}
+	return contractkit.MockNotSet("MockWorkflowDrafts", "UpdateWorkflowDraftDefinitionAtVersion")
+}
+
+// Compile-time check.
+var _ WorkflowDrafts = (*MockWorkflowDrafts)(nil)
+
+// forge:section MockscenarioRunDrafts
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
+
+// MockscenarioRunDrafts is a test mock for the scenarioRunDrafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockscenarioRunDrafts.<Method>Func not set" error.
+type MockscenarioRunDrafts struct {
+	contractkit.Recorder
+	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftFunc        func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockscenarioRunDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockscenarioRunDrafts", "GetUsableWorkflowBySlug")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockscenarioRunDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockscenarioRunDrafts", "GetWorkflowDraftBySlug")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockscenarioRunDrafts) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockscenarioRunDrafts", "GetWorkflowDraft")
+}
+
+// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
+func (m *MockscenarioRunDrafts) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
+	if m.GetWorkflowDraftByNameFunc != nil {
+		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockscenarioRunDrafts", "GetWorkflowDraftByName")
+}
+
+// Compile-time check.
+var _ scenarioRunDrafts = (*MockscenarioRunDrafts)(nil)
+
 // forge:section MockScenarioStore
-// forge:hash=577bf13c49325a90f1b728f7f649ee77faf52fe2be74540d4477a8c11da9e741
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockScenarioStore is a test mock for the ScenarioStore interface.
 //
@@ -721,7 +1077,7 @@ func (m *MockScenarioStore) ReplaceWorkflowScenario(ctx context.Context, s *db.W
 var _ ScenarioStore = (*MockScenarioStore)(nil)
 
 // forge:section MockscenarioFinder
-// forge:hash=3fc3d06cf046e2d5a86b09b02b10151e0b73874f5182ee66c1a589723591cd8d
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockscenarioFinder is a test mock for the scenarioFinder interface.
 //
@@ -747,7 +1103,7 @@ func (m *MockscenarioFinder) FindWorkflowScenarioByName(ctx context.Context, dra
 var _ scenarioFinder = (*MockscenarioFinder)(nil)
 
 // forge:section MockLaunchedRunCounter
-// forge:hash=10ee4f4c09e40663f31dad5d140031c1affebed2e267e779713dbc303d48e1bb
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockLaunchedRunCounter is a test mock for the LaunchedRunCounter interface.
 //
@@ -773,7 +1129,7 @@ func (m *MockLaunchedRunCounter) CountLiveLaunchedRuns(ctx context.Context, user
 var _ LaunchedRunCounter = (*MockLaunchedRunCounter)(nil)
 
 // forge:section MockWorktreeChatLister
-// forge:hash=b65b9a33b8651777926bc2b9046d0d0a4728d7759e97df63ceb6e26fb7e28f07
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockWorktreeChatLister is a test mock for the WorktreeChatLister interface.
 //
@@ -799,7 +1155,7 @@ func (m *MockWorktreeChatLister) ListChatsForWorktree(ctx context.Context, userI
 var _ WorktreeChatLister = (*MockWorktreeChatLister)(nil)
 
 // forge:section MockWorkflowSlugChecker
-// forge:hash=e670f528b3a2921d7dbec487338eed35e9fe9179923283c4e52976eee757a96b
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockWorkflowSlugChecker is a test mock for the WorkflowSlugChecker interface.
 //
@@ -825,7 +1181,7 @@ func (m *MockWorkflowSlugChecker) WorkflowSlugExists(ctx context.Context, userID
 var _ WorkflowSlugChecker = (*MockWorkflowSlugChecker)(nil)
 
 // forge:section MockscenarioExecStore
-// forge:hash=2da4b69a02851a2ccd86e57e7a6b67a9b99b10b2b8eccaad3ce47e06890d9dae
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockscenarioExecStore is a test mock for the scenarioExecStore interface.
 //
@@ -837,8 +1193,6 @@ type MockscenarioExecStore struct {
 	contractkit.Recorder
 	UpdateWorkflowScenarioResultFunc func(context.Context, string, string, string) error
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
 }
 
@@ -860,24 +1214,6 @@ func (m *MockscenarioExecStore) GetProjectWorkflowsJSON(ctx context.Context, pro
 	return nil, contractkit.MockNotSet("MockscenarioExecStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockscenarioExecStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockscenarioExecStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockscenarioExecStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockscenarioExecStore", "GetWorkflowDraftBySlug")
-}
-
 // GetChat records the call and delegates to GetChatFunc when set.
 func (m *MockscenarioExecStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	m.Recorder.Record("GetChat", ctx, id)
@@ -891,7 +1227,7 @@ func (m *MockscenarioExecStore) GetChat(ctx context.Context, id string) (*db.Cha
 var _ scenarioExecStore = (*MockscenarioExecStore)(nil)
 
 // forge:section MockcreatePlanStore
-// forge:hash=e436d7f546a2adea3aa71fbb6b79575169ddb7fa317c8a725ccb947743b1c4a9
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockcreatePlanStore is a test mock for the createPlanStore interface.
 //
@@ -937,7 +1273,7 @@ func (m *MockcreatePlanStore) EmitChatRefetch(ctx context.Context, chatID string
 var _ createPlanStore = (*MockcreatePlanStore)(nil)
 
 // forge:section MockupdatePlanStore
-// forge:hash=c4d66b292e558a41e8f210e4ef977b6831b2fd3a3a917d368ee5888b8bc74211
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockupdatePlanStore is a test mock for the updatePlanStore interface.
 //
@@ -973,7 +1309,7 @@ func (m *MockupdatePlanStore) GetThread(ctx context.Context, id string) (*db.Thr
 var _ updatePlanStore = (*MockupdatePlanStore)(nil)
 
 // forge:section MockgetPlanStore
-// forge:hash=60bd6a90e1d5678d7cf1585687fa1794128012d28d65bb431ffdf59d299cd66d
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgetPlanStore is a test mock for the getPlanStore interface.
 //
@@ -999,7 +1335,7 @@ func (m *MockgetPlanStore) GetThread(ctx context.Context, id string) (*db.Thread
 var _ getPlanStore = (*MockgetPlanStore)(nil)
 
 // forge:section MockaddTaskStore
-// forge:hash=04e2753c1e5f5347ea3304ee1a02bc2f09f7855bb3de85ce840f62fe91289406
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockaddTaskStore is a test mock for the addTaskStore interface.
 //
@@ -1045,7 +1381,7 @@ func (m *MockaddTaskStore) GetThread(ctx context.Context, id string) (*db.Thread
 var _ addTaskStore = (*MockaddTaskStore)(nil)
 
 // forge:section MocklistTasksStore
-// forge:hash=e577e0979d502990c7306bbbbd0bc37d11c3c3bce5b6afa5eb0c51605218c39c
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistTasksStore is a test mock for the listTasksStore interface.
 //
@@ -1081,7 +1417,7 @@ func (m *MocklistTasksStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ listTasksStore = (*MocklistTasksStore)(nil)
 
 // forge:section MocktaskScopeStore
-// forge:hash=65d1952c32896310dfa410265d6ff7927f838131e3e3269942a43f456253892b
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocktaskScopeStore is a test mock for the taskScopeStore interface.
 //
@@ -1117,7 +1453,7 @@ func (m *MocktaskScopeStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ taskScopeStore = (*MocktaskScopeStore)(nil)
 
 // forge:section MockupdateTaskStore
-// forge:hash=a4bb75132737a5b0a273ab4fc3f35274a381e924775accbb5963edba6c9c8e18
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockupdateTaskStore is a test mock for the updateTaskStore interface.
 //
@@ -1183,7 +1519,7 @@ func (m *MockupdateTaskStore) GetThread(ctx context.Context, id string) (*db.Thr
 var _ updateTaskStore = (*MockupdateTaskStore)(nil)
 
 // forge:section MockcreateSubtaskStore
-// forge:hash=384a2f1505243da71a9ba481365732bb0ed0fecd8b29c34086a91ade4a812cf1
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockcreateSubtaskStore is a test mock for the createSubtaskStore interface.
 //
@@ -1249,7 +1585,7 @@ func (m *MockcreateSubtaskStore) GetThread(ctx context.Context, id string) (*db.
 var _ createSubtaskStore = (*MockcreateSubtaskStore)(nil)
 
 // forge:section MockaddDependencyStore
-// forge:hash=1dcd7aca3274ba3b6c3500902d67354627ad052923a4ae1b986d5eff7d8c98b0
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockaddDependencyStore is a test mock for the addDependencyStore interface.
 //
@@ -1285,7 +1621,7 @@ func (m *MockaddDependencyStore) GetTask(ctx context.Context, id string) (*db.Ta
 var _ addDependencyStore = (*MockaddDependencyStore)(nil)
 
 // forge:section MockremoveDependencyStore
-// forge:hash=3f393712149e0e206fc7cb545a3ee39b491ac52c108c070e575eb67f643ae113
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockremoveDependencyStore is a test mock for the removeDependencyStore interface.
 //
@@ -1311,7 +1647,7 @@ func (m *MockremoveDependencyStore) EmitChatRefetch(ctx context.Context, chatID 
 var _ removeDependencyStore = (*MockremoveDependencyStore)(nil)
 
 // forge:section MocklistReadyTasksStore
-// forge:hash=e7aef13f1d39dc2776cb8b32e71fbf4256c3353143c6ac5867de9315baa7c64f
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistReadyTasksStore is a test mock for the listReadyTasksStore interface.
 //
@@ -1347,7 +1683,7 @@ func (m *MocklistReadyTasksStore) GetThread(ctx context.Context, id string) (*db
 var _ listReadyTasksStore = (*MocklistReadyTasksStore)(nil)
 
 // forge:section MockreadAttachmentStore
-// forge:hash=9a47c1463b8cc058fc2eed23ffb8b445b28a38b186370b9c06692a3198b96c21
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockreadAttachmentStore is a test mock for the readAttachmentStore interface.
 //
@@ -1373,7 +1709,7 @@ func (m *MockreadAttachmentStore) GetAttachment(ctx context.Context, id string) 
 var _ readAttachmentStore = (*MockreadAttachmentStore)(nil)
 
 // forge:section MocksaveAttachmentStore
-// forge:hash=9b2260bd0add2a3df356654dc632c95e086175be75e74a4e000f5c9c3756c1f8
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocksaveAttachmentStore is a test mock for the saveAttachmentStore interface.
 //
@@ -1409,7 +1745,7 @@ func (m *MocksaveAttachmentStore) GetChat(ctx context.Context, id string) (*db.C
 var _ saveAttachmentStore = (*MocksaveAttachmentStore)(nil)
 
 // forge:section MockpresentImageStore
-// forge:hash=026fb5a9844fcc8d3cd55d8b532a67aec4710aaad7d70c461b9d8f15ed072a15
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockpresentImageStore is a test mock for the presentImageStore interface.
 //
@@ -1445,7 +1781,7 @@ func (m *MockpresentImageStore) GetChat(ctx context.Context, id string) (*db.Cha
 var _ presentImageStore = (*MockpresentImageStore)(nil)
 
 // forge:section MockgenerateImageStore
-// forge:hash=d742ad49b237530f069ee21e2c249cfa67ed7ebe87a4cf7be6f4c3b661855bea
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgenerateImageStore is a test mock for the generateImageStore interface.
 //
@@ -1481,7 +1817,7 @@ func (m *MockgenerateImageStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateImageStore = (*MockgenerateImageStore)(nil)
 
 // forge:section MockgenerateVideoStore
-// forge:hash=b28c83db5e3b79e791fc4be085a6fcc08c1e5456e845e846123db3c8c336b2ba
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgenerateVideoStore is a test mock for the generateVideoStore interface.
 //
@@ -1527,7 +1863,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=175d97e1e6ff88643ec7d64bfaded8bb66d2ab8f5ac40cec684830ade0fc4393
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -2003,7 +2339,7 @@ func (m *MockspawnStatusStore) ListPendingApprovalsByChat(ctx context.Context, c
 var _ spawnStatusStore = (*MockspawnStatusStore)(nil)
 
 // forge:section MockproviderBackoffReader
-// forge:hash=aeaecae3a443f4e6ed4617835b2605945ec3859ab30491b96b62931c07648833
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockproviderBackoffReader is a test mock for the providerBackoffReader interface.
 //
@@ -2029,7 +2365,7 @@ func (m *MockproviderBackoffReader) ProviderBackoffByChat(ctx context.Context, c
 var _ providerBackoffReader = (*MockproviderBackoffReader)(nil)
 
 // forge:section MockSpawnQuestions
-// forge:hash=87c747b90b6687ac0dc8055fc21fc08380b3c05e2b0997b079194907573754ac
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockSpawnQuestions is a test mock for the SpawnQuestions interface.
 //
@@ -2055,7 +2391,7 @@ func (m *MockSpawnQuestions) PendingQuestionsByThread(ctx context.Context, chatI
 var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 
 // forge:section MockspawnSendStore
-// forge:hash=36a9020755974b19ce42dc8165d0848dc7fe55cfa49c49151199cc1db0c2128c
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockspawnSendStore is a test mock for the spawnSendStore interface.
 //
@@ -2091,7 +2427,7 @@ func (m *MockspawnSendStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ spawnSendStore = (*MockspawnSendStore)(nil)
 
 // forge:section MockspawnStopStore
-// forge:hash=e23d579f2d6d8c2cfb4cd7c0080d752f6f0216c2d6eee578bb1cc91bb387a032
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockspawnStopStore is a test mock for the spawnStopStore interface.
 //
@@ -2117,7 +2453,7 @@ func (m *MockspawnStopStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ spawnStopStore = (*MockspawnStopStore)(nil)
 
 // forge:section MockstartRunStore
-// forge:hash=cc1e46cc64fe6d4b174185a25d9f4f34b027c3a1970bd65cf9a78c4303e0e3a8
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockstartRunStore is a test mock for the startRunStore interface.
 //
@@ -2163,7 +2499,7 @@ func (m *MockstartRunStore) GetTriggerEventByChat(ctx context.Context, kind core
 var _ startRunStore = (*MockstartRunStore)(nil)
 
 // forge:section MocklistRunsStore
-// forge:hash=7c4867013843328d672af097f70e0aacf6dcb80c5a7fefd91325bb550b661178
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistRunsStore is a test mock for the listRunsStore interface.
 //
@@ -2199,7 +2535,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=36f24b4dd4ac955edcca8c50d9c6777fc5ff5aab88f474c90abad6658b2c93b0
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -2675,7 +3011,7 @@ func (m *MockgetRunStore) GetChat(ctx context.Context, id string) (*db.Chat, err
 var _ getRunStore = (*MockgetRunStore)(nil)
 
 // forge:section MockbugReportLookup
-// forge:hash=8cf55e6345018ee950b0ec291e95f3a925a8cd266e3811c51308437464763b7c
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockbugReportLookup is a test mock for the bugReportLookup interface.
 //
@@ -2741,7 +3077,7 @@ func (m *MockbugReportLookup) ListFreshDaemonAttachmentsForUser(ctx context.Cont
 var _ bugReportLookup = (*MockbugReportLookup)(nil)
 
 // forge:section MocklistWorkflowsStore
-// forge:hash=9c01fb22ff44899bf5d8ffb84d77d4c38bffcb56d721907a6a522d7132275186
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistWorkflowsStore is a test mock for the listWorkflowsStore interface.
 //
@@ -2751,10 +3087,7 @@ var _ bugReportLookup = (*MockbugReportLookup)(nil)
 // "MocklistWorkflowsStore.<Method>Func not set" error.
 type MocklistWorkflowsStore struct {
 	contractkit.Recorder
-	GetProjectWorkflowsJSONFunc  func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc   func(context.Context, string, string) (*db.WorkflowDraft, error)
-	ListWorkflowDraftsByUserFunc func(context.Context, string) ([]*db.WorkflowDraft, error)
+	GetProjectWorkflowsJSONFunc func(context.Context, string) (*string, error)
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -2766,38 +3099,11 @@ func (m *MocklistWorkflowsStore) GetProjectWorkflowsJSON(ctx context.Context, pr
 	return nil, contractkit.MockNotSet("MocklistWorkflowsStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MocklistWorkflowsStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MocklistWorkflowsStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MocklistWorkflowsStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MocklistWorkflowsStore", "GetWorkflowDraftBySlug")
-}
-
-// ListWorkflowDraftsByUser records the call and delegates to ListWorkflowDraftsByUserFunc when set.
-func (m *MocklistWorkflowsStore) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error) {
-	m.Recorder.Record("ListWorkflowDraftsByUser", ctx, userID)
-	if m.ListWorkflowDraftsByUserFunc != nil {
-		return m.ListWorkflowDraftsByUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MocklistWorkflowsStore", "ListWorkflowDraftsByUser")
-}
-
 // Compile-time check.
 var _ listWorkflowsStore = (*MocklistWorkflowsStore)(nil)
 
 // forge:section MockgetWorkflowStore
-// forge:hash=9c885d02d457a607984d86284593d216bf3d4bee48bb347e92858c717641a936
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockgetWorkflowStore is a test mock for the getWorkflowStore interface.
 //
@@ -2808,10 +3114,6 @@ var _ listWorkflowsStore = (*MocklistWorkflowsStore)(nil)
 type MockgetWorkflowStore struct {
 	contractkit.Recorder
 	GetProjectWorkflowsJSONFunc func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftFunc        func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -2823,47 +3125,11 @@ func (m *MockgetWorkflowStore) GetProjectWorkflowsJSON(ctx context.Context, proj
 	return nil, contractkit.MockNotSet("MockgetWorkflowStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockgetWorkflowStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockgetWorkflowStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockgetWorkflowStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockgetWorkflowStore", "GetWorkflowDraftBySlug")
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockgetWorkflowStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockgetWorkflowStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockgetWorkflowStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockgetWorkflowStore", "GetWorkflowDraftByName")
-}
-
 // Compile-time check.
 var _ getWorkflowStore = (*MockgetWorkflowStore)(nil)
 
 // forge:section MockcreateWorkflowStore
-// forge:hash=42a4947498d184b065a4a2baa519dc1472045451feeace1191da466f08fed193
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockcreateWorkflowStore is a test mock for the createWorkflowStore interface.
 //
@@ -2874,9 +3140,6 @@ var _ getWorkflowStore = (*MockgetWorkflowStore)(nil)
 type MockcreateWorkflowStore struct {
 	contractkit.Recorder
 	GetProjectWorkflowsJSONFunc func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
-	CreateWorkflowDraftFunc     func(context.Context, *db.WorkflowDraft) error
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -2888,38 +3151,11 @@ func (m *MockcreateWorkflowStore) GetProjectWorkflowsJSON(ctx context.Context, p
 	return nil, contractkit.MockNotSet("MockcreateWorkflowStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockcreateWorkflowStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockcreateWorkflowStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockcreateWorkflowStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockcreateWorkflowStore", "GetWorkflowDraftBySlug")
-}
-
-// CreateWorkflowDraft records the call and delegates to CreateWorkflowDraftFunc when set.
-func (m *MockcreateWorkflowStore) CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
-	m.Recorder.Record("CreateWorkflowDraft", ctx, draft)
-	if m.CreateWorkflowDraftFunc != nil {
-		return m.CreateWorkflowDraftFunc(ctx, draft)
-	}
-	return contractkit.MockNotSet("MockcreateWorkflowStore", "CreateWorkflowDraft")
-}
-
 // Compile-time check.
 var _ createWorkflowStore = (*MockcreateWorkflowStore)(nil)
 
 // forge:section MockworkflowWriteStore
-// forge:hash=a31dc89a2c190467222608e1be97c6fce870ce9935829bbb2eddb35106bb733e
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockworkflowWriteStore is a test mock for the workflowWriteStore interface.
 //
@@ -2929,13 +3165,7 @@ var _ createWorkflowStore = (*MockcreateWorkflowStore)(nil)
 // "MockworkflowWriteStore.<Method>Func not set" error.
 type MockworkflowWriteStore struct {
 	contractkit.Recorder
-	GetProjectWorkflowsJSONFunc                func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc                func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
-	UpdateWorkflowDraftDefinitionFunc          func(context.Context, string, string, string, string, db.WorkflowDraftStatus) error
-	UpdateWorkflowDraftDefinitionAtVersionFunc func(context.Context, string, int64, string, string, string, db.WorkflowDraftStatus) error
-	GetWorkflowDraftFunc                       func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc                 func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetProjectWorkflowsJSONFunc func(context.Context, string) (*string, error)
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -2947,65 +3177,11 @@ func (m *MockworkflowWriteStore) GetProjectWorkflowsJSON(ctx context.Context, pr
 	return nil, contractkit.MockNotSet("MockworkflowWriteStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockworkflowWriteStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockworkflowWriteStore", "GetUsableWorkflowBySlug")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockworkflowWriteStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockworkflowWriteStore", "GetWorkflowDraftBySlug")
-}
-
-// UpdateWorkflowDraftDefinition records the call and delegates to UpdateWorkflowDraftDefinitionFunc when set.
-func (m *MockworkflowWriteStore) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
-	m.Recorder.Record("UpdateWorkflowDraftDefinition", ctx, id, name, slug, definition, status)
-	if m.UpdateWorkflowDraftDefinitionFunc != nil {
-		return m.UpdateWorkflowDraftDefinitionFunc(ctx, id, name, slug, definition, status)
-	}
-	return contractkit.MockNotSet("MockworkflowWriteStore", "UpdateWorkflowDraftDefinition")
-}
-
-// UpdateWorkflowDraftDefinitionAtVersion records the call and delegates to UpdateWorkflowDraftDefinitionAtVersionFunc when set.
-func (m *MockworkflowWriteStore) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error {
-	m.Recorder.Record("UpdateWorkflowDraftDefinitionAtVersion", ctx, id, version, name, slug, definition, status)
-	if m.UpdateWorkflowDraftDefinitionAtVersionFunc != nil {
-		return m.UpdateWorkflowDraftDefinitionAtVersionFunc(ctx, id, version, name, slug, definition, status)
-	}
-	return contractkit.MockNotSet("MockworkflowWriteStore", "UpdateWorkflowDraftDefinitionAtVersion")
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockworkflowWriteStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockworkflowWriteStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockworkflowWriteStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockworkflowWriteStore", "GetWorkflowDraftByName")
-}
-
 // Compile-time check.
 var _ workflowWriteStore = (*MockworkflowWriteStore)(nil)
 
 // forge:section MocklistScenariosStore
-// forge:hash=02565d0d5439967cc9a1001506fe5340fe2e7dc7cf08f90047e3e4f3b8d6e01f
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistScenariosStore is a test mock for the listScenariosStore interface.
 //
@@ -3016,9 +3192,6 @@ var _ workflowWriteStore = (*MockworkflowWriteStore)(nil)
 type MocklistScenariosStore struct {
 	contractkit.Recorder
 	ListWorkflowScenariosByDraftFunc func(context.Context, string) ([]*db.WorkflowScenario, error)
-	GetWorkflowDraftFunc             func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
 }
 
 // ListWorkflowScenariosByDraft records the call and delegates to ListWorkflowScenariosByDraftFunc when set.
@@ -3030,38 +3203,11 @@ func (m *MocklistScenariosStore) ListWorkflowScenariosByDraft(ctx context.Contex
 	return nil, contractkit.MockNotSet("MocklistScenariosStore", "ListWorkflowScenariosByDraft")
 }
 
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MocklistScenariosStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MocklistScenariosStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MocklistScenariosStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MocklistScenariosStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MocklistScenariosStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MocklistScenariosStore", "GetWorkflowDraftBySlug")
-}
-
 // Compile-time check.
 var _ listScenariosStore = (*MocklistScenariosStore)(nil)
 
 // forge:section MockviewScenarioStore
-// forge:hash=91741eb1d2261e27b42a189f9b174b7a6b28ee7fb66beec5c368c9d48bc0ca91
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockviewScenarioStore is a test mock for the viewScenarioStore interface.
 //
@@ -3071,43 +3217,13 @@ var _ listScenariosStore = (*MocklistScenariosStore)(nil)
 // "MockviewScenarioStore.<Method>Func not set" error.
 type MockviewScenarioStore struct {
 	contractkit.Recorder
-	GetWorkflowDraftFunc       func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockviewScenarioStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockviewScenarioStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockviewScenarioStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockviewScenarioStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockviewScenarioStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockviewScenarioStore", "GetWorkflowDraftBySlug")
 }
 
 // Compile-time check.
 var _ viewScenarioStore = (*MockviewScenarioStore)(nil)
 
 // forge:section MockeditScenarioStore
-// forge:hash=b96b84391615804020b71f30e9563ae011d018c3215b7e55e28a2bc61f70ea2e
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockeditScenarioStore is a test mock for the editScenarioStore interface.
 //
@@ -3117,43 +3233,13 @@ var _ viewScenarioStore = (*MockviewScenarioStore)(nil)
 // "MockeditScenarioStore.<Method>Func not set" error.
 type MockeditScenarioStore struct {
 	contractkit.Recorder
-	GetWorkflowDraftFunc       func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockeditScenarioStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockeditScenarioStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockeditScenarioStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockeditScenarioStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockeditScenarioStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockeditScenarioStore", "GetWorkflowDraftBySlug")
 }
 
 // Compile-time check.
 var _ editScenarioStore = (*MockeditScenarioStore)(nil)
 
 // forge:section MockwriteScenarioStore
-// forge:hash=ccffb454a5e30ef4205bdb0ee07c43e1cef2750b9b7d7bc7583219ff6c33efa8
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockwriteScenarioStore is a test mock for the writeScenarioStore interface.
 //
@@ -3164,12 +3250,8 @@ var _ editScenarioStore = (*MockeditScenarioStore)(nil)
 type MockwriteScenarioStore struct {
 	contractkit.Recorder
 	CreateWorkflowScenarioFunc       func(context.Context, *db.WorkflowScenario) error
-	GetWorkflowDraftFunc             func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
 	UpdateWorkflowScenarioResultFunc func(context.Context, string, string, string) error
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
 }
 
@@ -3180,33 +3262,6 @@ func (m *MockwriteScenarioStore) CreateWorkflowScenario(ctx context.Context, sce
 		return m.CreateWorkflowScenarioFunc(ctx, scenario)
 	}
 	return contractkit.MockNotSet("MockwriteScenarioStore", "CreateWorkflowScenario")
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockwriteScenarioStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockwriteScenarioStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockwriteScenarioStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockwriteScenarioStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockwriteScenarioStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockwriteScenarioStore", "GetWorkflowDraftBySlug")
 }
 
 // UpdateWorkflowScenarioResult records the call and delegates to UpdateWorkflowScenarioResultFunc when set.
@@ -3227,15 +3282,6 @@ func (m *MockwriteScenarioStore) GetProjectWorkflowsJSON(ctx context.Context, pr
 	return nil, contractkit.MockNotSet("MockwriteScenarioStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockwriteScenarioStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockwriteScenarioStore", "GetUsableWorkflowBySlug")
-}
-
 // GetChat records the call and delegates to GetChatFunc when set.
 func (m *MockwriteScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	m.Recorder.Record("GetChat", ctx, id)
@@ -3249,7 +3295,7 @@ func (m *MockwriteScenarioStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ writeScenarioStore = (*MockwriteScenarioStore)(nil)
 
 // forge:section MockdeleteScenarioStore
-// forge:hash=e22497b603ec27113a7170f8953eec827dd5bdef00113fc188268329173e9520
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockdeleteScenarioStore is a test mock for the deleteScenarioStore interface.
 //
@@ -3260,9 +3306,6 @@ var _ writeScenarioStore = (*MockwriteScenarioStore)(nil)
 type MockdeleteScenarioStore struct {
 	contractkit.Recorder
 	DeleteWorkflowScenarioFunc func(context.Context, string) error
-	GetWorkflowDraftFunc       func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc func(context.Context, string, string) (*db.WorkflowDraft, error)
 }
 
 // DeleteWorkflowScenario records the call and delegates to DeleteWorkflowScenarioFunc when set.
@@ -3274,38 +3317,11 @@ func (m *MockdeleteScenarioStore) DeleteWorkflowScenario(ctx context.Context, id
 	return contractkit.MockNotSet("MockdeleteScenarioStore", "DeleteWorkflowScenario")
 }
 
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockdeleteScenarioStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockdeleteScenarioStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockdeleteScenarioStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockdeleteScenarioStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockdeleteScenarioStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockdeleteScenarioStore", "GetWorkflowDraftBySlug")
-}
-
 // Compile-time check.
 var _ deleteScenarioStore = (*MockdeleteScenarioStore)(nil)
 
 // forge:section MockrunScenarioStore
-// forge:hash=a266f3ff43fecf5c560461bdd113c9a97252b5de9e0b8f6a85a06df2875a3f6a
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockrunScenarioStore is a test mock for the runScenarioStore interface.
 //
@@ -3315,40 +3331,9 @@ var _ deleteScenarioStore = (*MockdeleteScenarioStore)(nil)
 // "MockrunScenarioStore.<Method>Func not set" error.
 type MockrunScenarioStore struct {
 	contractkit.Recorder
-	GetWorkflowDraftFunc             func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
 	UpdateWorkflowScenarioResultFunc func(context.Context, string, string, string) error
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockrunScenarioStore) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockrunScenarioStore", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockrunScenarioStore) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockrunScenarioStore", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockrunScenarioStore) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockrunScenarioStore", "GetWorkflowDraftBySlug")
 }
 
 // UpdateWorkflowScenarioResult records the call and delegates to UpdateWorkflowScenarioResultFunc when set.
@@ -3369,15 +3354,6 @@ func (m *MockrunScenarioStore) GetProjectWorkflowsJSON(ctx context.Context, proj
 	return nil, contractkit.MockNotSet("MockrunScenarioStore", "GetProjectWorkflowsJSON")
 }
 
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockrunScenarioStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockrunScenarioStore", "GetUsableWorkflowBySlug")
-}
-
 // GetChat records the call and delegates to GetChatFunc when set.
 func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	m.Recorder.Record("GetChat", ctx, id)
@@ -3391,7 +3367,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=e9c63573c29739275f38799d1c8ab9e79397bb99d29fb632bd1f23fd4d2d325f
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3557,7 +3533,7 @@ func (m *MockworktreeStore) GetWorktree(ctx context.Context, id string) (*db.Wor
 var _ worktreeStore = (*MockworktreeStore)(nil)
 
 // forge:section MocklistPendingQuestionsStore
-// forge:hash=c741bcaf3d9335871260040388ecd224dd61befee76006389b705a015a5753b6
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MocklistPendingQuestionsStore is a test mock for the listPendingQuestionsStore interface.
 //
@@ -3583,7 +3559,7 @@ func (m *MocklistPendingQuestionsStore) ListPendingQuestionsInThreadSubtree(ctx 
 var _ listPendingQuestionsStore = (*MocklistPendingQuestionsStore)(nil)
 
 // forge:section MockwithdrawQuestionStore
-// forge:hash=b20f5f2f8113fd1573bdc468ed8de964e4db9de30defe3cf382995a67038c091
+// forge:hash=f4ddfe098f6f7b3522f17e1ecd981a29439e0e4edc9b27bcfce08da115474091
 
 // MockwithdrawQuestionStore is a test mock for the withdrawQuestionStore interface.
 //

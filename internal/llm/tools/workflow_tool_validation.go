@@ -34,7 +34,7 @@ func (c workflowToolCheck) hasErrors() bool {
 // outputs are dyn, which is weaker than the run-start validation the
 // workflow will later face: the agent would be told "valid" and meet the
 // error only when someone runs it.
-func validateWorkflowForTool(ctx context.Context, repo workflowsource.Store, content string) workflowToolCheck {
+func validateWorkflowForTool(ctx context.Context, repo workflowsource.ProjectStore, drafts workflowsource.DraftReads, content string) workflowToolCheck {
 	var raw interface{}
 	if err := yaml.Unmarshal([]byte(content), &raw); err != nil {
 		return workflowToolCheck{syntaxErr: fmt.Errorf("invalid YAML syntax: %w", err)}
@@ -43,7 +43,7 @@ func validateWorkflowForTool(ctx context.Context, repo workflowsource.Store, con
 	if err != nil {
 		return workflowToolCheck{syntaxErr: fmt.Errorf("workflow could not be parsed: %w", err)}
 	}
-	result, err := v2.ValidateYAMLResult([]byte(content), workflowToolLoader(ctx, repo, self))
+	result, err := v2.ValidateYAMLResult([]byte(content), workflowToolLoader(ctx, workflowsource.NewStore(repo, drafts), self))
 	if err != nil {
 		return workflowToolCheck{syntaxErr: fmt.Errorf("workflow could not be parsed: %w", err)}
 	}

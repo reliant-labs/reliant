@@ -47,10 +47,8 @@ var userScopedReads = map[string]string{
 	"GetChatWithUserCheck":     readRepoChecks,
 	"GetProjectWithUserCheck":  readRepoChecks,
 	"GetUsableWorkflowBySlug":  readRepoChecks,
-	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
-	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListArchivedChats":        readCallersFilter,
 	"ListChats":                readCallersFilter,

@@ -27,7 +27,8 @@ type ListWorkflowsParams struct {
 }
 
 type listWorkflowsTool struct {
-	repo listWorkflowsStore
+	repo   listWorkflowsStore
+	drafts listWorkflowsDrafts
 }
 
 const (
@@ -46,8 +47,8 @@ User workflows also list their draft UUID; builtin and project workflows have no
 Any handle in the Workflow column can be passed straight to get_workflow as id.`
 )
 
-func NewListWorkflowsTool(repo listWorkflowsStore) Tool {
-	tool := &listWorkflowsTool{repo: repo}
+func NewListWorkflowsTool(repo listWorkflowsStore, drafts listWorkflowsDrafts) Tool {
+	tool := &listWorkflowsTool{repo: repo, drafts: drafts}
 	return NewToolWrapper[ListWorkflowsParams, ToolResponse](tool)
 }
 
@@ -169,10 +170,10 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 	// Get the user's visible workflows — drafts included, since the agent
 	// iterates on them — each with its status and validity computed NOW
 	// (validity is never stored; it goes stale when validation gets stricter).
-	if (source == "all" || source == "user") && t.repo != nil {
+	if (source == "all" || source == "user") && t.drafts != nil {
 		userID, ok := auth.GetUserIDFromContext(ctx)
 		if ok && userID != "" {
-			userWorkflows, err := t.repo.ListWorkflowDraftsByUser(ctx, userID)
+			userWorkflows, err := t.drafts.ListWorkflowDraftsByUser(ctx, userID)
 			if err == nil {
 				for _, wf := range userWorkflows {
 					if wf.IsHidden {
@@ -189,7 +190,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 						description: desc,
 						source:      "user",
 						status:      string(wf.Status),
-						isValid:     !validateWorkflowForTool(ctx, t.repo, wf.Definition).hasErrors(),
+						isValid:     !validateWorkflowForTool(ctx, t.repo, t.drafts, wf.Definition).hasErrors(),
 					})
 				}
 			}
@@ -250,7 +251,8 @@ type GetWorkflowParams struct {
 }
 
 type getWorkflowTool struct {
-	repo getWorkflowStore
+	repo   getWorkflowStore
+	drafts getWorkflowDrafts
 }
 
 const (
@@ -279,8 +281,8 @@ Builtin and project workflows are read-only and have no version — copy one int
 create_workflow to get an editable draft.`
 )
 
-func NewGetWorkflowTool(repo getWorkflowStore) Tool {
-	tool := &getWorkflowTool{repo: repo}
+func NewGetWorkflowTool(repo getWorkflowStore, drafts getWorkflowDrafts) Tool {
+	tool := &getWorkflowTool{repo: repo, drafts: drafts}
 	return NewToolWrapper[GetWorkflowParams, ToolResponse](tool)
 }
 
@@ -297,13 +299,13 @@ func (t *getWorkflowTool) RequiresPermission(args GetWorkflowParams) (bool, erro
 }
 
 func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.drafts == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
-	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.drafts, args.ID)
 	if err == nil {
-		return formatWorkflowDraftResponse(draft, validateWorkflowForTool(ctx, t.repo, draft.Definition), args.window())
+		return formatWorkflowDraftResponse(draft, validateWorkflowForTool(ctx, t.repo, t.drafts, draft.Definition), args.window())
 	}
 
 	// list_workflows advertises builtin and project workflows alongside drafts,
@@ -312,7 +314,7 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 	// nothing to edit and no version to pass back.
 	if args.ID != "" {
 		if yamlContent, source, found := t.findReadOnlyWorkflow(ctx, args.ID); found {
-			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent, validateWorkflowForTool(ctx, t.repo, yamlContent), args.window()), nil
+			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent, validateWorkflowForTool(ctx, t.repo, t.drafts, yamlContent), args.window()), nil
 		}
 	}
 

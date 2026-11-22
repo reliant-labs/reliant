@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,7 +40,7 @@ func listWorkflowsRow(t *testing.T, listing, workflowName string) []string {
 
 func runListWorkflows(t *testing.T, repo *db.Repo, chatID string) string {
 	t.Helper()
-	resp, err := NewListWorkflowsTool(repo).Run(createTestContext(t, chatID), ToolCall{
+	resp, err := NewListWorkflowsTool(repo, workflowdraftstest.New(t, repo)).Run(createTestContext(t, chatID), ToolCall{
 		ID: "list", Name: ListWorkflowsToolName, Input: "{}",
 	})
 	require.NoError(t, err)
@@ -50,7 +52,7 @@ func runGetWorkflow(t *testing.T, repo *db.Repo, chatID, id string) ToolResponse
 	t.Helper()
 	inputJSON, err := json.Marshal(GetWorkflowParams{ID: id})
 	require.NoError(t, err)
-	resp, err := NewGetWorkflowTool(repo).Run(createTestContext(t, chatID), ToolCall{
+	resp, err := NewGetWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(createTestContext(t, chatID), ToolCall{
 		ID: "get", Name: GetWorkflowToolName, Input: string(inputJSON),
 	})
 	require.NoError(t, err)
@@ -153,7 +155,7 @@ func TestGetWorkflowPrintsVersion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	editResp, err := NewEditWorkflowTool(repo).Run(createTestContext(t, ""), ToolCall{
+	editResp, err := NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(createTestContext(t, ""), ToolCall{
 		ID: "edit", Name: EditWorkflowToolName, Input: string(inputJSON),
 	})
 	require.NoError(t, err)
@@ -187,7 +189,7 @@ func TestListWorkflowsShowsStatusAndComputedValidity(t *testing.T) {
 	// Simulate staleness directly in the row: broken content, still complete.
 	// (The editing tools can no longer produce this.)
 	broken := strings.Replace(complete.Definition, "entry: [agent]", "entry: [no-such-node]", 1)
-	require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), complete.ID, complete.Name, complete.Slug, broken, db.WorkflowDraftStatusComplete))
+	require.NoError(t, workflowdraftstest.New(t, repo).UpdateWorkflowDraftDefinition(context.Background(), complete.ID, complete.Name, complete.Slug, broken, db.WorkflowDraftStatusComplete))
 
 	out := runListWorkflows(t, repo, "")
 	assert.Regexp(t, "`"+complete.Slug+"`"+`[^\n]*\| complete \| ✗ \|`, out,
