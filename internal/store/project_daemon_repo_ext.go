@@ -166,9 +166,6 @@ func FailProjectDaemonInstall(ctx context.Context, db orm.Context, projectID, da
 // project id. A non-empty installErr marks the row failed; otherwise it is
 // installed, as of now.
 func ResolveQueuedProjectDaemon(ctx context.Context, db orm.Context, requestID, installErr string) error {
-	if requestID == "" {
-		return fmt.Errorf("request ID cannot be empty")
-	}
 	q := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil))
 	if installErr != "" {
 		q = q.Set("install_state = ?", core.ProjectInstallFailed).
