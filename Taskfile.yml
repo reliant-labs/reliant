@@ -1083,6 +1083,11 @@ tasks:
     cmds:
       - ./scripts/test-flake-report.sh
 
+  test:capture:test:
+    desc: Self-test of scripts/test-capture.sh (a Vitest lane recorded in one checkout reports repo-relative paths and blob ids in another)
+    cmds:
+      - ./scripts/test-test-capture.sh
+
   forge:resolve:test:
     desc: Self-test of scripts/forge.sh (which forge tasks and scripts run - FORGE_BIN, forge at the pin, reliant forge, go run) against fake binaries
     cmds:

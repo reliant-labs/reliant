@@ -69,6 +69,39 @@ run=$("$root/scripts/forge.sh" test begin 2>/dev/null) && [ -n "$run" ] && [ -d 
 }
 dir="$run/$lane"
 
+# relocate <lane dir>: make a Vitest lane's record portable. Istanbul's
+# coverage-final.json keys every file, and its "path", by ABSOLUTE source path,
+# and vitest.json names each test file absolutely. A record read in another
+# checkout of the same commit (ci.yml's test-upload job reads the release
+# gate's private snapshot's runs) keeps those snapshot paths: no repo path, no
+# git blob id, no diff coverage, and test ids that differ per checkout. So
+# the checkout's root is cut off them here, leaving repo-relative paths, which
+# `forge test report` places in any checkout (forge's own fix to relocate a
+# foreign root, forge#2694, covers coverage). Go lanes need nothing: a
+# coverprofile names files by import path. Never changes the lane's verdict:
+# without jq, or on a file jq cannot read, the record stays as Vitest wrote
+# it, with a warning.
+relocate() {
+  local d=$1 f tmp top phys
+  top=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null) || top=$root
+  phys=$(cd "$top" && pwd -P)
+  command -v jq >/dev/null 2>&1 || { echo "test-capture: no jq: lane $lane's Vitest paths stay absolute" >&2; return 0; }
+  for f in coverage-final.json vitest.json; do
+    [ -s "$d/$f" ] || continue
+    tmp="$d/.$f.tmp"
+    if jq -c --arg a "$top/" --arg b "$phys/" --arg f "$f" '
+        def rel: if type == "string" then ltrimstr($a) | ltrimstr($b) else . end;
+        if $f == "coverage-final.json" then with_entries(.key |= rel | .value.path |= rel)
+        elif (.testResults | type) == "array" then .testResults |= map(.name |= rel)
+        else . end' "$d/$f" >"$tmp"; then
+      mv -f "$tmp" "$d/$f"
+    else
+      rm -f "$tmp"
+      echo "test-capture: could not relocate $d/$f; its paths stay absolute" >&2
+    fi
+  done
+}
+
 capture=("$root/scripts/forge.sh" test capture --run "$run" --lane "$lane")
 case "$kind" in
   go)
@@ -77,5 +110,8 @@ case "$kind" in
     [ "${FORGE_TEST_COVERAGE:-}" = off ] || cover=(-covermode=atomic "-coverprofile=$dir/cover.out")
     exec "${capture[@]}" -- "$root/scripts/go-test.sh" -json ${cover[@]+"${cover[@]}"} "$@" ;;
   vitest)
-    exec "${capture[@]}" --results "$dir/vitest.json" --format vitest -- "$@" ;;
+    status=0
+    "${capture[@]}" --results "$dir/vitest.json" --format vitest -- "$@" || status=$?
+    relocate "$dir"
+    exit "$status" ;;
 esac
