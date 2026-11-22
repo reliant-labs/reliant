@@ -16,6 +16,9 @@
   "icons": {
     "library": "lucide"
   },
+  "contextual": {
+    "options": ["copy", "view", "mcp", "cursor", "vscode"]
+  },
   "navigation": {
     "tabs": [
       {
@@ -28,7 +31,8 @@
               "getting-started/why-reliant",
               "getting-started/quick-start",
               "getting-started/installation",
-              "getting-started/concepts"
+              "getting-started/concepts",
+              "getting-started/search-docs-from-your-agent"
             ]
           },
           {
