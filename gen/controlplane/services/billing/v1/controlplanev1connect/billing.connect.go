@@ -134,6 +134,18 @@ const (
 	// BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure is the fully-qualified name of the
 	// BillingService's CreateCurrentUserUsageBillingCheckout RPC.
 	BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure = "/controlplane.v1.BillingService/CreateCurrentUserUsageBillingCheckout"
+	// BillingServiceSetUsageBillingBudgetProcedure is the fully-qualified name of the BillingService's
+	// SetUsageBillingBudget RPC.
+	BillingServiceSetUsageBillingBudgetProcedure = "/controlplane.v1.BillingService/SetUsageBillingBudget"
+	// BillingServiceListUsageBillingBudgetVersionsProcedure is the fully-qualified name of the
+	// BillingService's ListUsageBillingBudgetVersions RPC.
+	BillingServiceListUsageBillingBudgetVersionsProcedure = "/controlplane.v1.BillingService/ListUsageBillingBudgetVersions"
+	// BillingServiceGetOrgHostingUsageSummaryProcedure is the fully-qualified name of the
+	// BillingService's GetOrgHostingUsageSummary RPC.
+	BillingServiceGetOrgHostingUsageSummaryProcedure = "/controlplane.v1.BillingService/GetOrgHostingUsageSummary"
+	// BillingServiceGetFreeHostingStatusProcedure is the fully-qualified name of the BillingService's
+	// GetFreeHostingStatus RPC.
+	BillingServiceGetFreeHostingStatusProcedure = "/controlplane.v1.BillingService/GetFreeHostingStatus"
 	// BillingServiceGetCurrentUserWalletAutoRechargeProcedure is the fully-qualified name of the
 	// BillingService's GetCurrentUserWalletAutoRecharge RPC.
 	BillingServiceGetCurrentUserWalletAutoRechargeProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletAutoRecharge"
@@ -262,6 +274,11 @@ type BillingServiceClient interface {
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
 	// the compute pair above. Separate from it because the two cap different
 	// products through different gates; see SetCurrentUserInfraOverageRequest.
+	//
+	// Deprecated for hosting: Reliant hosting (PAYG) is bounded by the
+	// organization's hosting budget instead (SetUsageBillingBudget, read back by
+	// GetCurrentUserUsageBilling). This per-user cap never gates hosted
+	// admission. The RPC keeps working for v1 clients and is not removed.
 	SetCurrentUserInfraOverage(context.Context, *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error)
 	// Everything the deploy overage surface renders from, in one call:
 	// consumption, allowance, the customer's cap, and the current ladder rung
@@ -303,6 +320,36 @@ type BillingServiceClient interface {
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
 	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
+	// SetUsageBillingBudget changes the organization's monthly hosting
+	// admission budget without a new Stripe checkout. Each change appends a new
+	// budget version (never edits one) recording the actor, the time and the
+	// hosting usage policy version the actor accepted; the newest version is the
+	// budget admission reads, from the next deploy on. Requires owner or admin of
+	// org_id and an enrolled (non-pending, non-canceled) usage billing agreement.
+	// Lowering the budget below this month's spend refuses new deploys at once;
+	// running work is never stopped by it.
+	SetUsageBillingBudget(context.Context, *connect.Request[v1.SetUsageBillingBudgetRequest]) (*connect.Response[v1.SetUsageBillingBudgetResponse], error)
+	// ListUsageBillingBudgetVersions is the current agreement's budget history,
+	// newest first, ending with version 0: the budget consented at checkout. Any
+	// member of org_id may read it.
+	//
+	// forge:custom — hand-written: version 0 is synthesized from the agreement
+	// and only the current agreement's versions are listed, so it is not an
+	// entity list and gets no CRUD wiring.
+	ListUsageBillingBudgetVersions(context.Context, *connect.Request[v1.ListUsageBillingBudgetVersionsRequest]) (*connect.Response[v1.ListUsageBillingBudgetVersionsResponse], error)
+	// GetOrgHostingUsageSummary is this UTC month's hosting spend for one
+	// organization, per app (deployment) and environment, with a projected
+	// month-end figure (spend so far plus the current running rate for the rest
+	// of the month: an estimate) and when new deploys would be refused by the
+	// hosting budget at that rate. Hosting only: no machine, AI or observability
+	// spend. Requires billing:read, re-checked at use.
+	GetOrgHostingUsageSummary(context.Context, *connect.Request[v1.GetOrgHostingUsageSummaryRequest]) (*connect.Response[v1.GetOrgHostingUsageSummaryResponse], error)
+	// GetFreeHostingStatus reports the free static hosting allowance as it
+	// applies to org_id: whether this org holds its founder's free allowance,
+	// the sites using it, and storage and transfer used against the limits. Any
+	// member of org_id may read it; only the founder learns which of their other
+	// organizations holds the allowance.
+	GetFreeHostingStatus(context.Context, *connect.Request[v1.GetFreeHostingStatusRequest]) (*connect.Response[v1.GetFreeHostingStatusResponse], error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
@@ -550,6 +597,30 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
 			connect.WithClientOptions(opts...),
 		),
+		setUsageBillingBudget: connect.NewClient[v1.SetUsageBillingBudgetRequest, v1.SetUsageBillingBudgetResponse](
+			httpClient,
+			baseURL+BillingServiceSetUsageBillingBudgetProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("SetUsageBillingBudget")),
+			connect.WithClientOptions(opts...),
+		),
+		listUsageBillingBudgetVersions: connect.NewClient[v1.ListUsageBillingBudgetVersionsRequest, v1.ListUsageBillingBudgetVersionsResponse](
+			httpClient,
+			baseURL+BillingServiceListUsageBillingBudgetVersionsProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("ListUsageBillingBudgetVersions")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrgHostingUsageSummary: connect.NewClient[v1.GetOrgHostingUsageSummaryRequest, v1.GetOrgHostingUsageSummaryResponse](
+			httpClient,
+			baseURL+BillingServiceGetOrgHostingUsageSummaryProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetOrgHostingUsageSummary")),
+			connect.WithClientOptions(opts...),
+		),
+		getFreeHostingStatus: connect.NewClient[v1.GetFreeHostingStatusRequest, v1.GetFreeHostingStatusResponse](
+			httpClient,
+			baseURL+BillingServiceGetFreeHostingStatusProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetFreeHostingStatus")),
+			connect.WithClientOptions(opts...),
+		),
 		getCurrentUserWalletAutoRecharge: connect.NewClient[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
@@ -647,6 +718,10 @@ type billingServiceClient struct {
 	changeMachinePlan                          *connect.Client[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse]
 	getCurrentUserUsageBilling                 *connect.Client[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse]
 	createCurrentUserUsageBillingCheckout      *connect.Client[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse]
+	setUsageBillingBudget                      *connect.Client[v1.SetUsageBillingBudgetRequest, v1.SetUsageBillingBudgetResponse]
+	listUsageBillingBudgetVersions             *connect.Client[v1.ListUsageBillingBudgetVersionsRequest, v1.ListUsageBillingBudgetVersionsResponse]
+	getOrgHostingUsageSummary                  *connect.Client[v1.GetOrgHostingUsageSummaryRequest, v1.GetOrgHostingUsageSummaryResponse]
+	getFreeHostingStatus                       *connect.Client[v1.GetFreeHostingStatusRequest, v1.GetFreeHostingStatusResponse]
 	getCurrentUserWalletAutoRecharge           *connect.Client[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse]
 	setCurrentUserWalletAutoRecharge           *connect.Client[v1.SetCurrentUserWalletAutoRechargeRequest, v1.SetCurrentUserWalletAutoRechargeResponse]
 	createCurrentUserWalletPaymentMethodSetup  *connect.Client[v1.CreateCurrentUserWalletPaymentMethodSetupRequest, v1.CreateCurrentUserWalletPaymentMethodSetupResponse]
@@ -829,6 +904,27 @@ func (c *billingServiceClient) CreateCurrentUserUsageBillingCheckout(ctx context
 	return c.createCurrentUserUsageBillingCheckout.CallUnary(ctx, req)
 }
 
+// SetUsageBillingBudget calls controlplane.v1.BillingService.SetUsageBillingBudget.
+func (c *billingServiceClient) SetUsageBillingBudget(ctx context.Context, req *connect.Request[v1.SetUsageBillingBudgetRequest]) (*connect.Response[v1.SetUsageBillingBudgetResponse], error) {
+	return c.setUsageBillingBudget.CallUnary(ctx, req)
+}
+
+// ListUsageBillingBudgetVersions calls
+// controlplane.v1.BillingService.ListUsageBillingBudgetVersions.
+func (c *billingServiceClient) ListUsageBillingBudgetVersions(ctx context.Context, req *connect.Request[v1.ListUsageBillingBudgetVersionsRequest]) (*connect.Response[v1.ListUsageBillingBudgetVersionsResponse], error) {
+	return c.listUsageBillingBudgetVersions.CallUnary(ctx, req)
+}
+
+// GetOrgHostingUsageSummary calls controlplane.v1.BillingService.GetOrgHostingUsageSummary.
+func (c *billingServiceClient) GetOrgHostingUsageSummary(ctx context.Context, req *connect.Request[v1.GetOrgHostingUsageSummaryRequest]) (*connect.Response[v1.GetOrgHostingUsageSummaryResponse], error) {
+	return c.getOrgHostingUsageSummary.CallUnary(ctx, req)
+}
+
+// GetFreeHostingStatus calls controlplane.v1.BillingService.GetFreeHostingStatus.
+func (c *billingServiceClient) GetFreeHostingStatus(ctx context.Context, req *connect.Request[v1.GetFreeHostingStatusRequest]) (*connect.Response[v1.GetFreeHostingStatusResponse], error) {
+	return c.getFreeHostingStatus.CallUnary(ctx, req)
+}
+
 // GetCurrentUserWalletAutoRecharge calls
 // controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge.
 func (c *billingServiceClient) GetCurrentUserWalletAutoRecharge(ctx context.Context, req *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error) {
@@ -980,6 +1076,11 @@ type BillingServiceHandler interface {
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
 	// the compute pair above. Separate from it because the two cap different
 	// products through different gates; see SetCurrentUserInfraOverageRequest.
+	//
+	// Deprecated for hosting: Reliant hosting (PAYG) is bounded by the
+	// organization's hosting budget instead (SetUsageBillingBudget, read back by
+	// GetCurrentUserUsageBilling). This per-user cap never gates hosted
+	// admission. The RPC keeps working for v1 clients and is not removed.
 	SetCurrentUserInfraOverage(context.Context, *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error)
 	// Everything the deploy overage surface renders from, in one call:
 	// consumption, allowance, the customer's cap, and the current ladder rung
@@ -1021,6 +1122,36 @@ type BillingServiceHandler interface {
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
 	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
+	// SetUsageBillingBudget changes the organization's monthly hosting
+	// admission budget without a new Stripe checkout. Each change appends a new
+	// budget version (never edits one) recording the actor, the time and the
+	// hosting usage policy version the actor accepted; the newest version is the
+	// budget admission reads, from the next deploy on. Requires owner or admin of
+	// org_id and an enrolled (non-pending, non-canceled) usage billing agreement.
+	// Lowering the budget below this month's spend refuses new deploys at once;
+	// running work is never stopped by it.
+	SetUsageBillingBudget(context.Context, *connect.Request[v1.SetUsageBillingBudgetRequest]) (*connect.Response[v1.SetUsageBillingBudgetResponse], error)
+	// ListUsageBillingBudgetVersions is the current agreement's budget history,
+	// newest first, ending with version 0: the budget consented at checkout. Any
+	// member of org_id may read it.
+	//
+	// forge:custom — hand-written: version 0 is synthesized from the agreement
+	// and only the current agreement's versions are listed, so it is not an
+	// entity list and gets no CRUD wiring.
+	ListUsageBillingBudgetVersions(context.Context, *connect.Request[v1.ListUsageBillingBudgetVersionsRequest]) (*connect.Response[v1.ListUsageBillingBudgetVersionsResponse], error)
+	// GetOrgHostingUsageSummary is this UTC month's hosting spend for one
+	// organization, per app (deployment) and environment, with a projected
+	// month-end figure (spend so far plus the current running rate for the rest
+	// of the month: an estimate) and when new deploys would be refused by the
+	// hosting budget at that rate. Hosting only: no machine, AI or observability
+	// spend. Requires billing:read, re-checked at use.
+	GetOrgHostingUsageSummary(context.Context, *connect.Request[v1.GetOrgHostingUsageSummaryRequest]) (*connect.Response[v1.GetOrgHostingUsageSummaryResponse], error)
+	// GetFreeHostingStatus reports the free static hosting allowance as it
+	// applies to org_id: whether this org holds its founder's free allowance,
+	// the sites using it, and storage and transfer used against the limits. Any
+	// member of org_id may read it; only the founder learns which of their other
+	// organizations holds the allowance.
+	GetFreeHostingStatus(context.Context, *connect.Request[v1.GetFreeHostingStatusRequest]) (*connect.Response[v1.GetFreeHostingStatusResponse], error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
@@ -1264,6 +1395,30 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
 		connect.WithHandlerOptions(opts...),
 	)
+	billingServiceSetUsageBillingBudgetHandler := connect.NewUnaryHandler(
+		BillingServiceSetUsageBillingBudgetProcedure,
+		svc.SetUsageBillingBudget,
+		connect.WithSchema(billingServiceMethods.ByName("SetUsageBillingBudget")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceListUsageBillingBudgetVersionsHandler := connect.NewUnaryHandler(
+		BillingServiceListUsageBillingBudgetVersionsProcedure,
+		svc.ListUsageBillingBudgetVersions,
+		connect.WithSchema(billingServiceMethods.ByName("ListUsageBillingBudgetVersions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceGetOrgHostingUsageSummaryHandler := connect.NewUnaryHandler(
+		BillingServiceGetOrgHostingUsageSummaryProcedure,
+		svc.GetOrgHostingUsageSummary,
+		connect.WithSchema(billingServiceMethods.ByName("GetOrgHostingUsageSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceGetFreeHostingStatusHandler := connect.NewUnaryHandler(
+		BillingServiceGetFreeHostingStatusProcedure,
+		svc.GetFreeHostingStatus,
+		connect.WithSchema(billingServiceMethods.ByName("GetFreeHostingStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	billingServiceGetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
 		svc.GetCurrentUserWalletAutoRecharge,
@@ -1390,6 +1545,14 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceGetCurrentUserUsageBillingHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure:
 			billingServiceCreateCurrentUserUsageBillingCheckoutHandler.ServeHTTP(w, r)
+		case BillingServiceSetUsageBillingBudgetProcedure:
+			billingServiceSetUsageBillingBudgetHandler.ServeHTTP(w, r)
+		case BillingServiceListUsageBillingBudgetVersionsProcedure:
+			billingServiceListUsageBillingBudgetVersionsHandler.ServeHTTP(w, r)
+		case BillingServiceGetOrgHostingUsageSummaryProcedure:
+			billingServiceGetOrgHostingUsageSummaryHandler.ServeHTTP(w, r)
+		case BillingServiceGetFreeHostingStatusProcedure:
+			billingServiceGetFreeHostingStatusHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserWalletAutoRechargeProcedure:
 			billingServiceGetCurrentUserWalletAutoRechargeHandler.ServeHTTP(w, r)
 		case BillingServiceSetCurrentUserWalletAutoRechargeProcedure:
@@ -1545,6 +1708,22 @@ func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Con
 
 func (UnimplementedBillingServiceHandler) CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) SetUsageBillingBudget(context.Context, *connect.Request[v1.SetUsageBillingBudgetRequest]) (*connect.Response[v1.SetUsageBillingBudgetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.SetUsageBillingBudget is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) ListUsageBillingBudgetVersions(context.Context, *connect.Request[v1.ListUsageBillingBudgetVersionsRequest]) (*connect.Response[v1.ListUsageBillingBudgetVersionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListUsageBillingBudgetVersions is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetOrgHostingUsageSummary(context.Context, *connect.Request[v1.GetOrgHostingUsageSummaryRequest]) (*connect.Response[v1.GetOrgHostingUsageSummaryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetOrgHostingUsageSummary is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetFreeHostingStatus(context.Context, *connect.Request[v1.GetFreeHostingStatusRequest]) (*connect.Response[v1.GetFreeHostingStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetFreeHostingStatus is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error) {

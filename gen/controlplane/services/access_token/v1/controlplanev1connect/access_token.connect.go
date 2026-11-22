@@ -123,7 +123,7 @@ type AccessTokenServiceClient interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
-	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
 	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
@@ -359,7 +359,7 @@ type AccessTokenServiceHandler interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
-	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
 	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
