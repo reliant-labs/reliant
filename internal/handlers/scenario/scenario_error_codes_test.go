@@ -52,8 +52,8 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("CreateScenario, reading the workflow: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := newScenarioRepo(&fixture{})
-			repo.GetWorkflowDraftBySlugFunc = func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+			drafts := &scenario.MockDrafts{GetWorkflowDraftBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }}
+			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Drafts: drafts}))
 			_, err := svc.CreateScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.CreateScenarioRequest{
 				WorkflowSlug: ownWorkflowSlug, Scenario: &pb.ScenarioDefinition{Name: "s"},
 			}))

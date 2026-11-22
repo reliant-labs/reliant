@@ -63,7 +63,7 @@ func TestForkOrphanedWorkflow_Generated(t *testing.T) {
 	// workflow.NewTestWorkflow (helpers_gen_test.go) returns the
 	// workflow *Service wired with stubbed dependencies. Override one
 	// with workflow.WithWorkflowDeps(...), or per-row via Case.Setup.
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: &workflow.MockRepository{
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: &workflow.MockRepository{}, Drafts: &workflow.MockDrafts{
 		GetWorkflowDraftFunc: func(context.Context, string) (*db.WorkflowDraft, error) {
 			return nil, svcerr.NotFound("workflow draft")
 		},

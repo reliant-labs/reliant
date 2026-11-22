@@ -6,15 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 const admissionWorkflow = `name: triage
@@ -45,7 +49,7 @@ func TestEnableWorkflowRejectsInvalidTreeBeforeWrites(t *testing.T) {
 			if tc.name == "draft" {
 				stored, err := env.repo.GetWorkflowDraftBySlug(env.ctx, env.userID, "triage")
 				require.NoError(t, err)
-				require.NoError(t, env.repo.UpdateWorkflowDraftDefinition(env.ctx, stored.ID, "triage", "triage", tc.definition, db.WorkflowDraftStatusDraft))
+				require.NoError(t, workflowdraftstest.New(t, env.repo).UpdateWorkflowDraftDefinition(env.ctx, stored.ID, "triage", "triage", tc.definition, db.WorkflowDraftStatusDraft))
 			}
 			resp, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(nil)))
 			if err == nil {

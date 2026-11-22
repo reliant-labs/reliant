@@ -17,7 +17,7 @@ import (
 func TestCopyWorkflow_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: draftsRepo(), Projects: projectaccesstest.For(draftsRepo())}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(draftsRepo().deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CopyWorkflowRequest, pb.CopyWorkflowResponse]{
 		{
