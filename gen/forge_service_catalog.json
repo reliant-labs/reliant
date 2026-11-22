@@ -7764,6 +7764,11 @@
             {
               "name": "url",
               "kind": "string"
+            },
+            {
+              "name": "source_path",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.BranchChatRequest": [
@@ -19655,6 +19660,11 @@
             {
               "name": "url",
               "kind": "string"
+            },
+            {
+              "name": "source_path",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ContentBlock": [
@@ -37579,6 +37589,11 @@
             {
               "name": "url",
               "kind": "string"
+            },
+            {
+              "name": "source_path",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatCaughtUp": [

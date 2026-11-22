@@ -121,6 +121,8 @@ func TestPresentImage_StoresTheFileAsAUserOnlyAttachment(t *testing.T) {
 	assert.Equal(t, string(attachment.TypeDisplay), att.AttachmentType, "presented images are user-only")
 	assert.Equal(t, "test-user", att.UserID, "owned by the caller, so the ownership check on the result admits it")
 	assert.Equal(t, "chart.png", att.Filename)
+	assert.Equal(t, "/workspace/out/chart.png", att.SourcePath(),
+		"the resolved source path is kept, so the client can open the file in the viewer")
 
 	assert.Equal(t, output.AttachmentIDs, attachmentIDsFromMetadataForTest(t, resp.Metadata))
 	assert.Contains(t, resp.Content, "Showed 2 images to the user")

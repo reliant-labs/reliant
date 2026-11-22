@@ -275,7 +275,7 @@ func (t *presentImageTool) present(tc *rctx.ToolContext, userID, path string) (P
 	}
 
 	filename := filepath.Base(path)
-	id, err := t.store(tc.Context, userID, filename, mimeType, data)
+	id, err := t.store(tc.Context, userID, path, mimeType, data)
 	if err != nil {
 		return PresentedImage{}, fmt.Sprintf("could not be stored: %v", err)
 	}
@@ -293,7 +293,12 @@ func (t *presentImageTool) present(tc *rctx.ToolContext, userID, path string) (P
 // store writes the image as a user-only attachment row. The database is the
 // substrate: neither the api server nor the worker can see the machine's
 // disk, and /api/attachments/{id} is served from the row.
-func (t *presentImageTool) store(ctx context.Context, userID, filename, mimeType string, data []byte) (string, error) {
+//
+// FilePath is the absolute source path on the machine, as a file reference
+// keeps its original path: the client reads it back as the attachment's
+// source_path (core.Attachment.SourcePath) to open the file in the viewer.
+func (t *presentImageTool) store(ctx context.Context, userID, sourcePath, mimeType string, data []byte) (string, error) {
+	filename := filepath.Base(sourcePath)
 	id := uuid.New().String()
 	hash := sha256.Sum256(data)
 	fileHash := hex.EncodeToString(hash[:])
@@ -305,7 +310,7 @@ func (t *presentImageTool) store(ctx context.Context, userID, filename, mimeType
 		Size:           int64(len(data)),
 		MimeType:       mimeType,
 		FileHash:       &fileHash,
-		FilePath:       filepath.Join(userID, id, filename),
+		FilePath:       sourcePath,
 		AttachmentType: string(attachment.TypeDisplay),
 		Content:        data,
 		CreatedAt:      now,

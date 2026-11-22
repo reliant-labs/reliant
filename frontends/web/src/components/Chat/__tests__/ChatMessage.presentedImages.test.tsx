@@ -3,7 +3,7 @@
  * Its result's attachments render in the message flow like a generated
  * image's, outside the tool card, with the call's caption under them.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatMessage } from "../ChatMessage";
@@ -65,6 +65,14 @@ vi.mock("../BranchToWorktreeModal", () => ({
 vi.mock("../BranchToExistingWorktreeModal", () => ({
   BranchToExistingWorktreeModal: () => null,
 }));
+// The action is "open this path in the file viewer"; what the opener does
+// with a path is lib/__tests__/openPathInFileViewer.test.ts's.
+const openPathInFileViewer = vi.fn((_path: string, _worktreeId?: string) => true);
+vi.mock("../../../lib/fileOpener", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../lib/fileOpener")>()),
+  openPathInFileViewer: (path: string, worktreeId?: string) => openPathInFileViewer(path, worktreeId),
+}));
+
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
 // The real tool card reads the chat's workflow executions (for spawn links).
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({
@@ -77,6 +85,7 @@ const PRESENTED = {
   size: BigInt(4096),
   mimeType: "image/png",
   url: "/api/attachments/att-shown-1",
+  sourcePath: "/tmp/chart.png",
 };
 
 const resultsWithImage = {
@@ -162,5 +171,33 @@ describe("presented images in the chat transcript", () => {
     expect(figure).not.toBeNull();
     expect(figure!.querySelector("figcaption")).toHaveTextContent("p95 latency, last 24h");
     expect(getAttachmentAsBlob).toHaveBeenCalledWith("att-shown-1");
+  });
+
+  it("opens the image's source file in the file viewer, against the chat's worktree", async () => {
+    openPathInFileViewer.mockClear();
+    renderPresented();
+    await waitFor(() => screen.getByAltText("chart.png"));
+
+    const action = screen.getByRole("button", { name: /open in file viewer/i });
+    expect(action.closest(".tool-executions-container")).toBeNull();
+    fireEvent.click(action);
+    expect(openPathInFileViewer).toHaveBeenCalledWith("/tmp/chart.png", "worktree-1");
+  });
+
+  it("offers the same action in the enlarged preview, closing it first", async () => {
+    openPathInFileViewer.mockClear();
+    renderPresented();
+    const image = await waitFor(() => screen.getByAltText("chart.png"));
+
+    fireEvent.click(image.closest("button")!);
+    const dialog = await waitFor(() => screen.getByRole("dialog"));
+    const action = Array.from(dialog.querySelectorAll("button")).find((b) =>
+      /open in file viewer/i.test(b.textContent ?? ""),
+    );
+    expect(action).toBeDefined();
+    fireEvent.click(action!);
+
+    expect(openPathInFileViewer).toHaveBeenCalledWith("/tmp/chart.png", "worktree-1");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

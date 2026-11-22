@@ -860,6 +860,11 @@ message Attachment {
   int64 size = 3;
   string mime_type = 4;
   string url = 5;
+  // The file on the user's machine this attachment was read from: an
+  // absolute path there, set only for an image a tool presented to the user
+  // (present_image). The client opens it in the file viewer; the stored bytes
+  // stay the attachment's, so a deleted file still renders in the chat.
+  optional string source_path = 6;
 }
 
 // InputMessage represents a message in a request (for StartChat/SendMessage)

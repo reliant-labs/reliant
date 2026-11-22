@@ -983,13 +983,17 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 			// Try to get real attachment data from database
 			if att, found := attachmentMap[attachmentID]; found {
 				// Use real attachment metadata
-				attachments = append(attachments, map[string]interface{}{
+				entry := map[string]interface{}{
 					"id":        att.ID,
 					"filename":  att.Filename,
 					"size":      att.Size,
 					"mime_type": att.MimeType,
 					"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
-				})
+				}
+				if source := att.SourcePath(); source != "" {
+					entry["source_path"] = source
+				}
+				attachments = append(attachments, entry)
 			} else {
 				// Fallback when attachment metadata is unavailable
 				defaultFilename := "file"

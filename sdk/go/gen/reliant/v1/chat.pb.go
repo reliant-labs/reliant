@@ -2074,12 +2074,17 @@ func (x *ContentBlock) GetBodySize() int64 {
 
 // Attachment represents a file attachment
 type Attachment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	Size          int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
-	MimeType      string                 `protobuf:"bytes,4,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	Url           string                 `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Filename string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	Size     int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	MimeType string                 `protobuf:"bytes,4,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	Url      string                 `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	// The file on the user's machine this attachment was read from: an
+	// absolute path there, set only for an image a tool presented to the user
+	// (present_image). The client opens it in the file viewer; the stored bytes
+	// stay the attachment's, so a deleted file still renders in the chat.
+	SourcePath    *string `protobuf:"bytes,6,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2145,6 +2150,13 @@ func (x *Attachment) GetMimeType() string {
 func (x *Attachment) GetUrl() string {
 	if x != nil {
 		return x.Url
+	}
+	return ""
+}
+
+func (x *Attachment) GetSourcePath() string {
+	if x != nil && x.SourcePath != nil {
+		return *x.SourcePath
 	}
 	return ""
 }
@@ -8202,14 +8214,17 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_body_elidedB\f\n" +
 	"\n" +
 	"_body_sizeJ\x04\b\t\x10\n" +
-	"R\x0ematched_result\"{\n" +
+	"R\x0ematched_result\"\xb1\x01\n" +
 	"\n" +
 	"Attachment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x04 \x01(\tR\bmimeType\x12\x10\n" +
-	"\x03url\x18\x05 \x01(\tR\x03url\"\xab\x01\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url\x12$\n" +
+	"\vsource_path\x18\x06 \x01(\tH\x00R\n" +
+	"sourcePath\x88\x01\x01B\x0e\n" +
+	"\f_source_path\"\xab\x01\n" +
 	"\fInputMessage\x12+\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
@@ -9248,6 +9263,7 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_chat_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[9].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[12].OneofWrappers = []any{}

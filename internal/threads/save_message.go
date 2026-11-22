@@ -886,13 +886,17 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 			}
 			for _, attID := range attachmentIDs {
 				if att, found := attachmentMap[attID]; found {
-					attachments = append(attachments, map[string]interface{}{
+					entry := map[string]interface{}{
 						"id":        att.ID,
 						"filename":  att.Filename,
 						"size":      att.Size,
 						"mime_type": att.MimeType,
 						"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
-					})
+					}
+					if source := att.SourcePath(); source != "" {
+						entry["source_path"] = source
+					}
+					attachments = append(attachments, entry)
 				} else {
 					slog.WarnContext(ctx, "attachment not found in database, skipping",
 						"attachment_id", attID,

@@ -19,6 +19,8 @@ import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
 import { isPresentImageTool, isReadOnlyTool, isRequestMachineTool, presentImageCaption } from "../../lib/toolFormatters";
+import { openPathInFileViewer } from "../../lib/fileOpener";
+import type { Attachment } from "../../types/chat";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
@@ -796,6 +798,11 @@ function ChatMessageComponent({
     //
     // present_image is the agent showing the user a file on purpose, with an
     // optional caption, so each of its calls is its own captioned set.
+    // Its images carry the file they were read from (sourcePath), which
+    // opens in the file viewer against the chat's worktree.
+    const openImageSource = (attachment: Attachment) => {
+      if (attachment.sourcePath) openPathInFileViewer(attachment.sourcePath, chatWorktreeId);
+    };
     const presented = runExecutions.filter(
       (exec) => isPresentImageTool(exec.call.name) && (exec.result?.attachments?.length ?? 0) > 0,
     );
@@ -806,13 +813,14 @@ function ChatMessageComponent({
     const runImages = runAttachments.filter((a) => !isVideoMimeType(a.mimeType));
     const media = (
       <>
-        {runImages.length > 0 && <MessageGeneratedImages attachments={runImages} />}
+        {runImages.length > 0 && <MessageGeneratedImages attachments={runImages} onOpenSource={openImageSource} />}
         {runVideos.length > 0 && <MessageGeneratedVideos attachments={runVideos} />}
         {presented.map((exec) => (
           <MessageGeneratedImages
             key={`${keyBase}-presented-${exec.call.id}`}
             attachments={exec.result?.attachments ?? []}
             caption={presentImageCaption(exec.call.input)}
+            onOpenSource={openImageSource}
           />
         ))}
       </>

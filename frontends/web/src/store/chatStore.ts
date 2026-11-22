@@ -642,6 +642,8 @@ type AttachmentMetadataInput = {
   mimeType?: unknown;
   mime_type?: unknown;
   url?: unknown;
+  sourcePath?: unknown;
+  source_path?: unknown;
 };
 
 function normalizeAttachmentSize(size: unknown): bigint {
@@ -693,12 +695,23 @@ function normalizeMessageAttachments(rawAttachments: unknown): Attachment[] {
           ? raw.url
           : `/api/attachments/${id}`;
 
+      // The file on the machine a presented image was read from
+      // (present_image): proto snapshots spell it sourcePath, live
+      // chat_update payloads source_path.
+      const sourcePath =
+        typeof raw.sourcePath === "string" && raw.sourcePath !== ""
+          ? raw.sourcePath
+          : typeof raw.source_path === "string" && raw.source_path !== ""
+            ? raw.source_path
+            : undefined;
+
       return {
         id,
         filename,
         size: normalizeAttachmentSize(raw.size),
         mimeType,
         url,
+        ...(sourcePath ? { sourcePath } : {}),
       } as Attachment;
     })
     .filter((attachment): attachment is Attachment => attachment !== null);

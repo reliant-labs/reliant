@@ -257,4 +257,11 @@ describe("generated images in the chat transcript", () => {
     // if it threw, and the point here is the exact count.
     expect(screen.getAllByAltText("generated.png")).toHaveLength(1);
   });
+
+  it("offers no file-viewer action for an image with no source file on the machine", async () => {
+    renderWithGeneratedImage();
+
+    await waitFor(() => screen.getByAltText("generated.png"));
+    expect(screen.queryByRole("button", { name: /open in file viewer/i })).toBeNull();
+  });
 });

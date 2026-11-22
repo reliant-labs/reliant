@@ -318,6 +318,9 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 			MimeType: a.MimeType,
 			Url:      fmt.Sprintf("/api/attachments/%s", a.ID),
 		}
+		if source := a.SourcePath(); source != "" {
+			protoAttachments[i].SourcePath = &source
+		}
 	}
 	proto.Attachments = protoAttachments
 

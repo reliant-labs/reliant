@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { FolderOpen, X } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
@@ -9,6 +9,11 @@ interface ImagePreviewModalProps {
   onClose: () => void;
   imageUrl: string;
   filename: string;
+  /**
+   * Opens the image's source file in the file viewer (a presented image's
+   * file on the machine). The modal closes first, since it covers the viewer.
+   */
+  onOpenInFileViewer?: () => void;
 }
 
 export function ImagePreviewModal({
@@ -16,6 +21,7 @@ export function ImagePreviewModal({
   onClose,
   imageUrl,
   filename,
+  onOpenInFileViewer,
 }: ImagePreviewModalProps) {
   const wasOpenRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,17 +112,32 @@ export function ImagePreviewModal({
     >
       {/* Top bar with close button */}
       <div className="flex-shrink-0 flex items-center px-4 py-3 bg-black border-b border-white/10 relative">
-        {/* Spacer for centering */}
-        <div className="w-8" />
-        
+        {/* Equal-width side slots keep the title centered whatever they hold. */}
+        <div className="flex flex-1 basis-0 justify-start">
+          {onOpenInFileViewer && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenInFileViewer();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-ui text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
+              Open in file viewer
+            </button>
+          )}
+        </div>
+
         {/* Centered title */}
-        <div className="flex-1 text-center">
-          <span className="text-white text-sm font-medium truncate">
+        <div className="min-w-0 max-w-[50%] text-center">
+          <span className="block truncate text-sm font-medium text-white">
             {filename}
           </span>
         </div>
-        
+
         {/* Close button */}
+        <div className="flex flex-1 basis-0 justify-end">
         <Tooltip content="Close (ESC)" side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
           onClick={onClose}
@@ -124,6 +145,7 @@ export function ImagePreviewModal({
           <X className="w-4 h-4 text-white" />
         </button>
 </Tooltip>
+        </div>
       </div>
 
       {/* Image area - click to close */}

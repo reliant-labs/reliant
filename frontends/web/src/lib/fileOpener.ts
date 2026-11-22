@@ -8,6 +8,7 @@ import { ALL_PROJECTS, getCachedWorktrees, getCurrentWorktree, useCachedWorktree
 import { useViewerStore } from '../store/viewerStore';
 import { useProjectStore } from '../store/projectStore';
 import { logger } from './logger';
+import { toast } from './toast-manager';
 import type { ParsedFilePath } from './filePath';
 import type { FileNode } from '../components/FileBrowser';
 
@@ -262,6 +263,38 @@ export function openFile(
   } catch (error) {
     logger.error('openFile', 'Failed to open file', error);
   }
+}
+
+/**
+ * Open a path a tool reported (present_image's source file) in the file
+ * viewer, the way a tool card opens its file: classify it against the chat's
+ * worktree, then openFile. An absolute path outside the project (/tmp/shot.png)
+ * opens too, read-only: the viewer rpcs read any path on the workspace's
+ * machine (classifyPathWithContext, 'external').
+ *
+ * When it cannot open the path at all it says why in a toast and returns
+ * false. A file deleted since, or a machine that is gone, is the viewer tab's
+ * to report: it opens and shows its not-found or waiting-for-machine state.
+ */
+export function openPathInFileViewer(path: string, worktreeId?: string): boolean {
+  // A path the tool resolved, used as given: not parseFilePath, which reads
+  // prose (`file.go:12`) and accepts only source-file extensions, so it
+  // refuses an image and would split a path that contains a colon.
+  const trimmed = path.trim();
+  const parsed: ParsedFilePath | null = trimmed
+    ? { fullPath: trimmed, path: trimmed, isAbsolute: trimmed.startsWith('/') || /^[A-Za-z]:[\\/]/.test(trimmed) }
+    : null;
+  const classification = classifyPath(parsed, worktreeId);
+  if (!parsed || !classification.isClickable) {
+    toast.error(classification.tooltipMessage);
+    return false;
+  }
+  if (!useProjectStore.getState().currentProject?.id) {
+    toast.error('Open a project to view files from its machine.');
+    return false;
+  }
+  openFile(parsed, classification.targetWorktreeId || worktreeId);
+  return true;
 }
 
 /**
