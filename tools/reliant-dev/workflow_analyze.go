@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/execfollow"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ============================================================================
@@ -124,7 +125,7 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		}
 	}
 
-	if qs, qerr := repo.ListQuestionsByChat(ctx, chatID); qerr == nil {
+	if qs, qerr := store.NewQuestionExtStore(repo.ORM()).ListQuestionsByChat(ctx, chatID); qerr == nil {
 		rd.questions = qs
 	}
 

@@ -8,11 +8,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/structpb"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
@@ -35,7 +37,7 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 
 	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
@@ -87,7 +89,7 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 
 	_, err := service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
 		ChatId: chatID,
@@ -138,7 +140,7 @@ func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpda
 		LastActive: now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 
 	_, err := service.UpdateWorkflowParams(ctx, connect.NewRequest(&reliantv1.UpdateWorkflowParamsRequest{
 		ChatId: chatID,

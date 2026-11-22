@@ -201,8 +201,8 @@ esac
 	if !r.ok || !strings.Contains(r.log, "pnpm install --dir frontends/web --frozen-lockfile") {
 		t.Errorf("selected files: want an install and a pass:\n%s\n%s", r.out, r.log)
 	}
-	if !strings.Contains(r.log, " -base abc123 -lanes web -web-full reached -web-shard 2/4\n") {
-		t.Errorf("selected files: the web lane does not run alone, as shard 2/4:\n%s", r.log)
+	if !strings.Contains(r.log, " -base abc123 -lanes web -web-full reached -web-shard 2/4 -capture\n") {
+		t.Errorf("selected files: the web lane does not run alone, as shard 2/4, recorded as the gate records it:\n%s", r.log)
 	}
 	if r := run(t, some, map[string]string{"MG_REACH": "all"}, std...); !strings.Contains(r.log, "plan -json -reach all ") {
 		t.Errorf("MG_REACH is not honoured as in the gate:\n%s", r.log)

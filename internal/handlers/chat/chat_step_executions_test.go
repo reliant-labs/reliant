@@ -14,9 +14,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func recordedStep(stepID, activity, nodePath string, at time.Time) *db.StepExecution {
@@ -67,7 +69,7 @@ func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
 		recordedStep("agent", "Legacy", "", base.Add(4*time.Millisecond)),
 	})
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	list := func(nodePath string) *reliantv1.ListStepExecutionsResponse {
 		resp, err := service.ListStepExecutions(ctx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{
 			ChatId:   chatID,
@@ -105,6 +107,6 @@ func TestListStepExecutions_OtherUsersChatIsNotFound(t *testing.T) {
 	chatID := seedChatForThreadTree(t, repo, ownerCtx, "owner")
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err := (&Service{deps: Deps{Repo: repo}}).ListStepExecutions(otherCtx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: chatID}))
+	_, err := (&Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}).ListStepExecutions(otherCtx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: chatID}))
 	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }

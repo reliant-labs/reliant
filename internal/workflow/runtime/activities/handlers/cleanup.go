@@ -77,6 +77,9 @@ func (a *CleanupActivity) Category() schema.ActivityCategory {
 
 // Execute cancels pending approvals and notifies UI
 func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
+	if a.approvals == nil {
+		return CleanupOutput{}, fmt.Errorf("approval resolution store is not configured")
+	}
 	logging.DebugContext(ctx, "[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
 
 	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)

@@ -167,6 +167,9 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 // store call inside RunTx and a Repository call inside ORM().RunTx each join
 // the transaction the other opened.
 func (r *Repo) ORM() *orm.Client {
+	if r == nil || r.DB == nil {
+		return nil
+	}
 	return r.DB.orm
 }
 

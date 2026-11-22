@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -70,10 +71,11 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	}}
 	service := &Service{
 		deps: Deps{
-			Repo:     repo,
-			Temporal: temporal,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Temporal:  temporal,
 		},
-		runs: runs.NewService(repo, temporal, nil),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	// A backstop, so a regression fails instead of hanging the package.
@@ -157,10 +159,11 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:     repo,
-					Temporal: temporal,
+					Repo:      repo,
+					Questions: store.NewQuestionExtStore(repo.ORM()),
+					Temporal:  temporal,
 				},
-				runs: runs.NewService(repo, temporal, pause),
+				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 			}
 
 			req := sendMessageRequest(t, fx.chatID, "next step")

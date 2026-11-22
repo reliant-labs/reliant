@@ -1210,7 +1210,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=ce22096cf8ef0851ffa11e7c5a4f4581e81f027e7965b7c1008e264f0794b0c2
+// forge:hash=104759c8b7b23ade41525585d6652b82304552c3d62fe19ff5d5111454affbf4
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1266,7 +1266,6 @@ type MockspawnStatusStore struct {
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
 	LastThreadActivityByChatFunc                             func(context.Context, string) (map[string]time.Time, error)
 	ListPendingApprovalsByChatFunc                           func(context.Context, string) ([]*db.Approval, error)
-	PendingQuestionsByThreadFunc                             func(context.Context, string) (map[string]*db.Question, error)
 	ProviderBackoffByChatFunc                                func(context.Context, string) (map[string]db.ProviderBackoff, error)
 	ListSpawnChildrenFunc                                    func(context.Context, string) ([]*db.SpawnChild, error)
 	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
@@ -1686,15 +1685,6 @@ func (m *MockspawnStatusStore) ListPendingApprovalsByChat(ctx context.Context, c
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ListPendingApprovalsByChat")
 }
 
-// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
-func (m *MockspawnStatusStore) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
-	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
-	if m.PendingQuestionsByThreadFunc != nil {
-		return m.PendingQuestionsByThreadFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "PendingQuestionsByThread")
-}
-
 // ProviderBackoffByChat records the call and delegates to ProviderBackoffByChatFunc when set.
 func (m *MockspawnStatusStore) ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]db.ProviderBackoff, error) {
 	m.Recorder.Record("ProviderBackoffByChat", ctx, chatID)
@@ -1724,6 +1714,32 @@ func (m *MockspawnStatusStore) ListInheritedSpawnChildren(ctx context.Context, t
 
 // Compile-time check.
 var _ spawnStatusStore = (*MockspawnStatusStore)(nil)
+
+// forge:section MockSpawnQuestions
+// forge:hash=87c747b90b6687ac0dc8055fc21fc08380b3c05e2b0997b079194907573754ac
+
+// MockSpawnQuestions is a test mock for the SpawnQuestions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawnQuestions.<Method>Func not set" error.
+type MockSpawnQuestions struct {
+	contractkit.Recorder
+	PendingQuestionsByThreadFunc func(context.Context, string) (map[string]*db.Question, error)
+}
+
+// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
+func (m *MockSpawnQuestions) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
+	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
+	if m.PendingQuestionsByThreadFunc != nil {
+		return m.PendingQuestionsByThreadFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawnQuestions", "PendingQuestionsByThread")
+}
+
+// Compile-time check.
+var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 
 // forge:section MockspawnSendStore
 // forge:hash=17ec09139fa5e700a34be1628667db4a0e45c6002d7e9ee83939a565886d4a29

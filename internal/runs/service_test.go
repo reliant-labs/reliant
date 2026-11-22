@@ -13,11 +13,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // --- fakes ---
@@ -234,7 +235,7 @@ func fixture(t *testing.T) (*fakeRepo, *fakeTemporal, *fakePause, *Service) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Paused()}
 	temporal := &fakeTemporal{status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runID: "run-old"}
 	pause := &fakePause{}
-	return repo, temporal, pause, NewService(repo, temporal, pause)
+	return repo, temporal, pause, New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
 }
 
 // =========================================================================
@@ -687,7 +688,7 @@ func TestResumeViaSignal_UndeliverableFallsBackToRestart(t *testing.T) {
 func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 	repo, temporal, pause, _ := fixture(t)
 	repo.chat = &db.Chat{ID: "chat-1"} // never started a root workflow
-	svc := NewService(repo, temporal, pause)
+	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
 
 	_, resumeErr := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, resumeErr, ErrNoWorkflow)
@@ -698,7 +699,7 @@ func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 func TestLifecycleCalls_RejectMissingChat(t *testing.T) {
 	repo, temporal, pause, _ := fixture(t)
 	repo.chatErr = core.ErrChatNotFound
-	svc := NewService(repo, temporal, pause)
+	svc := New(Deps{Repo: repo, Questions: repo, Temporal: temporal, Pause: pause})
 
 	_, err := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, err, core.ErrChatNotFound)

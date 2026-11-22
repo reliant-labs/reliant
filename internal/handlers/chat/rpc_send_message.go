@@ -939,7 +939,7 @@ func (s *Service) SendMessage(
 				}
 				var pendingQuestion *db.Question
 				if inspection.Recoverable {
-					if byThread, err := s.deps.Repo.PendingQuestionsByThread(ctx, req.Msg.ChatId); err == nil {
+					if byThread, err := s.deps.Questions.PendingQuestionsByThread(ctx, req.Msg.ChatId); err == nil {
 						pendingQuestion = byThread[targetThread]
 					}
 				}
