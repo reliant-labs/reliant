@@ -21,9 +21,10 @@ import (
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
-// UserAuth authenticates the user audience: a JWT (or, in apikey mode, the
-// shared key) and `rlat_` access tokens, through the deployment's token
-// authority behind a CacheTTL-bounded cache. The chain's Auth slot runs it for
+// UserAuth authenticates the user audience: a JWT — Supabase's, or, with
+// JWT_ISSUER set, the managed identity's (auth.TokenChain) — or, in apikey
+// mode, the shared key, and `rlat_` access tokens, through the deployment's
+// token authority behind a CacheTTL-bounded cache. The chain's Auth slot runs it for
 // every Connect call (UserChainDeps.Auth), and the attachment-bytes route
 // calls its AuthenticateHTTP directly. The procedures it lets through
 // unauthenticated are the ones whose proto declares (forge.v1.method)

@@ -35,6 +35,28 @@ type ApiServerConfig struct {
 	JwtPublicKey     string `protobuf:"bytes,1,opt,name=jwt_public_key,json=jwtPublicKey,proto3" json:"jwt_public_key,omitempty"`
 	JwtPublicKeyFile string `protobuf:"bytes,2,opt,name=jwt_public_key_file,json=jwtPublicKeyFile,proto3" json:"jwt_public_key_file,omitempty"`
 	JwksUrl          string `protobuf:"bytes,3,opt,name=jwks_url,json=jwksUrl,proto3" json:"jwks_url,omitempty"`
+	// The iss and aud a Supabase JWT must carry: SUPABASE_JWT_ISSUER
+	// (https://<project>.supabase.co/auth/v1, or the project's custom domain)
+	// and SUPABASE_JWT_AUDIENCE ("authenticated"), the names control-plane's
+	// validator reads. Empty checks nothing.
+	SupabaseJwtIssuer   string `protobuf:"bytes,86,opt,name=supabase_jwt_issuer,json=supabaseJwtIssuer,proto3" json:"supabase_jwt_issuer,omitempty"`
+	SupabaseJwtAudience string `protobuf:"bytes,87,opt,name=supabase_jwt_audience,json=supabaseJwtAudience,proto3" json:"supabase_jwt_audience,omitempty"`
+	// ── The managed identity (forge.ManagedIdentity) ──────────────────────
+	//
+	// forge's standard token-validator fields, which forge.IdentityRef fills
+	// from the env's forge.ManagedIdentity (a Zitadel instance on the control
+	// plane's shared identity deployment, or the dev IdP `forge env up`
+	// converges). With jwt_issuer set, AUTH_MODE=supabase accepts this issuer's
+	// tokens beside Supabase's (internal/auth TokenChain routes each token to
+	// exactly one of them by its iss). Unset, nothing changes.
+	JwtIssuer             string               `protobuf:"bytes,88,opt,name=jwt_issuer,json=jwtIssuer,proto3" json:"jwt_issuer,omitempty"`
+	JwtAudience           string               `protobuf:"bytes,89,opt,name=jwt_audience,json=jwtAudience,proto3" json:"jwt_audience,omitempty"`
+	JwtJwksUrl            string               `protobuf:"bytes,91,opt,name=jwt_jwks_url,json=jwtJwksUrl,proto3" json:"jwt_jwks_url,omitempty"`
+	JwtSigningMethod      string               `protobuf:"bytes,92,opt,name=jwt_signing_method,json=jwtSigningMethod,proto3" json:"jwt_signing_method,omitempty"`
+	JwtRolesClaim         string               `protobuf:"bytes,93,opt,name=jwt_roles_claim,json=jwtRolesClaim,proto3" json:"jwt_roles_claim,omitempty"`
+	JwtJwksSnapshotFile   string               `protobuf:"bytes,94,opt,name=jwt_jwks_snapshot_file,json=jwtJwksSnapshotFile,proto3" json:"jwt_jwks_snapshot_file,omitempty"`
+	JwtJwksSnapshot       string               `protobuf:"bytes,95,opt,name=jwt_jwks_snapshot,json=jwtJwksSnapshot,proto3" json:"jwt_jwks_snapshot,omitempty"`
+	JwtJwksSnapshotMaxAge *durationpb.Duration `protobuf:"bytes,96,opt,name=jwt_jwks_snapshot_max_age,json=jwtJwksSnapshotMaxAge,proto3" json:"jwt_jwks_snapshot_max_age,omitempty"`
 	// The email domains allowed to sign in, comma-separated; none allows every
 	// domain. The loader trims each element and drops blank ones, which the
 	// domain whitelist already did to every entry, so " B.com," still means
@@ -205,6 +227,76 @@ func (x *ApiServerConfig) GetJwksUrl() string {
 		return x.JwksUrl
 	}
 	return ""
+}
+
+func (x *ApiServerConfig) GetSupabaseJwtIssuer() string {
+	if x != nil {
+		return x.SupabaseJwtIssuer
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetSupabaseJwtAudience() string {
+	if x != nil {
+		return x.SupabaseJwtAudience
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtIssuer() string {
+	if x != nil {
+		return x.JwtIssuer
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtAudience() string {
+	if x != nil {
+		return x.JwtAudience
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtJwksUrl() string {
+	if x != nil {
+		return x.JwtJwksUrl
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtSigningMethod() string {
+	if x != nil {
+		return x.JwtSigningMethod
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtRolesClaim() string {
+	if x != nil {
+		return x.JwtRolesClaim
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtJwksSnapshotFile() string {
+	if x != nil {
+		return x.JwtJwksSnapshotFile
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtJwksSnapshot() string {
+	if x != nil {
+		return x.JwtJwksSnapshot
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetJwtJwksSnapshotMaxAge() *durationpb.Duration {
+	if x != nil {
+		return x.JwtJwksSnapshotMaxAge
+	}
+	return nil
 }
 
 func (x *ApiServerConfig) GetAllowedEmailDomains() []string {
@@ -520,14 +612,38 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xec%\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xf83\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
 	"\x13jwt_public_key_file\x18\x02 \x01(\tBO\x82\xce\x18K\n" +
 	"\x13JWT_PUBLIC_KEY_FILE\x12\x13jwt-public-key-file*\x1fPath to JWT public key PEM fileR\x10jwtPublicKeyFile\x12z\n" +
 	"\bjwks_url\x18\x03 \x01(\tB_\x82\xce\x18[\n" +
-	"\x10RELIANT_JWKS_URL\x12\bjwks-url*=JWKS endpoint URL for JWT validation (alternative to PEM key)R\ajwksUrl\x12\x93\x01\n" +
+	"\x10RELIANT_JWKS_URL\x12\bjwks-url*=JWKS endpoint URL for JWT validation (alternative to PEM key)R\ajwksUrl\x12\x85\x01\n" +
+	"\x13supabase_jwt_issuer\x18V \x01(\tBU\x82\xce\x18Q\n" +
+	"\x13SUPABASE_JWT_ISSUER*:Exact iss a Supabase JWT must carry (empty checks nothing)R\x11supabaseJwtIssuer\x12\x88\x01\n" +
+	"\x15supabase_jwt_audience\x18W \x01(\tBT\x82\xce\x18P\n" +
+	"\x15SUPABASE_JWT_AUDIENCE*7An aud a Supabase JWT must carry (empty checks nothing)R\x13supabaseJwtAudience\x12\x8d\x01\n" +
+	"\n" +
+	"jwt_issuer\x18X \x01(\tBn\x82\xce\x18j\n" +
+	"\n" +
+	"JWT_ISSUER\x12\n" +
+	"jwt-issuer*PThe managed identity's issuer: the exact iss of its tokens (empty: not accepted)R\tjwtIssuer\x12\x9e\x01\n" +
+	"\fjwt_audience\x18Y \x01(\tB{\x82\xce\x18w\n" +
+	"\fJWT_AUDIENCE\x12\fjwt-audience*YAn aud the managed identity's tokens must carry: its project id. Required with jwt_issuerR\vjwtAudience\x12\xa4\x01\n" +
+	"\fjwt_jwks_url\x18[ \x01(\tB\x81\x01\x82\xce\x18}\n" +
+	"\fJWT_JWKS_URL\x12\fjwt-jwks-url*_The managed identity's JWKS endpoint; empty discovers it from jwt_issuer's OpenID configurationR\n" +
+	"jwtJwksUrl\x12\x95\x01\n" +
+	"\x12jwt_signing_method\x18\\ \x01(\tBg\x82\xce\x18c\n" +
+	"\x12JWT_SIGNING_METHOD\x12\x12jwt-signing-method\x1a\x05RS256*2The alg the managed identity signs its tokens withR\x10jwtSigningMethod\x12\xbc\x01\n" +
+	"\x0fjwt_roles_claim\x18] \x01(\tB\x93\x01\x82\xce\x18\x8e\x01\n" +
+	"\x0fJWT_ROLES_CLAIM\x12\x0fjwt-roles-claim\x1a\x04auto*dThe claim the managed identity's roles are read from (auto: roles, else Zitadel's project roles map)R\rjwtRolesClaim\x12\xc6\x01\n" +
+	"\x16jwt_jwks_snapshot_file\x18^ \x01(\tB\x90\x01\x82\xce\x18\x8b\x01\n" +
+	"\x16JWT_JWKS_SNAPSHOT_FILE\x12\x16jwt-jwks-snapshot-file*YA delivered snapshot of the managed identity's JWKS, to start on while its issuer is downR\x13jwtJwksSnapshotFile\x12\xa9\x01\n" +
+	"\x11jwt_jwks_snapshot\x18_ \x01(\tB}\x82\xce\x18y\n" +
+	"\x11JWT_JWKS_SNAPSHOT*`The same JWKS snapshot, inline (sensitive only so it rides the secret path; the keys are public)0\x01P\x01R\x0fjwtJwksSnapshot\x12\xc7\x01\n" +
+	"\x19jwt_jwks_snapshot_max_age\x18` \x01(\v2\x19.google.protobuf.DurationBr\x82\xce\x18n\n" +
+	"\x19JWT_JWKS_SNAPSHOT_MAX_AGE\x12\x19jwt-jwks-snapshot-max-age\x1a\x04168h*0How old a JWKS snapshot may be and still be usedR\x15jwtJwksSnapshotMaxAge\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
@@ -585,8 +701,9 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x121\n" +
-	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\x95\x01\xbaHx\x1av\n" +
-	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\xca\xc1\x18\x16\n" +
+	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\xa0\x02\xbaH\x82\x02\x1av\n" +
+	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\x1a\x87\x01\n" +
+	"\x15jwt_audience_required\x12<JWT_ISSUER requires JWT_AUDIENCE (the identity project's id)\x1a0this.jwt_issuer == '' || this.jwt_audience != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xcc\a\n" +
 	"\n" +
@@ -621,19 +738,20 @@ var file_reliant_config_v1_api_server_config_proto_goTypes = []any{
 	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
 }
 var file_reliant_config_v1_api_server_config_proto_depIdxs = []int32{
-	2, // 0: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
-	2, // 1: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
-	2, // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
-	2, // 3: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
-	2, // 4: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
-	2, // 5: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
-	2, // 6: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	1, // 7: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	2, // 0: reliant.config.v1.ApiServerConfig.jwt_jwks_snapshot_max_age:type_name -> google.protobuf.Duration
+	2, // 1: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
+	2, // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
+	2, // 3: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
+	2, // 4: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
+	2, // 5: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
+	2, // 6: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
+	2, // 7: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
+	1, // 8: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_api_server_config_proto_init() }

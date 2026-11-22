@@ -221,18 +221,58 @@ func classifyHistory(ctx context.Context, checkout, baseBranch, worktreeID strin
 // automatic path (saveCommits) and a confirmed clean-up save to a ref. Tips
 // dropped here are never saved: nothing prunes refs/reliant/wip, and a ref
 // pins its objects forever.
+//
+// A tip whose work is on the checkout's own PUSHED branch (publishedRefs) is
+// dropped too, by the same ancestor-or-patch comparison: it is what a rebase
+// or amend leaves behind once the rewritten commits were force-pushed, and
+// its change already lives on the remote. On 2026-11-22 such tips held 19 of
+// 37 finished workspaces on one machine for days. Only remote-tracking refs
+// count, never a local branch: a local ref is not a durable receipt (#1590).
 func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []string, memo *commitMemo) ([]string, error) {
 	var lost []string
+	var published []string
+	publishedRead := false
 	for _, tip := range tips {
 		merged, err := inBase(ctx, checkout, tip, baseBranch, memo)
 		if err != nil {
 			return nil, err
 		}
 		if !merged {
+			if !publishedRead {
+				published, publishedRead = publishedRefs(ctx, checkout), true
+			}
+			if merged, err = inCommits(ctx, checkout, tip, published, memo); err != nil {
+				return nil, err
+			}
+		}
+		if !merged {
 			lost = append(lost, tip)
 		}
 	}
 	return lost, nil
+}
+
+// publishedRefs resolves the remote-tracking refs the checkout's current
+// branch was pushed to: its configured upstream, and origin/<branch>. Only
+// refs under refs/remotes/ are returned, as commits; a detached HEAD, or a
+// branch never pushed, has none.
+func publishedRefs(ctx context.Context, checkout string) []string {
+	branch, err := git(ctx, checkout, nil, "symbolic-ref", "--short", "-q", "HEAD")
+	if err != nil || branch == "" {
+		return nil
+	}
+	want := []string{"refs/remotes/origin/" + branch}
+	if up, err := git(ctx, checkout, nil, "rev-parse", "--symbolic-full-name", "--verify", "--quiet", branch+"@{upstream}"); err == nil && strings.HasPrefix(up, "refs/remotes/") && !slices.Contains(want, up) {
+		want = append(want, up)
+	}
+	var shas []string
+	for _, ref := range want {
+		sha, err := git(ctx, checkout, nil, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+		if err == nil && sha != "" && !slices.Contains(shas, sha) {
+			shas = append(shas, sha)
+		}
+	}
+	return shas
 }
 
 // refsContaining reports whether a remote ref, and whether a ref under prefix

@@ -109,7 +109,7 @@ func TestOrgFeed_AnActivityAfterAnUnshareWritesNothing(t *testing.T) {
 
 	entered, release := make(chan struct{}), make(chan struct{})
 	unsharing := holdOpen(repo, func(txCtx context.Context) error {
-		changed, err := repo.ApplyShareChange(txCtx, shareChange(f, core.ShareActionUnshare))
+		changed, err := applyShareChange(txCtx, repo, shareChange(f, core.ShareActionUnshare))
 		require.True(t, changed)
 		return err
 	}, entered, release)
@@ -125,7 +125,7 @@ func TestOrgFeed_AnActivityAfterAnUnshareWritesNothing(t *testing.T) {
 	require.Equal(t, []reliantv1.OrgUpdateType{shared, unshared}, chatFeed(t, repo, f),
 		"no CHANGED follows the chat's UNSHARED")
 
-	changedNow, err := repo.ApplyShareChange(ctx, shareChange(f, core.ShareActionShare))
+	changedNow, err := applyShareChange(ctx, repo, shareChange(f, core.ShareActionShare))
 	require.NoError(t, err)
 	require.True(t, changedNow)
 	require.NoError(t, announce(ctx, repo, f))
@@ -147,7 +147,7 @@ func TestOrgFeed_AnUnshareAfterAnActivityComesLast(t *testing.T) {
 
 	unsharing := make(chan error, 1)
 	go func() {
-		_, err := repo.ApplyShareChange(ctx, shareChange(f, core.ShareActionUnshare))
+		_, err := applyShareChange(ctx, repo, shareChange(f, core.ShareActionUnshare))
 		unsharing <- err
 	}()
 	waitForLockWaiter(t, repo, unsharing)

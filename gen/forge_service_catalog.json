@@ -56749,6 +56749,17 @@
     },
     {
       "consumer": "Sharing",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.OrgResolver",
       "methods": [],
@@ -56762,16 +56773,34 @@
     },
     {
       "consumer": "Sharing",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Repository",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Projects",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Shares",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Shares",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.TxRunner",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Streaming",
@@ -57689,6 +57718,38 @@
       "component": "Settings.ControlPlane",
       "source": {
         "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Chats",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Projects",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Shares",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Tx",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
         "symbol": "New"
       }
     },
