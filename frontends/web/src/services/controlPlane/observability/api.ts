@@ -24,7 +24,6 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -598,19 +597,12 @@ function quotaState(state: ObservabilityQuotaState | number): QuotaState {
 }
 
 /**
- * GetObservabilityUsage from ObservabilityBillingService, or, against a control
- * plane that predates that service (it answers Unimplemented), from
- * ObservabilityService's retired copy, which every older release serves. The
- * two responses carry the same fields this module reads. Keep the fallback
- * until the replacement's oldest supported release is past it.
+ * GetObservabilityUsage from ObservabilityBillingService. ObservabilityService's
+ * retired copy is gone from the control plane's contract, so there is no
+ * fallback to it.
  */
 async function fetchObservabilityUsage(orgId: string) {
-  try {
-    return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
-  } catch (err) {
-    if (!(err instanceof ConnectError && err.code === Code.Unimplemented)) throw err;
-    return await client().getObservabilityUsage({ orgId });
-  }
+  return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
 }
 
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];

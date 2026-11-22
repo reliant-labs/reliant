@@ -39,7 +39,7 @@
 //
 // `--check` re-renders and diffs without writing; it exits non-zero when the
 // committed file has drifted from the KCL, and is a no-op (with a clear skip
-// message) when the control-plane checkout or `kcl` is unavailable, so an
+// message) when the control-plane checkout or `forge` is unavailable, so an
 // outside contributor's fork does not fail on a private repo it cannot see.
 //
 // ## --require: the skip is the failure mode
@@ -167,9 +167,9 @@ if (checkOnly) {
       fail(
         `--require was passed but the KCL could not be rendered: ${unavailable}.\n` +
           `This invocation is an authoritative drift gate; skipping would mean it\n` +
-          `verified nothing while reporting success. Ensure \`kcl\` AND \`forge\` are\n` +
-          `installed (forge supplies the \`forge\` KCL module that control-plane's KCL\n` +
-          `imports — kcl alone cannot resolve it) and that CONTROL_PLANE_DIR points at\n` +
+          `verified nothing while reporting success. Ensure \`forge\` is installed\n` +
+          `(its evaluator supplies the \`forge\` KCL module and plugin that control-plane's\n` +
+          `KCL imports — a stock kcl cannot) and that CONTROL_PLANE_DIR points at\n` +
           `a control-plane checkout (currently ${CONTROL_PLANE_DIR}).`,
       );
     }

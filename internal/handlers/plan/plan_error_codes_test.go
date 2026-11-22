@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 )
 
@@ -32,32 +32,32 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 	} {
 		t.Run("GetPlan: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newPlanRepo()
-			repo.GetPlanFunc = func(context.Context, string) (*db.Plan, error) { return nil, tc.err }
-			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+			repo := newPlanMocks()
+			repo.Plans.GetPlanFunc = func(context.Context, string) (*core.Plan, error) { return nil, tc.err }
+			svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 			_, err := svc.GetPlan(plan.AuthedContext(t), connect.NewRequest(&pb.GetPlanRequest{PlanId: ownPlanID}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("CreatePlan, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newPlanRepo()
-			repo.GetChatRowFunc = func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err }
-			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+			repo := newPlanMocks()
+			repo.Chats.GetChatRowFunc = func(context.Context, string) (*core.ChatRow, error) { return nil, tc.err }
+			svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 			_, err := svc.CreatePlan(plan.AuthedContext(t), connect.NewRequest(&pb.CreatePlanRequest{ChatId: ownChatID, Title: "Plan"}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("UpdatePlan, writing: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newPlanRepo()
-			repo.UpdatePlanFunc = func(context.Context, *db.Plan) error { return tc.err }
-			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+			repo := newPlanMocks()
+			repo.Plans.ReplacePlanFunc = func(context.Context, *core.Plan) error { return tc.err }
+			svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 			_, err := svc.UpdatePlan(plan.AuthedContext(t), connect.NewRequest(&pb.UpdatePlanRequest{PlanId: ownPlanID}))
 			requireClientReads(t, err, tc.want)
 		})
 	}
 
 	// A missing plan is still NotFound: the store says so.
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(newPlanMocks().Deps()))
 	_, err := svc.GetPlan(plan.AuthedContext(t), connect.NewRequest(&pb.GetPlanRequest{PlanId: missingID}))
 	requireClientReads(t, err, connect.CodeNotFound)
 }
@@ -66,7 +66,7 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 func TestPlanRPCs_EmptyIDIsInvalidArgument(t *testing.T) {
 	t.Parallel()
 
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(newPlanMocks().Deps()))
 	ctx := plan.AuthedContext(t)
 
 	_, err := svc.GetPlan(ctx, connect.NewRequest(&pb.GetPlanRequest{}))

@@ -18,11 +18,12 @@
 import type { Fixtures } from '../rpc'
 import { DAY, FIXED_NOW, HOUR, MIN, USER, iso } from './base'
 import { queryPanel } from './console'
+import { fixtureReleaseCommit } from '../../../src/components/Forge/Tests/fixtureReleases'
 
 const PROD = { envId: 'env-shop-prod', envName: 'prod', namespace: 'shopfront-prod' }
 const STAGING = { envId: 'env-shop-staging', envName: 'staging', namespace: 'shopfront-staging' }
-const PROD_RELEASE = '20261118.121200-a1b2c3d4e5f6'
-const STAGING_RELEASE = '20261118.144000-f6e5d4c3b2a1'
+export const PROD_RELEASE = '20261118.121200-a1b2c3d4e5f6'
+export const STAGING_RELEASE = '20261118.144000-f6e5d4c3b2a1'
 const GIB = 1024 ** 3
 const MIB = 1024 ** 2
 
@@ -213,12 +214,18 @@ function projectCost() {
 
 // ── Releases and promotions ─────────────────────────────────────────────────
 
-const RELEASES = [
-  { version: PROD_RELEASE, ago: 3 * HOUR + 10 * MIN, commit: 'a1b2c3d4e5f6' },
-  { version: STAGING_RELEASE, ago: 55 * MIN, commit: 'f6e5d4c3b2a1' },
-  { version: '20261117.090000-0badc0ffee00', ago: 30 * HOUR + 30 * MIN, commit: '0badc0ffee00' },
-  { version: '20261116.160500-5eed5eed5eed', ago: 47 * HOUR, commit: '5eed5eed5eed' },
-]
+// Each release's commit is the shared table's (Tests/fixtureReleases.ts), so its header and its Tests tab agree.
+export const RELEASES = [
+  { version: PROD_RELEASE, ago: 3 * HOUR + 10 * MIN },
+  { version: STAGING_RELEASE, ago: 55 * MIN },
+  { version: '20261117.090000-0badc0ffee00', ago: 30 * HOUR + 30 * MIN },
+  { version: '20261116.160500-5eed5eed5eed', ago: 47 * HOUR },
+].map((r) => ({ ...r, commit: fixtureReleaseCommit(r.version) }))
+
+/** One release as DeployService answers it: ListReleases here, GetRelease in releases.ts. */
+export const releaseMessage = (r: (typeof RELEASES)[number]) => ({
+  id: `rel-${r.version}`, version: r.version, gitCommit: r.commit, createdAt: iso(r.ago), project: 'shopfront', createdByUserId: USER.id, artifacts: [],
+})
 const promotion = (environmentId: string, version: string, ago: number, from = '') => ({
   id: `pr-${environmentId}-${version}`, environmentId, releaseId: `rel-${version}`, releaseVersion: version, kind: 'DEPLOY_PROMOTION_KIND_PROMOTE',
   promotedByActor: USER.email, fromEnvironmentName: from, createdAt: iso(ago), targets: [], gates: [], resolvedArtifacts: {},
@@ -240,7 +247,7 @@ export const servicesFixtures: Fixtures = {
   'controlplane.v1.BillingService/GetProjectCost': (req) => (req.projectId === 'shopfront' ? projectCost() : { __error: { code: 'not_found', message: 'no hosted project' } }),
   'controlplane.v1.DeployService/ListReleases': (req) =>
     req.project === 'shopfront'
-      ? { releases: RELEASES.map((r) => ({ id: `rel-${r.version}`, version: r.version, gitCommit: r.commit, createdAt: iso(r.ago), project: 'shopfront', createdByUserId: USER.id, artifacts: [] })) }
+      ? { releases: RELEASES.map(releaseMessage) }
       : { releases: [] },
   'controlplane.v1.DeployService/ListPromotions': (req) => ({ promotions: PROMOTIONS[String(req.environmentId)] ?? [] }),
 }

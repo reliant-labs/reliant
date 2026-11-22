@@ -231,7 +231,7 @@ export const RemoveClusterResponseSchema: GenMessage<RemoveClusterResponse> = /*
  * ConnectClusterRequest declares a cluster by address.
  *
  * ADDRESSED BY NAME, NOT BY ID, and that is what makes it idempotent in the
- * way `forge cluster connect <name>` needs. A caller running from a checkout
+ * way `forge cloud cluster connect <name>` needs. A caller running from a checkout
  * knows the name it declared; it does not know the uuid we minted, and
  * requiring one would mean every connect is preceded by a list.
  *
@@ -273,7 +273,7 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
   caPem: string;
 
   /**
-   * The scoped ServiceAccount token `forge cluster connect` minted in the
+   * The scoped ServiceAccount token `forge cloud cluster connect` minted in the
    * target cluster. REQUIRED: a request without one is InvalidArgument.
    *
    * WRITE-ONLY. It is NEVER RETURNED by any RPC on this service — there is no
@@ -303,7 +303,7 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
    * projected token an External Secrets Operator in the cluster logs in with.
    * See ClusterIssuerRegistration.
    *
-   * PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+   * PRESENCE IS THE SWITCH, because an older `forge cloud cluster connect` sends no
    * issuer and re-running it must not silently withdraw one:
    *   absent          the registration is left as it is;
    *   present         it is replaced by this one;
@@ -528,7 +528,7 @@ export const ClusterConnectionSchema: GenEnum<ClusterConnection> = /*@__PURE__*/
  * and for listing, reading and removing what is connected.
  *
  * ONE WAY IN. A cluster is connected by address and authenticated ONLY with the
- * scoped ServiceAccount token that `forge cluster connect <context>` minted
+ * scoped ServiceAccount token that `forge cloud cluster connect <context>` minted
  * from the owner's own kube context and uploaded. The hub holds no cloud
  * identity in the owner's cluster and nothing is granted to it. There is no
  * in-cluster agent: nothing is installed in the target cluster, so there is no
@@ -587,10 +587,10 @@ export const ClusterService: GenService<{
    * The platform is told the address, the CA and the scoped ServiceAccount
    * token up front, all required. The token is the ONLY credential the
    * platform ever uses against the cluster; a request without one is
-   * InvalidArgument and names `forge cluster connect`. Nothing is installed in
+   * InvalidArgument and names `forge cloud cluster connect`. Nothing is installed in
    * the target cluster.
    *
-   * DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+   * DECLARATIVE AND IDEMPOTENT BY NAME. `forge cloud cluster connect <name>` is
    * re-run from a checkout, so a second call with different values UPDATES
    * them rather than failing on a name collision. That is what makes the
    * connect command safe to put in a script, and it is why there is no

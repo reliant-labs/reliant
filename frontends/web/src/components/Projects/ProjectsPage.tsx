@@ -28,9 +28,14 @@
  * chat yet lands here (the daemonless home), so the way to set chats up leads
  * the page. The filters keep U6's first Projects page's values
  * (`?show=apps|sites`), which the retired /apps and /sites redirect to.
+ *
+ * A finished claim lands on `?show=apps&claimed=<app>` (with `pausedSite`
+ * and `kept` when the claimer chose between two free sites): the page says
+ * the app is theirs and which site is paused (Apps/ClaimedBanner.tsx),
+ * highlights the app's row once, and drops the params.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Activity, AppWindow, Download, Eye, EyeOff, FolderGit2, FolderPlus, MessageSquare, MoreHorizontal, Pin, PinOff, Plus, Settings2 } from "lucide-react";
 
@@ -61,6 +66,7 @@ import {
 import { appCount, appSourceRemote, cloneUrlOf, projectsPageSections, type ProjectsSection } from "@/services/projects/projectsPage";
 import { openAddProject } from "@/store/addProjectDialogStore";
 
+import { ClaimedBanner, useClaimedApp } from "../Apps/ClaimedBanner";
 import { useStartBuildingApp } from "../Apps/startBuilding";
 import { orgPath } from "../Forge/Console/paths";
 import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
@@ -126,6 +132,9 @@ export function ProjectsBody() {
   const [query, setQuery] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const getTheCode = useGetTheCode();
+  // A finished claim lands here (`?show=apps&claimed=…`, components/Claim/useClaimFlow.ts).
+  const appNames = useMemo(() => (catalog ? catalog.rows.flatMap((row) => rowApps(row).map((app) => app.name)) : []), [catalog]);
+  const claimed = useClaimedApp(appNames, isLoading || !catalog);
   // A person who cannot run a chat yet lands here (the daemonless home, U6).
   const setup = useChatSetup();
   const startBuilding = useStartBuildingApp();
@@ -225,6 +234,8 @@ export function ProjectsBody() {
 
       {chatSetupNeeded(setup) && <SetUpChatsCard setup={setup} variant="page" onNavigate={(href) => void navigate({ href })} />}
 
+      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={isLoading || !catalog} paused={claimed.paused} />}
+
       {catalog && <HostedAppsBanner state={catalog.hostedAppsState} onRetry={refetch} />}
 
       {isLoading && !catalog ? (
@@ -286,6 +297,7 @@ export function ProjectsBody() {
               <ProjectsSectionList
                 key={section.id}
                 section={section}
+                highlighted={claimed.found ? claimed.name : null}
                 writable={writable}
                 onPin={setPinned}
                 onHide={setHidden}
@@ -362,13 +374,15 @@ function NoProjects() {
 
 interface SectionListProps {
   section: ProjectsSection;
+  /** The app a claim just made the person's own: its row is highlighted and scrolled into view. */
+  highlighted: string | null;
   writable: boolean;
   onPin: (key: string, on: boolean) => void;
   onHide: (key: string, on: boolean) => void;
   onGetTheCode: (app: AppChipModel) => void;
 }
 
-function ProjectsSectionList({ section, writable, onPin, onHide, onGetTheCode }: SectionListProps) {
+function ProjectsSectionList({ section, highlighted, writable, onPin, onHide, onGetTheCode }: SectionListProps) {
   const headingId = `projects-section-${section.id}`;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2" data-testid={headingId}>
@@ -378,7 +392,15 @@ function ProjectsSectionList({ section, writable, onPin, onHide, onGetTheCode }:
       </h2>
       <ul className="divide-y divide-border-subtle overflow-hidden rounded-xl border border-border bg-card">
         {section.rows.map((entry) => (
-          <CatalogRowItem key={entry.row.key} entry={entry} writable={writable} onPin={onPin} onHide={onHide} onGetTheCode={onGetTheCode} />
+          <CatalogRowItem
+            key={entry.row.key}
+            entry={entry}
+            highlighted={!!highlighted && rowApps(entry.row).some((app) => app.name === highlighted)}
+            writable={writable}
+            onPin={onPin}
+            onHide={onHide}
+            onGetTheCode={onGetTheCode}
+          />
         ))}
       </ul>
     </section>
@@ -391,22 +413,30 @@ function activityText(ms: number): string {
 
 interface RowProps {
   entry: ListedRow;
+  highlighted?: boolean;
   writable: boolean;
   onPin: (key: string, on: boolean) => void;
   onHide: (key: string, on: boolean) => void;
   onGetTheCode: (app: AppChipModel) => void;
 }
 
-function CatalogRowItem({ entry, writable, onPin, onHide, onGetTheCode }: RowProps) {
+function CatalogRowItem({ entry, highlighted = false, writable, onPin, onHide, onGetTheCode }: RowProps) {
   const { row, pinned, hidden } = entry;
   const href = row.kind === "project" ? projectPath(row.key) : appPath(row.name);
   const activity = activityText(row.activityAt);
+  const ref = useRef<HTMLLIElement>(null);
+  // A just-claimed app is brought into view once its row exists.
+  useEffect(() => {
+    if (highlighted) ref.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [highlighted]);
   return (
     <li
-      className={cn("group flex min-h-14 items-center gap-1 pr-2 hover:bg-foreground/5", hidden && "opacity-60")}
+      ref={ref}
+      className={cn("group flex min-h-14 items-center gap-1 pr-2 hover:bg-foreground/5", hidden && "opacity-60", highlighted && "bg-accent-surface")}
       data-testid="projects-row"
       data-row-key={row.key}
       data-hidden={hidden || undefined}
+      data-highlighted={highlighted ? "true" : undefined}
     >
       <Link
         to={href}

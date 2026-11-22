@@ -25,7 +25,7 @@ func (s *Service) DeleteAttachment(
 	}
 
 	// Verify the attachment exists and belongs to this user
-	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
+	dbAttachment, err := s.deps.Attachments.GetAttachment(ctx, attachmentID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get attachment"))
 	}
@@ -36,7 +36,7 @@ func (s *Service) DeleteAttachment(
 		return nil, svcerr.NotFound("attachment")
 	}
 
-	if err := s.deps.Repo.DeleteAttachment(ctx, attachmentID); err != nil {
+	if err := s.deps.Attachments.RemoveAttachment(ctx, attachmentID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete attachment"))
 	}
 

@@ -28,6 +28,9 @@ function collectErrors(page: Page): string[] {
   return errors;
 }
 
+/** The claimed site's row on Projects: an org app with no code here (claimMocks.ts). */
+const claimedRow = (page: Page) => page.locator('[data-testid="projects-row"][data-row-key="app:storefront"]');
+
 async function arrive(page: Page, options: ClaimMockOptions = {}, hash = CLAIM_FRAGMENT) {
   const mock = await mockClaimBackend(page, options);
   await page.goto(`/claim${hash}`);
@@ -192,11 +195,11 @@ test.describe('the whole new-human flow', () => {
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim']);
     expect(mock.calls[2].body).toEqual({ claimToken: CLAIM_TOKEN });
 
-    const row = page.getByTestId('app-row-storefront');
+    const row = claimedRow(page);
     await expect(row).toBeVisible(LOADED);
     await expect(row).toHaveAttribute('data-highlighted', 'true');
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
-    // The highlight is shown once: the param is dropped from the URL.
+    // The highlight is shown once: the params are dropped from the URL.
     await expect(page).toHaveURL(/\/projects\?show=apps$/);
 
     // 5. The token never reached a URL or a header; GoTrue saw the upgrade.
@@ -279,6 +282,7 @@ test.describe('the whole new-human flow', () => {
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'GetClaimFreeSite', 'CompleteClaim']);
     expect(mock.gotrue.some((g) => g.includes('/logout'))).toBe(false);
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    await expect(claimedRow(page)).toHaveAttribute('data-highlighted', 'true', LOADED);
     expect(errors).toEqual([]);
   });
 
@@ -401,6 +405,8 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       await page.getByTestId('claim-into-account-button').click();
       await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
       expect(mock.choices).toEqual(['']);
+      // Nothing was paused, so the banner names none.
+      await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
       await expect(page.getByTestId('apps-claimed-paused')).toHaveCount(0);
     });
 
@@ -495,5 +501,27 @@ test.describe('no free site in use', () => {
     await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.choices).toEqual(['']);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
+// ── what the landing says ─────────────────────────────────────────────────
+
+test.describe('the claim landing on Projects', () => {
+  // The one shell (#3191) moved the landing from /apps to Projects, which
+  // lost this banner until reliant#3258 (components/Apps/ClaimedBanner.tsx).
+  test('says the app is yours now and which free site was paused, highlights its row, then drops the params', async ({ page }) => {
+    const mock = await arriveWithConflict(page);
+    await openChoice(page);
+    await page.getByTestId('free-site-option-claimed').check();
+    await page.getByTestId('free-site-continue').click();
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
+    expect(mock.choices).toEqual(['FREE_SITE_CHOICE_CLAIMED']);
+
+    await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you chose free hosting for the site you claimed/i);
+    await expect(page.getByTestId('apps-claimed-paused')).toContainText(/review billing/i);
+    await expect(claimedRow(page)).toHaveAttribute('data-highlighted', 'true');
+    // Shown once: the params leave the URL.
+    await expect(page).toHaveURL(/\/projects\?show=apps$/);
   });
 });

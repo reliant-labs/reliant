@@ -58,6 +58,7 @@ const ICONS: Record<string, LucideIcon> = {
   ask_user: MessageCircleQuestion,
   generate_image: Image,
   generate_video: Image,
+  present_image: Image,
   request_machine: Server,
   draft_automation: Workflow,
 };

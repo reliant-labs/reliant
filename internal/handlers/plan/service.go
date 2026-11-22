@@ -19,9 +19,21 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo reads and writes plans, and resolves the thread and chat that
-	// authorize them.
-	Repo Repository
+	// Plans reads and writes plans.
+	Plans PlanStore
+
+	// Tasks lists a plan's tasks.
+	Tasks TaskStore
+
+	// Threads and Chats resolve the thread and chat that authorize a plan.
+	Threads ThreadStore
+	Chats   ChatStore
+
+	// Refetch tells a chat's clients a plan or task changed.
+	Refetch ChatRefetcher
+
+	// Tx opens the transactions of the read-check-write rpcs.
+	Tx TxRunner
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -33,8 +45,23 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("plan: Deps.Config is required")
 	}
-	if d.Repo == nil {
-		return fmt.Errorf("plan: Deps.Repo is required")
+	if d.Plans == nil {
+		return fmt.Errorf("plan: Deps.Plans is required")
+	}
+	if d.Tasks == nil {
+		return fmt.Errorf("plan: Deps.Tasks is required")
+	}
+	if d.Threads == nil {
+		return fmt.Errorf("plan: Deps.Threads is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("plan: Deps.Chats is required")
+	}
+	if d.Refetch == nil {
+		return fmt.Errorf("plan: Deps.Refetch is required")
+	}
+	if d.Tx == nil {
+		return fmt.Errorf("plan: Deps.Tx is required")
 	}
 	return nil
 }
