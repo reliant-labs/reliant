@@ -13,12 +13,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -297,6 +299,52 @@ func TestRunStepLLMGateway_RevokesOnFailure(t *testing.T) {
 	require.Error(t, err)
 	_, revokes = keys.calls()
 	assert.Equal(t, []string{stepRequestID}, revokes)
+}
+
+// stopMachine is a machine whose command ends with a transport failure, after
+// stopping the step first when stop is set (a server cancel arriving while the
+// step waits for its command).
+type stopMachine struct {
+	stop func(error)
+}
+
+func (m *stopMachine) ExecuteCommand(context.Context, string, string, int, map[string]string) (CommandResult, error) {
+	if m.stop != nil {
+		m.stop(temporal.NewCanceledError("cancelled by the server"))
+	}
+	return CommandResult{ExitCode: -1}, &toolexec.TransportError{Code: toolexec.ErrorCodeDaemonRoundTrip, Detail: "no result came back"}
+}
+
+// Every post-mint way out that is not a released attempt revokes the key
+// before the activity returns: a command whose result never came back (it
+// may have run, so the key must not outlive the step), and a step stopped by
+// the server while it waited for its command.
+func TestRunStepLLMGateway_RevokesOnTransportFailureAndStop(t *testing.T) {
+	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
+
+	keys := &fakeStepKeys{}
+	_, err := runGatewayStep(t, gatewayAct(repo, keys, &stopMachine{}), gatewayInput(chatID), 1)
+	require.Error(t, err, "a transport failure fails the activity")
+	mints, revokes := keys.calls()
+	assert.Equal(t, 1, mints)
+	assert.Equal(t, []string{stepRequestID}, revokes, "transport failure")
+
+	keys = &fakeStepKeys{}
+	machine := &stopMachine{}
+	act := gatewayAct(repo, keys, machine)
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(func(ctx context.Context, in ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
+		ctx, cancel := context.WithCancelCause(ctx)
+		defer cancel(nil)
+		machine.stop = cancel
+		return act.execute(ctx, in, 1, stepRequestID)
+	}, activity.RegisterOptions{Name: "GatewayStepStopped"})
+	_, err = env.ExecuteActivity("GatewayStepStopped", gatewayInput(chatID))
+	require.Error(t, err, "a stopped step ends as the stop")
+	mints, revokes = keys.calls()
+	assert.Equal(t, 1, mints)
+	assert.Equal(t, []string{stepRequestID}, revokes, "stopped by the server")
 }
 
 // An attempt released while its command runs leaves the key to the retry,
