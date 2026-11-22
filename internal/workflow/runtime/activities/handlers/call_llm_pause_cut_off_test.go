@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +138,7 @@ func newCutOffFixture(t *testing.T, driver *scriptedDriver) *cutOffFixture {
 		h:        h,
 		chatID:   chat.ID,
 		driver:   driver,
-		activity: NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, resolver, nil),
+		activity: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

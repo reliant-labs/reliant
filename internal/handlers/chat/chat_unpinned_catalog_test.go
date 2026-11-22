@@ -71,7 +71,7 @@ func TestInputsAfterClosedRunPinsAnUnpinnedChatBeforeBuilding(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateChat(ctx, chat))
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	inputs, err := svc.inputsAfterClosedRun(ctx, chat, workflowName)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID, "the chat is pinned before its inputs are built")

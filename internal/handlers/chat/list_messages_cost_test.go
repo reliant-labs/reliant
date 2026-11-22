@@ -131,7 +131,7 @@ func TestListMessages_StatementCount_LongCompactedSpawnHeavyChat(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, chatID := seedLongCompactedChat(t, repo, raw)
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	list := func(before int64) (*reliantv1.ListMessagesResponse, int64, time.Duration) {
 		recent := int32(costPage)

@@ -46,6 +46,10 @@ type ToolsOptions struct {
 	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
 	// spawn_status report it is unavailable here, like every database tool.
 	SpawnQuestions SpawnQuestions
+	// SpawnTree reads the spawn tree the spawn tools resolve agents through.
+	// store.ToolCallExtStore satisfies it. Optional: nil makes the spawn tools
+	// report they are unavailable here.
+	SpawnTree SpawnTree
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
@@ -256,6 +260,22 @@ func (f *ToolsFactory) store() toolStore {
 // spawnStatusStore is store() as spawn_status's role: nil when there is no
 // database, so the tool reports itself unavailable rather than dereferencing it.
 func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+// spawnSendStore and spawnStopStore are store() as those tools' roles, nil when
+// there is no database.
+func (f *ToolsFactory) spawnSendStore() spawnSendStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+func (f *ToolsFactory) spawnStopStore() spawnStopStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
@@ -492,15 +512,15 @@ func (f *ToolsFactory) WithdrawQuestion() Tool {
 
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
-	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions})
+	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions, Tree: f.opts.SpawnTree})
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
-	return NewSpawnSendTool(f.store(), f.opts.AgentMessageNotifier)
+	return NewSpawnSendTool(SpawnSendDeps{Store: f.spawnSendStore(), Tree: f.opts.SpawnTree, Notifier: f.opts.AgentMessageNotifier})
 }
 
 func (f *ToolsFactory) SpawnStop() Tool {
-	return NewSpawnStopTool(f.store(), f.opts.SpawnStopper)
+	return NewSpawnStopTool(SpawnStopDeps{Store: f.spawnStopStore(), Tree: f.opts.SpawnTree, Stopper: f.opts.SpawnStopper})
 }
 
 func (f *ToolsFactory) StartRun() Tool {

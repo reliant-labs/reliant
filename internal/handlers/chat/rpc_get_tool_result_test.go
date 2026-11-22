@@ -65,7 +65,7 @@ func TestGetToolResult(t *testing.T) {
 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	as := func(userID string) context.Context {
 		return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	}

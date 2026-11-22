@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/require"
 )
 
 const lifecycleSpawnThreadID = "thread-spawn-1"
@@ -87,7 +88,7 @@ func TestChatSnapshot_ThreadCompletingDuringSnapshotIsNotShownRunning(t *testing
 	}
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, raceTestUserID)
 
-	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, raceTestChatID)
+	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: &MockSpawnCalls{}})).buildChatSnapshotByID(ctx, raceTestChatID)
 	require.NoError(t, err)
 	require.Equal(t, int64(5), latestSeq)
 

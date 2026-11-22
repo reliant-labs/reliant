@@ -4,6 +4,9 @@ package activities
 import (
 	"reflect"
 
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -14,8 +17,6 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // nodeTypeActivityDef maps a node type to its Temporal activity name and Go types.
@@ -166,10 +167,16 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
 	var modelEndpoints local.EndpointSource
+	var spawnTree handlers.SpawnTree
 	if deps.Repo != nil {
 		modelEndpoints = store.NewModelEndpointExtStore(deps.Repo.ORM())
+		spawnTree = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
+	var stoppedAgents handlers.StoppedSubAgentReader
+	if deps.Repo != nil {
+		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
+	}
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -266,7 +273,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterObservabilityActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(deps.Repo, deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(stoppedAgents))
 
 }
 

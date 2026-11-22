@@ -75,7 +75,7 @@ func testStreaming(t *testing.T) testRoute {
 	repo := &streaminghandler.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
 	}
-	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, SpawnCalls: &streaminghandler.MockSpawnCalls{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.StreamingService", svc)
 }

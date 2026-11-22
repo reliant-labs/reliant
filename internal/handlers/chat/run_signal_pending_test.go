@@ -55,7 +55,7 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chats := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threadsSvc}
+	chats := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threadsSvc}
 	runs, err := run.New(run.Deps{
 		Logger: slog.Default(),
 		Config: &typedconfig.Config{},

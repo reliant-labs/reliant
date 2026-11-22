@@ -61,7 +61,7 @@ func TestDeleteChat_DeletesAnArchivedChatPermanently(t *testing.T) {
 		deleted = append(deleted, id)
 		return nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}}))
 
 	resp, err := svc.DeleteChat(chat.AuthedContext(t), connect.NewRequest(&pb.DeleteChatRequest{ChatId: archivedChatID}))
 	require.NoError(t, err)

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -103,10 +105,9 @@ func readLedger(t *testing.T, h *IdempotencyTestHelper) []ledgerRow {
 
 func runCallLLMWithRetries(t *testing.T, h *IdempotencyTestHelper, driver llm.Driver, chatID string) {
 	t.Helper()
-	callLLM := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
-			return driver, nil
-		}, nil)
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	}, MCPBinder: nil})
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -224,10 +225,9 @@ func TestCallLLM_UsageLedgerRecordsFailureAsClassOnly(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	driver := &ledgerUsageDriver{name: "claude", failures: 99}
-	callLLM := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
-			return driver, nil
-		}, nil)
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	}, MCPBinder: nil})
 	var out CallLLMOutput
 	err := h.ExecuteActivity(callLLM.Execute, buildPlainCallLLMInput(chat.ID), &out)
 	require.Error(t, err)

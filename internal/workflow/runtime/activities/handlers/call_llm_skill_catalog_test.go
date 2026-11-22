@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -50,9 +52,9 @@ func TestCallLLM_ExcludeSkillCatalogProviderBoundary(t *testing.T) {
 			require.NoError(t, err)
 			h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
 			driver := &ambientCaptureDriver{failFirst: tc.retry}
-			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}, nil)
+			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
 			args := input.Node.GetCallLlm()
 			args.ExcludeAmbientMemory = true
@@ -117,10 +119,10 @@ func TestCallLLM_ExcludeSkillCatalogRejectsExplicitPreload(t *testing.T) {
 	chat := h.CreateTestChat(ctx, uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
 	driver := &ambientCaptureDriver{}
-	handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{&cfgpkg.Config{}}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	handler := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{&cfgpkg.Config{}}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		t.Error("conflicting policy must be rejected before driver resolution")
 		return driver, nil
-	}, nil)
+	}, MCPBinder: nil})
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	args := input.Node.GetCallLlm()
 	args.ExcludeSkillCatalog = true

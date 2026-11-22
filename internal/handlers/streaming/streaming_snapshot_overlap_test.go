@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -83,7 +85,7 @@ func TestChatSnapshot_CarriesNoWorkflowState(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeWorkflowStatus, "run-1", `{"status":"completed"}`))
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeApproval, "approval-1", `{"id":"approval-1","status":"pending"}`))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	approvals := 0
 	for _, u := range snapshot.OtherUpdates {

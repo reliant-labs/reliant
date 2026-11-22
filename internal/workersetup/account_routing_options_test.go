@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,7 +77,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 
 		var suite temporaltest.WorkflowTestSuite
 		env := suite.NewTestActivityEnvironment()
-		activity := handlers.NewCallLLMActivity(repo, nil, nil, emptyConfig{}, nil, nil)
+		activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil})
 		if routed {
 			activity = activity.WithAccountRouting(accountRouting(repo, nil))
 		}

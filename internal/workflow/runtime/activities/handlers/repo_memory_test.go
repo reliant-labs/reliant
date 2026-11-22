@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 func injectedChars(msgs []message.Message) int {

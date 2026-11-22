@@ -5,13 +5,14 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // branchContextNote states what a branch is: of which chat, from which point,
 // and — only when there are any — what became of the sub-agents the original
 // had already spawned. Facts only, a few lines; the model decides what to do
 // with them.
-func branchContextNote(sourceChat *db.Chat, forkPoint *db.Message, inherited []*db.InheritedSpawnChild) string {
+func branchContextNote(sourceChat *db.Chat, forkPoint *db.Message, inherited []*core.InheritedSpawnChild) string {
 	source := "chat " + sourceChat.ID
 	if sourceChat.Title != "" {
 		source = fmt.Sprintf("%q (chat %s)", sourceChat.Title, sourceChat.ID)

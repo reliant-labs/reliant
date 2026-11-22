@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask pins who may write a task on

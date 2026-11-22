@@ -37,6 +37,8 @@ type Deps struct {
 	Repo Repository
 	// Questions lists the chat's open questions (Questions, deps.go).
 	Questions Questions
+	// Spawns reads the spawn tree (Spawns, deps.go).
+	Spawns Spawns
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -95,6 +97,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Questions == nil {
 		return fmt.Errorf("chat: Deps.Questions is required")
+	}
+	if d.Spawns == nil {
+		return fmt.Errorf("chat: Deps.Spawns is required")
 	}
 	if d.Temporal == nil {
 		return fmt.Errorf("chat: Deps.Temporal is required")
@@ -171,6 +176,12 @@ func (s *Service) chatPinner() *daemonplacement.Pinner {
 		s.pinnerImpl = daemonplacement.NewPinner(s.deps.Repo, machines)
 	})
 	return s.pinnerImpl
+}
+
+// durable is the repository and spawn tree together, for the runtime's
+// *FromDurableState helpers.
+func (s *Service) durable() durableState {
+	return durableState{Repository: s.deps.Repo, Spawns: s.deps.Spawns}
 }
 
 // Name returns the service name for logging and registry.

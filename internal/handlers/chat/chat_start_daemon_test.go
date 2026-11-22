@@ -71,7 +71,8 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 	return &startDaemonEnv{
 		svc: &Service{
 			deps: Deps{
-				Repo: repo, Temporal: temporal, Router: router,
+				Repo:   repo,
+				Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal, Router: router,
 			}, threads: threads.NewService(repo),
 			runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},

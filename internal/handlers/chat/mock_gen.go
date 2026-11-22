@@ -105,8 +105,54 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 // Compile-time check.
 var _ Questions = (*MockQuestions)(nil)
 
+// forge:section MockSpawns
+// forge:hash=e8af4c3c3a8dce6fe8e78da7341174f420adce76e694e4e2b04114098ceab40f
+
+// MockSpawns is a test mock for the Spawns interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawns.<Method>Func not set" error.
+type MockSpawns struct {
+	contractkit.Recorder
+	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*core.InheritedSpawnChild, error)
+	ListLiveBackgroundSpawnsFunc   func(context.Context, string) ([]*core.LiveBackgroundSpawn, error)
+	GetStoppedSpawnAgentFunc       func(context.Context, string, string) (*core.StoppedSpawnAgent, error)
+}
+
+// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
+func (m *MockSpawns) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error) {
+	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
+	if m.ListInheritedSpawnChildrenFunc != nil {
+		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawns", "ListInheritedSpawnChildren")
+}
+
+// ListLiveBackgroundSpawns records the call and delegates to ListLiveBackgroundSpawnsFunc when set.
+func (m *MockSpawns) ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error) {
+	m.Recorder.Record("ListLiveBackgroundSpawns", ctx, rootWorkflowID)
+	if m.ListLiveBackgroundSpawnsFunc != nil {
+		return m.ListLiveBackgroundSpawnsFunc(ctx, rootWorkflowID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawns", "ListLiveBackgroundSpawns")
+}
+
+// GetStoppedSpawnAgent records the call and delegates to GetStoppedSpawnAgentFunc when set.
+func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, threadID string) (*core.StoppedSpawnAgent, error) {
+	m.Recorder.Record("GetStoppedSpawnAgent", ctx, chatID, threadID)
+	if m.GetStoppedSpawnAgentFunc != nil {
+		return m.GetStoppedSpawnAgentFunc(ctx, chatID, threadID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawns", "GetStoppedSpawnAgent")
+}
+
+// Compile-time check.
+var _ Spawns = (*MockSpawns)(nil)
+
 // forge:section MockRepository
-// forge:hash=4e67902191bb4265cce1c19bb21a2c131d8d9eefa990942da087964b13f850d2
+// forge:hash=a6aea97482b1b44bb2be87b57bd707bf9e5783a3c334d9e8755d60422e9adc7d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -136,7 +182,6 @@ type MockRepository struct {
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
-	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
@@ -177,9 +222,7 @@ type MockRepository struct {
 	ListProjectsByIDsFunc                                    func(context.Context, []string) ([]*db.Project, error)
 	UnarchiveWorktreeFunc                                    func(context.Context, string) error
 	GetWorkflowCheckpointFunc                                func(context.Context, string) (*db.WorkflowCheckpoint, error)
-	ListLiveBackgroundSpawnsFunc                             func(context.Context, string) ([]*db.LiveBackgroundSpawn, error)
 	ListToolGrantsFunc                                       func(context.Context, string) ([]*db.ToolGrant, error)
-	GetStoppedSpawnAgentFunc                                 func(context.Context, string, string) (*db.StoppedSpawnAgent, error)
 	GetTriggerEventByChatIDFunc                              func(context.Context, string) (*core.TriggerEvent, error)
 	CreateNumberedMessageFunc                                func(context.Context, *db.Message) error
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
@@ -453,15 +496,6 @@ func (m *MockRepository) ListForkedThreadIDs(ctx context.Context, threadIDs []st
 		return m.ListForkedThreadIDsFunc(ctx, threadIDs)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListForkedThreadIDs")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockRepository) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListInheritedSpawnChildren")
 }
 
 // ThreadAwaitsReply records the call and delegates to ThreadAwaitsReplyFunc when set.
@@ -824,15 +858,6 @@ func (m *MockRepository) GetWorkflowCheckpoint(ctx context.Context, workflowID s
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowCheckpoint")
 }
 
-// ListLiveBackgroundSpawns records the call and delegates to ListLiveBackgroundSpawnsFunc when set.
-func (m *MockRepository) ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*db.LiveBackgroundSpawn, error) {
-	m.Recorder.Record("ListLiveBackgroundSpawns", ctx, rootWorkflowID)
-	if m.ListLiveBackgroundSpawnsFunc != nil {
-		return m.ListLiveBackgroundSpawnsFunc(ctx, rootWorkflowID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListLiveBackgroundSpawns")
-}
-
 // ListToolGrants records the call and delegates to ListToolGrantsFunc when set.
 func (m *MockRepository) ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error) {
 	m.Recorder.Record("ListToolGrants", ctx, chatID)
@@ -840,15 +865,6 @@ func (m *MockRepository) ListToolGrants(ctx context.Context, chatID string) ([]*
 		return m.ListToolGrantsFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolGrants")
-}
-
-// GetStoppedSpawnAgent records the call and delegates to GetStoppedSpawnAgentFunc when set.
-func (m *MockRepository) GetStoppedSpawnAgent(ctx context.Context, chatID string, threadID string) (*db.StoppedSpawnAgent, error) {
-	m.Recorder.Record("GetStoppedSpawnAgent", ctx, chatID, threadID)
-	if m.GetStoppedSpawnAgentFunc != nil {
-		return m.GetStoppedSpawnAgentFunc(ctx, chatID, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetStoppedSpawnAgent")
 }
 
 // GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.

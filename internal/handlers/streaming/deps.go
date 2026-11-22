@@ -18,6 +18,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
+// SpawnCalls maps a chat's child threads to the spawn tool calls that started
+// them, for a reconnect snapshot's cancel reconciliation. store.ToolCallExtStore
+// satisfies it.
+type SpawnCalls interface {
+	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
+}
+
 // Repository is everything the streaming handlers read.
 type Repository interface {
 	// Who the chat a subscription is for belongs to, and the trigger that
@@ -49,7 +56,6 @@ type Repository interface {
 	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*db.Message, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
-	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
 
 	// GetAttachmentsByIDs and GetContextUsage are called directly too; the
 	// roles below already declare them.

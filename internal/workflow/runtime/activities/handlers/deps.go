@@ -144,8 +144,6 @@ type CallLLMStore interface {
 	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error)
 	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
 	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	// GetDaemon and ListDaemonsByUserID are daemonPlatformReader

@@ -41,7 +41,7 @@ func TestGetWorkflowNodeExecutions_TheRunsNewestEventPerNode(t *testing.T) {
 	node("run-1", "tools", "failed")
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeWorkflowStatus, "run-1", `{"status":"completed"}`))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	resp, err := service.GetWorkflowNodeExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowNodeExecutionsRequest{
 		ChatId: chatID, WorkflowId: "run-1",
 	}))

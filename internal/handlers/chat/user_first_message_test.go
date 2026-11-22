@@ -98,7 +98,7 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
 	chatA := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	chatB := &db.Chat{ID: "chat-b", ProjectID: "proj-1"}
 
@@ -145,7 +145,7 @@ func TestUserFirstMessageIsNotEmittedAgainOnReplay(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
 	chat := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	for range 3 {
 		svc.trackMessageSent(context.Background(), "user-1", chat, "msg-1", "thread-a", "hello", 0)
@@ -162,7 +162,7 @@ func TestUserFirstMessageCarriesOpaqueIDsOnly(t *testing.T) {
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
 		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return true, nil },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a", ProjectID: "proj-1", WorkflowName: &name},
 		"msg-1", "thread-a", "private prompt text", 0)
 
@@ -184,7 +184,7 @@ func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
 		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return false, errors.New("db down") },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a"}, "msg-1", "thread-a", "hi", 0)
 
 	recs := out.records(t)

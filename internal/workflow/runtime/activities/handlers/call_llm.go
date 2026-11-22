@@ -35,6 +35,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
 
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolbindings"
@@ -44,9 +48,6 @@ import (
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ============================================================================
@@ -133,10 +134,37 @@ type streamingToolCall struct {
 // ACTIVITY IMPLEMENTATION
 // ============================================================================
 
+// SpawnTree reads who spawned whom for a turn's capability grants: whether the
+// thread has sub-agents of its own, and whether it inherited any by being a
+// branch. store.ToolCallExtStore satisfies it.
+type SpawnTree interface {
+	ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error)
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
+}
+
+// CallLLMDeps is what a CallLLMActivity is built from.
+type CallLLMDeps struct {
+	// Store is what the activity reads and writes.
+	Store CallLLMStore
+	// Spawns reads the thread's spawn tree for the turn's grants.
+	Spawns SpawnTree
+	// Hub carries the turn's streaming deltas.
+	Hub streaming.StreamingHub
+	// ToolsFactory builds the turn's tool set.
+	ToolsFactory *tools.ToolsFactory
+	// ConfigProvider reads the machine's synced config.
+	ConfigProvider cfgpkg.ConfigProvider
+	// DriverResolver picks the model driver.
+	DriverResolver drivers.DriverResolver
+	// MCPBinder binds MCP contexts for the turn's tools.
+	MCPBinder toolexec.MCPContextBinder
+}
+
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
 	repo           CallLLMStore
+	spawns         SpawnTree
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -221,15 +249,15 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
-// The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
-func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
+func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 	return &CallLLMActivity{
-		repo:           repo,
-		hub:            hub,
-		toolsFactory:   toolsFactory,
-		configProvider: cfgProvider,
-		driverResolver: resolver,
-		mcpBinder:      mcpBinder,
+		repo:           deps.Store,
+		spawns:         deps.Spawns,
+		hub:            deps.Hub,
+		toolsFactory:   deps.ToolsFactory,
+		configProvider: deps.ConfigProvider,
+		driverResolver: deps.DriverResolver,
+		mcpBinder:      deps.MCPBinder,
 		trackerFor:     analytics.ForUser,
 	}
 }
@@ -2874,10 +2902,10 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 // those grants for this turn only — the next turn reads again — so it is
 // logged rather than failing the turn.
 func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, thread string) (ownChildren, inheritedChildren bool) {
-	if a.repo == nil || chat == nil || thread == "" {
+	if a.repo == nil || a.spawns == nil || chat == nil || thread == "" {
 		return false, false
 	}
-	children, err := a.repo.ListSpawnChildren(ctx, thread)
+	children, err := a.spawns.ListSpawnChildren(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Could not read spawn history; spawn management tools not auto-granted",
 			"chatID", chat.ID, "thread", thread, "error", err)
@@ -2889,7 +2917,7 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 			break
 		}
 	}
-	inherited, err := a.repo.ListInheritedSpawnChildren(ctx, thread)
+	inherited, err := a.spawns.ListInheritedSpawnChildren(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Could not read inherited sub-agents",
 			"chatID", chat.ID, "thread", thread, "error", err)

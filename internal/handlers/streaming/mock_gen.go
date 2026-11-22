@@ -18,8 +18,34 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// forge:section MockSpawnCalls
+// forge:hash=d0e567b9679626a20755bd2d96d27aed7f78f4c713af0207e32575ba0e04ab6a
+
+// MockSpawnCalls is a test mock for the SpawnCalls interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawnCalls.<Method>Func not set" error.
+type MockSpawnCalls struct {
+	contractkit.Recorder
+	SpawnToolCallIDsByChildThreadFunc func(context.Context, string) (map[string]string, error)
+}
+
+// SpawnToolCallIDsByChildThread records the call and delegates to SpawnToolCallIDsByChildThreadFunc when set.
+func (m *MockSpawnCalls) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error) {
+	m.Recorder.Record("SpawnToolCallIDsByChildThread", ctx, chatID)
+	if m.SpawnToolCallIDsByChildThreadFunc != nil {
+		return m.SpawnToolCallIDsByChildThreadFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawnCalls", "SpawnToolCallIDsByChildThread")
+}
+
+// Compile-time check.
+var _ SpawnCalls = (*MockSpawnCalls)(nil)
+
 // forge:section MockRepository
-// forge:hash=e790b285fedc4c733da1440343862c209ace454893531e5e1416b34e85c2866e
+// forge:hash=1cf735097dedbce1f005ac0a2a4e6db44d65c9ce4d7e91520270630187d01dac
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -46,7 +72,6 @@ type MockRepository struct {
 	ListRecentTranscriptSiblingMessagesFunc                  func(context.Context, string, string, int64, int) ([]*db.Message, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
-	SpawnToolCallIDsByChildThreadFunc                        func(context.Context, string) (map[string]string, error)
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
@@ -244,15 +269,6 @@ func (m *MockRepository) ListLiveToolCallsByChat(ctx context.Context, chatID str
 		return m.ListLiveToolCallsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListLiveToolCallsByChat")
-}
-
-// SpawnToolCallIDsByChildThread records the call and delegates to SpawnToolCallIDsByChildThreadFunc when set.
-func (m *MockRepository) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error) {
-	m.Recorder.Record("SpawnToolCallIDsByChildThread", ctx, chatID)
-	if m.SpawnToolCallIDsByChildThreadFunc != nil {
-		return m.SpawnToolCallIDsByChildThreadFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SpawnToolCallIDsByChildThread")
 }
 
 // GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.

@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 // A turn that comes back from the provider with no text, no thinking and no

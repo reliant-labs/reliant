@@ -50,7 +50,7 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 
 	tc := &signaltest.Recorder{}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
@@ -86,7 +86,7 @@ func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusCancelled, db.Cancelled())
 
 	tc := &signaltest.Recorder{}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "keep going",
 	}))
@@ -192,7 +192,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFi
 	require.NoError(t, err)
 
 	tc := &signaltest.Recorder{}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: grandchild, Message: "carry on",
 	}))
@@ -239,7 +239,7 @@ func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *test
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	chat, err := repo.GetChat(ctx, fx.chatID)
 	require.NoError(t, err)
 

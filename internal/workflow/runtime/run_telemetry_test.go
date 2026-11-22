@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/forge/pkg/observe/temporalotel"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -227,13 +228,13 @@ func TestRunTelemetry_CheckpointCarriesTheRunIDToARestart(t *testing.T) {
 	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", RunID: "run-interrupted",
 	}))
-	resume := ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id")
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), "chat-run-id", "wf-run-id")
 	assert.Equal(t, "run-interrupted", resume.RunID)
 
 	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", LoopIteration: 2, RunID: "run-interrupted",
 	}))
-	assert.Equal(t, "run-interrupted", ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id").RunID,
+	assert.Equal(t, "run-interrupted", ResumeInputFromDurableState(ctx, withSpawnTree(repo), "chat-run-id", "wf-run-id").RunID,
 		"a later position of the same run keeps naming it")
 }
 

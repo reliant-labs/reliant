@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +85,10 @@ func TestLoadedToolSurvivesACoarseRestartFromTheCheckpoint(t *testing.T) {
 	require.NotContains(t, run1Model.offeredTools()[0], tools.ToolSourcegraph, "precondition: not preloaded")
 
 	// ── The coarse fresh restart ────────────────────────────────────────
-	resume := v2.ResumeInputFromDurableState(ctx, repo, chatID, chatID)
+	resume := v2.ResumeInputFromDurableState(ctx, struct {
+		*db.Repo
+		store.ToolCallExtStore
+	}{repo, store.NewToolCallExtStore(repo.ORM())}, chatID, chatID)
 	require.Equal(t, "agent_loop", resume.NodeID, "the checkpoint run 1 wrote")
 	require.Equal(t, 1, resume.LoopIteration, "turn N+1's iteration")
 

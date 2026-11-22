@@ -45,7 +45,7 @@ func TestListArchivedChats_Generated(t *testing.T) {
 		defer mu.Unlock()
 		return asked[userID]
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListArchivedChatsRequest, pb.ListArchivedChatsResponse]{
 		{

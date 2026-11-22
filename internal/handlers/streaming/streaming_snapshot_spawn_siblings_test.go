@@ -7,13 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/require"
 )
 
 // spawnSiblingsFixture is a chat whose main thread started a spawn that then
@@ -164,7 +167,7 @@ func TestChatSnapshot_OmitsSpawnThreadTranscripts(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, 3, 250)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, f.chatID)
 	require.NoError(t, err)
 
 	got := make(map[string]bool, len(snapshot.Messages))
@@ -225,7 +228,7 @@ func TestChatSnapshot_HasMoreWhenMainThreadOutgrowsWindow(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, snapshotMessageLimit+5, 3)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, f.chatID)
 	require.NoError(t, err)
 
 	mainCount := 0

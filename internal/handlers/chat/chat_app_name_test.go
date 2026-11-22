@@ -91,7 +91,7 @@ func TestListChats_AppNameFilter(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	resolver := orgs.New(memberOfBoth{}) // every caller is in acme and home; home is the default
-	service := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Orgs: resolver}))
+	service := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Orgs: resolver}))
 	as := func(user string) context.Context {
 		return authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, user), resolver)
 	}
@@ -161,7 +161,7 @@ func TestBranchChat_KeepsTheAppName(t *testing.T) {
 	_, err := repo.ORM().Bun().NewRaw(`UPDATE chats SET app_name = 'storefront' WHERE id = ?`, sourceChatID).Exec(ctx)
 	require.NoError(t, err)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
 	require.NoError(t, err)
 	assert.Equal(t, "storefront", resp.Msg.GetChat().GetAppName())
@@ -180,7 +180,7 @@ func TestGetChat_ViewerReadsTheAppName(t *testing.T) {
 	f := viewertest.New(t, repo)
 	_, err := repo.ORM().Bun().NewRaw(`UPDATE chats SET app_name = 'storefront' WHERE id = ?`, f.ChatID).Exec(context.Background())
 	require.NoError(t, err)
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Orgs: f.Membership}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Orgs: f.Membership}))
 
 	resp, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
 	require.NoError(t, err)

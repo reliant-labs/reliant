@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -97,7 +99,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 	f := seedToolBodiesStream(t, ctx, repo)
 
 	t.Run("unset is FULL, byte for byte: snapshot and update frames", func(t *testing.T) {
-		svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo}))
+		svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
 		chat, err := repo.GetChatRow(ctx, f.ChatID)
 		require.NoError(t, err)
 		marshal := func(mode reliantv1.ToolBodyMode) []byte {
@@ -159,7 +161,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 	})
 
 	t.Run("STUB: a replay stubs results and thinking, keeps inputs", func(t *testing.T) {
-		svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo}))
+		svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{
 			ChatId: f.ChatID, SinceSeq: f.updates[0].SequenceNumber,
 			ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),

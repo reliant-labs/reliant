@@ -128,7 +128,7 @@ func (m *MockworkflowDraftLookup) GetWorkflowDraftBySlug(ctx context.Context, us
 var _ workflowDraftLookup = (*MockworkflowDraftLookup)(nil)
 
 // forge:section MockinheritedSpawnLookup
-// forge:hash=04c91bf07fabac76365455f4f7650653dd8c63acf153d1ee24accdc6389ae6b4
+// forge:hash=4a75335acab7082f26afd59e278a82678067796f1b48e48182730c6c97cc4374
 
 // MockinheritedSpawnLookup is a test mock for the inheritedSpawnLookup interface.
 //
@@ -138,11 +138,11 @@ var _ workflowDraftLookup = (*MockworkflowDraftLookup)(nil)
 // "MockinheritedSpawnLookup.<Method>Func not set" error.
 type MockinheritedSpawnLookup struct {
 	contractkit.Recorder
-	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*db.InheritedSpawnChild, error)
+	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*core.InheritedSpawnChild, error)
 }
 
 // ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockinheritedSpawnLookup) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
+func (m *MockinheritedSpawnLookup) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error) {
 	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
 	if m.ListInheritedSpawnChildrenFunc != nil {
 		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
@@ -154,7 +154,7 @@ func (m *MockinheritedSpawnLookup) ListInheritedSpawnChildren(ctx context.Contex
 var _ inheritedSpawnLookup = (*MockinheritedSpawnLookup)(nil)
 
 // forge:section MockspawnChildLister
-// forge:hash=6047a986cc95a5c7e15c32ed617b6faf9f14c6de4d30ea123cba334d4810ae67
+// forge:hash=00cf1d2f6ce861eda179523e1f8362ba89060673b9be488331b16e55c84b44c8
 
 // MockspawnChildLister is a test mock for the spawnChildLister interface.
 //
@@ -164,11 +164,11 @@ var _ inheritedSpawnLookup = (*MockinheritedSpawnLookup)(nil)
 // "MockspawnChildLister.<Method>Func not set" error.
 type MockspawnChildLister struct {
 	contractkit.Recorder
-	ListSpawnChildrenFunc func(context.Context, string) ([]*db.SpawnChild, error)
+	ListSpawnChildrenFunc func(context.Context, string) ([]*core.SpawnChild, error)
 }
 
 // ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockspawnChildLister) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
+func (m *MockspawnChildLister) ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error) {
 	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
 	if m.ListSpawnChildrenFunc != nil {
 		return m.ListSpawnChildrenFunc(ctx, threadID)
@@ -180,7 +180,7 @@ func (m *MockspawnChildLister) ListSpawnChildren(ctx context.Context, threadID s
 var _ spawnChildLister = (*MockspawnChildLister)(nil)
 
 // forge:section MockspawnRelationStore
-// forge:hash=b3217db72e5d9bb47b5fe66179c4d4b8e1724ad1765d1f5e8200e14daff94e0f
+// forge:hash=70091bf3a1fc485dff62a6694fd75b46e6bf74e8c6569d9f19fa0b9360fb7a2a
 
 // MockspawnRelationStore is a test mock for the spawnRelationStore interface.
 //
@@ -190,8 +190,7 @@ var _ spawnChildLister = (*MockspawnChildLister)(nil)
 // "MockspawnRelationStore.<Method>Func not set" error.
 type MockspawnRelationStore struct {
 	contractkit.Recorder
-	GetThreadFunc         func(context.Context, string) (*db.Thread, error)
-	ListSpawnChildrenFunc func(context.Context, string) ([]*db.SpawnChild, error)
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
 }
 
 // GetThread records the call and delegates to GetThreadFunc when set.
@@ -203,17 +202,44 @@ func (m *MockspawnRelationStore) GetThread(ctx context.Context, id string) (*db.
 	return nil, contractkit.MockNotSet("MockspawnRelationStore", "GetThread")
 }
 
+// Compile-time check.
+var _ spawnRelationStore = (*MockspawnRelationStore)(nil)
+
+// forge:section MockSpawnTree
+// forge:hash=c8fee7121f2bf5e56d398146a3cb71b606dad5df6444fa43ba8f6bf74ee66aa4
+
+// MockSpawnTree is a test mock for the SpawnTree interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawnTree.<Method>Func not set" error.
+type MockSpawnTree struct {
+	contractkit.Recorder
+	ListSpawnChildrenFunc          func(context.Context, string) ([]*core.SpawnChild, error)
+	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*core.InheritedSpawnChild, error)
+}
+
 // ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockspawnRelationStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
+func (m *MockSpawnTree) ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error) {
 	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
 	if m.ListSpawnChildrenFunc != nil {
 		return m.ListSpawnChildrenFunc(ctx, threadID)
 	}
-	return nil, contractkit.MockNotSet("MockspawnRelationStore", "ListSpawnChildren")
+	return nil, contractkit.MockNotSet("MockSpawnTree", "ListSpawnChildren")
+}
+
+// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
+func (m *MockSpawnTree) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error) {
+	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
+	if m.ListInheritedSpawnChildrenFunc != nil {
+		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawnTree", "ListInheritedSpawnChildren")
 }
 
 // Compile-time check.
-var _ spawnRelationStore = (*MockspawnRelationStore)(nil)
+var _ SpawnTree = (*MockSpawnTree)(nil)
 
 // forge:section MockstartRunLineageReader
 // forge:hash=5850fcc17c8fc1acdbdb59bf44a8d8e11eb0c8f0d188fb9e990de9c1b93417c9
@@ -1210,7 +1236,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=104759c8b7b23ade41525585d6652b82304552c3d62fe19ff5d5111454affbf4
+// forge:hash=5407d64a30a12d32a13e8623b4747ec454b7f16e8173bcc6ad6086b158eb98c3
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1267,8 +1293,6 @@ type MockspawnStatusStore struct {
 	LastThreadActivityByChatFunc                             func(context.Context, string) (map[string]time.Time, error)
 	ListPendingApprovalsByChatFunc                           func(context.Context, string) ([]*db.Approval, error)
 	ProviderBackoffByChatFunc                                func(context.Context, string) (map[string]db.ProviderBackoff, error)
-	ListSpawnChildrenFunc                                    func(context.Context, string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
 }
 
 // GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
@@ -1694,24 +1718,6 @@ func (m *MockspawnStatusStore) ProviderBackoffByChat(ctx context.Context, chatID
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ProviderBackoffByChat")
 }
 
-// ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockspawnStatusStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
-	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
-	if m.ListSpawnChildrenFunc != nil {
-		return m.ListSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ListSpawnChildren")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockspawnStatusStore) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "ListInheritedSpawnChildren")
-}
-
 // Compile-time check.
 var _ spawnStatusStore = (*MockspawnStatusStore)(nil)
 
@@ -1742,7 +1748,7 @@ func (m *MockSpawnQuestions) PendingQuestionsByThread(ctx context.Context, chatI
 var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 
 // forge:section MockspawnSendStore
-// forge:hash=17ec09139fa5e700a34be1628667db4a0e45c6002d7e9ee83939a565886d4a29
+// forge:hash=36a9020755974b19ce42dc8165d0848dc7fe55cfa49c49151199cc1db0c2128c
 
 // MockspawnSendStore is a test mock for the spawnSendStore interface.
 //
@@ -1752,10 +1758,8 @@ var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 // "MockspawnSendStore.<Method>Func not set" error.
 type MockspawnSendStore struct {
 	contractkit.Recorder
-	EnqueueAgentMessageFunc        func(context.Context, *db.AgentMessage) error
-	GetThreadFunc                  func(context.Context, string) (*db.Thread, error)
-	ListSpawnChildrenFunc          func(context.Context, string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*db.InheritedSpawnChild, error)
+	EnqueueAgentMessageFunc func(context.Context, *db.AgentMessage) error
+	GetThreadFunc           func(context.Context, string) (*db.Thread, error)
 }
 
 // EnqueueAgentMessage records the call and delegates to EnqueueAgentMessageFunc when set.
@@ -1776,29 +1780,11 @@ func (m *MockspawnSendStore) GetThread(ctx context.Context, id string) (*db.Thre
 	return nil, contractkit.MockNotSet("MockspawnSendStore", "GetThread")
 }
 
-// ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockspawnSendStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
-	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
-	if m.ListSpawnChildrenFunc != nil {
-		return m.ListSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnSendStore", "ListSpawnChildren")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockspawnSendStore) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnSendStore", "ListInheritedSpawnChildren")
-}
-
 // Compile-time check.
 var _ spawnSendStore = (*MockspawnSendStore)(nil)
 
 // forge:section MockspawnStopStore
-// forge:hash=a9317d813804d2a5db27b2c8bdfff03d7fef700a6b41343a677daba37ca6455b
+// forge:hash=e23d579f2d6d8c2cfb4cd7c0080d752f6f0216c2d6eee578bb1cc91bb387a032
 
 // MockspawnStopStore is a test mock for the spawnStopStore interface.
 //
@@ -1808,9 +1794,7 @@ var _ spawnSendStore = (*MockspawnSendStore)(nil)
 // "MockspawnStopStore.<Method>Func not set" error.
 type MockspawnStopStore struct {
 	contractkit.Recorder
-	GetThreadFunc                  func(context.Context, string) (*db.Thread, error)
-	ListSpawnChildrenFunc          func(context.Context, string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildrenFunc func(context.Context, string) ([]*db.InheritedSpawnChild, error)
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
 }
 
 // GetThread records the call and delegates to GetThreadFunc when set.
@@ -1820,24 +1804,6 @@ func (m *MockspawnStopStore) GetThread(ctx context.Context, id string) (*db.Thre
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockspawnStopStore", "GetThread")
-}
-
-// ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockspawnStopStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
-	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
-	if m.ListSpawnChildrenFunc != nil {
-		return m.ListSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStopStore", "ListSpawnChildren")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockspawnStopStore) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStopStore", "ListInheritedSpawnChildren")
 }
 
 // Compile-time check.
