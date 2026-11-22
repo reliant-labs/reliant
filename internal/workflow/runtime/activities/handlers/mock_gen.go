@@ -21,7 +21,7 @@ import (
 )
 
 // forge:section MockWorkflowLoader
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=60756489beb2435ec1ddffb9cf2d149a46dc6073488aaf3b0fd20f4146acc6ae
 
 // MockWorkflowLoader is a test mock for the WorkflowLoader interface.
 //
@@ -47,7 +47,7 @@ func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*core
 var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
 
 // forge:section MockRunOwnerReader
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=4755ec99bf28d4775a4554d9bd51fb3a53d49a2b86f548f279685bd071d610c0
 
 // MockRunOwnerReader is a test mock for the RunOwnerReader interface.
 //
@@ -73,7 +73,7 @@ func (m *MockRunOwnerReader) GetChat(ctx context.Context, id string) (*db.Chat, 
 var _ RunOwnerReader = (*MockRunOwnerReader)(nil)
 
 // forge:section MockWorkflowRuns
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=3bc0dea11cad0330d68769330faa6ae5e23da5f3c99b24066b78148917e721c2
 
 // MockWorkflowRuns is a test mock for the WorkflowRuns interface.
 //
@@ -129,7 +129,7 @@ func (m *MockWorkflowRuns) LoadWorkflow(ctx context.Context, id string) (*core.W
 var _ WorkflowRuns = (*MockWorkflowRuns)(nil)
 
 // forge:section MockQuestionsByStep
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=c9b38f464efb3c2f2f0729a6cd657f95c9bf27cc4a8e82c4ce20c92d1b8188bc
 
 // MockQuestionsByStep is a test mock for the QuestionsByStep interface.
 //
@@ -155,7 +155,7 @@ func (m *MockQuestionsByStep) ListQuestionsByWorkflowStepIteration(ctx context.C
 var _ QuestionsByStep = (*MockQuestionsByStep)(nil)
 
 // forge:section MockWorktreeOwnerReader
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=33fbcd5b290add46fe61cd6404db83e95c2de20bcd5316b3280e02f47a85b84c
 
 // MockWorktreeOwnerReader is a test mock for the WorktreeOwnerReader interface.
 //
@@ -181,7 +181,7 @@ func (m *MockWorktreeOwnerReader) GetWorktree(ctx context.Context, id string) (*
 var _ WorktreeOwnerReader = (*MockWorktreeOwnerReader)(nil)
 
 // forge:section MockThreadWorktreeReader
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=10a3a1dd0a568f0ab4d89c17dee61465306d69435bc8b38171faf81807a2b298
 
 // MockThreadWorktreeReader is a test mock for the ThreadWorktreeReader interface.
 //
@@ -207,7 +207,7 @@ func (m *MockThreadWorktreeReader) GetThread(ctx context.Context, id string) (*d
 var _ ThreadWorktreeReader = (*MockThreadWorktreeReader)(nil)
 
 // forge:section MockBindingDescriber
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=03c1d43ce8f020e61ad00cfabeb8c41d55bed650686fd568f0e93261eeef41b2
 
 // MockBindingDescriber is a test mock for the BindingDescriber interface.
 //
@@ -233,7 +233,7 @@ func (m *MockBindingDescriber) GetWorktree(ctx context.Context, id string) (*db.
 var _ BindingDescriber = (*MockBindingDescriber)(nil)
 
 // forge:section MockRunExecutorContextStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=cb5dca1167cd658791832ecf270fcf159a5484eed076d09274bb4fadfda6448c
 
 // MockRunExecutorContextStore is a test mock for the RunExecutorContextStore interface.
 //
@@ -299,7 +299,7 @@ func (m *MockRunExecutorContextStore) ListProjectDaemonsForProject(ctx context.C
 var _ RunExecutorContextStore = (*MockRunExecutorContextStore)(nil)
 
 // forge:section MockToolResultRecoveryStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=ad29750fbc496ce31d09c3cea8ed8f36c7f22a7fb057d59fea778d665868a9f1
 
 // MockToolResultRecoveryStore is a test mock for the ToolResultRecoveryStore interface.
 //
@@ -325,7 +325,7 @@ func (m *MockToolResultRecoveryStore) GetToolCallResultForMessage(ctx context.Co
 var _ ToolResultRecoveryStore = (*MockToolResultRecoveryStore)(nil)
 
 // forge:section MockMessageRepairStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=5f33cc1d2365e8dabb37511cfe2801c417ff17f977b2aac7b56ba24735d6b1d0
 
 // MockMessageRepairStore is a test mock for the MessageRepairStore interface.
 //
@@ -391,7 +391,7 @@ func (m *MockMessageRepairStore) GetToolCallResultForMessage(ctx context.Context
 var _ MessageRepairStore = (*MockMessageRepairStore)(nil)
 
 // forge:section MockLLMHistoryStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=c3b21e32a3707fb476d7f8ee89f67881d0eeef0349af2dafe4832537b3b44cfb
 
 // MockLLMHistoryStore is a test mock for the LLMHistoryStore interface.
 //
@@ -857,7 +857,7 @@ func (m *MockLLMHistoryStore) GetToolCallResultForMessage(ctx context.Context, t
 var _ LLMHistoryStore = (*MockLLMHistoryStore)(nil)
 
 // forge:section MockWorkflowErrorWriter
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=d43c60585b774346e6ac641e96880af4a5325c95c146f6a4022f0ad2f640edc0
 
 // MockWorkflowErrorWriter is a test mock for the WorkflowErrorWriter interface.
 //
@@ -883,7 +883,7 @@ func (m *MockWorkflowErrorWriter) CreateChatUpdate(ctx context.Context, chatID s
 var _ WorkflowErrorWriter = (*MockWorkflowErrorWriter)(nil)
 
 // forge:section MockTransitionMessageWriter
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=df0ba7bfc70a50255f3213db414640d164bfcf7dcd7ebceb1f32c5f486a15614
 
 // MockTransitionMessageWriter is a test mock for the TransitionMessageWriter interface.
 //
@@ -909,7 +909,7 @@ func (m *MockTransitionMessageWriter) SaveMessageToThread(ctx context.Context, c
 var _ TransitionMessageWriter = (*MockTransitionMessageWriter)(nil)
 
 // forge:section MockChatTransitioner
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=03c806188478b1679aed22d67f19cbf473c631eec7e73c3fd0b22f21d3ecc689
 
 // MockChatTransitioner is a test mock for the ChatTransitioner interface.
 //
@@ -1045,7 +1045,7 @@ func (m *MockChatTransitioner) PinProjectCatalog(ctx context.Context, scope db.C
 var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 
 // forge:section MockApprovalCreateStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=0ee9093a624e3d4c0564cf34ea504f4489261b31800ce846d0350e65ebce4551
 
 // MockApprovalCreateStore is a test mock for the ApprovalCreateStore interface.
 //
@@ -1151,7 +1151,7 @@ func (m *MockApprovalCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ ApprovalCreateStore = (*MockApprovalCreateStore)(nil)
 
 // forge:section MockApprovalLookup
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=3a9b5797a1986454d77e9b7af8aee8ece815b74c89895e8cf84a7a3055788b15
 
 // MockApprovalLookup is a test mock for the ApprovalLookup interface.
 //
@@ -1177,7 +1177,7 @@ func (m *MockApprovalLookup) GetApprovalByEntityID(ctx context.Context, entityID
 var _ ApprovalLookup = (*MockApprovalLookup)(nil)
 
 // forge:section MockToolCallResults
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=3546453336979169fd44b556275801bb7d3843bca0c9681e6618112e190d1daf
 
 // MockToolCallResults is a test mock for the ToolCallResults interface.
 //
@@ -1203,7 +1203,7 @@ func (m *MockToolCallResults) FindToolCallResult(ctx context.Context, toolCallID
 var _ ToolCallResults = (*MockToolCallResults)(nil)
 
 // forge:section MockApprovalResolveStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=63c72dedc81d6360d817c1ffc03475929670181a182e6089b4ee007f50e7690c
 
 // MockApprovalResolveStore is a test mock for the ApprovalResolveStore interface.
 //
@@ -1229,7 +1229,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=aace0bed73f929ad4f2448babe5167b0bec622a0d3903bfda1aec22133d8b7d6
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1925,7 +1925,7 @@ func (m *MockCallLLMStore) GetToolCallResultForMessage(ctx context.Context, tool
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
 // forge:section MockToolResultFinder
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=9a10b2d67e055f95ee581571b9f1d6441b0897bf7413527f3481c29f2cf47908
 
 // MockToolResultFinder is a test mock for the ToolResultFinder interface.
 //
@@ -1951,7 +1951,7 @@ func (m *MockToolResultFinder) FindToolBlock(ctx context.Context, toolCallID str
 var _ ToolResultFinder = (*MockToolResultFinder)(nil)
 
 // forge:section MockCleanupStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=faae8bc4fa4c95e35aa1bf298fef090cdfe34213085618e2370a0534484d4115
 
 // MockCleanupStore is a test mock for the CleanupStore interface.
 //
@@ -2087,7 +2087,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=141f004593c6de69f2e01aff12da50965bdd8cebdfb8632b2a07c1b7cbbbe2ff
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -2603,7 +2603,7 @@ func (m *MockCompactStore) GetToolCallResultForMessage(ctx context.Context, tool
 var _ CompactStore = (*MockCompactStore)(nil)
 
 // forge:section MockCreateWorkflowWithThreadStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=c0bdbfe0b410d32c54fd0d5e4963d65d00e0b24577b3eebc41d58a3560e986a7
 
 // MockCreateWorkflowWithThreadStore is a test mock for the CreateWorkflowWithThreadStore interface.
 //
@@ -2669,7 +2669,7 @@ func (m *MockCreateWorkflowWithThreadStore) CreateChatUpdate(ctx context.Context
 var _ CreateWorkflowWithThreadStore = (*MockCreateWorkflowWithThreadStore)(nil)
 
 // forge:section MockCreateWorktreeStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=acfe104e8b501353ab5e0963fde88264885510898840aeca101be352d3f2ef5b
 
 // MockCreateWorktreeStore is a test mock for the CreateWorktreeStore interface.
 //
@@ -2845,7 +2845,7 @@ func (m *MockCreateWorktreeStore) GetWorktree(ctx context.Context, id string) (*
 var _ CreateWorktreeStore = (*MockCreateWorktreeStore)(nil)
 
 // forge:section MockDeleteWorktreeStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=64c09701d58ab77236ca8c42670a613e539b302dbba5ff282e7be96910491d96
 
 // MockDeleteWorktreeStore is a test mock for the DeleteWorktreeStore interface.
 //
@@ -2931,7 +2931,7 @@ func (m *MockDeleteWorktreeStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ DeleteWorktreeStore = (*MockDeleteWorktreeStore)(nil)
 
 // forge:section MockDrainAgentMessagesStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=d0a5628772cf76ee35ac0a8c352b5c44183b098b118727f7d7b00e71f952cf74
 
 // MockDrainAgentMessagesStore is a test mock for the DrainAgentMessagesStore interface.
 //
@@ -3007,7 +3007,7 @@ func (m *MockDrainAgentMessagesStore) CreateChatUpdate(ctx context.Context, chat
 var _ DrainAgentMessagesStore = (*MockDrainAgentMessagesStore)(nil)
 
 // forge:section MockEmitStreamFinalizedStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=c8abb535a226a682a8d26835f8b461f8f97f3bff324214d50764b0ca35320466
 
 // MockEmitStreamFinalizedStore is a test mock for the EmitStreamFinalizedStore interface.
 //
@@ -3033,7 +3033,7 @@ func (m *MockEmitStreamFinalizedStore) CreateChatUpdate(ctx context.Context, cha
 var _ EmitStreamFinalizedStore = (*MockEmitStreamFinalizedStore)(nil)
 
 // forge:section MockEmitToolCallStatusStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=0456502a70e0698b47ca2b7be036fa425494f31a12f343d768d9e3d9c61ba6f3
 
 // MockEmitToolCallStatusStore is a test mock for the EmitToolCallStatusStore interface.
 //
@@ -3099,7 +3099,7 @@ func (m *MockEmitToolCallStatusStore) UpsertToolCall(ctx context.Context, call *
 var _ EmitToolCallStatusStore = (*MockEmitToolCallStatusStore)(nil)
 
 // forge:section MockEnqueueAgentMessageStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=72c556a7709ae277c9b36707c3af8ca6eeb6f188b773146c20d742ec3b4d1530
 
 // MockEnqueueAgentMessageStore is a test mock for the EnqueueAgentMessageStore interface.
 //
@@ -3135,7 +3135,7 @@ func (m *MockEnqueueAgentMessageStore) EnqueueSpawnReport(ctx context.Context, m
 var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 
 // forge:section MockExecuteRunStepStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=661e32a635c288b6e74e4f5f3adab0cdecc720dfa3fe89d97165607f9b960cac
 
 // MockExecuteRunStepStore is a test mock for the ExecuteRunStepStore interface.
 //
@@ -3211,7 +3211,7 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
 // forge:section MockWorktreeReviver
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=9366bfb4c64d85f7d5cbf08815826e439aa157b2669f8cd8e4d7588a908c3fef
 
 // MockWorktreeReviver is a test mock for the WorktreeReviver interface.
 //
@@ -3237,7 +3237,7 @@ func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id str
 var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=25678128990b21701c6a92a52646c053108db7e7356861f3b74fa40c4ca2f2cc
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3493,7 +3493,7 @@ func (m *MockExecuteToolsStore) GetTrigger(ctx context.Context, id string) (*cor
 var _ ExecuteToolsStore = (*MockExecuteToolsStore)(nil)
 
 // forge:section MockRunFundingStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=d68c4c0dd75f4321735bf8ef5fe9cfc6813975e0b04f3f224ef51ab5f8d3d1e5
 
 // MockRunFundingStore is a test mock for the RunFundingStore interface.
 //
@@ -3529,7 +3529,7 @@ func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID strin
 var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=1a0958c5135d364a5649f6f7386ff8d21f4bc00e583a7146e6450856f7a7de5f
 
 // MockGenerateTitleStore is a test mock for the GenerateTitleStore interface.
 //
@@ -3615,7 +3615,7 @@ func (m *MockGenerateTitleStore) GetTrigger(ctx context.Context, id string) (*co
 var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 
 // forge:section MockGitPublishStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=67a70134576cc160bb98a11b911daae8b768306fcb85ba495a35f08b94e8fff5
 
 // MockGitPublishStore is a test mock for the GitPublishStore interface.
 //
@@ -3661,7 +3661,7 @@ func (m *MockGitPublishStore) GetWorktree(ctx context.Context, id string) (*db.W
 var _ GitPublishStore = (*MockGitPublishStore)(nil)
 
 // forge:section MockLoadPresetParamsStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=98651ef5d0e1356b71eb9969928c7e4e1ec030e9a9872cac12c7ecbe9eebf89b
 
 // MockLoadPresetParamsStore is a test mock for the LoadPresetParamsStore interface.
 //
@@ -3727,7 +3727,7 @@ func (m *MockLoadPresetParamsStore) GetPinnedProjectCatalog(ctx context.Context,
 var _ LoadPresetParamsStore = (*MockLoadPresetParamsStore)(nil)
 
 // forge:section MockLoadWorkflowStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=cc2ea81130110fc4a545c3d3bba6eb3d205943df917dfda0a73445ea0e056b17
 
 // MockLoadWorkflowStore is a test mock for the LoadWorkflowStore interface.
 //
@@ -3853,7 +3853,7 @@ func (m *MockLoadWorkflowStore) PinProjectCatalog(ctx context.Context, scope db.
 var _ LoadWorkflowStore = (*MockLoadWorkflowStore)(nil)
 
 // forge:section MockMachineResumeWakeStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=813864190c618312446545dfd7966a47c3f71b37fabee0f2057635d69af4e88f
 
 // MockMachineResumeWakeStore is a test mock for the MachineResumeWakeStore interface.
 //
@@ -3919,7 +3919,7 @@ func (m *MockMachineResumeWakeStore) SetChatDaemonBlocked(ctx context.Context, c
 var _ MachineResumeWakeStore = (*MockMachineResumeWakeStore)(nil)
 
 // forge:section MockPreflightDaemonCheckStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=474429ef221a863bd7c5843a1a4ba021cc4f846f52238fffbcf659388cfe32e8
 
 // MockPreflightDaemonCheckStore is a test mock for the PreflightDaemonCheckStore interface.
 //
@@ -4005,7 +4005,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=ce49993e24f7a78e14a0f74c682cf9619edf507c872a888efdd63ae5487bb236
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -4121,7 +4121,7 @@ func (m *MockQuestionCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 
 // forge:section MockQuestionResolveStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=4c052e9237bce3e252b808e47a5dc0aa6a0bd79fe22d733c3d95d8779d5440d4
 
 // MockQuestionResolveStore is a test mock for the QuestionResolveStore interface.
 //
@@ -4167,7 +4167,7 @@ func (m *MockQuestionResolveStore) EmitQuestionUpdate(ctx context.Context, chatI
 var _ QuestionResolveStore = (*MockQuestionResolveStore)(nil)
 
 // forge:section MockSaveMessageStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=6435982a474d43df57851ea674c090104b662c5f86225da47181c928076aa235
 
 // MockSaveMessageStore is a test mock for the SaveMessageStore interface.
 //
@@ -4623,7 +4623,7 @@ func (m *MockSaveMessageStore) RunTx(p0 context.Context, policy orm.TxPolicy, f 
 var _ SaveMessageStore = (*MockSaveMessageStore)(nil)
 
 // forge:section MockThreadStatusStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=285747666afd683e3fd8a29e35efb0978172d705450126e9327fcaee47f1a8c6
 
 // MockThreadStatusStore is a test mock for the ThreadStatusStore interface.
 //
@@ -4669,7 +4669,7 @@ func (m *MockThreadStatusStore) CreateChatUpdate(ctx context.Context, chatID str
 var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 
 // forge:section MockUsageLimitWaitStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=f9c3addab34c6dcaa735a56da72356230d761a83f3899d889acff6cac42f8a5b
 
 // MockUsageLimitWaitStore is a test mock for the UsageLimitWaitStore interface.
 //
@@ -5115,7 +5115,7 @@ func (m *MockUsageLimitWaitStore) RunTx(p0 context.Context, policy orm.TxPolicy,
 var _ UsageLimitWaitStore = (*MockUsageLimitWaitStore)(nil)
 
 // forge:section MockProviderBackoffMarkers
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=2120ed741a37e51dee9ed169716e8712906adbe0c84eaeafd7b479ac76a4c1a2
 
 // MockProviderBackoffMarkers is a test mock for the ProviderBackoffMarkers interface.
 //
@@ -5171,7 +5171,7 @@ func (m *MockProviderBackoffMarkers) ClearUsageLimitWait(ctx context.Context, ch
 var _ ProviderBackoffMarkers = (*MockProviderBackoffMarkers)(nil)
 
 // forge:section MockTriggerCapacitySlotStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=b881e8a614f384a8b12c089b11851665a2266982d0da0ada4c7bd0e82d38ce0b
 
 // MockTriggerCapacitySlotStore is a test mock for the TriggerCapacitySlotStore interface.
 //
@@ -5207,7 +5207,7 @@ func (m *MockTriggerCapacitySlotStore) ResumeTriggerCapacity(ctx context.Context
 var _ TriggerCapacitySlotStore = (*MockTriggerCapacitySlotStore)(nil)
 
 // forge:section MockValidateThreadOwnershipStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=f3e587ecc2fb64f57d34fea78819a8610979f26441339b7b256b6fe957c343fc
 
 // MockValidateThreadOwnershipStore is a test mock for the ValidateThreadOwnershipStore interface.
 //
@@ -5233,7 +5233,7 @@ func (m *MockValidateThreadOwnershipStore) GetThread(ctx context.Context, id str
 var _ ValidateThreadOwnershipStore = (*MockValidateThreadOwnershipStore)(nil)
 
 // forge:section MockWorkflowCheckpointStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=1ef00db17011b2cf732b97dfa6cd7578f0f88af4a545271bc3e928b2eea6a87e
 
 // MockWorkflowCheckpointStore is a test mock for the WorkflowCheckpointStore interface.
 //
@@ -5259,7 +5259,7 @@ func (m *MockWorkflowCheckpointStore) SaveWorkflowCheckpoint(ctx context.Context
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockRunRecords
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=778239d471fed6e7dc55cb464d4fac6253b7c54e3361c89a2318cbe798b09532
 
 // MockRunRecords is a test mock for the RunRecords interface.
 //
@@ -5365,7 +5365,7 @@ func (m *MockRunRecords) SetChatRunID(ctx context.Context, chatID string, workfl
 var _ RunRecords = (*MockRunRecords)(nil)
 
 // forge:section MockAttentionRecorder
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=989412c3da871c68df854bc421f30f6d83fc1926dc81062c63b8570d9220f92f
 
 // MockAttentionRecorder is a test mock for the AttentionRecorder interface.
 //
@@ -5391,7 +5391,7 @@ func (m *MockAttentionRecorder) ApplyAttentionUpdate(ctx context.Context, update
 var _ AttentionRecorder = (*MockAttentionRecorder)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=661a00ba5f8f8c4f006a72c15fb908131721df7c6601869ce3ce4b13d9fc377c
+// forge:hash=c794d71aabdb1aaf9da4f7df6e14a7a529ad3dcf7223afad11f1f2bc327c971d
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
