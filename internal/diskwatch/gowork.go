@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // Go work directories: the scratch of builds that were killed.
@@ -43,6 +45,18 @@ import (
 //
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.
+//
+// The per-command roots are the daemon's own: it makes one for every command
+// it runs, and only a cgroup lets it remove one when its command ends
+// (proctree, gotmp_linux.go). A daemon without cgroup delegation (a
+// self-hosted systemd service) therefore leaves every root it makes, one per
+// command: on 2026-11-22 one such daemon had left 105k of them, ~48 GiB with
+// its killed builds inside. So the daemon reclaims its own roots on the
+// Go-cache cadence whatever RELIANT_STORAGE_REAPER says (reaper.go,
+// runReaperOff). With the reaper off that pass judges ONLY those roots
+// (daemonOnly): a person's go-build* and go-link-* in their own /tmp are not
+// the daemon's to remove there, the same line "auto runs on managed daemons
+// only" draws for every other cache.
 
 const (
 	goBuildPrefix = "go-build"
@@ -140,7 +154,10 @@ func (s *procSnapshot) creatorAlive(kind string, birth time.Time) (procStart, bo
 type workDirAudit struct {
 	// Proof is how a directory was shown dead: "proc_scan", or "age_only"
 	// where there is no /proc.
-	Proof   string `json:"proof"`
+	Proof string `json:"proof"`
+	// Scope is "daemon_roots" for a pass over only the daemon's per-command
+	// GOTMPDIR roots (the storage reaper is off), "" for every work dir.
+	Scope   string `json:"scope,omitempty"`
 	Dirs    string `json:"dirs"`
 	Scanned int    `json:"scanned"`
 	Removed int    `json:"removed"`
@@ -185,16 +202,25 @@ func (w *Watcher) goWorkDirRoots() []string {
 
 // trimGoWorkDirs removes the work directories of killed builds (see the top
 // of this file) and reports what it did; nil when it found none. Only this
-// user's: /tmp is shared.
-func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pacer) (*CacheTrimResult, workDirAudit) {
+// user's: /tmp is shared. daemonOnly judges only the daemon's per-command
+// GOTMPDIR roots, and only on a /proc proof: no age rule, and no /proc scan at
+// all where no root base exists.
+func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pacer, daemonOnly bool) (*CacheTrimResult, workDirAudit) {
 	uid := w.currentUID()
 	roots := w.goWorkDirRoots()
 	audit := workDirAudit{Proof: "proc_scan", Dirs: strings.Join(roots, ", ")}
+	if daemonOnly {
+		audit.Scope = "daemon_roots"
+		if !w.hasCommandGoTmpBase(roots, uid) {
+			return nil, audit
+		}
+	}
 	snap, scanErr := w.scanProcs()
 	if scanErr != nil {
 		audit.Proof, audit.Error = "age_only", scanErr.Error()
 	}
-	if scanErr != nil && age <= 0 {
+	if scanErr != nil && (age <= 0 || daemonOnly) {
+		// A root is removed only on a proof; without one, nothing is.
 		return nil, audit
 	}
 	res := &CacheTrimResult{Kind: "go_work_dirs", Path: audit.Dirs}
@@ -265,7 +291,9 @@ func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pace
 				}
 				continue
 			}
-			consider(dir, e, goBuildPrefix, goLinkPrefix)
+			if !daemonOnly {
+				consider(dir, e, goBuildPrefix, goLinkPrefix)
+			}
 		}
 	}
 	audit.Removed, audit.Freed = res.Removed, res.Freed
@@ -282,6 +310,20 @@ func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pace
 		return nil, audit
 	}
 	return res, audit
+}
+
+// hasCommandGoTmpBase reports whether any of roots holds this user's
+// per-command root base (reliant-gotmp-<uid>) as a real directory.
+func (w *Watcher) hasCommandGoTmpBase(roots []string, uid int) bool {
+	if uid < 0 {
+		return false
+	}
+	for _, dir := range roots {
+		if fi, err := os.Lstat(filepath.Join(dir, commandGoTmpBasePrefix+fmt.Sprint(uid))); err == nil && fi.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 // birthTime is when path was created: its birth time where the filesystem
@@ -324,6 +366,44 @@ func (w *Watcher) auditGoWorkDirs(ctx context.Context, trigger string, a workDir
 	w.appendTrimAudit(ctx, w.reaperPolicyPath(w.reaperConfig()), trimAuditRecord{ //nolint:gosec // G101: Pass names the trim pass, not a credential
 		At: w.now(), Pass: "go_work_dirs", Trigger: trigger, Verdict: verdict, Ran: true, RecordFresh: true, WorkDirs: &a,
 	})
+}
+
+// logWorkDirPass logs one line for a go_work_dirs pass that found any work
+// directory to judge: what it scanned, removed and freed, and what it kept by
+// reason. At INFO when it removed something, so a person can see the daemon
+// reclaiming its own roots on a self-hosted box; a cut-short pass is a WARN;
+// a pass that removed nothing is DEBUG, one every 10 minutes.
+func logWorkDirPass(ctx context.Context, trigger string, a workDirAudit) {
+	if a.Scanned == 0 && a.Error == "" {
+		return
+	}
+	scope := a.Scope
+	if scope == "" {
+		scope = "all"
+	}
+	fields := []any{
+		"trigger", trigger, "scope", scope, "proof", a.Proof, "dirs", a.Dirs,
+		"scanned", a.Scanned, "removed", a.Removed, "freed", FormatBytes(a.Freed),
+		"kept_referenced", a.KeptReferenced, "kept_creator_alive", a.KeptCreatorAlive,
+		"kept_young", a.KeptYoung, "kept_foreign", a.KeptForeign,
+	}
+	if a.OldestCreator != "" {
+		fields = append(fields, "oldest_creator", a.OldestCreator)
+	}
+	if a.Error != "" {
+		fields = append(fields, "error", a.Error)
+	}
+	switch {
+	case a.Scope != "" && a.Error != "":
+		// Only a /proc proof removes a root, so none goes until this clears.
+		logging.WarnContext(ctx, "[diskwatch] Go work dir pass could not prove any GOTMPDIR root dead: the /proc scan failed", fields...)
+	case a.Stopped != "":
+		logging.WarnContext(ctx, "[diskwatch] Go work dir pass stopped early; the next pass resumes", append(fields, "stopped", a.Stopped)...)
+	case a.Removed > 0:
+		logging.InfoContext(ctx, "[diskwatch] Go work dir pass reclaimed dead work directories", fields...)
+	default:
+		logging.DebugContext(ctx, "[diskwatch] Go work dir pass found nothing dead", fields...)
+	}
 }
 
 func containsString(list []string, s string) bool {

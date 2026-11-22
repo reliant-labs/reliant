@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/workflow"
 
@@ -84,6 +85,14 @@ func startRunTelemetry(ctx workflow.Context, input WorkflowInput, execCtx *Execu
 		span.SetAttributes(scope.SpanAttributes()...)
 		if input.ChatID != "" {
 			span.SetAttributes(attribute.String(telemetry.AttrGenAIConversationID, input.ChatID))
+		}
+		// A run a trigger launched is the root of its own trace; it links to
+		// the span that fired it, which may be in another org's trace
+		// (launch.runTraceContext). A link, like an attribute, is no command.
+		if input.Trigger != nil {
+			if firing := telemetry.SpanContextOf(input.Trigger.TraceParent); firing.IsValid() {
+				span.AddLink(trace.Link{SpanContext: firing})
+			}
 		}
 	}
 	return workflow.WithValue(ctx, rootRunIDKey{}, runID)

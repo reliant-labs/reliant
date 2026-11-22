@@ -27,7 +27,13 @@ import (
 // counts how many reads are in flight at once.
 type inflightRepo struct {
 	*MockRepository
+	rec       *MockRecoveries
 	now, peak atomic.Int32
+}
+
+// deps is the service's Deps over r: its repository and its recovery list.
+func (r *inflightRepo) deps() Deps {
+	return Deps{Repo: r, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -46,7 +52,7 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	m.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
@@ -67,7 +73,7 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
+	r.rec.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
@@ -113,7 +119,7 @@ func userCtx() context.Context {
 func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	const hold = 40 * time.Millisecond
 	repo := newInflightRepo(hold)
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 
 	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.NoError(t, err)
@@ -157,11 +163,11 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 		waitForBoth(ctx)
 		return nil, nil
 	}
-	repo.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
+	repo.rec.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
 		waitForBoth(ctx)
 		return nil, nil
 	}
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 
 	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.NoError(t, err)
@@ -176,7 +182,7 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 // set of queries, whatever scope and limit each call asked for.
 func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
 	repo := newInflightRepo(100 * time.Millisecond)
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 	const callers = 8
 	var wg sync.WaitGroup
 	errs := make(chan error, callers)
@@ -204,7 +210,7 @@ func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
 // One caller giving up does not fail the others sharing its read.
 func TestListInbox_ACancelledCallerDoesNotFailASharedRead(t *testing.T) {
 	repo := newInflightRepo(100 * time.Millisecond)
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 	first, cancel := context.WithCancel(userCtx())
 	done := make(chan error, 1)
 	go func() {
@@ -235,7 +241,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newInflightRepo(0)
 			tc.breakIt(repo.MockRepository)
-			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+			svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 			_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
 		})
@@ -250,7 +256,7 @@ func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 	repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
 		return []*core.InboxPending{{Kind: core.InboxPendingApproval, ItemKey: "a1", ProjectID: "p1", WaitingSince: time.Now()}}, nil
 	}
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
 	resp, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Items, 1)
