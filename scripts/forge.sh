@@ -25,15 +25,22 @@
 #      this checkout's pin) `reliant forge` would run the forge built into
 #      reliant instead, so it is that only when reliant's forge IS the pin, and
 #      otherwise the pinned build reliant's hand-off keeps (reliant_pinned).
-#   4. go run …/cmd/forge@<pin>, for a published pin: what a CI runner, which
-#      has Go and neither forge nor reliant, runs.
+#   4. go install …/cmd/forge@<pin>, for a published pin: what a CI runner,
+#      which has Go and neither forge nor reliant, runs. It builds the pin
+#      once into <user cache>/reliant-forge/<pin>/<os>-<arch>/forge
+#      (${XDG_CACHE_HOME:-$HOME/.cache}; never the repo) and execs that, so
+#      forge's own exit status reaches the caller. Not `go run`: it reports
+#      ANY non-zero exit of the program as its own exit 1 (printing `exit
+#      status N`), so every caller that branches on forge's exit codes —
+#      test-flake.sh's 2 "no new or edited tests" — read a 1 instead.
+#      --which builds it too, so the path it prints runs.
 #
 # Nothing found: it says what to install and exits 127.
 #
 # --machine is for the commands that are about this machine, not the project
 # (`slot`: the heavy slots every project and forge version share). Any forge
 # answers those, and they run on every `task`, so they must cost nothing: the
-# same order without the version check, and never a `go run`.
+# same order without the version check, and never a `go install`.
 #
 # Self-test: scripts/test-forge.sh.
 set -euo pipefail
@@ -112,6 +119,33 @@ reliant_pinned() {
   return 1
 }
 
+# go_installed: the pin, built by `go install` once per machine into a cache
+# directory keyed by the pin and platform, then run directly (step 4 above).
+# The build lands in a fresh directory beside the final path and is renamed
+# into place, so a concurrent run sees either no binary or a whole one.
+go_installed() {
+  local dir bin tmp
+  dir=${XDG_CACHE_HOME:-$HOME/.cache}/reliant-forge/$pin/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
+  bin=$dir/forge
+  if [ ! -x "$bin" ]; then
+    mkdir -p "$dir" || exit 1
+    tmp=$(mktemp -d "$dir/.install.XXXXXX") || exit 1
+    # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
+    # (scripts/pin-forge.sh). GOFLAGS is just -trimpath because `go install
+    # pkg@version` refuses a repo-level -mod setting. Its output goes to
+    # stderr: stdout is forge's (and --which's).
+    if ! env GOBIN="$tmp" GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath \
+      go install "$FORGE_MOD/cmd/forge@$pin" >&2; then
+      rm -rf "$tmp"
+      echo "forge.sh: go install $FORGE_MOD/cmd/forge@$pin failed" >&2
+      exit 1
+    fi
+    mv -f "$tmp/forge" "$bin" || { rm -rf "$tmp"; exit 1; }
+    rm -rf "$tmp"
+  fi
+  cmd=("$bin")
+}
+
 resolve() {
   if [ -n "${FORGE_BIN:-}" ]; then
     cmd=("$FORGE_BIN")
@@ -132,13 +166,10 @@ resolve() {
     if reliant_pinned; then
       return
     fi
-    echo "forge.sh: reliant has no build of forge $pin to run outside $root; trying go run" >&2
+    echo "forge.sh: reliant has no build of forge $pin to run outside $root; trying go install" >&2
   fi
   if [ "$machine" = 0 ] && [ "$published" = 1 ] && command -v go >/dev/null 2>&1; then
-    # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
-    # (scripts/pin-forge.sh). GOFLAGS is just -trimpath because `go run
-    # pkg@version` refuses a repo-level -mod setting.
-    cmd=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath go run "$FORGE_MOD/cmd/forge@$pin")
+    go_installed
     return
   fi
   if [ "$machine" = 1 ]; then

@@ -22,6 +22,10 @@ type Deps struct {
 	Store Store
 	// ControlPlane is control-plane's half of the move.
 	ControlPlane ControlPlane
+	// Projects names the moved project in the audit record.
+	Projects Projects
+	// Announcer tells the owner's clients, in the commit's transaction.
+	Announcer Announcer
 	// Triggers turns the triggers the move paused back on.
 	Triggers Triggers
 	// Members counts the target org's live members, which re-stamp the moved
@@ -55,8 +59,8 @@ type service struct {
 //
 // forge:constructor
 func New(deps Deps) (Service, error) {
-	if deps.Store == nil || deps.ControlPlane == nil || deps.Triggers == nil {
-		return nil, fmt.Errorf("orgmove: Store, ControlPlane and Triggers are required")
+	if deps.Store == nil || deps.ControlPlane == nil || deps.Triggers == nil || deps.Projects == nil || deps.Announcer == nil {
+		return nil, fmt.Errorf("orgmove: Store, ControlPlane, Projects, Announcer and Triggers are required")
 	}
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
@@ -131,7 +135,9 @@ func (s *service) Commit(ctx context.Context, moveID string) (Outcome, error) {
 		}
 		commit.TargetLiveMembers, commit.TargetLiveMembersKnown = n, known
 	}
-	res, err := s.deps.Store.MoveProjectOrg(ctx, commit)
+	res, err := s.deps.Store.CommitProjectOrgMove(ctx, commit, func(ctx context.Context, res *core.ProjectOrgMoveResult) error {
+		return s.deps.Announcer.AnnounceProjectMoved(ctx, res.Move.OwnerUserID, res.Move.ProjectID)
+	})
 	switch {
 	case err == nil:
 		return Outcome{}, nil
@@ -220,7 +226,7 @@ func (s *service) Record(ctx context.Context, moveID string) error {
 		return nil
 	}
 	name := m.ProjectID
-	if p, err := s.deps.Store.GetProject(ctx, m.ProjectID); err == nil && p != nil && p.Name != "" {
+	if p, err := s.deps.Projects.GetProject(ctx, m.ProjectID); err == nil && p != nil && p.Name != "" {
 		name = p.Name
 	}
 	if err := s.deps.ControlPlane.RecordProjectOrgMove(ctx, step(m), name, countsWire(m.Counts)); err != nil {

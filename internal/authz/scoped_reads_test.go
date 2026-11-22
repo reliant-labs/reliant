@@ -73,12 +73,10 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves": readCallersFilter,
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
 	"ListDeletedProjects":         readCallersFilter,
-	"FindProjectOrgMoveByRequest": readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
@@ -92,11 +90,6 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUserInScope":      readCallersFilter,
 	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
-	// The shared lists read OTHER users' rows of one org; SharingService
-	// passes each through authz.SharedChatsFor / SharedProjectsFor,
-	// which is where a viewer is decided.
-	"ListSharedProjects": readCallersFilter,
-
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
 	"GetPresetBySlugAndProject":        readParentAuthorized,
@@ -107,10 +100,8 @@ var userScopedReads = map[string]string{
 	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"ListChatsForWorktree":  readParentAuthorized,
 	"RecentTriggerFirings":  readParentAuthorized,
 	"RecentTriggerOutcomes": readParentAuthorized,
-	"WorkflowSlugExists":    readParentAuthorized,
 
 	"GetAnalyticsEnabled": readPersonal,
 	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
@@ -144,7 +135,6 @@ var userScopedReads = map[string]string{
 	"ListHeldWorktreesForUser":          readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountLiveLaunchedRuns":            readBackground,
 	"CountTriggerCapacityHeldByMember": readBackground,
 	"HasEnabledTriggerOfKind":          readBackground,
 	"ListCapacityWakeTargets":          readBackground,

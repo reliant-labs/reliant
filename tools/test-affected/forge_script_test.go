@@ -11,8 +11,9 @@ import (
 // TestForgeScript runs scripts/test-forge.sh, the hermetic self-test of
 // scripts/forge.sh, the forge every task and script runs: FORGE_BIN, then a
 // forge on PATH or in .tools/bin only at the pin, then `reliant forge`, then
-// `go run …@<pin>`, else exit 127; and --machine (the heavy slot) takes any
-// forge and never `go run`.
+// the pin built once by `go install …@<pin>` into the user cache and run
+// directly (forge's exit status passes through, which `go run` lost), else
+// exit 127; and --machine (the heavy slot) takes any forge and never builds one.
 func TestForgeScript(t *testing.T) {
 	testkit.Slow(t, "runs scripts/test-forge.sh (bash subprocesses and fake forge, reliant and go)",
 		testkit.Inputs("scripts/forge.sh", "scripts/test-forge.sh"))
