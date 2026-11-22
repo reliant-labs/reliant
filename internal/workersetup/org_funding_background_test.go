@@ -58,7 +58,7 @@ func (w *orgFundingWorld) title(first string) (string, error) {
 // compact runs a forced compaction of the chat's root thread once.
 func (w *orgFundingWorld) compact() (*handlers.CompactOutput, error) {
 	w.t.Helper()
-	activity := handlers.NewCompactActivity(w.repo, nil).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewCompactActivity(w.repo, handlers.NewToolCalls(w.repo.ORM()), nil).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{

@@ -58,7 +58,7 @@ func TestDurableStatus_BackgroundedToolRecordsWhereItRuns(t *testing.T) {
 // activity, so the activity logger and context it relies on are real.
 func executeSingleToolAsRetry(t *testing.T, f *durableStatusFixture, executor *mockToolExecutor, toolCallID, toolName, toolInput string) message.ToolResult {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor)
 
 	runRetry := func(ctx context.Context) (message.ToolResult, error) {
 		return activityInstance.executeSingleTool(ctx, nil, f.chatID, f.chatID, toolName, toolInput, toolCallID,

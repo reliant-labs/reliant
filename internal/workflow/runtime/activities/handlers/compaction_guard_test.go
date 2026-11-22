@@ -90,7 +90,7 @@ func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}
@@ -127,7 +127,7 @@ func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
@@ -157,7 +157,7 @@ func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	var out CompactOutput

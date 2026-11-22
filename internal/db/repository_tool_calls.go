@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -58,16 +59,6 @@ func (r *Repo) UpsertToolCallResult(ctx context.Context, chatID string, result *
 	return store.UpsertToolCallResult(ctx, r.ORM(), chatID, result)
 }
 
-// GetToolCallResultForMessage reads the result of the call that assistant
-// message messageID carries, or nil. The id alone can name another chat's
-// call; the message cannot.
-func (r *Repo) GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error) {
-	if toolCallID == "" || messageID == "" {
-		return nil, fmt.Errorf("tool call ID and message ID are required")
-	}
-	return store.FindToolCallResultForMessage(ctx, r.ORM(), toolCallID, messageID)
-}
-
 func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 	if id == "" {
 		return nil, fmt.Errorf("tool call ID cannot be empty")
@@ -80,20 +71,6 @@ func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("tool call"), id)
 	}
 	return call, nil
-}
-
-// GetToolCallResult reads the recorded result for a single call, or nil if
-// none was ever written (e.g. a terminal call whose result write lost a race,
-// or a historical Cancelled row that predates durable status).
-func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error) {
-	if toolCallID == "" {
-		return nil, fmt.Errorf("tool call ID cannot be empty")
-	}
-	result, err := store.FindToolCallResult(ctx, r.ORM(), toolCallID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tool call result: %w", err)
-	}
-	return result, nil
 }
 
 // ListToolCallsByMessageIDs batches the message read path's tool-call lookup:

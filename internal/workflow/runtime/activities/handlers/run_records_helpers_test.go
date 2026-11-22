@@ -20,3 +20,13 @@ func workflowStatusDeps(repo WorkflowStatusStore) WorkflowStatusDeps {
 func workflowRunsOf(repo interface{ ORM() *orm.Client }) WorkflowRuns {
 	return NewWorkflowRuns(repo.ORM())
 }
+
+// toolCallsOf is the tool-call roles over repo's ORM handle: a *db.Repo, or a
+// fake embedding one. Anything else (a mock store, nil) has no database, so
+// there are no tool-call rows to read.
+func toolCallsOf(repo any) ToolCalls {
+	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
+		return NewToolCalls(o.ORM())
+	}
+	return nil
+}

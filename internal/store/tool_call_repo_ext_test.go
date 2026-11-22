@@ -192,8 +192,8 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err != nil || got == nil || got.Content != "out '?' tr-c" || fmt.Sprint(got.GrantedTools) != "[shell view]" || *got.MessageID != m4 {
 		t.Fatalf("FindToolCallResult(tr-c) = %+v, %v", got, err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.GrantedTools != nil {
-		t.Fatalf("Repo.GetToolCallResult(tr-b) = %+v; want no grants", got)
+	if got, _ := store.FindToolCallResult(ctx, o, "tr-b"); got == nil || got.GrantedTools != nil {
+		t.Fatalf("FindToolCallResult(tr-b) = %+v; want no grants", got)
 	}
 	if got, err := store.FindToolCallResult(ctx, o, "absent"); err != nil || got != nil {
 		t.Fatalf("FindToolCallResult(absent) = %v, %v", got, err)
@@ -205,7 +205,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, rewrite); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
+	if got, _ := store.FindToolCallResult(ctx, o, "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
 		t.Fatalf("after rewrite: %+v", got)
 	}
 
@@ -217,7 +217,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, broken); err != nil {
 		t.Fatalf("upsert invalid UTF-8 result: %v", err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.Content != "line \uFFFD..." {
+	if got, _ := store.FindToolCallResult(ctx, o, "tr-b"); got == nil || got.Content != "line \uFFFD..." {
 		t.Fatalf("after invalid UTF-8 write: %+v", got)
 	}
 
@@ -238,8 +238,8 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if got, err := store.FindToolCallResultForMessage(ctx, o, "tr-c", m1); err != nil || got != nil {
 		t.Fatalf("FindToolCallResultForMessage(tr-c, m1) = %v, %v; want nil", got, err)
 	}
-	if got, err := f.env.Repo.GetToolCallResultForMessage(ctx, "tr-a", m1); err != nil || got == nil || got.Content != "error" {
-		t.Fatalf("Repo.GetToolCallResultForMessage = %v, %v", got, err)
+	if got, err := store.FindToolCallResultForMessage(ctx, o, "tr-a", m1); err != nil || got == nil || got.Content != "error" {
+		t.Fatalf("FindToolCallResultForMessage = %v, %v", got, err)
 	}
 
 	// Grants: only results that granted something, per thread.

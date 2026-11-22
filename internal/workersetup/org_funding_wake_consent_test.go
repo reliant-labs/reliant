@@ -123,7 +123,7 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 
 	var suite temporaltest.WorkflowTestSuite
 	w.env = suite.NewTestActivityEnvironment()
-	w.activity = handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
+	w.activity = handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), ToolResults: handlers.NewToolCalls(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
 	w.env.RegisterActivity(w.activity.Execute)
 	w.input = types.ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: w.chatID, Thread: w.chatID},

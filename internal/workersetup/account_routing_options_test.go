@@ -77,7 +77,7 @@ func TestAccountRouting_RealWiring_RoutedDriverOptionsMatchTheDefaultPath(t *tes
 
 		var suite temporaltest.WorkflowTestSuite
 		env := suite.NewTestActivityEnvironment()
-		activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil})
+		activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), ToolResults: handlers.NewToolCalls(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil})
 		if routed {
 			activity = activity.WithAccountRouting(accountRouting(repo, nil))
 		}

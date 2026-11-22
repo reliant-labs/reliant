@@ -106,7 +106,7 @@ func readLedger(t *testing.T, h *IdempotencyTestHelper) []ledgerRow {
 
 func runCallLLMWithRetries(t *testing.T, h *IdempotencyTestHelper, driver llm.Driver, chatID string) {
 	t.Helper()
-	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	}, MCPBinder: nil}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 
@@ -226,7 +226,7 @@ func TestCallLLM_UsageLedgerRecordsFailureAsClassOnly(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	driver := &ledgerUsageDriver{name: "claude", failures: 99}
-	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	}, MCPBinder: nil}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	var out CallLLMOutput

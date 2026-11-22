@@ -138,7 +138,7 @@ func newCutOffFixture(t *testing.T, driver *scriptedDriver) *cutOffFixture {
 		h:        h,
 		chatID:   chat.ID,
 		driver:   driver,
-		activity: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
+		activity: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

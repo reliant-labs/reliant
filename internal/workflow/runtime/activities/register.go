@@ -159,9 +159,11 @@ func registerNodeTypeActivities() {
 // This function registers activity instances with their runtime dependencies.
 func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var workflowRuns handlers.WorkflowRuns
+	var toolCalls handlers.ToolCalls
 	var questionsByStep handlers.QuestionsByStep
 	if deps.Repo != nil {
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
+		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
 		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
 	}
 
@@ -184,7 +186,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, ToolResults: toolCalls, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -201,15 +203,15 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, toolCalls, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 

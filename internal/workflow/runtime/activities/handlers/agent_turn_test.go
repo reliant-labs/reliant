@@ -58,7 +58,7 @@ func TestCallLLM_OpensTheAgentTurnAndRecordsItsTraceParent(t *testing.T) {
 	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	input.Runtime.Telemetry = &activitytypes.RunTelemetry{WorkflowName: "agent", RunID: "run-1", Preset: "researcher"}
@@ -100,7 +100,7 @@ func TestCallLLM_OpensTheAgentTurnAndRecordsItsTraceParent(t *testing.T) {
 func TestExecuteTools_OpensEachCallUnderTheTurnThatAskedForIt(t *testing.T) {
 	rec := recordHandlerSpans(t)
 	h, chatID := newValidationChat(t)
-	activity := NewExecuteToolsActivity(h.Repo(), newMockToolExecutor())
+	activity := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), newMockToolExecutor())
 
 	// The asking turn, as CallLLM recorded it.
 	_, turn := otel.Tracer("test").Start(context.Background(), "invoke_agent general")
