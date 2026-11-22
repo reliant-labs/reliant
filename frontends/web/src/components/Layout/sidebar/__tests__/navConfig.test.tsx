@@ -47,11 +47,17 @@ describe("the hybrid nav's shape", () => {
       "observability",
       "analytics",
       "deployments",
+      "tests",
       "data",
       "storage",
       "auth",
       "configure",
     ]);
+  });
+
+  it("puts Tests right after Deployments", () => {
+    const ids = topIds();
+    expect(ids.indexOf("tests")).toBe(ids.indexOf("deployments") + 1);
   });
 
   it("draws Security ▾ only once a page registers into it, with that page's row", () => {
@@ -60,7 +66,7 @@ describe("the hybrid nav's shape", () => {
     expect(flattenIds(hybridNav.items, ctx)).not.toContain("security");
     const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
     try {
-      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "security", "configure"]);
+      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "tests", "data", "storage", "auth", "security", "configure"]);
       expect(flattenIds(hybridNav.items, ctx)).toContain("registered-advisories");
       // Not in Analytics: a Security row joins Security alone.
       const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
