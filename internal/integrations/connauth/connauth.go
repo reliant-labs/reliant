@@ -271,6 +271,18 @@ type integrationPolicy interface {
 	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
 }
 
+// RunOrgOf implements Service (and httpaction.RunOrgSource).
+func (s *source) RunOrgOf(ctx context.Context, runID string) (string, error) {
+	if s == nil || runID == "" {
+		return "", nil
+	}
+	orgs, ok := s.resolver.(runOrgs)
+	if !ok {
+		return "", nil
+	}
+	return orgs.RunOrgOf(ctx, runID)
+}
+
 // AdmitIntegration implements Service (and httpaction.IntegrationGate).
 func (s *source) AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error) {
 	if s == nil {

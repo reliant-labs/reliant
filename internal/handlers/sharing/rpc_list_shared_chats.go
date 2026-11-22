@@ -52,7 +52,7 @@ func (s *Service) ListSharedChats(
 	if app := req.Msg.GetAppName(); app != "" {
 		filters.AppName = &app
 	}
-	chats, err := s.deps.Repo.ListSharedChats(ctx, filters)
+	chats, err := s.deps.Shares.ListSharedChats(ctx, filters)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list shared chats"))
 	}

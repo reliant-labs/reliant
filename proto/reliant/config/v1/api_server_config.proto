@@ -25,6 +25,11 @@ message ApiServerConfig {
     message: "AUTH_MODE=apikey requires AUTH_API_KEY"
     expression: "this.auth_mode != 'apikey' || this.auth_api_key != ''"
   };
+  option (buf.validate.message).cel = {
+    id: "jwt_audience_required"
+    message: "JWT_ISSUER requires JWT_AUDIENCE (the identity project's id)"
+    expression: "this.jwt_issuer == '' || this.jwt_audience != ''"
+  };
 
   // The blocks every server role shares moved to ServerProcessConfig and
   // DatabaseConfig.
@@ -47,6 +52,72 @@ message ApiServerConfig {
     env_var: "RELIANT_JWKS_URL"
     flag: "jwks-url"
     description: "JWKS endpoint URL for JWT validation (alternative to PEM key)"
+  }];
+
+  // The iss and aud a Supabase JWT must carry: SUPABASE_JWT_ISSUER
+  // (https://<project>.supabase.co/auth/v1, or the project's custom domain)
+  // and SUPABASE_JWT_AUDIENCE ("authenticated"), the names control-plane's
+  // validator reads. Empty checks nothing.
+  string supabase_jwt_issuer = 86 [(forge.v1.config) = {
+    env_var: "SUPABASE_JWT_ISSUER"
+    description: "Exact iss a Supabase JWT must carry (empty checks nothing)"
+  }];
+  string supabase_jwt_audience = 87 [(forge.v1.config) = {
+    env_var: "SUPABASE_JWT_AUDIENCE"
+    description: "An aud a Supabase JWT must carry (empty checks nothing)"
+  }];
+
+  // ── The managed identity (forge.ManagedIdentity) ──────────────────────
+  //
+  // forge's standard token-validator fields, which forge.IdentityRef fills
+  // from the env's forge.ManagedIdentity (a Zitadel instance on the control
+  // plane's shared identity deployment, or the dev IdP `forge env up`
+  // converges). With jwt_issuer set, AUTH_MODE=supabase accepts this issuer's
+  // tokens beside Supabase's (internal/auth TokenChain routes each token to
+  // exactly one of them by its iss). Unset, nothing changes.
+  string jwt_issuer = 88 [(forge.v1.config) = {
+    env_var: "JWT_ISSUER"
+    flag: "jwt-issuer"
+    description: "The managed identity's issuer: the exact iss of its tokens (empty: not accepted)"
+  }];
+  string jwt_audience = 89 [(forge.v1.config) = {
+    env_var: "JWT_AUDIENCE"
+    flag: "jwt-audience"
+    description: "An aud the managed identity's tokens must carry: its project id. Required with jwt_issuer"
+  }];
+  string jwt_jwks_url = 91 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_URL"
+    flag: "jwt-jwks-url"
+    description: "The managed identity's JWKS endpoint; empty discovers it from jwt_issuer's OpenID configuration"
+  }];
+  string jwt_signing_method = 92 [(forge.v1.config) = {
+    env_var: "JWT_SIGNING_METHOD"
+    flag: "jwt-signing-method"
+    default_value: "RS256"
+    description: "The alg the managed identity signs its tokens with"
+  }];
+  string jwt_roles_claim = 93 [(forge.v1.config) = {
+    env_var: "JWT_ROLES_CLAIM"
+    flag: "jwt-roles-claim"
+    default_value: "auto"
+    description: "The claim the managed identity's roles are read from (auto: roles, else Zitadel's project roles map)"
+  }];
+  string jwt_jwks_snapshot_file = 94 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT_FILE"
+    flag: "jwt-jwks-snapshot-file"
+    description: "A delivered snapshot of the managed identity's JWKS, to start on while its issuer is down"
+  }];
+  string jwt_jwks_snapshot = 95 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT"
+    sensitive: true
+    optional: true
+    description: "The same JWKS snapshot, inline (sensitive only so it rides the secret path; the keys are public)"
+  }];
+  google.protobuf.Duration jwt_jwks_snapshot_max_age = 96 [(forge.v1.config) = {
+    env_var: "JWT_JWKS_SNAPSHOT_MAX_AGE"
+    flag: "jwt-jwks-snapshot-max-age"
+    default_value: "168h"
+    description: "How old a JWKS snapshot may be and still be used"
   }];
 
   // The email domains allowed to sign in, comma-separated; none allows every
