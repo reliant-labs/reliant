@@ -47,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -424,11 +425,12 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   s.Repo,
-		Syncer: triggerSyncer,
-		Fires:  triggerFires,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Syncer:   triggerSyncer,
+		Fires:    triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 

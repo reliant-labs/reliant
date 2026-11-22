@@ -20,6 +20,32 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
+// forge:section MockOrgMoveResumer
+// forge:hash=24aa5dcc555a954dab86d468ba43820a1ac30a2be0c2abb149fbd1ca2c9b06b3
+
+// MockOrgMoveResumer is a test mock for the OrgMoveResumer interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgMoveResumer.<Method>Func not set" error.
+type MockOrgMoveResumer struct {
+	contractkit.Recorder
+	ResumePausedTriggerFunc func(context.Context, string, string, time.Time) (bool, error)
+}
+
+// ResumePausedTrigger records the call and delegates to ResumePausedTriggerFunc when set.
+func (m *MockOrgMoveResumer) ResumePausedTrigger(ctx context.Context, id string, reason string, seen time.Time) (bool, error) {
+	m.Recorder.Record("ResumePausedTrigger", ctx, id, reason, seen)
+	if m.ResumePausedTriggerFunc != nil {
+		return m.ResumePausedTriggerFunc(ctx, id, reason, seen)
+	}
+	return false, contractkit.MockNotSet("MockOrgMoveResumer", "ResumePausedTrigger")
+}
+
+// Compile-time check.
+var _ OrgMoveResumer = (*MockOrgMoveResumer)(nil)
+
 // forge:section MockOrgResolver
 // forge:hash=4d2cc6317bbaf8446fe92f23a7810192cb935c679f5f297a42c82ae1b35d4ab1
 
@@ -87,7 +113,7 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=27f8ea5ae6c53b6fd22b55cad1d16e61257572d1d57dc5dc6b46dd07c77ddfd3
+// forge:hash=400115501d487044ac779273f8080e94397321de3c9d3017866a6a0afc2972a7
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -111,7 +137,6 @@ type MockRepository struct {
 	AdoptTriggerFunc                   func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
-	ResumeTriggerPausedByFunc          func(context.Context, string, string, time.Time) (bool, error)
 	SetTriggerWebhookSecretFunc        func(context.Context, string, []byte) error
 	SetTriggerWebhookTokenHashFunc     func(context.Context, string, []byte) error
 	GetTriggerWebhookCredentialsFunc   func(context.Context, string) (*core.TriggerWebhookCredentials, error)
@@ -265,15 +290,6 @@ func (m *MockRepository) SetTriggerEnabled(ctx context.Context, id string, enabl
 		return m.SetTriggerEnabledFunc(ctx, id, enabled)
 	}
 	return contractkit.MockNotSet("MockRepository", "SetTriggerEnabled")
-}
-
-// ResumeTriggerPausedBy records the call and delegates to ResumeTriggerPausedByFunc when set.
-func (m *MockRepository) ResumeTriggerPausedBy(ctx context.Context, id string, reason string, seen time.Time) (bool, error) {
-	m.Recorder.Record("ResumeTriggerPausedBy", ctx, id, reason, seen)
-	if m.ResumeTriggerPausedByFunc != nil {
-		return m.ResumeTriggerPausedByFunc(ctx, id, reason, seen)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ResumeTriggerPausedBy")
 }
 
 // SetTriggerWebhookSecret records the call and delegates to SetTriggerWebhookSecretFunc when set.
