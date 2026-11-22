@@ -228,6 +228,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('forge-auth:changed', listener);
       return () => ipcRenderer.removeListener('forge-auth:changed', listener);
     },
+    // The terminal websocket, relayed by the main process (it holds the
+    // socket and the session; frames cross IPC). The renderer passes only
+    // the terminal's query string. frontends/web lib/desktop-terminal-socket.ts.
+    terminal: {
+      open: (query) => ipcRenderer.invoke('forge-auth:terminal-open', String(query || '')),
+      send: (id, data) => ipcRenderer.send('forge-auth:terminal-send', id, data),
+      close: (id, code, reason) => ipcRenderer.invoke('forge-auth:terminal-close', id, code, reason),
+      onEvent: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('forge-auth:terminal-event', listener);
+        return () => ipcRenderer.removeListener('forge-auth:terminal-event', listener);
+      },
+    },
   },
 
   startOAuthRedirect: async () => {

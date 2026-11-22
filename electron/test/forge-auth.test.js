@@ -19,6 +19,8 @@ const {
   DEV_COOKIE_NAME,
   ForgeAuth,
   SECURE_COOKIE_NAME,
+  TERMINAL_PATH,
+  TerminalRelays,
   authProviderOf,
   createApiProxy,
   isFromApp,
@@ -27,6 +29,7 @@ const {
   parseSetCookie,
   sessionCookieName,
   startLoopback,
+  terminalUpstreamUrl,
   upstreamFor,
 } = require('../src/forge-auth');
 
@@ -115,7 +118,9 @@ function fakeBroker({ subject = 'user-1', email = 'p@example.com', consentUrl = 
         sessions.add(id);
         return json(200, { kind: 'native', session: id, token_type: 'Bearer', expires_at: '2100-01-01T00:00:00Z' });
       }
-      const presented = cookie.split('=')[1] || '';
+      const bearer = ((init.headers && init.headers.Authorization) || '').replace(/^Bearer /, '');
+      const presented = bearer || cookie.split('=')[1] || '';
+      calls[calls.length - 1].bearer = bearer;
       if (u.pathname === '/auth/session') {
         return sessions.has(presented)
           ? json(200, { authenticated: true, subject, email })
@@ -156,8 +161,9 @@ function newAuth(broker, overrides = {}) {
 
 test('only AUTH_PROVIDER "forge" selects forge sign-in; anything else keeps Supabase', () => {
   assert.equal(authProviderOf({ AUTH_PROVIDER: 'forge' }), 'forge');
-  assert.equal(authProviderOf({ AUTH_PROVIDER: ' Forge ' }), 'forge');
-  for (const v of [undefined, '', 'supabase', 'forgee', 1]) {
+  // Exactly "forge", as the renderer reads it: a value only one side
+  // normalized would split the two processes across providers.
+  for (const v of [undefined, '', 'supabase', 'forgee', ' Forge ', 'FORGE', 1]) {
     assert.equal(authProviderOf({ AUTH_PROVIDER: v }), 'supabase', String(v));
   }
   assert.equal(authProviderOf(null), 'supabase');
@@ -483,4 +489,248 @@ test('originOf names an app:// sender, which URL.origin cannot', () => {
   assert.equal(originOf('https://evil.example/app://bundle'), 'https://evil.example');
   assert.equal(originOf('not a url'), '');
   assert.equal(originOf(undefined), '');
+});
+
+// ── Ordering: a sign-out or a newer sign-in during a sign-in ──────────────
+
+/** A broker whose redeem answers only when released, to interleave events with it. */
+function deferredRedeem(broker) {
+  const held = [];
+  const inner = broker.fetch;
+  broker.fetch = async (url, init) => {
+    if (new URL(url).pathname === '/auth/handoff/redeem') {
+      const answer = await inner(url, init);
+      await new Promise((release) => held.push(release));
+      return answer;
+    }
+    return inner(url, init);
+  };
+  return {
+    // Resolves when n redeems are being held.
+    waitFor: async (n) => {
+      while (held.length < n) await new Promise((r) => setTimeout(r, 5));
+    },
+    release: (i) => held[i](),
+  };
+}
+
+test('a sign-out during the redeem wins: the redeemed session is revoked, never stored', async () => {
+  const broker = fakeBroker();
+  const gate = deferredRedeem(broker);
+  const { auth, cookies, changes } = newAuth(broker);
+  const signingIn = auth.signIn();
+  await gate.waitFor(1);
+  await auth.signOut();
+  gate.release(0);
+  await assert.rejects(signingIn, { name: 'SignInSuperseded' });
+
+  assert.equal(cookies.jar.size, 0, 'nothing stored after the sign-out');
+  assert.equal(auth.principal, null);
+  assert.equal(auth.storage().loadStoredAuth(), null);
+  assert.equal(broker.sessions.size, 0, 'the abandoned session was ended at the server');
+  const revoke = broker.calls.filter((c) => c.path === '/auth/logout' && c.bearer);
+  assert.equal(revoke.length, 1);
+  assert.equal(revoke[0].cookie, '', 'a revoke presents the abandoned session alone');
+  assert.ok(!changes.some((c) => c.next), 'nobody was announced signed in');
+});
+
+test('a newer sign-in replaces one still redeeming: the older session is revoked, the newer one kept', async () => {
+  const broker = fakeBroker();
+  const gate = deferredRedeem(broker);
+  const { auth, cookies } = newAuth(broker);
+  const first = auth.signIn();
+  await gate.waitFor(1);
+  const second = auth.signIn();
+  await gate.waitFor(2);
+  gate.release(1);
+  const who = await second;
+  gate.release(0);
+  await assert.rejects(first, { name: 'SignInSuperseded' });
+
+  assert.equal(who.subject, 'user-1');
+  const stored = [...cookies.jar.values()];
+  assert.equal(stored.length, 1);
+  assert.ok(broker.sessions.has(stored[0].value), 'the kept session is the live one');
+  assert.equal(broker.sessions.size, 1, 'the older redeemed session was revoked');
+});
+
+test('a principal read that finishes after a sign-out does not sign the person back in', async () => {
+  const broker = fakeBroker();
+  const { auth } = newAuth(broker);
+  await auth.signIn();
+  const inner = broker.fetch;
+  let release;
+  broker.fetch = async (url, init) => {
+    if (new URL(url).pathname === '/auth/session') {
+      const answer = await inner(url, init);
+      await new Promise((r) => (release = r));
+      return answer;
+    }
+    return inner(url, init);
+  };
+  auth.fetch = broker.fetch;
+  const reading = auth.refreshPrincipal('test');
+  while (!release) await new Promise((r) => setTimeout(r, 5));
+  await auth.signOut();
+  release();
+  await reading;
+  assert.equal(auth.principal, null);
+});
+
+// ── Development: the renderer's jar is the source ───────────────────────
+
+test('in development, an in-window sign-in, account switch and sign-out in the renderer jar are followed', async () => {
+  const broker = fakeBroker();
+  const cookies = fakeCookies();
+  const rendererJar = fakeCookies();
+  const DEV = 'http://127.0.0.1:5173';
+  const changes = [];
+  const auth = new ForgeAuth({
+    apiUrl: 'http://127.0.0.1:21710', cookies, fetch: broker.fetch, logger: quiet, openExternal() {},
+    devMirror: { cookies: rendererJar, url: DEV },
+    onPrincipalChange: (prev, next) => changes.push([prev && prev.subject, next && next.subject]),
+  });
+  await auth.init();
+  assert.equal(auth.principal, null);
+
+  // In-window sign-in: the Vite proxy put the broker's cookie in the renderer jar.
+  const one = newSessionId();
+  broker.sessions.add(one);
+  await rendererJar.set({ url: DEV, name: DEV_COOKIE_NAME, value: one });
+  await auth.syncFromRenderer();
+  assert.equal([...cookies.jar.values()][0].value, one, 'the auth partition follows the renderer jar');
+  assert.equal(auth.storage().loadStoredAuth().cookie, `${DEV_COOKIE_NAME}=${one}`);
+  assert.equal(auth.principal.subject, 'user-1');
+
+  // Account switch: another session in the renderer jar.
+  const two = newSessionId();
+  broker.sessions.add(two);
+  const other = { ...broker };
+  broker.fetch = async (url, init) => {
+    const res = await other.fetch(url, init);
+    if (new URL(url).pathname === '/auth/session' && (init.headers.Cookie || '').endsWith(two)) {
+      return json(200, { authenticated: true, subject: 'user-2', email: 'q@example.com' });
+    }
+    return res;
+  };
+  auth.fetch = broker.fetch;
+  await rendererJar.set({ url: DEV, name: DEV_COOKIE_NAME, value: two });
+  await auth.syncFromRenderer();
+  assert.equal(auth.principal.subject, 'user-2');
+  assert.equal([...cookies.jar.values()][0].value, two);
+
+  // In-window sign-out: the renderer jar's cookie is gone.
+  await rendererJar.remove(DEV, DEV_COOKIE_NAME);
+  await auth.syncFromRenderer();
+  assert.equal(cookies.jar.size, 0);
+  assert.equal(auth.principal, null);
+  assert.equal(auth.storage().loadStoredAuth(), null);
+  assert.deepEqual(changes, [[null, 'user-1'], ['user-1', 'user-2'], ['user-2', null]]);
+});
+
+// ── The terminal relay ───────────────────────────────────────────────────
+
+/** A stand-in WebSocket that records what the relay asked for. */
+function fakeWebSocketClass() {
+  const made = [];
+  class FakeWS {
+    constructor(url, init) {
+      this.url = url;
+      this.init = init;
+      this.readyState = 0;
+      this.sent = [];
+      this.closed = null;
+      made.push(this);
+    }
+    send(d) { this.sent.push(d); }
+    close(code, reason) {
+      this.closed = { code, reason };
+      this.readyState = 3;
+      if (this.onclose) this.onclose({ code: code || 1005, reason: reason || '', wasClean: true });
+    }
+    serverOpen() { this.readyState = 1; this.onopen && this.onopen({}); }
+    serverMessage(data) { this.onmessage && this.onmessage({ data }); }
+  }
+  return { FakeWS, made };
+}
+
+async function signedInAuth() {
+  const broker = fakeBroker();
+  const { auth, cookies } = newAuth(broker);
+  await auth.signIn();
+  return { auth, id: [...cookies.jar.values()][0].value };
+}
+
+test('the terminal relay opens the terminal path on reliant-api with the session cookie and only the terminal query', async () => {
+  const { auth, id } = await signedInAuth();
+  const { FakeWS, made } = fakeWebSocketClass();
+  const relays = new TerminalRelays({ auth, WebSocketImpl: FakeWS, logger: quiet });
+  const events = [];
+  const tid = relays.open(7, 'workingDir=%2Ftmp&worktreeId=w1&token=stolen&evil=1&traceparent=00-a-b-01', (e) => events.push(e));
+
+  const ws = made[0];
+  const u = new URL(ws.url);
+  assert.equal(u.protocol, 'wss:');
+  assert.equal(u.host, new URL(API).host);
+  assert.equal(u.pathname, TERMINAL_PATH);
+  assert.equal(u.searchParams.get('workingDir'), '/tmp');
+  assert.equal(u.searchParams.get('worktreeId'), 'w1');
+  assert.equal(u.searchParams.get('traceparent'), '00-a-b-01');
+  assert.equal(u.searchParams.get('token'), null, 'a token never rides the URL');
+  assert.equal(u.searchParams.get('evil'), null);
+  assert.equal(ws.init.headers.Cookie, `${SECURE_COOKIE_NAME}=${id}`);
+  assert.equal(ws.init.headers.Origin, undefined);
+
+  ws.serverOpen();
+  ws.serverMessage('{"type":"init","pid":1}');
+  ws.serverMessage(Buffer.from('raw bytes'));
+  assert.deepEqual(events.map((e) => [e.id, e.type, e.data]), [
+    [tid, 'open', undefined], [tid, 'message', '{"type":"init","pid":1}'], [tid, 'message', 'raw bytes'],
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /fs_/, 'no event carries the session');
+
+  assert.equal(relays.send(7, tid, '{"type":"input","data":"ls\\n"}'), true);
+  assert.deepEqual(ws.sent, ['{"type":"input","data":"ls\\n"}']);
+});
+
+test('a terminal belongs to the window that opened it, and the session ending closes every terminal', async () => {
+  const { auth } = await signedInAuth();
+  const { FakeWS, made } = fakeWebSocketClass();
+  const relays = new TerminalRelays({ auth, WebSocketImpl: FakeWS, logger: quiet });
+  const events = [];
+  const a = relays.open(1, 'workingDir=/a', (e) => events.push(e));
+  relays.open(2, 'workingDir=/b', (e) => events.push(e));
+  made.forEach((w) => w.serverOpen());
+
+  assert.equal(relays.send(2, a, 'x'), false, 'another window cannot write to it');
+  assert.equal(relays.close(2, a), false, 'or close it');
+  assert.equal(made[0].sent.length, 0);
+  assert.equal(relays.send(1, a, { not: 'text' }), false);
+
+  relays.closeOwner(2);
+  assert.equal(made[1].closed.code, 1000);
+  assert.equal(relays.size, 1);
+
+  relays.closeAll('signed out');
+  assert.equal(made[0].closed.code, 4401);
+  const closes = events.filter((e) => e.type === 'close');
+  assert.deepEqual(closes.map((e) => [e.id, e.code]), [[a, 4401]], 'one close per terminal, to its own window');
+  assert.equal(relays.size, 0);
+});
+
+test('signed out there is no terminal relay, and a window cannot hold unbounded terminals', async () => {
+  const { FakeWS } = fakeWebSocketClass();
+  const out = new ForgeAuth({ apiUrl: API, cookies: fakeCookies(), logger: quiet, openExternal() {}, fetch: async () => json(200, {}) });
+  assert.throws(() => new TerminalRelays({ auth: out, WebSocketImpl: FakeWS }).open(1, '', () => {}), /not signed in/);
+
+  const { auth } = await signedInAuth();
+  const relays = new TerminalRelays({ auth, WebSocketImpl: FakeWS, logger: quiet });
+  for (let i = 0; i < 32; i++) relays.open(1, '', () => {});
+  assert.throws(() => relays.open(1, '', () => {}), /too many/);
+  relays.open(2, '', () => {});
+});
+
+test('terminalUpstreamUrl stays on the API and uses ws for a plain-http dev stack', () => {
+  assert.equal(terminalUpstreamUrl('http://127.0.0.1:21710', ''), 'ws://127.0.0.1:21710/api/v2/terminal/ws');
+  assert.equal(terminalUpstreamUrl('https://api.example.test/', { projectId: 'p' }), 'wss://api.example.test/api/v2/terminal/ws?projectId=p');
 });

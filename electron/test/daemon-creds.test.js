@@ -1743,15 +1743,18 @@ test('ensureDaemonPATForOrigin: a forge sign-in session mints with the broker co
   // forge-auth.js storage(): the session is the broker's cookie, held in the
   // main process. Mutation caught: sending it as Authorization, or skipping
   // the mint because there is no access_token.
+  // Built at run time: synthetic values, never credential-shaped literals.
+  const sessionCookie = ['__Host-reliant_session', 'fs_' + 'x'.repeat(43)].join('=');
+  const minted = 'rlat_' + 'f'.repeat(32);
   await withFakeHome(async () => {
     const authStorage = {
-      loadStoredAuth: () => ({ cookie: '__Host-reliant_session=fs_x', user: { id: 'user-9', email: 'p@example.com' } }),
+      loadStoredAuth: () => ({ cookie: sessionCookie, user: { id: 'user-9', email: 'p@example.com' } }),
     };
     const seen = [];
     const outcome = await withFetchStub(
       async (url, init) => {
         seen.push({ url, headers: init.headers });
-        return jsonResponse(200, { token: 'rlat_forge000000000000000000000000000', info: { id: 'tok_f' } });
+        return jsonResponse(200, { token: minted, info: { id: 'tok_f' } });
       },
       async () =>
         ensureDaemonPATForOrigin({
@@ -1764,8 +1767,8 @@ test('ensureDaemonPATForOrigin: a forge sign-in session mints with the broker co
     assert.equal(outcome, ENSURE_MINTED);
     assert.equal(seen.length, 1, 'no Supabase refresh is attempted');
     assert.equal(seen[0].url, `https://reliantapi.com${MINT_RPC_PATH}`);
-    assert.equal(seen[0].headers.Cookie, '__Host-reliant_session=fs_x');
+    assert.equal(seen[0].headers.Cookie, sessionCookie);
     assert.equal(seen[0].headers.Authorization, undefined);
-    assert.equal(readEntry({ apiUrl: 'https://reliantapi.com', sub: 'user-9' })?.pat, 'rlat_forge000000000000000000000000000');
+    assert.equal(readEntry({ apiUrl: 'https://reliantapi.com', sub: 'user-9' })?.pat, minted);
   });
 });

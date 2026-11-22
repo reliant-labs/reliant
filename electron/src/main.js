@@ -1424,6 +1424,7 @@ async function restartBackendForAuthPrincipalChange(previousSession, nextSession
 // process and the renderer it serves always agree.
 let forgeAuth = null;
 let forgeApiProxy = null;
+let forgeTerminals = null;
 let cachedDesktopAuthProvider = null;
 function desktopAuthProvider() {
   if (!cachedDesktopAuthProvider) {
@@ -1443,8 +1444,10 @@ function desktopAuthProvider() {
  */
 function onForgePrincipalChange(previous, next, reason) {
   const asSession = (p) => (p ? { user: { id: p.subject, email: p.email } } : null);
-  if (previous && (!next || next.subject !== previous.subject) && backendManager) {
-    backendManager.clearDaemonCredsForOrigin(previous.subject);
+  if (previous && (!next || next.subject !== previous.subject)) {
+    if (backendManager) backendManager.clearDaemonCredsForOrigin(previous.subject);
+    // A terminal holds the previous person's session: it ends with it.
+    if (forgeTerminals) forgeTerminals.closeAll(next ? "signed in as someone else" : "signed out");
   }
   startBackendRestart({
     restart: () => restartBackendForAuthPrincipalChange(asSession(previous), asSession(next), `forge-auth:${reason}`),
@@ -1476,6 +1479,7 @@ async function startForgeAuth() {
     onPrincipalChange: onForgePrincipalChange,
     logger: log,
   });
+  forgeTerminals = new forgeAuthModule.TerminalRelays({ auth: forgeAuth, logger: log });
   forgeApiProxy = forgeAuthModule.createApiProxy({
     upstreams: { reliant: apiUrl, cp: status.controlPlaneUrl || "" },
     auth: forgeAuth,
@@ -2478,13 +2482,50 @@ ipcMain.handle("forge-auth:session-changed", async (event) => {
   if (!forgeAuth) return { success: false };
   if (!isAppSender(event)) return { success: false };
   try {
-    await forgeAuth.cookie.load();
-    await forgeAuth.refreshPrincipal("renderer");
+    await forgeAuth.syncFromRenderer();
     return { success: true };
   } catch (error) {
     log.warn("[IPC] Could not re-read the forge session:", error.message);
     return { success: false };
   }
+});
+
+// The terminal websocket in packaged forge mode: the main process holds the
+// socket (it carries the session cookie) and relays frames to the window that
+// opened it (forge-auth.js TerminalRelays, for why a relay and not a proxied
+// upgrade). The renderer names only the terminal's query parameters.
+const forgeTerminalOwners = new Set();
+ipcMain.handle("forge-auth:terminal-open", async (event, query) => {
+  if (!forgeTerminals) return { success: false, error: "Forge sign-in is not enabled in this build" };
+  if (!isAppSender(event)) return { success: false, error: "not allowed" };
+  const sender = event.sender;
+  try {
+    const id = forgeTerminals.open(sender.id, query, (payload) => {
+      if (!sender.isDestroyed()) sender.send("forge-auth:terminal-event", payload);
+    });
+    if (!forgeTerminalOwners.has(sender.id)) {
+      forgeTerminalOwners.add(sender.id);
+      const owner = sender.id;
+      sender.once("destroyed", () => {
+        forgeTerminalOwners.delete(owner);
+        if (forgeTerminals) forgeTerminals.closeOwner(owner);
+      });
+    }
+    return { success: true, id };
+  } catch (error) {
+    log.warn("[IPC] Could not open a terminal relay:", error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.on("forge-auth:terminal-send", (event, id, data) => {
+  if (!forgeTerminals || !isAppSender(event)) return;
+  forgeTerminals.send(event.sender.id, id, data);
+});
+
+ipcMain.handle("forge-auth:terminal-close", async (event, id, code, reason) => {
+  if (!forgeTerminals || !isAppSender(event)) return { success: false };
+  return { success: forgeTerminals.close(event.sender.id, id, code, reason) };
 });
 
 function surfaceMainWindowAfterBrowser() {

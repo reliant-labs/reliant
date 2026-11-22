@@ -264,6 +264,15 @@ export interface ElectronAPI {
     // Fires when the main process's session changes (signed in, out, or ended
     // at the server): a refetch trigger for /auth/session, not data.
     onChanged?: (callback: (payload: { signedIn: boolean }) => void) => () => void;
+    // The terminal websocket, relayed by the main process (lib/desktop-terminal-socket.ts).
+    terminal?: {
+      open: (query: string) => Promise<{ success: boolean; id?: string; error?: string }>;
+      send: (id: string, data: string) => void;
+      close: (id: string, code?: number, reason?: string) => Promise<{ success: boolean }>;
+      onEvent: (
+        callback: (event: { id: string; type: "open" | "message" | "error" | "close"; data?: string; code?: number; reason?: string; wasClean?: boolean }) => void,
+      ) => () => void;
+    };
   };
 
   platform: string;

@@ -67,15 +67,18 @@ const DEV_COOKIE_NAME = 'reliant_session';
 const API_PREFIX = '/_api/@';
 
 /**
- * Which sign-in the renderer config selects. Anything but "forge" is Supabase,
- * so a missing or misspelled value keeps today's behaviour.
+ * Which sign-in the renderer config selects. Anything but exactly "forge" is
+ * Supabase, so a missing or misspelled value keeps today's behaviour.
  *
  * @param {Record<string, unknown>} doc the renderer config document
  * @returns {'forge' | 'supabase'}
  */
 function authProviderOf(doc) {
-  const value = doc && typeof doc.AUTH_PROVIDER === 'string' ? doc.AUTH_PROVIDER.trim().toLowerCase() : '';
-  return value === AUTH_PROVIDER_FORGE ? AUTH_PROVIDER_FORGE : AUTH_PROVIDER_SUPABASE;
+  // Exactly "forge", as the renderer reads it (frontends/web
+  // lib/desktop-forge-sign-in.ts authProvider, and the config schema's enum):
+  // a value one side normalizes and the other does not would put the main
+  // process on forge and the renderer on Supabase.
+  return doc && doc.AUTH_PROVIDER === AUTH_PROVIDER_FORGE ? AUTH_PROVIDER_FORGE : AUTH_PROVIDER_SUPABASE;
 }
 
 /**
@@ -289,10 +292,63 @@ class SessionCookie {
     if (this.devMirror) await this.devMirror.cookies.remove(this.devMirror.url, DEV_COOKIE_NAME);
     if (typeof this.cookies.flushStore === 'function') await this.cookies.flushStore();
   }
+
+  /**
+   * Development only: take the session the RENDERER's jar holds for the dev
+   * server origin. There the Vite proxy, not this process, forwards
+   * `/_api/@…`, so an in-window sign-in or sign-out lands in that jar; this
+   * makes the auth partition follow it (a new id, a cleared one, another
+   * account's). Packaged, it re-reads the partition.
+   *
+   * @returns {Promise<boolean>} whether the session changed
+   */
+  async syncFromDevMirror() {
+    const before = this.cached;
+    if (!this.devMirror) {
+      await this.load();
+      return this.cached !== before;
+    }
+    const found = await this.devMirror.cookies.get({ url: this.devMirror.url, name: DEV_COOKIE_NAME });
+    const raw = found && found[0] && found[0].value;
+    const value = isSessionId(raw) ? raw : '';
+    if (value === before) return false;
+    if (value) {
+      const exp = found[0].expirationDate ? new Date(found[0].expirationDate * 1000) : undefined;
+      const secure = this.name === SECURE_COOKIE_NAME;
+      await this.cookies.set({
+        url: this.url, name: this.name, value, path: '/', httpOnly: true, secure, sameSite: 'lax',
+        ...(exp ? { expirationDate: Math.floor(exp.getTime() / 1000) } : {}),
+      });
+    } else {
+      await this.cookies.remove(this.url, this.name);
+    }
+    this.cached = value;
+    if (typeof this.cookies.flushStore === 'function') await this.cookies.flushStore();
+    return true;
+  }
+}
+
+/** Thrown by a sign-in that a sign-out or a newer sign-in replaced. */
+class SignInSuperseded extends Error {
+  constructor() {
+    super('sign-in was replaced by a newer sign-in or a sign-out');
+    this.name = 'SignInSuperseded';
+  }
 }
 
 /**
  * The desktop app's forge sign-in: the handoff, the session, the principal.
+ *
+ * ── Ordering ──────────────────────────────────────────────────────────
+ *
+ * A sign-in spans the person's time in the browser plus two broker calls, and
+ * a sign-out or a second sign-in can happen at any point of it. Every attempt
+ * takes a GENERATION; a sign-out or a newer attempt bumps it, and an attempt
+ * commits nothing once it is no longer current: a session it already redeemed
+ * is revoked at the server instead of stored. Every change to the stored
+ * session and the principal runs through one queue (serialize), and a
+ * principal read that finishes after the session it read has changed is
+ * discarded, so a late answer never resurrects a signed-out person.
  */
 class ForgeAuth {
   /**
@@ -321,17 +377,36 @@ class ForgeAuth {
     /** @type {{ subject: string, email: string, name: string } | null} */
     this.principal = null;
     this.inFlight = null;
+    this.generation = 0;
+    this.queue = Promise.resolve();
+  }
+
+  /** Run fn after every change queued before it; its result or error is the caller's. */
+  serialize(fn) {
+    const run = this.queue.then(fn, fn);
+    this.queue = run.catch(() => {});
+    return run;
   }
 
   /** Load the stored session and who it is. Never throws. */
   async init() {
     try {
-      await this.cookie.load();
+      await this.serialize(() => (this.cookie.devMirror ? this.cookie.syncFromDevMirror() : this.cookie.load()));
       if (this.cookie.value()) await this.refreshPrincipal('startup', { notify: false });
     } catch (err) {
       this.log.warn('[ForgeAuth] could not read the stored session:', err && err.message);
     }
     return this.principal;
+  }
+
+  /**
+   * The renderer says the session changed (an in-window sign-in or
+   * sign-out): follow its jar in development, re-read the partition when
+   * packaged, then re-read who it is.
+   */
+  async syncFromRenderer() {
+    await this.serialize(() => this.cookie.syncFromDevMirror());
+    return this.refreshPrincipal('renderer');
   }
 
   /**
@@ -351,10 +426,19 @@ class ForgeAuth {
     };
   }
 
-  async brokerCall(path, { method = 'GET', body } = {}) {
+  /**
+   * One call to the broker. It presents the stored session as the cookie,
+   * or — `bearer` — the given session id as a bearer and no cookie (revoking
+   * a session that was never stored).
+   */
+  async brokerCall(path, { method = 'GET', body, bearer } = {}) {
     const headers = { Accept: 'application/json' };
-    const cookie = this.cookie.header();
-    if (cookie) headers.Cookie = cookie;
+    if (bearer) {
+      headers.Authorization = `Bearer ${bearer}`;
+    } else {
+      const cookie = this.cookie.header();
+      if (cookie) headers.Cookie = cookie;
+    }
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await this.fetch(`${this.apiUrl}${path}`, {
       method,
@@ -375,12 +459,14 @@ class ForgeAuth {
   /**
    * Read GET /auth/session and record who is signed in. A session the server
    * no longer knows is dropped; an unreachable server keeps everything as it
-   * is (the session may be fine).
+   * is (the session may be fine). An answer about a session that has since
+   * changed is discarded.
    */
   async refreshPrincipal(reason, { notify = true } = {}) {
-    const previous = this.principal;
+    const asked = this.cookie.value();
     let next = null;
-    if (this.cookie.value()) {
+    let known = true;
+    if (asked) {
       const { ok, status, data } = await this.brokerCall('/auth/session');
       if (!ok) throw new Error(`GET /auth/session answered HTTP ${status}`);
       if (data && data.authenticated === true && typeof data.subject === 'string' && data.subject) {
@@ -390,28 +476,46 @@ class ForgeAuth {
           name: typeof data.name === 'string' ? data.name : '',
         };
       } else {
-        await this.cookie.clear();
+        known = false;
       }
     }
-    this.principal = next;
-    if (notify && (previous && previous.subject) !== (next && next.subject)) {
-      this.onPrincipalChange(previous, next, reason);
+    return this.serialize(async () => {
+      if (this.cookie.value() !== asked) return this.principal; // stale: the session changed meanwhile
+      if (!known) await this.cookie.clear();
+      const previous = this.principal;
+      this.principal = next;
+      if (notify && (previous && previous.subject) !== (next && next.subject)) {
+        this.onPrincipalChange(previous, next, reason);
+      }
+      return next;
+    });
+  }
+
+  /** End, at the server, a session this process redeemed but will not keep. */
+  async revokeAbandoned(session) {
+    try {
+      await this.brokerCall('/auth/logout', { method: 'POST', body: {}, bearer: session });
+    } catch (err) {
+      this.log.warn('[ForgeAuth] could not end an abandoned session (it expires on its own):', err && err.message);
     }
-    return next;
   }
 
   /**
    * Sign in through the system browser (forge's sign-in handoff). Resolves
    * with who signed in; the session id stays in this process. A second call
-   * cancels the first (the person closed the tab and clicked again).
+   * replaces the first (the person closed the tab and clicked again), and a
+   * sign-out ends it: see Ordering above.
    */
   async signIn() {
     if (this.inFlight) this.inFlight.close();
+    const gen = ++this.generation;
+    const current = () => gen === this.generation;
     const { verifier, challenge } = newPkcePair();
     const state = base64url(crypto.randomBytes(24));
     const loop = await this.startLoopback({ state });
     this.inFlight = loop;
     try {
+      if (!current()) throw new SignInSuperseded();
       const started = await this.brokerCall('/auth/handoff/start', {
         method: 'POST',
         body: { code_challenge: challenge, code_challenge_method: 'S256', redirect_uri: loop.redirectUri, state },
@@ -420,9 +524,11 @@ class ForgeAuth {
         throw new Error(brokerError('start the sign-in', started));
       }
       const authorizeUrl = this.checkConsentUrl(started.data.authorize_url);
+      if (!current()) throw new SignInSuperseded();
       await this.openExternal(authorizeUrl);
 
       const code = await loop.code;
+      if (!current()) throw new SignInSuperseded();
       // One attempt per code: forge burns it on the first redeem, right or
       // wrong, so a failure here is reported, never retried.
       const redeemed = await this.brokerCall('/auth/handoff/redeem', {
@@ -434,8 +540,15 @@ class ForgeAuth {
         throw new Error(brokerError('finish the sign-in', redeemed));
       }
       const expiresAt = new Date(redeemed.data.expires_at);
-      await this.cookie.set(session, expiresAt);
+      await this.serialize(async () => {
+        if (!current()) {
+          await this.revokeAbandoned(session);
+          throw new SignInSuperseded();
+        }
+        await this.cookie.set(session, expiresAt);
+      });
       const principal = await this.refreshPrincipal('sign-in');
+      if (!current()) throw new SignInSuperseded();
       if (!principal) throw new Error('the new session was not accepted');
       this.log.info('[ForgeAuth] signed in through the system browser');
       return { subject: principal.subject, email: principal.email, name: principal.name };
@@ -466,22 +579,28 @@ class ForgeAuth {
     return u.toString();
   }
 
-  /** Sign out: end the session at the server and forget it here. Never throws. */
+  /**
+   * Sign out: end the session at the server and forget it here. Any sign-in
+   * still in progress is ended too, and commits nothing. Never throws.
+   */
   async signOut() {
     if (this.inFlight) this.inFlight.close();
-    const previous = this.principal;
-    if (this.cookie.value()) {
-      try {
-        await this.brokerCall('/auth/logout', { method: 'POST', body: {} });
-      } catch (err) {
-        // The session is forgotten here anyway; at the server it ends at its
-        // idle or absolute expiry.
-        this.log.warn('[ForgeAuth] sign-out could not reach the server:', err && err.message);
+    this.generation++;
+    await this.serialize(async () => {
+      const previous = this.principal;
+      if (this.cookie.value()) {
+        try {
+          await this.brokerCall('/auth/logout', { method: 'POST', body: {} });
+        } catch (err) {
+          // The session is forgotten here anyway; at the server it ends at
+          // its idle or absolute expiry.
+          this.log.warn('[ForgeAuth] sign-out could not reach the server:', err && err.message);
+        }
       }
-    }
-    await this.cookie.clear();
-    this.principal = null;
-    if (previous) this.onPrincipalChange(previous, null, 'sign-out');
+      await this.cookie.clear();
+      this.principal = null;
+      if (previous) this.onPrincipalChange(previous, null, 'sign-out');
+    });
   }
 
   /**
@@ -494,20 +613,23 @@ class ForgeAuth {
    * @returns {Promise<boolean>} whether the session changed
    */
   async applySetCookies(setCookies) {
-    let changed = false;
-    for (const line of setCookies || []) {
-      const parsed = parseSetCookie(line);
-      if (!parsed || (parsed.name !== SECURE_COOKIE_NAME && parsed.name !== DEV_COOKIE_NAME)) continue;
-      if (parsed.cleared || !isSessionId(parsed.value)) {
-        if (this.cookie.value()) {
-          await this.cookie.clear();
-          changed = true;
+    const changed = await this.serialize(async () => {
+      let any = false;
+      for (const line of setCookies || []) {
+        const parsed = parseSetCookie(line);
+        if (!parsed || (parsed.name !== SECURE_COOKIE_NAME && parsed.name !== DEV_COOKIE_NAME)) continue;
+        if (parsed.cleared || !isSessionId(parsed.value)) {
+          if (this.cookie.value()) {
+            await this.cookie.clear();
+            any = true;
+          }
+        } else if (parsed.value !== this.cookie.value()) {
+          await this.cookie.set(parsed.value, parsed.expiresAt);
+          any = true;
         }
-      } else if (parsed.value !== this.cookie.value()) {
-        await this.cookie.set(parsed.value, parsed.expiresAt);
-        changed = true;
       }
-    }
+      return any;
+    });
     if (changed) {
       try {
         await this.refreshPrincipal('session-cookie');
@@ -557,6 +679,167 @@ function parseSetCookie(line, now = Date.now()) {
     }
   }
   return { name, value, cleared, expiresAt };
+}
+
+// ── The terminal websocket relay ─────────────────────────────────────────
+//
+// The terminal is a WebSocket (reliant-api /api/v2/terminal/ws), and the
+// app:// protocol handler cannot upgrade a connection. Two ways keep the
+// session out of the renderer:
+//
+//   - proxy the upgrade with the cookie attached: either a loopback listener
+//     the renderer connects to (any local process, and any page in a browser
+//     tab, could connect too, so it would need one-time tickets), or injecting
+//     the cookie into the renderer's own handshake (webRequest), which the
+//     browser tabs sharing that session would also pass through;
+//   - THIS: the main process opens the socket and relays its frames over
+//     IPC. Nothing listens, the renderer names only the query (an allowlist of
+//     the terminal's parameters, never a URL), the upstream is always the
+//     terminal path on reliant-api, each socket belongs to the window that
+//     opened it, and a sign-out closes them all.
+//
+// The renderer side is frontends/web/src/lib/desktop-terminal-socket.ts: a
+// WebSocket-shaped object over the preload's forgeAuth.terminal bridge.
+
+/** The terminal websocket on reliant-api (internal/grpc/server.go). */
+const TERMINAL_PATH = '/api/v2/terminal/ws';
+
+/** The query parameters a terminal connection may carry; never `token`. */
+const TERMINAL_QUERY_KEYS = ['workingDir', 'worktreeId', 'projectId', 'chatId', 'reconnect', 'traceparent', 'tracestate'];
+
+/** How many terminals one window may hold open. */
+const MAX_TERMINALS_PER_OWNER = 32;
+
+/**
+ * The upstream terminal URL for a renderer's query: ws(s) on reliant-api,
+ * the terminal path, and only the allowlisted parameters.
+ *
+ * @param {string} apiUrl
+ * @param {string | Record<string, string>} query
+ */
+function terminalUpstreamUrl(apiUrl, query) {
+  const base = new URL(apiUrl);
+  const u = new URL(`${apiUrl.replace(/\/+$/, '')}${TERMINAL_PATH}`);
+  if (u.origin !== base.origin) throw new Error('terminal URL left the API');
+  u.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+  const given = new URLSearchParams(typeof query === 'string' ? query : query || {});
+  for (const key of TERMINAL_QUERY_KEYS) {
+    const value = given.get(key);
+    if (value !== null && value.length <= 4096) u.searchParams.set(key, value);
+  }
+  return u.toString();
+}
+
+/** Stop a socket's events: its close was already reported (or nobody is left to tell). */
+function detach(ws) {
+  ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+}
+
+/** A close code the renderer may ask for (1000, or an application code). */
+function closeCodeFrom(code) {
+  return code === 1000 || (Number.isInteger(code) && code >= 3000 && code <= 4999) ? code : undefined;
+}
+
+/**
+ * The open terminal relays: sockets this process holds for renderer windows.
+ */
+class TerminalRelays {
+  /**
+   * @param {{ auth: ForgeAuth, WebSocketImpl?: typeof WebSocket, logger?: object }} opts
+   */
+  constructor({ auth, WebSocketImpl, logger }) {
+    this.auth = auth;
+    this.WebSocketImpl = WebSocketImpl || globalThis.WebSocket;
+    this.log = logger || { info() {}, warn() {} };
+    this.sockets = new Map(); // id -> { ws, owner, emit }
+    this.nextId = 1;
+  }
+
+  /**
+   * Open a terminal for owner (a window's webContents id). emit receives
+   * {id, type: 'open'|'message'|'error'|'close', data?, code?, reason?,
+   * wasClean?}. Throws when signed out or over the per-window limit.
+   */
+  open(owner, query, emit) {
+    const cookie = this.auth.cookie.header();
+    if (!cookie) throw new Error('not signed in');
+    let held = 0;
+    for (const s of this.sockets.values()) if (s.owner === owner) held++;
+    if (held >= MAX_TERMINALS_PER_OWNER) throw new Error('too many open terminals');
+    if (typeof this.WebSocketImpl !== 'function') throw new Error('this build has no WebSocket client');
+
+    const id = `t${this.nextId++}`;
+    // No Origin: the server admits a cookie-authenticated upgrade from a
+    // non-browser (internal/handlers/terminal sameOriginUpgrade).
+    const ws = new this.WebSocketImpl(terminalUpstreamUrl(this.auth.apiUrl, query), { headers: { Cookie: cookie } });
+    try {
+      ws.binaryType = 'arraybuffer';
+    } catch {
+      // not settable on this implementation
+    }
+    const entry = { ws, owner, emit };
+    this.sockets.set(id, entry);
+    const deliver = (event) => {
+      try {
+        emit({ id, ...event });
+      } catch (err) {
+        this.log.warn('[ForgeAuth] terminal event could not be delivered:', err && err.message);
+      }
+    };
+    ws.onopen = () => deliver({ type: 'open' });
+    ws.onmessage = (e) => {
+      const data = typeof e.data === 'string' ? e.data : Buffer.from(e.data).toString('utf8');
+      deliver({ type: 'message', data });
+    };
+    ws.onerror = () => deliver({ type: 'error' });
+    ws.onclose = (e) => {
+      this.sockets.delete(id);
+      deliver({ type: 'close', code: e.code, reason: e.reason || '', wasClean: Boolean(e.wasClean) });
+    };
+    return id;
+  }
+
+  /** Send a text frame on owner's socket id. False when it is not owner's or not open. */
+  send(owner, id, data) {
+    const entry = this.sockets.get(id);
+    if (!entry || entry.owner !== owner || typeof data !== 'string') return false;
+    if (entry.ws.readyState !== 1) return false;
+    entry.ws.send(data);
+    return true;
+  }
+
+  /** Close owner's socket id. */
+  close(owner, id, code, reason) {
+    const entry = this.sockets.get(id);
+    if (!entry || entry.owner !== owner) return false;
+    entry.ws.close(closeCodeFrom(code), typeof reason === 'string' ? reason.slice(0, 120) : undefined);
+    return true;
+  }
+
+  /** Close every socket of a window (it went away). */
+  closeOwner(owner) {
+    for (const [id, entry] of this.sockets) {
+      if (entry.owner === owner) {
+        this.sockets.delete(id);
+        detach(entry.ws);
+        entry.ws.close(1000, 'window closed');
+      }
+    }
+  }
+
+  /** Close every socket (the session ended: a sign-out, another person). */
+  closeAll(reason) {
+    for (const [id, entry] of this.sockets) {
+      this.sockets.delete(id);
+      detach(entry.ws);
+      entry.ws.close(4401, reason);
+      entry.emit({ id, type: 'close', code: 4401, reason, wasClean: true });
+    }
+  }
+
+  get size() {
+    return this.sockets.size;
+  }
 }
 
 // ── The app:// API proxy ────────────────────────────────────────────────
@@ -704,6 +987,10 @@ module.exports = {
   DEV_COOKIE_NAME,
   ForgeAuth,
   SECURE_COOKIE_NAME,
+  SignInSuperseded,
+  TERMINAL_PATH,
+  TerminalRelays,
+  terminalUpstreamUrl,
   SessionCookie,
   authProviderOf,
   createApiProxy,
