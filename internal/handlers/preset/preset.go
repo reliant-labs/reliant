@@ -27,7 +27,7 @@ import (
 // store's NotFound (core.ErrProjectNotFound) if the project doesn't exist or
 // belongs to someone else, Internal if it could not be read.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	return svcerr.WrapOr(err, svcerr.Internal("database error"))
 }
 

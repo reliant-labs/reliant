@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -69,7 +71,7 @@ func TestForkOrphanedWorkflow(t *testing.T) {
 	}
 	orphan, livs := saved(cora), saved("liv")
 	adasProject := project("ada")
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	fork := func(ctx context.Context, id, projectID string) (*reliantv1.ForkOrphanedWorkflowResponse, error) {
 		resp, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{WorkflowId: id, ProjectId: projectID}))
 		if err != nil {

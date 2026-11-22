@@ -13,8 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -726,145 +724,15 @@ func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType r
 	})
 }
 
-// GetLatestNonMessageUpdatesPerEntity returns, for each entity in a chat, only
-// the newest non-message chat_update row.
+// GetLatestNonMessageUpdatesPerEntity is store.LatestNonMessageUpdatesPerEntity's
+// answer through the heads table where the chat's counter vouches for it
+// (store.SnapshotUpdateHeads). The streaming handler reads through its own
+// Heads role; this stays for the tests of other areas that read it.
 //
-// This replaces the pattern of reading GetUpdatesSince(chatID, 0, 10000) and
-// discarding message updates in Go, which was both slow and WRONG:
-//
-//   - Wrong: the LIMIT applied to a sequence-ASCENDING scan of ALL update
-//     types. Message updates dominate the table, so on a long-lived chat the
-//     cap was consumed by rows the caller then threw away, and genuinely
-//     needed non-message updates past the cap never reached the client. The
-//     OLDEST rows evicted the NEWEST — the opposite of what a snapshot wants.
-//     Because the snapshot's sequence high-water mark is computed separately,
-//     those dropped updates were never backfilled by gap detection either.
-//
-//   - Slow: it read (and JSON-unmarshalled) every message update's payload,
-//     and GetUpdatesSince enriches message updates with an N+1 per-row
-//     GetMessage + ListContentBlocks fan-out — all of it wasted, since the
-//     caller drops every message row.
-//
-// Filtering by type in SQL and keeping one row per entity makes the result
-// complete by construction: there is no cap to evict anything.
-//
-// STREAM_FINALIZED is excluded as well. Those markers exist only to retire
-// in-flight streaming placeholders ("any delta carrying this message_id is a
-// stale tail"), and a fresh snapshot has no in-flight deltas to retire — the
-// finalized messages are already present as persisted rows. They are pure
-// weight on the initial load, and on a long chat they are thousands of rows.
+// Deprecated: use store.ChatUpdateExtStore.SnapshotUpdateHeads.
 func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]ChatUpdate, error) {
-	// DISTINCT ON keeps the first row per identity under the ORDER BY, i.e.
-	// the highest sequence_number — matching the "last write per entity wins"
-	// dedup the Go caller used to do.
-	//
-	// (Tool-call updates used to be deduped here by JSON tool_call_id; they are
-	// no longer read by this query at all — see below.)
-	//
-	// Question updates need the same treatment, for a user-visible reason. A
-	// question writes TWO rows over its life — "pending" when the gate opens
-	// and "resolved" when it is answered — and EntityIDForQuestion also embeds
-	// a timestamp, so per-entity_id dedup keeps BOTH. The snapshot then replays
-	// the stale "pending" row to a client that is opening the chat, and an
-	// already-answered question renders until the "resolved" row is applied
-	// behind it. That is the "answered ask briefly pops up on open" flash.
-	// Collapsing to the latest status per question makes the pending row
-	// unreachable rather than merely short-lived.
-	//
-	// Question ids are UUIDs, which contain '-', so split_part cannot pick them
-	// out the way it does for tool calls. The timestamp suffix has no '-' of
-	// its own, so stripping the final '-' segment yields "question-<uuid>" —
-	// stable across both transitions, and distinct per question.
-	//
-	// Thread updates need it for a different reason: their entity_id is the
-	// WORKFLOW id, not the thread id (emitThreadUpdate keys on input.WorkflowID).
-	// An inline fork reuses its parent's workflow id, so one workflow id can own
-	// several threads AND is shared with that workflow's workflow_status rows.
-	// Under entity_id dedup those all land in one bucket and the newest wins:
-	// completing a run wrote a workflow_status that EVICTED the fork's only
-	// announcement, so the snapshot carried no origin for the thread,
-	// InterleavedTimeline could not classify it, and every message on it was
-	// dropped from the timeline. Measured on a real database: 3,196 announcements
-	// across 180 chats. The bug hid behind the live stream, which carries origin
-	// directly — the thread rendered fine while running and vanished on reload.
-	//
-	// The payload's `thread` is the identity actually being deduped, so key on
-	// it. The 'thread:' prefix keeps that key in its own namespace: thread ids
-	// and workflow ids are both bare UUIDs, and an inline fork's workflow id IS
-	// the main thread's id, which would otherwise collide with the main thread's
-	// own bucket.
-	//
-	// Tool calls are NOT read here at all. They were 25,660 of 27,279 rows on
-	// the measured chat and dominated both the sort and the payload; the
-	// snapshot now synthesizes the few it needs from the durable tool_calls
-	// table (see snapshotToolCalls). Excluding them also lets this read use a
-	// skip-scan over idx_chat_updates_snapshot_entity_heads, whose partial
-	// predicate excludes exactly the types this read does not walk.
-	//
-	// Shape: a recursive skip-scan (one index probe per DISTINCT entity_id)
-	// for every type that dedups by entity_id, plus a separate small read of
-	// the types that re-key (THREAD, QUESTION). The split is load-bearing: a
-	// pure per-entity_id skip-scan LOSES rows, because thread updates share
-	// entity_id (the workflow id) with workflow_status rows, so the newest of
-	// the two would evict the other (measured: 198 workflow_status rows
-	// dropped). Re-keyed types are few (656 + 0 on the measured chat), so they
-	// can afford the CASE-key DISTINCT ON; everything else is bounded by the
-	// number of entities, not the number of updates. Measured on a 2.48M-row
-	// table: ~3-4s before, ~100ms after, with identical results minus tool
-	// calls.
-	//
-	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
-	// the re-keyed types, keyed by their dedup key. Without such an index the
-	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
-	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
-	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
-	//
-	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
-	// keyed per workflow and per workflow node, so every run a chat ever made
-	// added entities to walk (prod: this read at p50 0.2s, p95 2.5s, max 11s),
-	// and nothing a chat open renders reads them. The client only logs workflow
-	// status; node state feeds the run-status views, which read their one
-	// workflow's nodes through GetLatestWorkflowNodeUpdates when they open.
-	//
-	// AGENT_MESSAGES_DRAINED is excluded too. It is a live-only signal: it
-	// tells an open pending-queue strip to retire mailbox rows in the same
-	// commit as the transcript messages they became. Every drain has its own
-	// entity_id, so per-entity dedup kept the chat's ENTIRE drain history —
-	// 624 rows / 90KB of a 1.72MB snapshot on chat 8bb0a875 — and a snapshot
-	// has no strip to reconcile: the mailbox hook re-reads
-	// ListQueuedAgentMessages when it mounts. Live and replay delivery still
-	// carry it (a client that missed a drain while connected-but-lagging can
-	// still be showing the rows it retires).
-	//
-	// The update types are LITERALS, not bind parameters, and that is
-	// load-bearing. The planner can use a partial index only when it can PROVE
-	// the query's predicate implies the index's, and it can prove that only
-	// from values it sees at plan time. pgx prepares statements, and Postgres
-	// switches a prepared statement to a generic plan after five executions —
-	// one that cannot see a bound $2..$6. With parameters, that generic plan
-	// lost idx_chat_updates_snapshot_heads and fell back to a per-entity scan
-	// of the chat's whole history: measured >20s (cancelled) on the dev copy.
-	// TestSnapshotHeadsQueryMatchesPartialIndex pins these literals to the
-	// enum values and to both index predicates in the migrations.
-	//
-	// The statement and the literal-vs-parameter reasoning are
-	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
-	// pins its literals to the enum values and to both index predicates.
-	//
-	// That statement is now the fallback. The heads are materialized in
-	// chat_update_heads, in the transaction of every log write, and read from
-	// there when the chat's stream counter vouches for them; a chat the
-	// previous release wrote to, or one not yet backfilled, reads the log as
-	// above (store.SnapshotUpdateHeads, dev-docs/design/chat-update-heads.md).
-	// Which one served is recorded on the caller's span (the snapshot's
-	// chat_snapshot.update_heads) as chat_snapshot.update_heads.source.
-	updates, source, err := store.SnapshotUpdateHeads(ctx, r.ORM(), chatID)
-	if err != nil {
-		return nil, err
-	}
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
-	return updates, nil
+	updates, _, err := store.SnapshotUpdateHeads(ctx, r.ORM(), chatID)
+	return updates, err
 }
 
 // GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
@@ -1428,14 +1296,6 @@ func (r *Repo) QueueChatForMachine(ctx context.Context, chatID string, machine *
 // every user's.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
 	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
-}
-
-// SetChatRunID records runID as the run currently executing the chat's root
-// workflow (workflowID), and reports whether it changed. Each root run calls it
-// as it starts, so a continue-as-new successor or a reset replaces the closed
-// run's id rather than leaving the chat naming it.
-func (r *Repo) SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error) {
-	return store.SetChatRunID(ctx, r.ORM(), chatID, workflowID, runID)
 }
 
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker

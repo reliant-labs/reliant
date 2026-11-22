@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -146,7 +148,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Syncer: syncer, Fires: fires,
+		Repo: repo, Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
@@ -293,6 +295,9 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		Items:      extstore.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:    extstore.NewTriggerEventExtStore(repo.ORM()),
+		Notices:    extstore.NewTriggerExtStore(repo.ORM()),
 		Recoveries: extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      extstore.NewWorktreeExtStore(repo.ORM()),
 	})

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -38,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -164,7 +166,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	rig.natsURL = srv.ClientURL()
 	gatewayNATS := rig.connectNATS(t)
 	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{
-		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: rig.repo,
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()),
 		ResultPublisher: toolexec.NewToolResultPublisher(gatewayNATS),
 	})
 	require.NoError(t, err)

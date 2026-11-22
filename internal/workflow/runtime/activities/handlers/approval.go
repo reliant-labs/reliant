@@ -356,6 +356,9 @@ func (a *ApprovalResolveActivity) Category() schema.ActivityCategory {
 // is announced on the chat feed, or clients keep showing it as pending. A
 // person's decision that landed first is kept.
 func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalResolveInput) (ApprovalResolveOutput, error) {
+	if a.repo == nil {
+		return ApprovalResolveOutput{}, fmt.Errorf("approval resolution store is not configured")
+	}
 	logger := activity.GetLogger(ctx)
 	logger.Info("[ApprovalResolve] Resolving approval",
 		"approvalID", input.ApprovalID,

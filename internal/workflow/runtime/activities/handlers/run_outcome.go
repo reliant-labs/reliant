@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -26,7 +26,7 @@ const runStartSkew = 5 * time.Second
 // node whose failure the run went on past.
 type runOutcome struct {
 	outcome string
-	handled *db.HandledNodeFailure
+	handled *store.HandledNodeFailure
 }
 
 // resolveRunOutcome judges input's run as it ends. Lifecycle status is not
@@ -58,7 +58,7 @@ func (a *WorkflowStatusActivity) resolveRunOutcome(ctx context.Context, input Wo
 	if input.RunStartedAtMs > 0 {
 		since = time.UnixMilli(input.RunStartedAtMs).Add(-runStartSkew)
 	}
-	handled, err := a.repo.FirstHandledNodeFailure(ctx, input.WorkflowID, input.RunID, since)
+	handled, err := a.runs.FirstHandledNodeFailure(ctx, input.WorkflowID, input.RunID, since)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read the run's node attempts; judging it succeeded",
 			"workflow_id", input.WorkflowID, "error", err)
@@ -72,7 +72,7 @@ func (a *WorkflowStatusActivity) resolveRunOutcome(ctx context.Context, input Wo
 
 // handledFailureDetail describes a handled failure for whoever reads the
 // trigger's health: the run completed, and which node failed on the way.
-func handledFailureDetail(h *db.HandledNodeFailure) string {
+func handledFailureDetail(h *store.HandledNodeFailure) string {
 	if h == nil {
 		return ""
 	}

@@ -89,7 +89,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		input.Thread = chatID + "/child"
 	}
 	var output WorkflowStatusOutput
-	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(h.Repo()).Execute, input, &output))
+	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())).Execute, input, &output))
 	require.True(t, output.Success)
 
 	chat, err := h.Repo().GetChat(ctx, chatID)

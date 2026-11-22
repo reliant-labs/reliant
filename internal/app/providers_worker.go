@@ -569,10 +569,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(repo, d.Router),
+		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),
@@ -712,6 +712,18 @@ type TemporalWorkerDeps struct {
 // orgAdminNotifier is the control plane as the worker's notifier of an org's
 // admins, nil without one (a nil interface, never a nil client in one).
 func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
+// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
+// step keys, nil without one (a nil interface, never a nil client in one):
+// every run node with llm_gateway is then refused. A control plane the worker
+// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
+// the same way.
+func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
 	if d.Router == nil || d.Router.ControlPlane == nil {
 		return nil
 	}
@@ -867,6 +879,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

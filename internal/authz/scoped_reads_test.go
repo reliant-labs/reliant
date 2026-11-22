@@ -54,7 +54,6 @@ var userScopedReads = map[string]string{
 
 	"ListArchivedChats":        readCallersFilter,
 	"ListChats":                readCallersFilter,
-	"ListInboxPending":         readCallersFilter,
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,
@@ -65,8 +64,6 @@ var userScopedReads = map[string]string{
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
 	// caller's own, decided by CanReadTrigger, or one of an org they
 	// administer (control-plane's live answer).
-	"ListNoOrgAccountPauses":       readCallersFilter,
-	"ListPersonallyFundedTriggers": readCallersFilter,
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).
@@ -100,10 +97,8 @@ var userScopedReads = map[string]string{
 	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"RecentTriggerFirings":  readParentAuthorized,
-	"RecentTriggerOutcomes": readParentAuthorized,
+	"RecentTriggerFirings": readParentAuthorized,
 
-	"GetAnalyticsEnabled":         readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":   readPersonal,
@@ -111,11 +106,9 @@ var userScopedReads = map[string]string{
 	"GetMachinePoolByName":        readPersonal,
 	"GetMachinePoolForUser":       readPersonal,
 	"GetPresetBySlug":             readPersonal,
-	"GetPrivacySettings":          readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
 	"ListCommandFavorites":        readPersonal,
-	"ListDismissedInboxItemIDs":   readPersonal,
 	"ListLLMUsageDaily":           readPersonal,
 	"ListLLMUsageDetail":          readPersonal,
 	"ListMachinePoolsForUser":     readPersonal,

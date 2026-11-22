@@ -35,7 +35,7 @@ func (r *threadCompletesDuringSnapshotRepo) GetLatestUpdateSequence(context.Cont
 	return 5, nil
 }
 
-func (r *threadCompletesDuringSnapshotRepo) GetLatestNonMessageUpdatesPerEntity(context.Context, string) ([]db.ChatUpdate, error) {
+func (r *threadCompletesDuringSnapshotRepo) SnapshotUpdateHeads(context.Context, string) ([]db.ChatUpdate, string, error) {
 	select {
 	case <-r.threadsCalled:
 	case <-time.After(200 * time.Millisecond):
@@ -52,13 +52,13 @@ func (r *threadCompletesDuringSnapshotRepo) GetLatestNonMessageUpdatesPerEntity(
 		"status":      "completed",
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	return []db.ChatUpdate{{
 		ID: "update-5", ChatID: raceTestChatID, SequenceNumber: 5,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD,
 		EntityID:   lifecycleSpawnThreadID, Data: data, CreatedAt: time.Now(),
-	}}, nil
+	}}, "", nil
 }
 
 func (r *threadCompletesDuringSnapshotRepo) ListThreadsByConversation(context.Context, string) ([]*db.Thread, error) {
@@ -87,7 +87,7 @@ func TestChatSnapshot_ThreadCompletingDuringSnapshotIsNotShownRunning(t *testing
 	}
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, raceTestUserID)
 
-	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, raceTestChatID)
+	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, raceTestChatID)
 	require.NoError(t, err)
 	require.Equal(t, int64(5), latestSeq)
 
