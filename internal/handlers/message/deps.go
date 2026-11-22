@@ -16,5 +16,11 @@ type Repository interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*db.Attachment, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
-	SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error)
+}
+
+// Senders titles the senders of the messages a read assembles (a sender that
+// is another run's main thread is titled by that run).
+// store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }

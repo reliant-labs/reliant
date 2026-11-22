@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/forge/pkg/orm"
-
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -22,59 +21,7 @@ type LLMUsageDay = store.LlmCallUsageDaily
 
 // LLMCallUsageRetention is how long the per-call rows live. The daily rollup
 // is kept; docs/help/privacy.mdx states this number.
-const LLMCallUsageRetention = 90 * 24 * time.Hour
-
-// llmUsagePruneBatch bounds one retention DELETE, so a backlog is worked off in
-// short transactions rather than one long one.
-const llmUsagePruneBatch = 5000
-
-// RecordLLMCallUsage writes one provider request and its rollup. A request is
-// (rec.ID, rec.Attempt): each Temporal attempt is its own call and is counted,
-// and only a repeated write of the same attempt changes nothing. A user whose
-// account was purged is refused (false, nil). Reports whether anything was
-// written.
-func (r *Repo) RecordLLMCallUsage(ctx context.Context, rec LLMCallUsage) (bool, error) {
-	var written bool
-	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		var err error
-		written, err = store.RecordLLMCallUsage(ctx, r.ORM(), rec)
-		return err
-	})
-	if err != nil {
-		return false, fmt.Errorf("record llm call usage: %w", err)
-	}
-	return written, nil
-}
-
-// PruneLLMCallUsage deletes the per-call rows older than LLMCallUsageRetention
-// at now, in batches, and returns how many. The rollup keeps their totals.
-func (r *Repo) PruneLLMCallUsage(ctx context.Context, now time.Time) (int64, error) {
-	cutoff := now.Add(-LLMCallUsageRetention)
-	var total int64
-	for {
-		n, err := store.PruneLLMCallUsage(orm.Detached(ctx), r.ORM(), cutoff, llmUsagePruneBatch)
-		total += n
-		if err != nil {
-			return total, fmt.Errorf("prune llm call usage: %w", err)
-		}
-		if n < llmUsagePruneBatch {
-			return total, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return total, err
-		}
-	}
-}
-
-// PruneLLMUsagePurgeFences deletes the account-deletion fences old enough that
-// no call in flight at deletion can still be running.
-func (r *Repo) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time) (int64, error) {
-	n, err := store.PruneLLMUsagePurgeFences(orm.Detached(ctx), r.ORM(), now)
-	if err != nil {
-		return 0, fmt.Errorf("prune llm usage purge fences: %w", err)
-	}
-	return n, nil
-}
+const LLMCallUsageRetention = llmusage.Retention
 
 // ListLLMUsageDaily returns the user's rollup rows for the UTC days from..to
 // inclusive, oldest first. This is what the usage API reads; it only ever
@@ -122,16 +69,6 @@ func (r *Repo) ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to 
 	rows, err := store.ListLLMOrgUsageDaily(ctx, r.ORM(), orgID, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("list org llm usage: %w", err)
-	}
-	return rows, nil
-}
-
-// SumLLMOrgKeyUsage sums orgID's calls on its own API keys per provider and
-// model over the UTC days from..to inclusive.
-func (r *Repo) SumLLMOrgKeyUsage(ctx context.Context, orgID string, from, to time.Time) ([]OrgKeyModelUsage, error) {
-	rows, err := store.SumLLMOrgKeyUsage(ctx, r.ORM(), orgID, from, to)
-	if err != nil {
-		return nil, fmt.Errorf("sum org key llm usage: %w", err)
 	}
 	return rows, nil
 }

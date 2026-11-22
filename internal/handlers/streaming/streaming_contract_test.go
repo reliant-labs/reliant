@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/messageproto"
-	"github.com/stretchr/testify/require"
 )
 
 func TestFormatChatUpdateDataJSON_MessageUpdateWrappedUnderMessageField(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -564,12 +565,12 @@ func leaseTime(t time.Time) time.Time {
 // finishes first and this release wins; any later one sees done closed and
 // does nothing (renewLease).
 func (s *Service) releaseLease(ctx context.Context, conn *daemonConnection) error {
-	if s.deps.Repo == nil || conn.attachedAt.IsZero() {
+	if s.deps.Attachments == nil || conn.attachedAt.IsZero() {
 		return nil // no lease was written for this connection
 	}
 	conn.leaseMu.Lock()
 	defer conn.leaseMu.Unlock()
-	return s.deps.Repo.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
+	return s.deps.Attachments.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
 }
 
 // errDaemonSuperseded ends the stream of a connection whose daemonID slot was

@@ -137,7 +137,7 @@ func TestSpawnStatus_BranchedChat_SeesInheritedChildrenReadOnly(t *testing.T) {
 	ctx := context.Background()
 	f := seedBranchedSpawnFixture(t, repo, ctx)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
 	branchRC := rctx.NewToolContext(ctx, f.branchThreadID, f.branchThreadID, nil, nil)
 
 	listing, _ := runSpawnStatus(t, tool, branchRC, SpawnStatusParams{})
@@ -178,7 +178,7 @@ func TestSpawnSendAndStop_BranchedChat_RefuseInheritedChildWithOwnerNamed(t *tes
 	f := seedBranchedSpawnFixture(t, repo, ctx)
 	branchRC := rctx.NewToolContext(ctx, f.branchThreadID, f.branchThreadID, nil, nil)
 
-	send := runSpawnSend(t, NewSpawnSendTool(repo, nil), branchRC, SpawnSendParams{AgentID: f.inheritedChildID, Subject: "Status", Message: "status?"})
+	send := runSpawnSend(t, NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil}), branchRC, SpawnSendParams{AgentID: f.inheritedChildID, Subject: "Status", Message: "status?"})
 	require.True(t, send.IsError)
 	require.Contains(t, send.Content, "branched", "the refusal must name the branch as the reason")
 	require.Contains(t, send.Content, f.sourceThreadID, "the refusal must name the owning thread")
@@ -186,7 +186,7 @@ func TestSpawnSendAndStop_BranchedChat_RefuseInheritedChildWithOwnerNamed(t *tes
 		"the agent was spawned by this chat's own (inherited) transcript; calling it unrelated is wrong")
 
 	stopper := &recordingSpawnStopper{}
-	stop := runSpawnStop(t, NewSpawnStopTool(repo, stopper), branchRC, SpawnStopParams{AgentID: f.inheritedChildID})
+	stop := runSpawnStop(t, NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper}), branchRC, SpawnStopParams{AgentID: f.inheritedChildID})
 	require.True(t, stop.IsError)
 	require.Contains(t, stop.Content, "branched")
 	require.Contains(t, stop.Content, f.sourceThreadID)
@@ -195,7 +195,7 @@ func TestSpawnSendAndStop_BranchedChat_RefuseInheritedChildWithOwnerNamed(t *tes
 	// Waiting is how an orchestrator collects a result to act on, so it is
 	// control too — and it must be refused fast, not after parking a budget.
 	start := time.Now()
-	wait, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM())}), branchRC, SpawnStatusParams{AgentID: f.inheritedChildID, Wait: true, TimeoutSeconds: 60})
+	wait, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), branchRC, SpawnStatusParams{AgentID: f.inheritedChildID, Wait: true, TimeoutSeconds: 60})
 	require.True(t, wait.IsError, "a branch must not wait on the original conversation's agent; response: %+v", wait)
 	require.Contains(t, wait.Content, "branched")
 	require.Contains(t, wait.Content, f.sourceThreadID)

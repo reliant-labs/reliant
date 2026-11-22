@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -40,12 +41,10 @@ const (
 	restoreCloneTimeoutMs = int32(15 * time.Minute / time.Millisecond)
 )
 
-// CheckoutRestoreStore is what restoring a pool member's checkouts reads and
-// writes.
-type CheckoutRestoreStore interface {
+// CheckoutRestoreRepo is the repository's part of CheckoutRestoreStore.
+type CheckoutRestoreRepo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	// RecordFailedProjectDaemonRestoreInScope marks the checkout failed,
@@ -53,6 +52,20 @@ type CheckoutRestoreStore interface {
 	// re-read under its row lock, is in scope: the clone it follows can take
 	// minutes.
 	RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error)
+}
+
+// CheckoutRestoreStore is what restoring a pool member's checkouts reads and
+// writes: the repository's part and the machine's checkout rows.
+type CheckoutRestoreStore interface {
+	CheckoutRestoreRepo
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+}
+
+// restoreAdapter joins the repository and the checkout rows into the
+// CheckoutRestoreStore the restore pass takes.
+type restoreAdapter struct {
+	CheckoutRestoreRepo
+	ProjectDaemons
 }
 
 // cloneStep is one `git.clone` a restore runs.
@@ -107,7 +120,7 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 		}
 		return nil
 	}
-	restorePoolMemberCheckouts(ctx, s.deps.Repo, run, conn.daemonID, conn.userID, scope, missing)
+	restorePoolMemberCheckouts(ctx, restoreAdapter{s.deps.Repo, s.deps.Installs}, run, conn.daemonID, conn.userID, scope, missing)
 }
 
 // restorePoolMemberCheckouts is the testable core: when daemonID is a member

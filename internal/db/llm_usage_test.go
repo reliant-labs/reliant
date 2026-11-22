@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -49,12 +50,12 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	first := usageRec("wf/run/act-1", at)
 	first.Outcome, first.ErrorClass, first.InputTokens, first.OutputTokens = store.LLMOutcomeError, "network", 300, 80
 	first.CacheReadTokens, first.CacheWriteTokens, first.LatencyMs = 0, 0, 900
-	written, err := repo.RecordLLMCallUsage(ctx, first)
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.True(t, written)
 
 	// The same attempt delivered again (a duplicate write): nothing changes.
-	written, err = repo.RecordLLMCallUsage(ctx, first)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.False(t, written, "a repeat of the same attempt must not write")
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
@@ -64,12 +65,12 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	// the first, not a replacement of it.
 	second := usageRec("wf/run/act-1", at)
 	second.Attempt, second.InputTokens, second.OutputTokens = 2, 120, 60
-	written, err = repo.RecordLLMCallUsage(ctx, second)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, second)
 	require.NoError(t, err)
 	assert.True(t, written, "a later attempt is a call of its own")
 
 	// A late delivery of attempt 1 after attempt 2 changes nothing.
-	written, err = repo.RecordLLMCallUsage(ctx, first)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.False(t, written)
 
@@ -103,7 +104,7 @@ func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := repo.RecordLLMCallUsage(ctx, rec)
+			_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, rec)
 			assert.NoError(t, err)
 		}()
 	}
@@ -190,7 +191,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	mk := func(id string, at time.Time, mut func(*LLMCallUsage)) {
 		r := usageRec(id, at)
 		mut(&r)
-		_, err := repo.RecordLLMCallUsage(ctx, r)
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
 	mk("a", d1, func(r *LLMCallUsage) {})
@@ -256,7 +257,7 @@ func TestLLMCallUsage_RetentionDeletesCallRowsAndKeepsTheRollup(t *testing.T) {
 	old := now.Add(-LLMCallUsageRetention - time.Hour)
 	edge := now.Add(-LLMCallUsageRetention + time.Hour)
 	for i, at := range []time.Time{old, old.Add(-48 * time.Hour), edge, now} {
-		_, err := repo.RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("r%d", i), at))
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("r%d", i), at))
 		require.NoError(t, err)
 	}
 	require.Equal(t, 4, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
@@ -265,13 +266,13 @@ func TestLLMCallUsage_RetentionDeletesCallRowsAndKeepsTheRollup(t *testing.T) {
 	}
 	require.Equal(t, 4, totalCalls())
 
-	n, err := repo.PruneLLMCallUsage(ctx, now)
+	n, err := llmusagetest.New(t, repo).PruneLLMCallUsage(ctx, now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, n)
 	assert.Equal(t, 2, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`), "rows inside the period stay")
 	assert.Equal(t, 4, totalCalls(), "the rollup keeps the deleted rows' totals")
 
-	n, err = repo.PruneLLMCallUsage(ctx, now)
+	n, err = llmusagetest.New(t, repo).PruneLLMCallUsage(ctx, now)
 	require.NoError(t, err)
 	assert.Zero(t, n, "a second pass has nothing to delete")
 
@@ -284,7 +285,7 @@ func TestLLMCallUsage_PruneWorksInBatches(t *testing.T) {
 	ctx := context.Background()
 	now := day(2026, 10, 29)
 	for i := 0; i < 5; i++ {
-		_, err := repo.RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("b%d", i), now.Add(-200*24*time.Hour)))
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("b%d", i), now.Add(-200*24*time.Hour)))
 		require.NoError(t, err)
 	}
 	cutoff := now.Add(-LLMCallUsageRetention)
@@ -310,7 +311,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 	for i, purpose := range []string{store.LLMPurposeChat, store.LLMPurposeChat, store.LLMPurposeCompaction, store.LLMPurposeTitle, store.LLMPurposeDraftAutomation} {
 		r := usageRec(fmt.Sprintf("p%d", i), at)
 		r.Purpose = purpose
-		_, err := repo.RecordLLMCallUsage(ctx, r)
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
 	rows, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
@@ -324,7 +325,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 
 	bad := usageRec("bad", at)
 	bad.Purpose = "chatting"
-	_, err = repo.RecordLLMCallUsage(ctx, bad)
+	_, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, bad)
 	assert.Error(t, err, "purpose is a closed set")
 }
 
@@ -337,27 +338,27 @@ func TestLLMCallUsage_RefusedForAPurgedUser(t *testing.T) {
 	ctx := context.Background()
 	at := day(2026, 10, 29)
 
-	_, err := repo.RecordLLMCallUsage(ctx, usageRec("before", at))
+	_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("before", at))
 	require.NoError(t, err)
 	_, err = raw.Exec(`INSERT INTO llm_usage_purged_users (user_id) VALUES ('u1')`)
 	require.NoError(t, err)
 	_, err = raw.Exec(`DELETE FROM llm_call_usage WHERE user_id = 'u1'; DELETE FROM llm_call_usage_daily WHERE user_id = 'u1'`)
 	require.NoError(t, err)
 
-	written, err := repo.RecordLLMCallUsage(ctx, usageRec("after", at))
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("after", at))
 	require.NoError(t, err)
 	assert.False(t, written, "a call that finishes after deletion is not recorded")
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage_daily`))
 
 	later := usageRec("started-after-the-purge", at.Add(2*time.Hour))
-	written, err = repo.RecordLLMCallUsage(ctx, later)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, later)
 	require.NoError(t, err)
 	assert.False(t, written, "the fence refuses every write, whatever time the call started")
 
 	other := usageRec("other-user", at)
 	other.UserID = "u2"
-	written, err = repo.RecordLLMCallUsage(ctx, other)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, other)
 	require.NoError(t, err)
 	assert.True(t, written, "the fence is per user")
 }
@@ -370,7 +371,7 @@ func TestLLMUsagePurgeFences_AgeOut(t *testing.T) {
 	_, err := raw.Exec(`INSERT INTO llm_usage_purged_users (user_id, purged_at) VALUES ('old', $1), ('recent', $2)`,
 		now.Add(-store.LLMUsagePurgeFenceRetention-time.Hour), now.Add(-time.Hour))
 	require.NoError(t, err)
-	n, err := repo.PruneLLMUsagePurgeFences(context.Background(), now)
+	n, err := llmusagetest.New(t, repo).PruneLLMUsagePurgeFences(context.Background(), now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_usage_purged_users WHERE user_id = 'recent'`))

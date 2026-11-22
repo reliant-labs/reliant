@@ -227,7 +227,7 @@ func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driver
 // every request its driver failed and retried along the way.
 func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, resolved *resolvedLLMCall, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
 	call := llmUsageCall{
-		Recorder: a.repo, UserID: chat.UserID, ChatID: chat.ID,
+		Recorder: a.usage, UserID: chat.UserID, ChatID: chat.ID,
 		Purpose: store.LLMPurposeChat, Ordinal: 1,
 		Provider: provider, Model: modelID, AccountID: usageAccountID(resolved), LatencyMs: latencyMs,
 		OrgID: chatOrgID(chat), Funding: usageFunding(resolved, provider), FundingOrgID: usageFundingOrg(resolved),

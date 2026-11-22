@@ -9,13 +9,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // These tests are about DURABILITY, not about the chat_updates event stream.
@@ -49,7 +50,7 @@ func setupDurableStatusFixture(t *testing.T) *durableStatusFixture {
 
 func (f *durableStatusFixture) executeTool(t *testing.T, toolCallID, toolName, toolInput string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	var output ExecuteToolsOutput
 	err := f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
@@ -248,7 +249,7 @@ func TestDurableStatus_ParallelToolsEachGetARow(t *testing.T) {
 	executor.SetResult(firstID, &toolexec.ToolResult{Success: true, Content: "first"})
 	executor.SetError(secondID, errors.New("second blew up"))
 
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
 		ChatID: f.chatID,
@@ -315,7 +316,7 @@ func (f *durableStatusFixture) handleResultWithCancelledCtx(
 	execErr error,
 ) *reliantv1.ToolResultMsg {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), newMockToolExecutor())
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), newMockToolExecutor()).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	run := func(ctx context.Context, _ string) (*reliantv1.ToolResultMsg, error) {
 		cancelled, cancel := context.WithCancel(ctx)

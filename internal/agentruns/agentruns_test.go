@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -327,7 +328,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	}))
 
 	starter := &recordingStarter{}
-	runs := New(launch.NewLauncher(repo, threads.NewService(repo), starter, noopRecorder{}, "test-queue"), nil)
+	runs := New(launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: noopRecorder{}, TaskQueue: "test-queue"}), nil)
 
 	req := tools.StartRunRequest{
 		OwnerUserID: owner, ProjectID: projectID, Workflow: "builtin://agent",

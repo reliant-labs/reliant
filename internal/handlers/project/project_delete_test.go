@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -111,7 +113,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 func (f *deleteAuthFixture) service() (*Service, *orgs.Resolver) {
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	return NewTestProject(f.t, WithProjectDeps(Deps{Repo: f.repo, Orgs: m, Schedules: f.schedules, Now: clock})), m
+	return NewTestProject(f.t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Orgs: m, Schedules: f.schedules, Now: clock}))), m
 }
 
 // as is a request as userID through credential c; a machine token is also
@@ -329,7 +331,7 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			m := orgs.New(f.members)
 			clock := func() time.Time { return deleteNow }
 			held := heldPurge{Repo: f.repo, started: make(chan struct{}), release: make(chan struct{}), fail: c.fail}
-			svc := NewTestProject(t, WithProjectDeps(Deps{Repo: held, Orgs: m, Schedules: f.schedules, Now: clock}))
+			svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: held, Projects: projectaccesstest.For(held), Orgs: m, Schedules: f.schedules, Now: clock})))
 			owner := as(m, f.owner, auth.CredentialSession, "")
 
 			_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
@@ -403,7 +405,7 @@ func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
 	f.members.left[f.owner] = true
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	moving := NewTestProject(t, WithProjectDeps(Deps{Repo: movesBeforeWrite{Repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock}))
+	moving := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: movesBeforeWrite{Repo: f.repo, to: "globex"}, Projects: projectaccesstest.For(movesBeforeWrite{Repo: f.repo, to: "globex"}), Orgs: m, Schedules: f.schedules, Now: clock})))
 	admin := as(m, f.admin, auth.CredentialSession, "")
 
 	_, err := f.delete(moving, admin, false)

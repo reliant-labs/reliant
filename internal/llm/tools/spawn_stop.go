@@ -63,11 +63,13 @@ type SpawnStopper interface {
 
 type spawnStopTool struct {
 	repo    spawnStopStore
+	tree    SpawnTree
 	stopper SpawnStopper
 }
 
-func NewSpawnStopTool(repo spawnStopStore, stopper SpawnStopper) Tool {
-	return NewToolWrapper[SpawnStopParams, ToolResponse](&spawnStopTool{repo: repo, stopper: stopper})
+// NewSpawnStopTool builds the spawn_stop tool.
+func NewSpawnStopTool(deps SpawnStopDeps) Tool {
+	return NewToolWrapper[SpawnStopParams, ToolResponse](&spawnStopTool{repo: deps.Store, tree: deps.Tree, stopper: deps.Stopper})
 }
 
 func (s *spawnStopTool) Name() string {
@@ -83,7 +85,7 @@ func (s *spawnStopTool) RequiresPermission(params SpawnStopParams) (bool, error)
 }
 
 func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) (ToolResponse, error) {
-	if s.repo == nil {
+	if s.repo == nil || s.tree == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 	threadID := rctx.Thread
@@ -93,7 +95,7 @@ func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) 
 	if params.AgentID == "" {
 		return NewTextErrorResponse("agent_id is required"), nil
 	}
-	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID)
+	resolved, err := resolveSpawnAgentID(rctx, s.tree, threadID, params.AgentID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
@@ -105,12 +107,12 @@ func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) 
 	// Only a DIRECT child may be stopped, which is stricter than spawn_send's
 	// parent<->child rule on purpose: messaging your parent is a report, while
 	// stopping your parent would end the run that is waiting on you.
-	ref, err := spawnStopRefForChild(rctx, s.repo, threadID, params.AgentID)
+	ref, err := spawnStopRefForChild(rctx, s.tree, threadID, params.AgentID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	if ref.ToolCallID == "" {
-		if inherited := findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID); inherited != nil {
+		if inherited := findInheritedSpawnChild(rctx, s.tree, threadID, params.AgentID); inherited != nil {
 			return NewTextErrorResponse(inheritedSpawnRefusal("stop", inherited, params.AgentID)), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf(

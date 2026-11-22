@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -74,7 +75,7 @@ func (e *env) record(c call) {
 	if c.outcome == "" {
 		c.outcome = store.LLMOutcomeSuccess
 	}
-	_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+	_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 		ID: fmt.Sprintf("act-%d", e.seq), UserID: c.user, ChatID: "chat", Provider: c.provider, Model: c.model,
 		AuthMode: c.mode, Purpose: c.purpose, InputTokens: c.in, OutputTokens: c.out, CacheReadTokens: c.cacheR, CacheWriteTokens: c.cacheW,
 		Outcome: c.outcome, ErrorClass: c.errClass, LatencyMs: c.latency, Attempt: 1, CreatedAt: c.at,
@@ -399,7 +400,7 @@ func TestGetLLMUsage_PurposeSurvivesPerCallRetention(t *testing.T) {
 	e := newEnv(t)
 	e.record(call{user: "u", at: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC), in: 40, purpose: store.LLMPurposeChat})
 	e.record(call{user: "u", at: time.Date(2026, 6, 1, 12, 5, 0, 0, time.UTC), in: 9000, purpose: store.LLMPurposeCompaction})
-	pruned, err := e.repo.PruneLLMCallUsage(context.Background(), now)
+	pruned, err := llmusagetest.New(e.t, e.repo).PruneLLMCallUsage(context.Background(), now)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, pruned, "the per-call rows are gone")
 
@@ -415,7 +416,7 @@ func TestGetLLMUsage_CountsEveryAttemptOfARetriedRequest(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	rec := func(attempt int32, outcome, class string, in int64) {
-		_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+		_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 			ID: "wf/run/act/chat/1", UserID: "u", ChatID: "c", Provider: "anthropic", Model: "m", AuthMode: store.LLMAuthModeBYOK,
 			Purpose: store.LLMPurposeChat, InputTokens: in, Outcome: outcome, ErrorClass: class, LatencyMs: 100,
 			Attempt: attempt, CreatedAt: day(28),

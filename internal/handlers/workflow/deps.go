@@ -36,7 +36,6 @@ type Repository interface {
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*db.WorkflowDraft, error)

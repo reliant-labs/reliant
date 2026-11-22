@@ -79,7 +79,7 @@ func TestListMessages_ScrollBackPagesCountOnlyTranscriptRows(t *testing.T) {
 	visible(4, 6)
 	hiddenRun(2)
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	page := func(beforeSeq int64, recent int32) *reliantv1.ListMessagesResponse {
 		t.Helper()
 		req := &reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &recent}

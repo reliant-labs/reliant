@@ -35,10 +35,47 @@ import (
 // Shared helper roles
 // ============================================================================
 
-// RunOwnerReader is what resolveRunOwner reads: the parent run, then the chat.
+// WorkflowLoader reads one workflow (run) row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// RunOwnerReader is what resolveRunOwner reads after the parent run: the chat.
 type RunOwnerReader interface {
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
+// WorkflowRuns is what WorkflowStatusActivity reads and ends on a run's rows
+// that carry no chat activity: the run itself, its descendants' terminal
+// cascade, its position checkpoint and its node attempts. NewWorkflowRuns
+// builds it over the generated ext stores.
+type WorkflowRuns interface {
+	WorkflowLoader
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentID string, reason core.WorkflowStopReason) error
+	ClearWorkflowCheckpoint(ctx context.Context, workflowID string) error
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*core.StepExecution, error)
+}
+
+type workflowRuns struct {
+	store.WorkflowExtStore
+	store.WorkflowCheckpointExtStore
+	store.StepExecutionExtStore
+}
+
+// NewWorkflowRuns is the WorkflowRuns over the generated ext stores of db.
+func NewWorkflowRuns(db orm.Context) WorkflowRuns {
+	return workflowRuns{
+		WorkflowExtStore:           store.NewWorkflowExtStore(db),
+		WorkflowCheckpointExtStore: store.NewWorkflowCheckpointExtStore(db),
+		StepExecutionExtStore:      store.NewStepExecutionExtStore(db),
+	}
+}
+
+// QuestionsByStep reads the questions one step raised in one loop iteration.
+// store.QuestionExtStore satisfies it.
+type QuestionsByStep interface {
+	ListQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*core.Question, error)
 }
 
 // WorktreeOwnerReader is what worktreeOwnerOf reads.
@@ -112,7 +149,6 @@ type ChatTransitioner interface {
 // ApprovalCreateStore is what ApprovalCreateActivity reads and writes; the
 // blocked run event goes through runevents.EmitBlocked.
 type ApprovalCreateStore interface {
-	GetApprovalByEntityID(ctx context.Context, entityID string) (*db.Approval, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	CreateApproval(ctx context.Context, approval *db.Approval) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
@@ -120,7 +156,32 @@ type ApprovalCreateStore interface {
 	runevents.Store
 }
 
-// ApprovalResolveStore is what ApprovalResolveActivity writes.
+// ApprovalLookup finds the approval raised for an entity (idempotent raising).
+// store.ApprovalExtStore satisfies it.
+type ApprovalLookup interface {
+	GetApprovalByEntityID(ctx context.Context, entityID string) (*core.Approval, error)
+}
+
+// ApprovalCreateDeps is what NewApprovalCreateActivity takes.
+type ApprovalCreateDeps struct {
+	Repo      ApprovalCreateStore
+	Approvals ApprovalLookup
+}
+
+// ToolCallResults reads the durable result recorded for a tool call.
+// store.ToolCallResultExtStore satisfies it.
+type ToolCallResults interface {
+	FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error)
+}
+
+// TriggerCapacitySlotDeps is what NewTriggerCapacitySlotActivity takes.
+type TriggerCapacitySlotDeps struct {
+	Slots TriggerCapacitySlotStore
+}
+
+// ApprovalResolveStore is what ApprovalResolveActivity writes, and what
+// CleanupActivity closes a run's approvals through. approvalclose.Closer
+// implements it.
 type ApprovalResolveStore interface {
 	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 }
@@ -131,7 +192,6 @@ type ApprovalResolveStore interface {
 type CallLLMStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
@@ -144,8 +204,6 @@ type CallLLMStore interface {
 	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error)
 	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
 	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	// GetDaemon and ListDaemonsByUserID are daemonPlatformReader
@@ -162,17 +220,32 @@ type CallLLMStore interface {
 	daemonplacement.Installs
 }
 
+// ToolResultFinder reads the tool_result block a tool call was answered with.
+// store.MessageContentBlockExtStore satisfies it.
+type ToolResultFinder interface {
+	FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+}
+
+// CleanupDeps is what a CleanupActivity is built from.
+type CleanupDeps struct {
+	// Store is what the activity reads and writes.
+	Store CleanupStore
+	// ToolBlocks finds the result a tool call already has.
+	ToolBlocks ToolResultFinder
+	// Approvals closes the run's pending approvals.
+	Approvals ApprovalResolveStore
+	// Workflows reads a spawn's child run.
+	Workflows WorkflowLoader
+}
+
 // CleanupStore is what CleanupActivity reads and writes when it closes out a
 // run: pending approvals, unanswered tool calls and their synthetic results.
 type CleanupStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
-	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
 	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
@@ -184,7 +257,6 @@ type CleanupStore interface {
 type CompactStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -243,12 +315,12 @@ type DrainAgentMessagesStore interface {
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
-	EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update db.AgentMessagesDrainedUpdate) error
+	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
 // EmitStreamFinalizedStore is what EmitStreamFinalizedActivity writes.
 type EmitStreamFinalizedStore interface {
-	EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update db.StreamFinalizedUpdate) error
+	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
 // EmitToolCallStatusStore is what EmitToolCallStatusActivity writes.
@@ -266,6 +338,10 @@ type EnqueueAgentMessageStore interface {
 // ExecuteRunStepStore is what ExecuteRunStepActivity reads and writes.
 type ExecuteRunStepStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
+	// GetDaemon reads the command machine's registration: a run node with
+	// llm_gateway runs only on one that registered
+	// daemon.CapabilityRunStepEnv.
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	RunExecutorContextStore
 }
 
@@ -287,7 +363,6 @@ type ExecuteToolsStore interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetContextUsage(ctx context.Context, chatID string, thread string) (*db.ContextUsage, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	GetToolCallResult(ctx context.Context, toolCallID string) (*db.ToolCallResult, error)
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	// CreateAttachment is persistToolMedia's: a tool result's images and PDFs
@@ -325,7 +400,6 @@ type RunFundingStore interface {
 type GenerateTitleStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
@@ -393,7 +467,6 @@ type PreflightDaemonCheckStore interface {
 // runevents.Store).
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*db.Question, error)
 	CreateQuestion(ctx context.Context, question *db.Question) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
@@ -442,8 +515,62 @@ type ValidateThreadOwnershipStore interface {
 }
 
 // WorkflowCheckpointStore is what WorkflowCheckpointActivity writes.
+// store.WorkflowCheckpointExtStore satisfies it.
 type WorkflowCheckpointStore interface {
-	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *db.WorkflowCheckpoint) error
+	SaveWorkflowCheckpoint(ctx context.Context, cp *core.WorkflowCheckpoint) error
+}
+
+// WorkflowCheckpointDeps is what NewWorkflowCheckpointActivity takes.
+type WorkflowCheckpointDeps struct {
+	Checkpoints WorkflowCheckpointStore
+}
+
+// RunRecords is what WorkflowStatusActivity records about a run: how it ended
+// on its row and on the launch event of the chat, the node whose failure the
+// run handled, and the run id its chat is executing. The methods are those of
+// the generated ext stores (see NewRunRecords); each takes the transaction
+// the ctx carries.
+type RunRecords interface {
+	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowFailureDetail(ctx context.Context, id string, detail string) error
+	FirstHandledNodeFailure(ctx context.Context, workflowID string, runID string, since time.Time) (*store.HandledNodeFailure, error)
+	MarkDeclaredFailureNode(ctx context.Context, workflowID string, nodeID string) (bool, error)
+	SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error
+	SetLaunchEventRunOutcome(ctx context.Context, chatID string, outcome string) error
+	SetLaunchEventRunFailureDetail(ctx context.Context, chatID string, detail string) error
+	SetChatRunID(ctx context.Context, chatID string, workflowID string, runID string) (bool, error)
+}
+
+// AttentionRecorder applies an attention update to its incident in a READ
+// COMMITTED transaction (NewAttentionRecorder).
+type AttentionRecorder interface {
+	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
+}
+
+// WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
+type WorkflowStatusDeps struct {
+	Repo      WorkflowStatusStore
+	Runs      RunRecords
+	Workflows WorkflowRuns
+	Attention AttentionRecorder
+}
+
+type runRecords struct {
+	store.WorkflowExtStore
+	store.StepExecutionExtStore
+	store.TriggerEventExtStore
+	store.ChatExtStore
+}
+
+// NewRunRecords is the RunRecords over the generated ext stores of db.
+func NewRunRecords(db orm.Context) RunRecords {
+	return runRecords{
+		WorkflowExtStore:      store.NewWorkflowExtStore(db),
+		StepExecutionExtStore: store.NewStepExecutionExtStore(db),
+		TriggerEventExtStore:  store.NewTriggerEventExtStore(db),
+		ChatExtStore:          store.NewChatExtStore(db),
+	}
 }
 
 // WorkflowStatusStore is what WorkflowStatusActivity reads and writes: the run
@@ -451,25 +578,13 @@ type WorkflowCheckpointStore interface {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
-	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
-	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
-	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
-	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
-	SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error
-	FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*db.HandledNodeFailure, error)
-	SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error
-	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
-	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
-	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
@@ -478,11 +593,9 @@ type WorkflowStatusStore interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
-	SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error
 	threads.Repository
 	runevents.Store
 	ChatTransitioner

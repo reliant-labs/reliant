@@ -40,8 +40,8 @@ type TriggerCapacitySlotActivity struct {
 }
 
 // NewTriggerCapacitySlotActivity creates a new TriggerCapacitySlotActivity.
-func NewTriggerCapacitySlotActivity(repo TriggerCapacitySlotStore) *TriggerCapacitySlotActivity {
-	return &TriggerCapacitySlotActivity{repo: repo}
+func NewTriggerCapacitySlotActivity(deps TriggerCapacitySlotDeps) *TriggerCapacitySlotActivity {
+	return &TriggerCapacitySlotActivity{repo: deps.Slots}
 }
 
 // Name returns the activity name for registration.

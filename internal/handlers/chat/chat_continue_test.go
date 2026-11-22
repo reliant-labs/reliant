@@ -165,7 +165,7 @@ func newContinueFixture(t *testing.T, replays bool) continueFixture {
 	// run itself is never queried (it would be replayed to answer).
 	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "claude-opus"}})
 	pause := &resetPause{repo: repo, replays: replays}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause})}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause})}
 	return continueFixture{ctx: ctx, repo: repo, chatID: fx.chatID, threadID: fx.rootThreadID,
 		temporal: temporal, pause: pause, svc: svc}
 }
@@ -376,7 +376,7 @@ func TestSendMessage_WhileTheRunWaitsForItsMachine_KeepsTheWaitAndNudgesIt(t *te
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
 	require.NoError(t, repo.SetChatDaemonBlocked(ctx, fx.chatID, true))
 	temporal := &endedRunTemporalClient{status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: &resetPause{repo: repo}})}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: &resetPause{repo: repo}})}
 
 	_, err := svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "and also this"))
 	require.NoError(t, err)

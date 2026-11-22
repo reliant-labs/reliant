@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -100,7 +102,7 @@ func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
 		return nil
 	}}
 	gates := &configv1.OrgsConfig{ProjectMovesEnabled: gateOn}
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: repo, Ledger: repoLedger, OrgRollout: gates, Moves: starter}))
+	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Ledger: repoLedger, OrgRollout: gates, Moves: starter}))
 }
 
 func personIn(t *testing.T, m authz.Membership) context.Context {

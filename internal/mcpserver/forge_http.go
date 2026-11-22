@@ -198,6 +198,10 @@ func (a *forgeAuth) middleware(next http.Handler) http.Handler {
 		if fat.HasFormat(token) {
 			// A connector credential grants mcp:connector only; it cannot act
 			// as its person at the control plane, which is all these tools do.
+			// An MCP client's control-plane OAuth token (mcp:oauth) is refused
+			// here too, whatever its audience: it carries none of the
+			// control-plane authority the forge tools need. Accepting it is
+			// follow-up work (R9b), not an omission.
 			a.challenge(w, "Reliant Forge signs in with OAuth; a connector credential cannot be used here")
 			return
 		}

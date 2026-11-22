@@ -40,6 +40,8 @@ type Deps struct {
 	// Accounts holds the person's provider accounts, their limits and usage poll
 	// (credentials/provideraccounts); the secrets stay inside it.
 	Accounts Accounts
+	// Privacy keeps the user's analytics and crash-reporting choices.
+	Privacy Privacy
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
 	// server.go passes the deployment's controlplane adapter.
 	ControlPlane LLMKeyMinter
@@ -88,6 +90,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Accounts == nil {
 		return fmt.Errorf("settings: Deps.Accounts is required")
+	}
+	if d.Privacy == nil {
+		return fmt.Errorf("settings: Deps.Privacy is required")
 	}
 	if d.ControlPlane == nil {
 		return fmt.Errorf("settings: Deps.ControlPlane is required")

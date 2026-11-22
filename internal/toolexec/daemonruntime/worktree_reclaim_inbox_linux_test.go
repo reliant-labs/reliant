@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -133,6 +134,10 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	inboxSvc, err := inbox.New(inbox.Deps{
 		Logger: logger, Config: config.Defaults(), Repo: repo,
+		Items:      store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:    store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:    store.NewTriggerExtStore(repo.ORM()),
+		Storage:    worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())),
 		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      store.NewWorktreeExtStore(repo.ORM()),
 	})

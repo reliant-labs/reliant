@@ -27,9 +27,7 @@ type Repository interface {
 	UpdateSetting(ctx context.Context, setting *db.Setting) error
 	DeleteSetting(ctx context.Context, id string) error
 
-	// Privacy choices and hidden items.
-	GetPrivacySettings(ctx context.Context, userID string) (analyticsEnabled, crashReportingEnabled bool, err error)
-	SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled, crashReportingEnabled bool) error
+	// Hidden items.
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	SetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string, isVisible bool) error
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
@@ -47,6 +45,13 @@ type Accounts interface {
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
 	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
 	drivers.AccountLister
+}
+
+// Privacy keeps a user's analytics and crash-reporting choices.
+// privacy.Service satisfies it.
+type Privacy interface {
+	GetPrivacySettings(ctx context.Context, userID string) (analyticsEnabled, crashReportingEnabled bool, err error)
+	SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled, crashReportingEnabled bool) error
 }
 
 // ChatWaker wakes every chat of a user whose run may have a thread blocked on

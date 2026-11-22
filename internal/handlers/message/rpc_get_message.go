@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -106,7 +107,7 @@ func (s *Service) GetMessage(
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
-		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
+		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Senders, []*db.Message{msg}),
 		ToolBodies:             toolBodies,
 	})
 

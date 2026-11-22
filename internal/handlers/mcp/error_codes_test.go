@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +42,7 @@ func TestMCPStoreErrorCodes(t *testing.T) {
 			t.Parallel()
 			repo := ownedProjectRepo(t, `{}`)
 			if tc.projectErr != nil {
-				repo.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, tc.projectErr }
+				projectaccesstest.Bind(repo, func(context.Context, string, string) (*db.Project, error) { return nil, tc.projectErr })
 			}
 			if tc.configErr != nil {
 				repo.GetProjectMCPConfigsJSONFunc = func(context.Context, string) (*string, error) { return nil, tc.configErr }
@@ -118,7 +120,7 @@ func TestMCPErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
 	repo := ownedProjectRepo(t, `{}`)
-	_, client := mcp.NewTestMCPServer(t, mcp.WithMCPDeps(mcp.Deps{Repo: repo}))
+	_, client := mcp.NewTestMCPServer(t, mcp.WithMCPDeps(mcp.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	_, err := client.ListServers(context.Background(), connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: "p-2"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))

@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -117,7 +118,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{},
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 		},
 		threads: threads.NewService(failingRepo),
 	}
@@ -175,7 +176,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{},
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 		},
 		threads: threads.NewService(failingRepo),
 	}
