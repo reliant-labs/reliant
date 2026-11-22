@@ -93,6 +93,8 @@ export class DesktopTerminalSocket {
   // first, and events travel on another IPC channel) are recognised as they
   // arrive, and every other terminal's are ignored at once.
   private id: string;
+  private unsubscribe: (() => void) | null = null;
+  private closeRequested: { code?: number; reason?: string } | null = null;
   // Whether the open() reply has arrived.
   private answered = false;
   // Only for a main process that ignores the id sent with open() and names
