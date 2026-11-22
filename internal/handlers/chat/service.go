@@ -35,6 +35,8 @@ type Deps struct {
 	// is what the handlers call plus the roles of launch, threads, runs and
 	// the other callees they hand it to.
 	Repo Repository
+	// Questions lists the chat's open questions (Questions, deps.go).
+	Questions Questions
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -91,6 +93,9 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("chat: Deps.Repo is required")
 	}
+	if d.Questions == nil {
+		return fmt.Errorf("chat: Deps.Questions is required")
+	}
 	if d.Temporal == nil {
 		return fmt.Errorf("chat: Deps.Temporal is required")
 	}
@@ -131,7 +136,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps: deps,
-		runs: runs.NewService(deps.Repo, deps.Temporal, deps.Pause),
+		runs: runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause}),
 		threads: threads.NewService(deps.Repo,
 			threads.WithTemporalSignaler(deps.Temporal),
 			threads.WithToolCanceler(deps.Router),

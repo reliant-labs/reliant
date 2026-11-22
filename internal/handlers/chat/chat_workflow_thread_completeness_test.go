@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // GetWorkflowExecutions used to build its tree purely from the `workflows`
@@ -135,7 +136,7 @@ func TestGetWorkflowExecutions_IncludesInlineForkThreadWithoutWorkflowRow(t *tes
 		Status:         db.ThreadStatusRunning,
 	})
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
 	}))
@@ -231,7 +232,7 @@ func TestGetWorkflowExecutions_PreservesSpawnAndNodeOriginDistinction(t *testing
 		Status:         db.ThreadStatusRunning,
 	})
 
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
 	}))

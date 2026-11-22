@@ -95,6 +95,7 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	questions  Questions
 	tempClient client.Client
 
 	// owners answers whose chat a pass is working on, so the records it logs
@@ -469,9 +470,11 @@ func DefaultConfig() *ReconcilerConfig {
 	}
 }
 
-// NewReconciler creates a new workflow reconciler. Zero-valued config fields
-// fall back to DefaultConfig values.
-func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
+// New creates a new workflow reconciler. Zero-valued config fields fall back
+// to DefaultConfig values. Plain Deps, not a forge contract package: it is
+// built by hand by the api server's NewWorkflowReconciler provider.
+func New(deps Deps) *Reconciler {
+	repo, tempClient, config := deps.Store, deps.Temporal, deps.Config
 	def := DefaultConfig()
 	if config == nil {
 		config = def
@@ -506,6 +509,7 @@ func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *Recon
 	}
 	return &Reconciler{
 		repo:                    repo,
+		questions:               deps.Questions,
 		tempClient:              tempClient,
 		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
@@ -1902,7 +1906,7 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 // waiting for signal.resume), but log it as an ERROR so the violation is
 // visible instead of silently masking the watchdog.
 func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bool, error) {
-	questions, err := r.repo.ListPendingQuestionsByChat(ctx, wf.ChatID)
+	questions, err := r.questions.ListPendingQuestionsByChat(ctx, wf.ChatID)
 	if err != nil {
 		return false, fmt.Errorf("checking pending question: %w", err)
 	}

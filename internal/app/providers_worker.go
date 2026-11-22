@@ -309,7 +309,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.NewService(d.DB, d.Temporal.Client, d.Pause), nil
+	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -352,6 +352,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
@@ -458,6 +459,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          repo,
+		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Syncer:        syncer,
 		Fires:         fires,
 		ControlPlane:  hostedControlPlane(d.ControlPlane),
@@ -520,6 +522,11 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
+		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
+		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
+		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
+		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
@@ -700,6 +707,14 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
+// projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
+// owner, written in the commit's own transaction (the ctx it is called with).
+type projectMoveAnnouncer struct{ repo *db.Repo }
+
+func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
+	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+}
+
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
 // no orgs (a nil *orgs.Resolver would be a non-nil interface).
 func orgMembers(r *orgs.Resolver) orgmove.Members {
@@ -720,9 +735,12 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 	if ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret == "" {
 		return nil, nil
 	}
+	o := d.DB.ORM()
 	svc, err := orgmove.New(orgmove.Deps{
 		Logger:       slog.Default(),
-		Store:        d.DB,
+		Store:        store.NewProjectOrgMoveExtStore(o),
+		Projects:     store.NewProjectExtStore(o),
+		Announcer:    projectMoveAnnouncer{repo: d.DB},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),

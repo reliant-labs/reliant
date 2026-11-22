@@ -1889,7 +1889,7 @@ function WorkflowBuilderInner({
               )}
             </div>
             <a
-              href="https://docs.reliantlabs.io/workflows"
+              href="https://docs.reliantlabs.io/workflows/custom-workflows"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-primary-ink/80 hover:text-primary-ink text-xs transition-colors shrink-0"

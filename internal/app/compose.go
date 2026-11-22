@@ -1072,6 +1072,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
@@ -1111,6 +1112,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		OrgMoves:     store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1294,10 +1296,13 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 // a deployment WITH a control plane can clone from GitHub on the user's
 // behalf; self-hosted leaves ControlPlane nil.
 func (g *Graph) newProject() (*project.Service, error) {
+	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Ledger:       store.NewProjectOrgMoveExtStore(o),
+		Shared:       store.NewShareEventExtStore(o),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil
@@ -1343,11 +1348,12 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Signals:  g.PauseService(),
-		Messages: g.Chat(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Signals:   g.PauseService(),
+		Messages:  g.Chat(),
 	})
 }
 

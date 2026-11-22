@@ -9,12 +9,14 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
 )
 
 // branchNoteForkTime is the fork point's timestamp; the note names it, so it is
@@ -79,7 +81,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 // the branch starts with — the only message the branch's own thread holds.
 func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, forkPoint string) string {
 	t.Helper()
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId: sourceChatID, MessageId: forkPoint,
 	}))
