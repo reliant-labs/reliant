@@ -1,0 +1,56 @@
+//go:build e2e
+// +build e2e
+
+package orders_test
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	connect "connectrpc.com/connect/v2"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "github.com/example/demo/gen/services/orders/v1"
+)
+
+// TestHealthCheck verifies the service binary starts and responds to health checks.
+func TestHealthCheck(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/healthz", nil)
+	if err != nil {
+		t.Fatalf("failed to create health check request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("health check request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /healthz, got %d", resp.StatusCode)
+	}
+}
+
+// Per-RPC E2E tests scaffolded by forge. Each runs against the live
+// service binary started in TestMain, using a Connect client built via
+// the `newClient` helper in helpers_test.go.
+//
+// Library reference: github.com/reliant-labs/forge/pkg/tdd
+// Skill: forge skill load testing/e2e
+
+func TestOrdersService_GetOrder(t *testing.T) {
+	t.Parallel()
+	client := newClient(t, baseURL)
+
+	tdd.TableRPCV2(t, []tdd.CaseV2[pb.GetOrderRequest, pb.GetOrderResponse]{
+		{
+			Name:    "default stub returns Unimplemented",
+			Req:     &pb.GetOrderRequest{},
+			WantErr: connect.CodeUnimplemented,
+		},
+	}, client.GetOrder)
+}
+

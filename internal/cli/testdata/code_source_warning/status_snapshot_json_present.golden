@@ -1,0 +1,5 @@
+{
+  "code_sources": {
+    "warning": "\"shop\" is deployed from 2 repositories (github.com/acme/shop, github.com/other/shop). An app name is one app in its org, so each of them deploys to the same environments; if that is not intended, give one of them a different `name` in its forge.yaml."
+  }
+}
