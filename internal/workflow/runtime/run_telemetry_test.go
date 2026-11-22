@@ -367,3 +367,44 @@ func TestRunTelemetry_SpanTree(t *testing.T) {
 	assert.Equal(t, "spawn", ca[telemetry.AttrAIWorkflowTrigger])
 	assert.NotEqual(t, spanAttrs(parentTurns[0])[telemetry.AttrGenAIAgentID], ca[telemetry.AttrGenAIAgentID], "the sub-agent is its own agent: its thread")
 }
+
+// A run a trigger launched is the root of its own trace (launch.runTraceContext)
+// and links its workflow span to the span that fired it, so two orgs' runs of
+// one fanned-out event are two traces that each point back at that event. A
+// run with no firing span — a person's start — links nothing.
+func TestRunTelemetry_TriggeredRunLinksToItsFiringSpan(t *testing.T) {
+	rec, interceptors := recordRunSpans(t)
+	_, firing := otel.Tracer("test").Start(context.Background(), "trigger.fire integration")
+	firing.End()
+	traceParent := telemetry.TraceParentOf(firing.SpanContext())
+
+	for _, input := range []WorkflowInput{
+		{ChatID: "chat-org-a", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "a"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindIntegration), EventID: "evt-a", TraceParent: traceParent}},
+		{ChatID: "chat-org-b", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "b"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindIntegration), EventID: "evt-b", TraceParent: traceParent}},
+		{ChatID: "chat-manual", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "m"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindChatStart)}},
+	} {
+		env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+		env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{Interceptors: interceptors}))
+		env.RegisterWorkflow(startRunTelemetryWorkflow)
+		env.ExecuteWorkflow(startRunTelemetryWorkflow, input)
+		require.NoError(t, env.GetWorkflowError())
+	}
+
+	runs := map[string]sdktrace.ReadOnlySpan{}
+	for _, s := range spansNamed(rec.Ended(), "RunWorkflow:") {
+		runs[spanAttrs(s)[telemetry.AttrGenAIConversationID]] = s
+	}
+	require.Len(t, runs, 3)
+	for _, chat := range []string{"chat-org-a", "chat-org-b"} {
+		links := runs[chat].Links()
+		require.Len(t, links, 1, "%s links to its firing span", chat)
+		assert.Equal(t, firing.SpanContext().TraceID(), links[0].SpanContext.TraceID(), chat)
+		assert.Equal(t, firing.SpanContext().SpanID(), links[0].SpanContext.SpanID(), chat)
+		assert.NotEqual(t, firing.SpanContext().TraceID(), runs[chat].SpanContext().TraceID(), "%s is not in the firing trace", chat)
+	}
+	assert.NotEqual(t, runs["chat-org-a"].SpanContext().TraceID(), runs["chat-org-b"].SpanContext().TraceID())
+	assert.Empty(t, runs["chat-manual"].Links(), "a person's start links nothing")
+}

@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -161,6 +162,10 @@ type seedContent struct {
 // when the event and chat are committed but the run never started, calling
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
+	if spec.FiringTraceParent == "" {
+		// The caller's span, before launch.Launch becomes the current one.
+		spec.FiringTraceParent = telemetry.TraceParentOf(trace.SpanContextFromContext(ctx))
+	}
 	ctx, span := otel.Tracer("reliant.launch").Start(ctx, "launch.Launch",
 		trace.WithAttributes(attribute.String("launch.kind", string(ev.Kind)), attribute.Bool("launch.pinned", spec.CatalogPin != "")))
 	defer span.End()
@@ -1428,12 +1433,13 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// Injected after validation for the same reason as unattended.
 	initialData[v2.InputKeyLaunchRun] = true
 
+	runCtx, trigger := runTraceContext(ctx, p.trigger, p.spec.FiringTraceParent)
 	workflowInput := v2.WorkflowInput{
 		ChatID:       chatID,
 		WorkflowName: p.workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
-		Trigger:      p.trigger,
+		Trigger:      trigger,
 		// The run asks the daemon whether the directory holds code, before
 		// its first LLM call (runtime.runGreenfieldProbe) — not this
 		// request, which must not wait on a machine that may be asleep. A
@@ -1446,7 +1452,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// already exists, and neither needs the other's result: serially they
 	// were two Temporal round trips on every launch. Joined before returning
 	// so it never outlives the request's context.
-	titleStarted := l.startTitleGeneration(ctx, p)
+	titleStarted := l.startTitleGeneration(runCtx, p)
 	defer func() { <-titleStarted }()
 
 	// The root start stays synchronous. Returning before Temporal accepted
@@ -1457,7 +1463,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// accepted long after its durable stamp. Capacity recovery and the
 	// stranded-start sweep wait core.StartAttemptBound past that stamp
 	// before treating the start as no longer in flight.
-	startCtx, cancelStart := context.WithDeadline(ctx, p.attemptAt.Add(core.StartAttemptDeadline))
+	startCtx, cancelStart := context.WithDeadline(runCtx, p.attemptAt.Add(core.StartAttemptDeadline))
 	workflowRun, err := l.temporal.ExecuteWorkflow(startCtx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	cancelStart()
 	if err != nil && p.spec.RecordExecution != nil {
