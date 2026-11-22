@@ -123,7 +123,7 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{
 		deps: Deps{Repo: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal},
-		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil, Waits: providerbackofftest.New(t, repo)}),
 	}
 	_, err = svc.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
 	require.NoError(t, err)
