@@ -43,6 +43,10 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   // A ClickHouse read over the env's user events (control-plane
   // rpc_get_user_activity.go opens a read slot); the web does not call it yet.
   "getUserActivity",
+  // ClickHouse reads through the same read slot (control-plane
+  // rpc_export_pgo_profile.go, rpc_get_managed_database_metrics.go); the web does not call them yet.
+  "exportPGOProfile",
+  "getManagedDatabaseMetrics",
   // IssuesService
   "listIssues",
   "getIssue",
@@ -68,6 +72,9 @@ export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "linkIssueChat",
   "listAssignableUsers",
   "listIssueTimeline",
+  // Maintenance windows: served from Postgres alone.
+  "declareMaintenanceWindow",
+  "listMaintenanceWindows",
 ]);
 
 /** Whether `<serviceTypeName>/<MethodName>` (the wire names) is a ClickHouse read. */
