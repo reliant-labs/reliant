@@ -55613,8 +55613,30 @@
     },
     {
       "consumer": "Chat",
+      "field": "AgentMessages",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.AgentMessages",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/llm/drivers/local.Directory",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Mailbox",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Mailbox",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -56610,6 +56632,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Mailbox",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Mailbox",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],

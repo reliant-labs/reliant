@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -160,7 +161,7 @@ func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, got.GetContent(), result.Content, "the durable result is what the agent saw")
 
-	msg, err := f.h.Repo().GetAgentMessage(ctx, <-messageIDs)
+	msg, err := store.GetAgentMessage(ctx, f.h.Repo().ORM(), <-messageIDs)
 	require.NoError(t, err)
 	assert.Equal(t, core.AgentMessageStatusQueued, msg.Status, "preemption must not consume the message; the next turn delivers it")
 }

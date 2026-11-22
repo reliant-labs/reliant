@@ -24,6 +24,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -1069,20 +1070,22 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
-		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
-		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
-		Messages:    store.NewMessageExtStore(g.Database().ORM()),
-		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
-		Senders:     store.NewThreadExtStore(g.Database().ORM()),
-		Temporal:    g.TemporalClient().Client,
-		Pause:       g.PauseService(),
-		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
-		Orgs:        g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Repo:          g.Database(),
+		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
+		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
+		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		AgentMessages: store.NewAgentMessageExtStore(g.Database().ORM()),
+		Messages:      store.NewMessageExtStore(g.Database().ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(g.Database().ORM()),
+		Senders:       store.NewThreadExtStore(g.Database().ORM()),
+		Temporal:      g.TemporalClient().Client,
+		Pause:         g.PauseService(),
+		Router:        g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels:   local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
+		Orgs:          g.OrgResolver(),
 	})
 }
 
@@ -1354,6 +1357,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Config:    g.Cfg,
 		Repo:      g.Database(),
 		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
 		Signals:   g.PauseService(),
 		Messages:  g.Chat(),
 	})

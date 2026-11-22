@@ -43,6 +43,11 @@ type Deps struct {
 	// Selections stores each chat's composer selection (chatselection.Store;
 	// store.ChatSelectionExtStore satisfies it).
 	Selections chatselection.Store
+	// Mailbox queues messages for a thread and announces them (Mailbox,
+	// deps.go).
+	Mailbox Mailbox
+	// AgentMessages reads and removes mailbox rows (AgentMessages, deps.go).
+	AgentMessages AgentMessages
 	// Messages answers the send's idempotency checks (Messages, deps.go).
 	Messages Messages
 	// ToolBlocks reads tool-result blocks for the branch repair and
@@ -115,6 +120,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Selections == nil {
 		return fmt.Errorf("chat: Deps.Selections is required")
+	}
+	if d.Mailbox == nil {
+		return fmt.Errorf("chat: Deps.Mailbox is required")
+	}
+	if d.AgentMessages == nil {
+		return fmt.Errorf("chat: Deps.AgentMessages is required")
 	}
 	if d.Messages == nil {
 		return fmt.Errorf("chat: Deps.Messages is required")
