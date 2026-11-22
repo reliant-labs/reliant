@@ -36,15 +36,8 @@ type Repository interface {
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
 	// the staleness check needs, never the whole (large) record.
-	// GetProjectByPathAndUserInScope resolves a reported path in the
-	// machine's org (nil scope: any org): the same path may be a project in
-	// each of the user's orgs.
-	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
-	// GetProjectWithUserCheck resolves the project of the machine's own
-	// checkout at a path (ensureOwnedProjectForPath).
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
-	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
 
@@ -54,7 +47,7 @@ type Repository interface {
 
 	// ListProjects is called directly too; ProjectReconcileRepo declares it.
 	ProjectReconcileRepo
-	CheckoutRestoreStore
+	CheckoutRestoreRepo
 	daemonHostnameLookup
 	projectfacts.ForgeNameWriter
 }
@@ -82,19 +75,13 @@ type MachineDetachments interface {
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 }
 
-// reconcileStore is the repository and the machine's checkouts together: what
-// a reconcile pass reads and writes.
+// reconcileStore is the repository and the roles beside it together: what a
+// reconcile pass reads and writes.
 type reconcileStore struct {
 	ProjectReconcileRepo
-	checkouts MachineDetachments
-}
-
-func (r reconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID, daemonID, userID, machineOrg string) (bool, error) {
-	return r.checkouts.DetachProjectDaemonOfOtherOrg(ctx, projectID, daemonID, userID, machineOrg)
-}
-
-func (r reconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
-	return r.checkouts.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	MachineDetachments
+	ProjectLookups
+	ProjectDaemons
 }
 
 // ProjectReconcileStore is what a reconcile pass (reconcileProjectDaemons)
@@ -102,6 +89,8 @@ func (r reconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Contex
 type ProjectReconcileStore interface {
 	ProjectReconcileRepo
 	MachineDetachments
+	ProjectLookups
+	ProjectDaemons
 }
 
 // ProjectReconcileRepo is the repository's part of ProjectReconcileStore: the user's projects, the project_daemons row of each one
@@ -109,12 +98,6 @@ type ProjectReconcileStore interface {
 // (user_id, remote_url) unique index.
 type ProjectReconcileRepo interface {
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
-	// ListProjectDaemonsForDaemon is what the machine already has on record,
-	// which a creation-path probe never overrules.
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
-	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
-	// clones queued while the machine was away: they run from this connect.
-	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
 	// RecordObservedProjectDaemonInScope records a checkout found on the
 	// machine, never over a detachment of the pair, and only while the
 	// project's org, re-read under its row lock, is in the machine's scope
@@ -129,10 +112,6 @@ type ProjectReconcileRepo interface {
 	// checkout is installed now).
 	MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error)
 	FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
-	// GetProjectByRemoteURLAndUserInScope finds the user's project of a
-	// remote in one org (nil scope: any): the remote backfill's uniqueness
-	// check, per (org, user, remote_url).
-	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
 	// The machine's detachments and cleanup of other orgs' checkouts are the
 	// service's Checkouts (MachineCheckouts), joined to this by reconcileStore.
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
@@ -161,4 +140,31 @@ type Attachments interface {
 // store.DaemonExtStore satisfies it.
 type LocalModels interface {
 	SetDaemonLocalModels(ctx context.Context, daemonID, inventoryJSON string) error
+}
+
+// ProjectLookups finds the user's project by where it is, in one org.
+// store.ProjectExtStore satisfies it.
+type ProjectLookups interface {
+	// GetProjectByPathAndUserInScope resolves a path a machine reports in the
+	// machine's org (nil scope: any org): the same path may be a project in
+	// each of the user's orgs.
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*core.Project, error)
+	// GetProjectByRemoteURLAndUserInScope finds the user's project of a
+	// remote in one org (nil scope: any): the remote backfill's uniqueness
+	// check, per (org, user, remote_url).
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+}
+
+// ProjectDaemons is the machine's checkout rows. store.ProjectDaemonExtStore
+// satisfies it.
+type ProjectDaemons interface {
+	// ListProjectDaemonsForDaemon is what the machine already has on record,
+	// which a creation-path probe never overrules.
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
+	// clones queued while the machine was away: they run from this connect.
+	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
+	// ResolveQueuedProjectDaemon applies the outcome a daemon reported for a
+	// clone queued to it.
+	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 }

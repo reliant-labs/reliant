@@ -46,6 +46,11 @@ type Deps struct {
 	// deps.go). Without it inventories are not stored.
 	// forge:optional-dep
 	LocalModels LocalModels
+	// Projects resolves the project a machine reports by its path or remote
+	// (ProjectLookups, deps.go).
+	Projects ProjectLookups
+	// Installs is the machine's checkout rows (ProjectDaemons, deps.go).
+	Installs ProjectDaemons
 	// Checkouts is the machine's checkout lock and detachments
 	// (store.ProjectDaemonDetachmentExtStore).
 	Checkouts MachineCheckouts
@@ -120,6 +125,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Checkouts == nil {
 		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("tools_daemon: Deps.Projects is required")
+	}
+	if d.Installs == nil {
+		return fmt.Errorf("tools_daemon: Deps.Installs is required")
 	}
 	return nil
 }

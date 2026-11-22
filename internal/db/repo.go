@@ -111,7 +111,6 @@ type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 type Repo struct {
 	DB       *WrappedDBTX
 	driver   DatabaseDriver
-	apiKeys  *apiKeyStore
 	accounts *accountStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
@@ -162,7 +161,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	return &Repo{
 		DB:       &WrappedDBTX{db: db, orm: client},
 		driver:   driver,
-		apiKeys:  newAPIKeyStore(client),
 		accounts: newAccountStore(client),
 	}, nil
 }

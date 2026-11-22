@@ -34,6 +34,8 @@ type Deps struct {
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
 	// reclaim now. store.WorktreeExtStore satisfies it.
 	Marks worktreesweep.MarkDecisionStore
+	// Storage is the machines' storage view, forget and clean-up (deps.go).
+	Storage Storage
 	// Sweeper runs the confirmed storage clean-up on a machine's daemon.
 	// nil when no daemon router is wired; CleanupStorage then reports
 	// unavailable.
@@ -75,6 +77,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Marks == nil {
 		return fmt.Errorf("inbox: Deps.Marks is required")
+	}
+	if d.Storage == nil {
+		return fmt.Errorf("inbox: Deps.Storage is required")
 	}
 	return nil
 }

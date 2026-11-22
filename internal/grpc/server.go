@@ -78,8 +78,13 @@ type APIHTTPRoutesDeps struct {
 	// without it, connectors authenticate with `rlat_` connector
 	// credentials only and OAuth discovery is not advertised.
 	OAuthIssuers []string
+	// OAuthScopes are the scopes the connector endpoints advertise; empty
+	// advertises "openid".
+	OAuthScopes []string
 	// AuthorizationServer is the control plane that issues this
-	// deployment's rlat_ tokens; empty serves no CLI login discovery.
+	// deployment's rlat_ tokens; empty serves no CLI login discovery. Listed
+	// in OAuthIssuers too, the workspace connector also accepts the
+	// mcp:oauth tokens it issues to MCP clients.
 	AuthorizationServer string
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
@@ -154,7 +159,13 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// chain. Confinement is enforced daemon-side at command dispatch
 	// (internal/daemonpolicy); this route resolves the grant and terminates
 	// the protocol.
-	mountMCP, err := connectorMCPRoutes(deps.Repo, deps.Grants, deps.Router, deps.PublicURL, deps.OAuthIssuers,
+	oauthCfg := mcpserver.OAuthConfig{
+		PublicURL:            deps.PublicURL,
+		AuthorizationServers: deps.OAuthIssuers,
+		Scopes:               deps.OAuthScopes,
+		AccessTokenIssuer:    deps.AuthorizationServer,
+	}
+	mountMCP, err := connectorMCPRoutes(deps.Repo, deps.Grants, deps.Router, oauthCfg,
 		connectorTokenValidator(settings), accesstokenclient.NewCachedIntrospector(deps.Tokens), deps.ControlPlaneURL)
 	if err != nil {
 		return nil, fmt.Errorf("connector MCP endpoint: %w", err)
@@ -164,7 +175,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// The Reliant Forge connector: forge's account tools (monitoring,
 	// releases, environments) for a signed-in person, at /forge/mcp beside
 	// the workspace endpoint, under a forge connector grant.
-	if mountForge := forgeMCPRoutes(deps.Grants, deps.PublicURL, deps.OAuthIssuers,
+	if mountForge := forgeMCPRoutes(deps.Grants, oauthCfg,
 		connectorTokenValidator(settings), deps.ControlPlaneURL); mountForge != nil {
 		r.routes = append(r.routes, mountForge)
 	}
@@ -299,8 +310,7 @@ func connectorMCPRoutes(
 	database mcpserver.AttachmentReader,
 	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
-	publicURL string,
-	oauthIssuers []string,
+	oauthCfg mcpserver.OAuthConfig,
 	tokenValidator mcpserver.OAuthTokenValidator,
 	credentials mcpserver.CredentialIntrospector,
 	controlPlaneURL string,
@@ -329,11 +339,6 @@ func connectorMCPRoutes(
 	waker := mcpserver.NewPollingWaker(
 		mcpserver.NewAttachmentReadiness(database, resumer), slog.Default())
 
-	oauthCfg := mcpserver.OAuthConfig{
-		PublicURL:            publicURL,
-		AuthorizationServers: oauthIssuers,
-	}
-
 	handler, err := mcpserver.NewHTTPHandler(mcpserver.HTTPDeps{
 		Store:       grants,
 		Credentials: credentials,
@@ -346,7 +351,7 @@ func connectorMCPRoutes(
 		// Bindings answer "which connector does this application act
 		// through?", recorded at consent.
 		Bindings:       grants,
-		ConsentBaseURL: publicURL,
+		ConsentBaseURL: oauthCfg.PublicURL,
 	})
 	if err != nil {
 		return nil, err
@@ -391,12 +396,10 @@ func connectorMCPRoutes(
 // and a control plane (an OSS server has neither).
 func forgeMCPRoutes(
 	grants connectorgrant.Store,
-	publicURL string,
-	oauthIssuers []string,
+	oauthCfg mcpserver.OAuthConfig,
 	tokenValidator mcpserver.OAuthTokenValidator,
 	controlPlaneURL string,
 ) func(mux *http.ServeMux) {
-	oauthCfg := mcpserver.OAuthConfig{PublicURL: publicURL, AuthorizationServers: oauthIssuers}
 	if !oauthCfg.Enabled() || tokenValidator == nil || strings.TrimSpace(controlPlaneURL) == "" {
 		logging.Info("Reliant Forge MCP endpoint not mounted: it needs an OAuth authorization server and a control plane")
 		return nil
@@ -407,7 +410,7 @@ func forgeMCPRoutes(
 		Bindings:        grants,
 		OAuth:           oauthCfg,
 		ControlPlaneURL: controlPlaneURL,
-		ConsentBaseURL:  publicURL,
+		ConsentBaseURL:  oauthCfg.PublicURL,
 		Logger:          slog.Default(),
 	})
 	if err != nil {

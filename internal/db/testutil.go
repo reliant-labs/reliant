@@ -188,10 +188,9 @@ func PrepareTestDatabases() (release func(), err error) {
 	}, nil
 }
 
-// EnableTestCredentialSealing gives repo a vault with a throwaway key: provider
-// keys and sign-in tokens exist only sealed, so a test Repo cannot write them
-// without one.
-func EnableTestCredentialSealing(tb testing.TB, repo *Repo) {
+// NewTestVault returns a credential vault over repo's database with a throwaway key,
+// for a test of a credential package: the sealed columns exist only sealed.
+func NewTestVault(tb testing.TB, repo *Repo) vault.Service {
 	tb.Helper()
 	keyBytes := make([]byte, 32)
 	if _, err := rand.Read(keyBytes); err != nil {
@@ -201,7 +200,15 @@ func EnableTestCredentialSealing(tb testing.TB, repo *Repo) {
 	if err != nil {
 		tb.Fatalf("parse test vault key: %v", err)
 	}
-	repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
+	return vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
+}
+
+// EnableTestCredentialSealing gives repo a vault with a throwaway key: provider
+// keys and sign-in tokens exist only sealed, so a test Repo cannot write them
+// without one.
+func EnableTestCredentialSealing(tb testing.TB, repo *Repo) {
+	tb.Helper()
+	repo.EnableCredentialSealing(NewTestVault(tb, repo))
 }
 
 // setupTestRepo is the shared implementation: a Repo, with credential sealing,

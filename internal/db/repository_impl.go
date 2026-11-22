@@ -992,32 +992,6 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
-// GetProjectByPathAndUserInScope is the user's project at path in scope (an
-// org, with its unassigned rows when it is the user's default); nil scope is
-// every org's. Projects are unique per (org, user, path).
-func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
-	if path == "" {
-		return nil, fmt.Errorf("project path cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
-}
-
-// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
-// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
-// user, remote_url).
-func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
-	if remoteURL == "" {
-		return nil, fmt.Errorf("remote URL cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
-}
-
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	return projectaccess.NewFromORM(r.ORM()).GetProjectWithUserCheck(ctx, id, userID)
 }
@@ -1176,14 +1150,6 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 	})
 }
 
-// ResolveQueuedProjectDaemon applies the outcome the daemon reported.
-func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error {
-	if requestID == "" {
-		return fmt.Errorf("request ID cannot be empty")
-	}
-	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
-}
-
 // MarkProjectDaemonInstalledInScope settles the machine's clone of the
 // project as installed, from evidence the machine gave (its filesystem
 // announcement, or a directory at the row's own path for a clone whose outcome
@@ -1241,15 +1207,6 @@ func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *
 		return false, err
 	}
 	return scope.Includes(org), nil
-}
-
-// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
-// daemon's clones queued while it was away, now that it has connected.
-func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
 // FailProjectDaemonInstallInScope settles the machine's clone of the project
@@ -1327,13 +1284,6 @@ func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID strin
 // projects.
 func (r *Repo) ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
 	return store.ListProjectDaemonsForProjects(ctx, r.ORM(), projectIDs)
-}
-
-func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	if daemonID == "" {
-		return nil, fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.ListProjectDaemonsForDaemon(ctx, r.ORM(), daemonID)
 }
 
 func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
@@ -1820,17 +1770,6 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
-func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return store.ListWorktreesForReclaim(ctx, r.ORM())
-}
-
-func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
-}
-
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
 // cleanup_metadata under SELECT ... FOR UPDATE.
 func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error {
@@ -1840,27 +1779,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
-// archived row that still has no machine on record.
-func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
-}
-
+// AdoptWorktreeDaemon records the daemon that found a workspace's directory.
+//
+// Deprecated: use store.WorktreeExtStore.AdoptWorktreeDaemon; the sweep reads
+// it there, and only a test of the activities still calls this.
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
 		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
-}
-
-func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
@@ -2060,27 +1987,6 @@ func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *stri
 	setting.Value = value
 	setting.ValueType = valueType
 	return r.UpdateSetting(ctx, setting)
-}
-
-func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error) {
-	if userID == "" || daemonID == "" {
-		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.GetAutomationToken(ctx, userID, daemonID)
-}
-
-func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.SetAutomationToken(ctx, userID, daemonID, token)
-}
-
-func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.DeleteAutomationToken(ctx, userID, daemonID)
 }
 
 // ==================== Visibility Methods ====================
@@ -4149,10 +4055,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
-}
-
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
@@ -4177,11 +4079,10 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// EnableCredentialSealing gives the api_keys and provider_accounts stores
-// their vault; without one, automation tokens and provider credentials cannot
-// be read or written. Call once at boot, before serving.
+// EnableCredentialSealing gives the provider_accounts store its vault; without
+// one, provider credentials cannot be read or written. Call once at boot,
+// before serving.
 func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
-	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
 }
 
