@@ -77,7 +77,7 @@ func newEnv(t *testing.T) *env {
 	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	resolver := connections.NewResolver(repo, store, tokens)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")

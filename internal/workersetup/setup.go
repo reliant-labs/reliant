@@ -74,6 +74,8 @@ type Config struct {
 	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
 	// routing reads and writes (credentials/provideraccounts).
 	ProviderAccounts AccountStore
+	// Connections holds the saved logins the trigger pollers read (credentials/connectionvault).
+	Connections TriggerConnections
 	// OrgAccounts holds the org key notices the sweep claims and confirms (credentials/orgaccounts).
 	OrgAccounts    OrgKeyNoticeStore
 	StreamingHub   streaming.StreamingHub
@@ -380,7 +382,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: repo.Connections()},
+				triggerPollRepo{Repo: repo, connections: cfg.Connections},
 				cfg.TriggerPollers,
 				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
@@ -634,9 +636,15 @@ func (p poolMemberWaker) WakeMember(ctx context.Context, userID, daemonID string
 	return err
 }
 
+// TriggerConnections is the one read of a saved login the trigger pollers make.
+// credentials/connectionvault.Service satisfies it.
+type TriggerConnections interface {
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+}
+
 type triggerPollRepo struct {
 	*db.Repo
-	connections db.ConnectionStore
+	connections TriggerConnections
 }
 
 func (r triggerPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {
