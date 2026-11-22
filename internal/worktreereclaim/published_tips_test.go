@@ -4,6 +4,7 @@ package worktreereclaim
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -70,6 +71,13 @@ func TestOrphan_AmendedAwayUnpushedTipStillHolds(t *testing.T) {
 	}
 	if got := f.verdict(w); got.Outcome != OutcomeHeld || got.Reason != ReasonUnreachable || !exists(w.Path) {
 		t.Fatalf("unpublished history must still hold: %+v", got)
+	}
+	// Asked live whether it is reclaimable, the answer says what holds it.
+	live := w
+	live.State, live.Fence, live.ProbeRecoverableAfterSeconds = StateActive, "", 3600
+	got := f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{live}}).Results[0]
+	if got.Outcome != OutcomeLocked || got.RecoverableIdle || !strings.HasPrefix(got.NotReclaimable, string(ReasonUnreachable)+": ") {
+		t.Fatalf("a live answer must name the unreachable history: %+v", got)
 	}
 }
 
