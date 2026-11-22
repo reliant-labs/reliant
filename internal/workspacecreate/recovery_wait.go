@@ -36,8 +36,9 @@ func isRecoveryRefusal(err error) bool {
 	return errors.As(err, &r) && r.RetryableRefusal()
 }
 
-// Tests shrink these, and replace recoveryWaitSleep, so they wait no real time.
+// Tests replace the clock and sleep so they wait no real time.
 var (
+	recoveryWaitNow = time.Now
 	// recoveryWaitFirst is the first wait, doubling up to recoveryWaitMax.
 	recoveryWaitFirst = 2 * time.Second
 	recoveryWaitMax   = 5 * time.Second
@@ -77,30 +78,48 @@ func (e *recoveryOutlastedError) Unwrap() error { return e.cause }
 type recoveryPatientMachine struct{ Machine }
 
 func (m recoveryPatientMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
-	wait, waited := recoveryWaitFirst, time.Duration(0)
+	started := recoveryWaitNow()
+	// Sends share the budget too, including an in-flight retry. Do not restart
+	// a full command timeout after every refusal.
+	budgetCtx, cancel := context.WithTimeout(ctx, recoveryWaitBudget)
+	defer cancel()
+	wait := recoveryWaitFirst
+	var refusal error
 	for {
-		err := m.Machine.Send(ctx, commandType, payload, resp, timeoutMs)
-		if !isRecoveryRefusal(err) {
-			if waited > 0 && err == nil {
-				logging.InfoContext(ctx, "Daemon command ran after the machine finished a recovery finalization",
-					"command", commandType, "waited", waited)
+		err := m.Machine.Send(budgetCtx, commandType, payload, resp, timeoutMs)
+		elapsed := recoveryWaitNow().Sub(started)
+		if isRecoveryRefusal(err) {
+			if refusal == nil {
+				logging.InfoContext(ctx, "Machine is finalizing a workspace's recovery; waiting to send the command again",
+					"command", commandType, "error", err)
 			}
-			return err
+			refusal = err
+		} else {
+			if err == nil {
+				if refusal != nil {
+					logging.InfoContext(ctx, "Daemon command ran after the machine finished a recovery finalization",
+						"command", commandType, "waited", elapsed)
+				}
+				return nil
+			}
+			if refusal == nil || ctx.Err() != nil || budgetCtx.Err() == nil {
+				return err
+			}
 		}
-		if waited+wait > recoveryWaitBudget {
-			// Not a fault of ours, nor one waiting longer clears: a WARN
-			// through machineFailure, never an issue.
-			return &recoveryOutlastedError{waited: waited, cause: err}
+		remaining := recoveryWaitBudget - elapsed
+		if remaining <= 0 || (ctx.Err() == nil && budgetCtx.Err() != nil) {
+			return &recoveryOutlastedError{waited: elapsed, cause: refusal}
 		}
-		if waited == 0 {
-			logging.InfoContext(ctx, "Machine is finalizing a workspace's recovery; waiting to send the command again",
-				"command", commandType, "error", err)
-		}
-		if serr := recoveryWaitSleep(ctx, wait); serr != nil {
+		if serr := recoveryWaitSleep(budgetCtx, min(wait, remaining)); serr != nil {
+			if ctx.Err() == nil && budgetCtx.Err() != nil {
+				return &recoveryOutlastedError{waited: recoveryWaitNow().Sub(started), cause: refusal}
+			}
 			// Cancelled while waiting: the refusal is still what happened.
-			return err
+			return refusal
 		}
-		waited += wait
+		if elapsed = recoveryWaitNow().Sub(started); elapsed >= recoveryWaitBudget {
+			return &recoveryOutlastedError{waited: elapsed, cause: refusal}
+		}
 		wait = min(2*wait, recoveryWaitMax)
 	}
 }

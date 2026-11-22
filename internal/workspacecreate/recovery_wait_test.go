@@ -59,16 +59,23 @@ func waitsNoTime(t *testing.T) *[]time.Duration {
 	var mu sync.Mutex
 	var waits []time.Duration
 	prev := recoveryWaitSleep
+	prevNow := recoveryWaitNow
+	now := time.Now()
+	recoveryWaitNow = func() time.Time { return now }
 	recoveryWaitSleep = func(ctx context.Context, d time.Duration) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		mu.Lock()
 		waits = append(waits, d)
+		now = now.Add(d)
 		mu.Unlock()
 		return nil
 	}
-	t.Cleanup(func() { recoveryWaitSleep = prev })
+	t.Cleanup(func() {
+		recoveryWaitSleep = prev
+		recoveryWaitNow = prevNow
+	})
 	return &waits
 }
 
@@ -131,6 +138,46 @@ func TestFinishFailsWhenRecoveryFinalizationOutlastsTheWait(t *testing.T) {
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED), row.Status)
 	assert.Contains(t, row.FailureReason, "finalizing another workspace's removal")
 	assert.Empty(t, row.Path)
+}
+
+type slowRefusingMachine struct {
+	Machine
+	send func(context.Context) error
+}
+
+func (m slowRefusingMachine) Send(ctx context.Context, _ string, _, _ any, _ int32) error {
+	return m.send(ctx)
+}
+
+// Send time consumes the same budget as backoff, and every attempt inherits
+// the same deadline rather than receiving a fresh timeout.
+func TestRecoveryBudgetIncludesSlowSends(t *testing.T) {
+	waits := waitsNoTime(t)
+	clock := recoveryWaitNow
+	var sendTime time.Duration
+	recoveryWaitNow = func() time.Time { return clock().Add(sendTime) }
+	var deadline time.Time
+	calls := 0
+	m := slowRefusingMachine{send: func(ctx context.Context) error {
+		calls++
+		d, ok := ctx.Deadline()
+		require.True(t, ok)
+		if calls == 1 {
+			deadline = d
+			sendTime += 120 * time.Second
+		} else {
+			require.Equal(t, deadline, d)
+			sendTime += 28 * time.Second
+		}
+		return fakeRefusal{}
+	}}
+	err := (recoveryPatientMachine{Machine: m}).Send(context.Background(), "worktree.create", nil, nil, 120000)
+	var outlasted *recoveryOutlastedError
+	require.ErrorAs(t, err, &outlasted)
+	assert.Equal(t, recoveryWaitBudget, outlasted.waited)
+	assert.True(t, isRecoveryRefusal(err))
+	assert.Equal(t, 2, calls)
+	assert.Equal(t, []time.Duration{2 * time.Second}, *waits)
 }
 
 // A caller that gives up stops the wait at once.
