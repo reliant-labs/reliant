@@ -10,13 +10,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/require"
 )
 
 // Exercise the actual public tool, Finish and registered daemon handler, not
@@ -45,7 +48,7 @@ func TestWorktreeToolForceResetsStaleBranchesAfterValidation(t *testing.T) {
 		oldHeads[dir] = fixture.run(dir, "rev-parse", "refs/heads/feat/again")
 		rc.Repos = append(rc.Repos, &core.Repo{ID: uuid.NewString(), ProjectID: project.ID, Name: name, RelativePath: name})
 	}
-	tool := tools.NewWorktreeTool(repo, machine, nil)
+	tool := tools.NewWorktreeTool(repo, store.NewChatExtStore(repo.ORM()), machine, nil)
 	call := func(name, base string) tools.ToolResponse {
 		input, err := json.Marshal(tools.WorktreeParams{Action: "create", Name: name, Branch: "feat/again", BaseBranch: base, Force: true})
 		require.NoError(t, err)

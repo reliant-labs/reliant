@@ -23,6 +23,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
+// OrgMoveResumer turns a trigger a project move paused back on
+// (ResumeAfterOrgMove). store.ProjectOrgMoveExtStore satisfies it.
+type OrgMoveResumer interface {
+	// ResumePausedTrigger turns a trigger on only while the system's pause
+	// for reason still stands and the row is the version checked (seen, its
+	// updated_at), recording it in the trigger's change history.
+	ResumePausedTrigger(ctx context.Context, id, reason string, seen time.Time) (bool, error)
+}
+
 // Repository is everything the trigger handlers read and write.
 // OrgResolver answers the org questions of these rpcs. *orgs.Resolver is
 // one; nil (or a nil *orgs.Resolver) is a deployment with no orgs.
@@ -58,10 +67,6 @@ type Repository interface {
 	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
-	// ResumeTriggerPausedBy turns a trigger on only while the system's pause
-	// for reason still stands and the row is the version checked (seen, its
-	// updated_at): a project move's, ResumeAfterOrgMove.
-	ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error)
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)

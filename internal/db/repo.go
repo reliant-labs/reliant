@@ -8,20 +8,23 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/store"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/sdk/activity"
 )
 
 const (
@@ -127,6 +130,11 @@ type Repo struct {
 	// ladder instead of sleeping through it: an exhausted retry budget is
 	// ~2.5s of sleep. Per Repo, so parallel tests cannot see each other's.
 	retrySleep func(time.Duration)
+
+	// planningSvc is the planning package over this Repo, built on first use.
+	planningOnce sync.Once
+	planningSvc  planning.Service
+	planningErr  error
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.

@@ -22,7 +22,7 @@ func (s *Service) GetProjectOrgMove(
 	req *connect.Request[pb.GetProjectOrgMoveRequest],
 ) (*connect.Response[pb.GetProjectOrgMoveResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	move, err := s.deps.Repo.GetProjectOrgMove(ctx, req.Msg.GetMoveId())
+	move, err := s.deps.Ledger.GetProjectOrgMove(ctx, req.Msg.GetMoveId())
 	if errors.Is(err, core.ErrProjectOrgMoveNotFound) {
 		return nil, svcerr.NotFound("project move")
 	}
