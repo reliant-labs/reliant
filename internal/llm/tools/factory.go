@@ -69,6 +69,10 @@ type ToolsOptions struct {
 	// report that it is unavailable here, like a nil Repo.
 	Placement PlacementRecords
 	Workflows RunWorkflows
+	// Refetch tells the chat's and the user's clients a plan, its tasks or the
+	// worktree list changed (chatupdates.Service). Optional: nil announces
+	// nothing, and clients fall back to their poll.
+	Refetch Refetcher
 	// Planning is the plan, task and dependency store behind the planning
 	// tools. Optional: nil makes them report that they are unavailable here,
 	// like a nil Repo.
@@ -292,6 +296,14 @@ type toolPlanning interface {
 // planning is Planning as the planning tools' roles: nil when the factory has
 // none, for the same reason store() is (a nil interface value is not nil
 // once converted).
+// refetch is the factory's Refetcher, a nil interface when there is none.
+func (f *ToolsFactory) refetch() Refetcher {
+	if f.opts == nil || f.opts.Refetch == nil {
+		return nil
+	}
+	return f.opts.Refetch
+}
+
 func (f *ToolsFactory) planning() toolPlanning {
 	if f.opts == nil || f.opts.Planning == nil {
 		return nil
@@ -545,11 +557,11 @@ func (f *ToolsFactory) GenerateVideo() Tool {
 
 // Planning tools
 func (f *ToolsFactory) CreatePlan() Tool {
-	return NewCreatePlanTool(f.store(), f.planning())
+	return NewCreatePlanTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) UpdatePlan() Tool {
-	return NewUpdatePlanTool(f.store(), f.planning())
+	return NewUpdatePlanTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) GetPlan() Tool {
@@ -562,23 +574,23 @@ func (f *ToolsFactory) ListTasks() Tool {
 }
 
 func (f *ToolsFactory) AddTask() Tool {
-	return NewAddTaskTool(f.store(), f.planning())
+	return NewAddTaskTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) UpdateTask() Tool {
-	return NewUpdateTaskTool(f.store(), f.planning())
+	return NewUpdateTaskTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) CreateSubtask() Tool {
-	return NewCreateSubtaskTool(f.store())
+	return NewCreateSubtaskTool(f.store(), f.refetch())
 }
 
 func (f *ToolsFactory) AddDependency() Tool {
-	return NewAddDependencyTool(f.store(), f.planning())
+	return NewAddDependencyTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) RemoveDependency() Tool {
-	return NewRemoveDependencyTool(f.store(), f.planning())
+	return NewRemoveDependencyTool(f.store(), f.planning(), f.refetch())
 }
 
 func (f *ToolsFactory) ListReadyTasks() Tool {
@@ -729,7 +741,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.worktreeRecords(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.worktreeRecords(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler, f.refetch())
 }
 
 // Skill tools
