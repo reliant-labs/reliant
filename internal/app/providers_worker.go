@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -311,6 +312,7 @@ func NewStoredConfigProvider(d StoredConfigProviderDeps) (*reliantconfig.StoredC
 // RunLifecycleDeps is what runs are recorded in and driven through.
 type RunLifecycleDeps struct {
 	DB       *db.Repo
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 }
@@ -318,7 +320,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -355,6 +357,7 @@ type WorkerChatDeps struct {
 	Logger   *slog.Logger
 	Config   *config.Config
 	DB       *db.Repo
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
@@ -375,6 +378,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Messages:    store.NewMessageExtStore(d.DB.ORM()),
 		ToolBlocks:  store.NewMessageContentBlockExtStore(d.DB.ORM()),
 		Senders:     store.NewThreadExtStore(d.DB.ORM()),
+		Backoff:     d.Backoff,
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
@@ -483,6 +487,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Config:        d.Config,
 		Repo:          repo,
 		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Pools:         store.NewMachinePoolExtStore(repo.ORM()),
 		Syncer:        syncer,
 		Fires:         fires,
 		ControlPlane:  hostedControlPlane(d.ControlPlane),
@@ -492,7 +497,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Catalog:       d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
@@ -510,6 +515,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 type WorkerToolsFactoryDeps struct {
 	ConnectionVault connectionvault.Service
 	DB              *db.Repo
+	Backoff         providerbackoff.Service
 	Network         *configv1.NetworkConfig
 	Temporal        *TemporalClient
 	AgentRuns       *agentruns.Runs
@@ -536,7 +542,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	// The registry service is a library here, not a mount: the label and
 	// pool tools call its rpcs in-process, as the run's owner. Its
 	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo}
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM())}
 	if d.Router != nil && d.Router.ControlPlane != nil {
 		registryDeps.IdleTimeouts = d.Router.ControlPlane
 	}
@@ -562,6 +568,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// spawn_status reads which sub-agents are parked on a usage limit.
+		ProviderBackoff: d.Backoff,
 		// spawn_stop executes here too, and the stop is NOT best-effort: with
 		// no stopper the tool reports that it cannot stop anything rather than
 		// claiming a cancellation that never left the process.
@@ -589,7 +597,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), store.NewMachinePoolExtStore(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
 		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
@@ -956,7 +964,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	repo := d.DB
 	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
@@ -1020,6 +1028,7 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 type AccountUsagePollerDeps struct {
 	DB       *db.Repo
 	Accounts provideraccounts.Service
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 }
 
@@ -1032,7 +1041,6 @@ type AccountUsagePollerDeps struct {
 //
 //forge:root-only worker
 func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, error) {
-	repo := d.DB
 	return &accountlimits.Poller{
 		Store: d.Accounts,
 		Fetcher: &accountlimits.Fetcher{
@@ -1041,7 +1049,7 @@ func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, err
 			// A poll that lifts a bench wakes the user's blocked chats, so their
 			// threads re-route onto the account now rather than at a reset.
 			OnCapacity: func(ctx context.Context, userID, _ string) {
-				capacitywake.WakeUser(ctx, repo, d.Temporal.Client, userID, "a usage poll found a limited account serving again")
+				capacitywake.WakeUser(ctx, d.Backoff, d.Temporal.Client, userID, "a usage poll found a limited account serving again")
 			},
 		},
 	}, nil

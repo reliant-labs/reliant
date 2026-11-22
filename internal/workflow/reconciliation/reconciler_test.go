@@ -326,7 +326,7 @@ func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.Ba
 	return out, nil
 }
 
-func (m *mockRepo) ChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
+func (m *mockRepo) ListChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.heldSince = append(m.heldSince, since)

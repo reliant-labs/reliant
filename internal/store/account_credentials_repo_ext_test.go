@@ -407,7 +407,7 @@ WHERE chat_id = $4 AND waiting_since IS NOT NULL
 	if port.WaitedMs != 1000+3000+60000 || port.Retries != 3 || port.Provider != "Anthropic" || port.Waiting() || port.Attempt != 0 {
 		t.Fatalf("backoff = %+v; want 64s waited over 3 retries, released", port)
 	}
-	viaRepo, err := env.Repo.ProviderBackoffByChat(ctx, "chat-bo")
+	viaRepo, err := store.ListChatProviderBackoff(ctx, env.ORM, "chat-bo")
 	if err != nil {
 		t.Fatalf("Repo.ProviderBackoffByChat: %v", err)
 	}

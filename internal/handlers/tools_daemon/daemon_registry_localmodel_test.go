@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -89,6 +90,15 @@ func userCtx(userID string) context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 }
 
+// registryPools is the generated pool store over repo when it is a database,
+// else an empty mock.
+func registryPools(repo daemon_registry.Repository) daemon_registry.Pools {
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		return store.NewMachinePoolExtStore(r.ORM())
+	}
+	return &daemon_registry.MockPools{}
+}
+
 // newDaemonRegistry builds the registry the gateway's writes are read back
 // through. A nil router is cloud mode's: the relays report Unavailable.
 func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router daemon_registry.Router) *daemon_registry.Service {
@@ -97,6 +107,7 @@ func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router dae
 		Logger: slog.New(slog.DiscardHandler),
 		Config: &typedconfig.Config{},
 		Repo:   repo,
+		Pools:  registryPools(repo),
 		Router: router,
 	})
 	require.NoError(t, err)

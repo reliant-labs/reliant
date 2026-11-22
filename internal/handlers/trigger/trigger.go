@@ -293,7 +293,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// against (fires then wait until a member syncs).
 	catalogMachine := def.DaemonId
 	if def.MachinePoolId != "" {
-		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Repo, userID, def.MachinePoolId, def.ProjectId); err == nil {
+		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Pools, userID, def.MachinePoolId, def.ProjectId); err == nil {
 			catalogMachine = member
 		}
 	}
@@ -369,7 +369,7 @@ func (s *Service) validateTriggerDaemon(ctx context.Context, userID, projectID, 
 // member that has the project is accepted (its runs wait, saying why), so a
 // pool can be wired before its machines finish cloning.
 func (s *Service) validateTriggerPool(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
-	if _, err := s.deps.Repo.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
+	if _, err := s.deps.Pools.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
 		return tools.RefuseActivation("machine pool not found", svcerr.NotFound("machine pool"))
 	} else if err != nil {
 		return triggerDBError("get machine pool", err)
@@ -387,13 +387,13 @@ func (s *Service) ensureGrants(ctx context.Context, t *core.Trigger) {
 		s.grants.ensure(ctx, t.UserID, t.DaemonID)
 		return
 	}
-	pool, err := s.deps.Repo.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
+	pool, err := s.deps.Pools.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
 	if err != nil {
 		logging.WarnContext(ctx, "automation access not granted to pool members: could not read the pool",
 			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
 		return
 	}
-	members, err := s.deps.Repo.ListMachinePoolMembers(ctx, pool, "")
+	members, err := s.deps.Pools.ListMachinePoolMembers(ctx, pool, "")
 	if err != nil {
 		logging.WarnContext(ctx, "automation access not granted to pool members: could not list them",
 			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)

@@ -102,6 +102,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -170,6 +171,7 @@ func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
 	return NewOrgPolicyWatcher(OrgPolicyWatcherDeps{
 		Policies: g.OrgPolicyResolver(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 		Temporal: g.TemporalClient(),
 	})
 }
@@ -205,6 +207,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
 		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
 		Checkouts:       store.NewProjectDaemonDetachmentExtStore(g.Database().ORM()),
+		Pools:           store.NewMachinePoolExtStore(g.Database().ORM()),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
@@ -538,6 +541,7 @@ func (g *Graph) newRunLifecycle() (*runs.Service, error) {
 		Temporal: g.TemporalClient(),
 		Pause:    g.PauseService(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
@@ -558,6 +562,7 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
@@ -606,6 +611,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Membership:      g.OrgResolver(),
 		Logger:          g.Log,
 		Config:          g.Cfg,
+		Backoff:         g.Providerbackoff(),
 	})
 }
 
@@ -685,6 +691,7 @@ func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 		DB:       g.Database(),
 		Accounts: g.ProviderAccounts(),
 		Temporal: g.TemporalClient(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
@@ -1146,6 +1153,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Messages:    store.NewMessageExtStore(g.Database().ORM()),
 		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		Backoff:     g.Providerbackoff(),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
@@ -1187,6 +1195,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Config:         g.Cfg,
 		Repo:           g.Database(),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
+		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
 		Fires:          fires,
 		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1229,6 +1238,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1562,6 +1572,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
 		Orgs:        g.OrgResolver(),
@@ -1638,7 +1649,7 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
-		ChatWaker:   orgAccountChatWaker(g.Database(), g.TemporalClient()),
+		ChatWaker:   orgAccountChatWaker(g.Providerbackoff(), g.TemporalClient()),
 	})
 }
 
@@ -1662,6 +1673,22 @@ func (g *Graph) newPrivacy() (privacy.Service, error) {
 		return nil, err
 	}
 	return privacy.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newProviderbackoff constructs the providerbackoff package
+// (internal/providerbackoff): the markers a thread parked on a provider leaves.
+func (g *Graph) newProviderbackoff() (providerbackoff.Service, error) {
+	svc, err := providerbackoff.New(providerbackoff.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Markers:  store.NewProviderBackoffExtStore(g.Database().ORM()),
+		Tx:       g.Database(),
+		Activity: g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return providerbackoff.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newLlmusage constructs the llmusage package (internal/llmusage): the

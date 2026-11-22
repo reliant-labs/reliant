@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -28,11 +30,11 @@ func TestMachinePoolQueries(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"mp-a", "mp-b"} {
-		if ok, err := env.Repo.SetDaemonLabels(ctx, storetest.SeedUserID, id, map[string]string{"pool": "cicd", "size": "2xl"}); err != nil || !ok {
+		if ok, err := store.SetDaemonLabels(ctx, env.ORM, storetest.SeedUserID, id, map[string]string{"pool": "cicd", "size": "2xl"}); err != nil || !ok {
 			t.Fatalf("SetDaemonLabels %s = %v, %v", id, ok, err)
 		}
 	}
-	if ok, _ := env.Repo.SetDaemonLabels(ctx, "someone-else", "mp-a", map[string]string{}); ok {
+	if ok, _ := store.SetDaemonLabels(ctx, env.ORM, "someone-else", "mp-a", map[string]string{}); ok {
 		t.Fatal("another user relabelled the machine")
 	}
 	// Labels survive a re-registration (the upsert names its columns).
@@ -44,11 +46,11 @@ func TestMachinePoolQueries(t *testing.T) {
 		t.Fatalf("labels after re-registration = %v, %v", d, err)
 	}
 
-	pool, err := env.Repo.PutMachinePool(ctx, &core.MachinePool{UserID: storetest.SeedUserID, Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MaxRunsPerMember: 3})
+	pool, err := store.PutMachinePool(ctx, env.ORM, &core.MachinePool{UserID: storetest.SeedUserID, Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MaxRunsPerMember: 3}, uuid.NewString(), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("PutMachinePool: %v", err)
 	}
-	again, err := env.Repo.PutMachinePool(ctx, &core.MachinePool{UserID: storetest.SeedUserID, Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MaxRunsPerMember: 4})
+	again, err := store.PutMachinePool(ctx, env.ORM, &core.MachinePool{UserID: storetest.SeedUserID, Name: "cicd", Selector: map[string]string{"pool": "cicd"}, MaxRunsPerMember: 4}, uuid.NewString(), time.Now().UTC())
 	if err != nil || again.ID != pool.ID || again.MaxRunsPerMember != 4 {
 		t.Fatalf("re-put = %+v, %v; want the same id, updated", again, err)
 	}
@@ -79,7 +81,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	mkChat("mp-done", true, core.Completed())
 	mkChat("mp-unpooled", false, core.Active())
 
-	n, err := env.Repo.CountMachinePoolMemberLiveRuns(ctx, pool.ID, "mp-a")
+	n, err := store.CountMachinePoolMemberLiveRuns(ctx, env.ORM, pool.ID, "mp-a")
 	if err != nil || n != 2 {
 		t.Fatalf("live runs on a = %d, %v; want 2", n, err)
 	}
@@ -104,7 +106,7 @@ func TestMachinePoolQueries(t *testing.T) {
 			t.Fatalf("mark %d launched: %v", i, err)
 		}
 	}
-	held, err := env.Repo.CountTriggerCapacityHeldByMember(ctx, pool.ID, scope.UserID, scope.ProjectID, scope.WorkflowRef)
+	held, err := store.CountTriggerCapacityHeldByMember(ctx, env.ORM, pool.ID, scope.UserID, scope.ProjectID, scope.WorkflowRef)
 	if err != nil || len(held) != 1 || held["mp-a"] != 1 {
 		t.Fatalf("held = %v, %v; want only pr-review's one unreleased slot on a", held, err)
 	}
@@ -112,7 +114,7 @@ func TestMachinePoolQueries(t *testing.T) {
 		t.Fatalf("member idle timeout = %q, want the 10m default", again.MemberIdleTimeout)
 	}
 
-	members, err := env.Repo.ListMachinePoolMembers(ctx, again, storetest.SeedProjectID)
+	members, err := store.ListMachinePoolMembers(ctx, env.ORM, again, storetest.SeedProjectID)
 	if err != nil {
 		t.Fatalf("ListMachinePoolMembers: %v", err)
 	}
@@ -135,7 +137,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	// connection begins, until the connect-time reconcile sees it again.
 	memberA := func() core.MachinePoolMemberRow {
 		t.Helper()
-		ms, err := env.Repo.ListMachinePoolMembers(ctx, again, storetest.SeedProjectID)
+		ms, err := store.ListMachinePoolMembers(ctx, env.ORM, again, storetest.SeedProjectID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +178,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	if got, err := env.Repo.GetTrigger(ctx, "trg-pool"); err != nil || got.MachinePoolID != pool.ID || got.MachinePoolName != "cicd" || got.MachineState != "pool" {
 		t.Fatalf("pool trigger read back = %+v, %v", got, err)
 	}
-	if err := env.Repo.DeleteMachinePoolByName(ctx, storetest.SeedUserID, "cicd"); !errors.Is(err, core.ErrMachinePoolInUse) {
+	if err := store.DeleteMachinePoolByName(ctx, env.ORM, storetest.SeedUserID, "cicd"); !errors.Is(err, core.ErrMachinePoolInUse) {
 		t.Fatalf("delete a used pool = %v, want in use", err)
 	}
 	// The CHECK refuses a trigger naming a pool and a daemon.
@@ -185,7 +187,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	if err := store.InsertTrigger(ctx, env.ORM, bad); err == nil {
 		t.Fatal("a trigger naming both a daemon and a pool was stored")
 	}
-	if err := env.Repo.DeleteMachinePoolByName(ctx, storetest.SeedUserID, "nope"); !errors.Is(err, core.ErrMachinePoolNotFound) {
+	if err := store.DeleteMachinePoolByName(ctx, env.ORM, storetest.SeedUserID, "nope"); !errors.Is(err, core.ErrMachinePoolNotFound) {
 		t.Fatalf("delete missing = %v", err)
 	}
 }
@@ -215,14 +217,14 @@ func TestMergeDeclaredDaemonLabels(t *testing.T) {
 	}
 	merge := func(userID, id string, bound bool, l map[string]string, max int) bool {
 		t.Helper()
-		ok, err := env.Repo.MergeDeclaredDaemonLabels(ctx, userID, id, bound, l, max)
+		ok, err := store.MergeDeclaredDaemonLabels(ctx, env.ORM, userID, id, bound, l, max)
 		if err != nil {
 			t.Fatalf("MergeDeclaredDaemonLabels %s: %v", id, err)
 		}
 		return ok
 	}
 
-	if ok, _ := env.Repo.SetDaemonLabels(ctx, storetest.SeedUserID, "dl-box", map[string]string{"team": "ci"}); !ok {
+	if ok, _ := store.SetDaemonLabels(ctx, env.ORM, storetest.SeedUserID, "dl-box", map[string]string{"team": "ci"}); !ok {
 		t.Fatal("SetDaemonLabels dl-box wrote nothing")
 	}
 	if !merge(storetest.SeedUserID, "dl-box", false, map[string]string{"pool": "pipeline"}, 32) {

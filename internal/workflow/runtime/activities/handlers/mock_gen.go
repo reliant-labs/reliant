@@ -1229,7 +1229,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=e6a0c1b5df65bf07f23aca0f5fb58ab8726fc7c431d36ed3416ba6180ba9b7c1
+// forge:hash=aace0bed73f929ad4f2448babe5167b0bec622a0d3903bfda1aec22133d8b7d6
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1250,8 +1250,6 @@ type MockCallLLMStore struct {
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	EmitToolCallUpdateFunc                                   func(context.Context, string, db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThreadFunc                     func(context.Context, string) ([]*db.AgentMessage, error)
-	RecordProviderBackoffFunc                                func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
-	ClearProviderBackoffFunc                                 func(context.Context, string, time.Time) error
 	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
 	ListDaemonsByUserIDFunc                                  func(context.Context, string) ([]*db.Daemon, error)
 	ListDaemonLocalModelsFunc                                func(context.Context, string) (map[string]string, error)
@@ -1408,24 +1406,6 @@ func (m *MockCallLLMStore) ListQueuedAgentMessagesForThread(ctx context.Context,
 		return m.ListQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
 	}
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListQueuedAgentMessagesForThread")
-}
-
-// RecordProviderBackoff records the call and delegates to RecordProviderBackoffFunc when set.
-func (m *MockCallLLMStore) RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error {
-	m.Recorder.Record("RecordProviderBackoff", ctx, chatID, threadID, attempt, maxAttempts, statusCode, reason, delay, now)
-	if m.RecordProviderBackoffFunc != nil {
-		return m.RecordProviderBackoffFunc(ctx, chatID, threadID, attempt, maxAttempts, statusCode, reason, delay, now)
-	}
-	return contractkit.MockNotSet("MockCallLLMStore", "RecordProviderBackoff")
-}
-
-// ClearProviderBackoff records the call and delegates to ClearProviderBackoffFunc when set.
-func (m *MockCallLLMStore) ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error {
-	m.Recorder.Record("ClearProviderBackoff", ctx, threadID, now)
-	if m.ClearProviderBackoffFunc != nil {
-		return m.ClearProviderBackoffFunc(ctx, threadID, now)
-	}
-	return contractkit.MockNotSet("MockCallLLMStore", "ClearProviderBackoff")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
@@ -4689,7 +4669,7 @@ func (m *MockThreadStatusStore) CreateChatUpdate(ctx context.Context, chatID str
 var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 
 // forge:section MockUsageLimitWaitStore
-// forge:hash=036413c11b56dec3bb8b22b6c221a989578a738b29853be0f3a01048fa33c6d1
+// forge:hash=f9c3addab34c6dcaa735a56da72356230d761a83f3899d889acff6cac42f8a5b
 
 // MockUsageLimitWaitStore is a test mock for the UsageLimitWaitStore interface.
 //
@@ -4699,8 +4679,6 @@ var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 // "MockUsageLimitWaitStore.<Method>Func not set" error.
 type MockUsageLimitWaitStore struct {
 	contractkit.Recorder
-	RecordUsageLimitWaitFunc                                 func(context.Context, string, string, string, bool, time.Time, time.Time) error
-	ClearUsageLimitWaitFunc                                  func(context.Context, string, string, time.Time) error
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
@@ -4744,24 +4722,6 @@ type MockUsageLimitWaitStore struct {
 	SaveMessageAtomicFunc                                    func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-}
-
-// RecordUsageLimitWait records the call and delegates to RecordUsageLimitWaitFunc when set.
-func (m *MockUsageLimitWaitStore) RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error {
-	m.Recorder.Record("RecordUsageLimitWait", ctx, chatID, threadID, provider, probing, resumeAt, now)
-	if m.RecordUsageLimitWaitFunc != nil {
-		return m.RecordUsageLimitWaitFunc(ctx, chatID, threadID, provider, probing, resumeAt, now)
-	}
-	return contractkit.MockNotSet("MockUsageLimitWaitStore", "RecordUsageLimitWait")
-}
-
-// ClearUsageLimitWait records the call and delegates to ClearUsageLimitWaitFunc when set.
-func (m *MockUsageLimitWaitStore) ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error {
-	m.Recorder.Record("ClearUsageLimitWait", ctx, chatID, threadID, now)
-	if m.ClearUsageLimitWaitFunc != nil {
-		return m.ClearUsageLimitWaitFunc(ctx, chatID, threadID, now)
-	}
-	return contractkit.MockNotSet("MockUsageLimitWaitStore", "ClearUsageLimitWait")
 }
 
 // GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
@@ -5153,6 +5113,62 @@ func (m *MockUsageLimitWaitStore) RunTx(p0 context.Context, policy orm.TxPolicy,
 
 // Compile-time check.
 var _ UsageLimitWaitStore = (*MockUsageLimitWaitStore)(nil)
+
+// forge:section MockProviderBackoffMarkers
+// forge:hash=2120ed741a37e51dee9ed169716e8712906adbe0c84eaeafd7b479ac76a4c1a2
+
+// MockProviderBackoffMarkers is a test mock for the ProviderBackoffMarkers interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProviderBackoffMarkers.<Method>Func not set" error.
+type MockProviderBackoffMarkers struct {
+	contractkit.Recorder
+	RecordProviderBackoffFunc func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
+	ClearProviderBackoffFunc  func(context.Context, string, time.Time) error
+	RecordUsageLimitWaitFunc  func(context.Context, string, string, string, bool, time.Time, time.Time) error
+	ClearUsageLimitWaitFunc   func(context.Context, string, string, time.Time) error
+}
+
+// RecordProviderBackoff records the call and delegates to RecordProviderBackoffFunc when set.
+func (m *MockProviderBackoffMarkers) RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error {
+	m.Recorder.Record("RecordProviderBackoff", ctx, chatID, threadID, attempt, maxAttempts, statusCode, reason, delay, now)
+	if m.RecordProviderBackoffFunc != nil {
+		return m.RecordProviderBackoffFunc(ctx, chatID, threadID, attempt, maxAttempts, statusCode, reason, delay, now)
+	}
+	return contractkit.MockNotSet("MockProviderBackoffMarkers", "RecordProviderBackoff")
+}
+
+// ClearProviderBackoff records the call and delegates to ClearProviderBackoffFunc when set.
+func (m *MockProviderBackoffMarkers) ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error {
+	m.Recorder.Record("ClearProviderBackoff", ctx, threadID, now)
+	if m.ClearProviderBackoffFunc != nil {
+		return m.ClearProviderBackoffFunc(ctx, threadID, now)
+	}
+	return contractkit.MockNotSet("MockProviderBackoffMarkers", "ClearProviderBackoff")
+}
+
+// RecordUsageLimitWait records the call and delegates to RecordUsageLimitWaitFunc when set.
+func (m *MockProviderBackoffMarkers) RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error {
+	m.Recorder.Record("RecordUsageLimitWait", ctx, chatID, threadID, provider, probing, resumeAt, now)
+	if m.RecordUsageLimitWaitFunc != nil {
+		return m.RecordUsageLimitWaitFunc(ctx, chatID, threadID, provider, probing, resumeAt, now)
+	}
+	return contractkit.MockNotSet("MockProviderBackoffMarkers", "RecordUsageLimitWait")
+}
+
+// ClearUsageLimitWait records the call and delegates to ClearUsageLimitWaitFunc when set.
+func (m *MockProviderBackoffMarkers) ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error {
+	m.Recorder.Record("ClearUsageLimitWait", ctx, chatID, threadID, now)
+	if m.ClearUsageLimitWaitFunc != nil {
+		return m.ClearUsageLimitWaitFunc(ctx, chatID, threadID, now)
+	}
+	return contractkit.MockNotSet("MockProviderBackoffMarkers", "ClearUsageLimitWait")
+}
+
+// Compile-time check.
+var _ ProviderBackoffMarkers = (*MockProviderBackoffMarkers)(nil)
 
 // forge:section MockTriggerCapacitySlotStore
 // forge:hash=b881e8a614f384a8b12c089b11851665a2266982d0da0ada4c7bd0e82d38ce0b
