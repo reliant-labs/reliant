@@ -33,6 +33,7 @@ import {
   mobileChatsPath,
   mobileInboxPath,
   mobileMachinesPath,
+  mobileNewChatPath,
   mobileRunsPath,
   mobileSettingsPath,
   mobileWorkflowPath,
@@ -83,8 +84,9 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   // has no `/m/*` twin on purpose: its chrome collapses to an off-canvas nav
   // below `md` (forge-ui/sidebar_layout.tsx), so the one console serves both,
   // and redirecting it would make Apps and Observability unreachable from a
-  // phone — which is what this list used to do. /apps, the list of apps the
-  // console opens from, is one responsive page for the same reason.
+  // phone — which is what this list used to do. /projects, the list of apps
+  // the console opens from (the drawer's Apps), is one responsive page for the
+  // same reason, and so were the retired /apps and /sites it replaced.
   const PRESERVED = [
     "/auth",
     "/oauth",
@@ -101,7 +103,14 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/accept-invite",
     "/design-sandbox",
     "/forge",
+    "/projects",
     "/apps",
+    "/sites",
+    // Rows of the one nav (U6e) with no phone twin: Connectors and the org's
+    // Usage & billing are pages of the shell, which fits a phone, so the nav's
+    // drawer opens them rather than the chat list.
+    "/connectors",
+    "/usage",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;
@@ -145,6 +154,11 @@ export function mobilePathFor(pathname: string, search = ""): string {
   // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
   if (path === "/inbox" || path.startsWith("/inbox/")) return mobileInboxPath();
+
+  // A chat (a thread of it opens as the chat: the phone picks threads in its own sheet), and a draft.
+  const chat = /^\/c\/([^/]+)/.exec(path);
+  if (chat) return mobileChatPath(encodedSegment(chat[1]));
+  if (path === "/new") return mobileNewChatPath();
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
   if (run) return mobileChatPath(encodedSegment(run[1]));

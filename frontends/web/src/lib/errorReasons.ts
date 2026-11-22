@@ -61,6 +61,9 @@ export const ERROR_REASONS = [
   "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
+  // ── reliant: client version floor (internal/errreason.UpgradeRequired) ──
+  /** This app is older than the minimum the server serves; it must reload or update. FailedPrecondition. */
+  "upgrade_required",
   /** A protected environment wants a fresh step-up (control-plane secret_store). */
   "step_up_required",
   // ── control-plane: daemon lifecycle and entitlement (internal/svcdaemon) ──
@@ -197,6 +200,36 @@ export const ERROR_REASONS = [
   "policy_invalid",
   /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
   "policy_version_conflict",
+  // ── control-plane: Forge Changes (ChangesService; changes.proto) ──
+  /** A mutation named a revision the change has moved past (FailedPrecondition); nothing changed. */
+  "change_revision_conflict",
+  /** A launch, ramp up or roll-out in a protected environment without a person's approval (PermissionDenied). */
+  "approval_required",
+  /** RequestChangeApproval for a credential that acts for no person (FailedPrecondition). */
+  "approval_unavailable",
+  /** Launch/ramp/roll-out of a key the environment's current release does not declare (FailedPrecondition). */
+  "change_not_declared",
+  /** Launch/roll-out of a variant the environment's current release does not declare (FailedPrecondition). */
+  "variant_not_declared",
+  /** CreateChange of a key that already has a change in the environment (AlreadyExists). */
+  "change_exists",
+  /** GetChangeReadout of a change that never ran an experiment (FailedPrecondition). */
+  "no_experiment_run",
+  /** GetChangeReadout of a run launched as a rollout, not an experiment (FailedPrecondition). */
+  "run_not_experiment",
+  /** GetChangeReadout of a run frozen with no success metric (FailedPrecondition). */
+  "metric_missing",
+  /** GetChangeReadout of a run whose split has no control and treatment to compare (FailedPrecondition). */
+  "readout_plan_invalid",
+  // ── control-plane: free static hosting (OrganizationService.MoveFreeHostingDesignation) ──
+  /** PermissionDenied: the caller is not a member of the target org. */
+  "not_org_member",
+  /** PermissionDenied: only the accountable founder may move their free allowance. */
+  "free_hosting_founder_only",
+  /** FailedPrecondition: the target org already pays for hosting and needs no free allowance. */
+  "free_hosting_target_billed",
+  /** FailedPrecondition: a real move inside the 30-day cooldown; the message carries the RFC3339 date it ends. */
+  "free_hosting_move_cooldown",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

@@ -42,68 +42,84 @@ func (m *MockTokenSource) Token(ctx context.Context, userID string) (string, err
 // Compile-time check.
 var _ TokenSource = (*MockTokenSource)(nil)
 
-// forge:section MockStore
-// forge:hash=922bf6677e1a5627b93934c9ddcba360bf9dd8043a9f47fa7ac918c4cf9b367e
+// forge:section MockGrants
+// forge:hash=88ad5d926a66dc21cff178cde3c510b3063f8d13edd0f113073fd90b24ae2aa9
 
-// MockStore is a test mock for the Store interface.
+// MockGrants is a test mock for the Grants interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
 // assert call counts and captured arguments. Set XxxFunc fields to
 // override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
-type MockStore struct {
+// "MockGrants.<Method>Func not set" error.
+type MockGrants struct {
 	contractkit.Recorder
-	ReplaceIntegrationAccessFunc       func(context.Context, string, string, string, time.Time, []core.IntegrationAccessGrant) error
-	ListIntegrationTriggerOwnersFunc   func(context.Context, string) ([]string, error)
-	ClaimIntegrationAccessRefreshFunc  func(context.Context, string, string, time.Time, time.Time, time.Time) (bool, error)
-	FinishIntegrationAccessRefreshFunc func(context.Context, string, string, time.Time, error) error
-	PruneIntegrationAccessFunc         func(context.Context, time.Time) (int64, error)
+	ReplaceIntegrationAccessFunc func(context.Context, string, string, string, time.Time, []core.IntegrationAccessGrant) error
+	PruneIntegrationAccessFunc   func(context.Context, time.Time) (int64, error)
 }
 
 // ReplaceIntegrationAccess records the call and delegates to ReplaceIntegrationAccessFunc when set.
-func (m *MockStore) ReplaceIntegrationAccess(ctx context.Context, userID string, integrationID string, subjectID string, at time.Time, grants []core.IntegrationAccessGrant) error {
+func (m *MockGrants) ReplaceIntegrationAccess(ctx context.Context, userID string, integrationID string, subjectID string, at time.Time, grants []core.IntegrationAccessGrant) error {
 	m.Recorder.Record("ReplaceIntegrationAccess", ctx, userID, integrationID, subjectID, at, grants)
 	if m.ReplaceIntegrationAccessFunc != nil {
 		return m.ReplaceIntegrationAccessFunc(ctx, userID, integrationID, subjectID, at, grants)
 	}
-	return contractkit.MockNotSet("MockStore", "ReplaceIntegrationAccess")
-}
-
-// ListIntegrationTriggerOwners records the call and delegates to ListIntegrationTriggerOwnersFunc when set.
-func (m *MockStore) ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error) {
-	m.Recorder.Record("ListIntegrationTriggerOwners", ctx, integration)
-	if m.ListIntegrationTriggerOwnersFunc != nil {
-		return m.ListIntegrationTriggerOwnersFunc(ctx, integration)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "ListIntegrationTriggerOwners")
-}
-
-// ClaimIntegrationAccessRefresh records the call and delegates to ClaimIntegrationAccessRefreshFunc when set.
-func (m *MockStore) ClaimIntegrationAccessRefresh(ctx context.Context, userID string, integrationID string, now time.Time, leaseUntil time.Time, dueBefore time.Time) (bool, error) {
-	m.Recorder.Record("ClaimIntegrationAccessRefresh", ctx, userID, integrationID, now, leaseUntil, dueBefore)
-	if m.ClaimIntegrationAccessRefreshFunc != nil {
-		return m.ClaimIntegrationAccessRefreshFunc(ctx, userID, integrationID, now, leaseUntil, dueBefore)
-	}
-	return false, contractkit.MockNotSet("MockStore", "ClaimIntegrationAccessRefresh")
-}
-
-// FinishIntegrationAccessRefresh records the call and delegates to FinishIntegrationAccessRefreshFunc when set.
-func (m *MockStore) FinishIntegrationAccessRefresh(ctx context.Context, userID string, integrationID string, at time.Time, refreshErr error) error {
-	m.Recorder.Record("FinishIntegrationAccessRefresh", ctx, userID, integrationID, at, refreshErr)
-	if m.FinishIntegrationAccessRefreshFunc != nil {
-		return m.FinishIntegrationAccessRefreshFunc(ctx, userID, integrationID, at, refreshErr)
-	}
-	return contractkit.MockNotSet("MockStore", "FinishIntegrationAccessRefresh")
+	return contractkit.MockNotSet("MockGrants", "ReplaceIntegrationAccess")
 }
 
 // PruneIntegrationAccess records the call and delegates to PruneIntegrationAccessFunc when set.
-func (m *MockStore) PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error) {
+func (m *MockGrants) PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error) {
 	m.Recorder.Record("PruneIntegrationAccess", ctx, before)
 	if m.PruneIntegrationAccessFunc != nil {
 		return m.PruneIntegrationAccessFunc(ctx, before)
 	}
-	return 0, contractkit.MockNotSet("MockStore", "PruneIntegrationAccess")
+	return 0, contractkit.MockNotSet("MockGrants", "PruneIntegrationAccess")
 }
 
 // Compile-time check.
-var _ Store = (*MockStore)(nil)
+var _ Grants = (*MockGrants)(nil)
+
+// forge:section MockRefreshes
+// forge:hash=6ea7263802417fbb19dd47e6e5a9363af028062121f8f5c8a1c9b1c9f3f9f455
+
+// MockRefreshes is a test mock for the Refreshes interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRefreshes.<Method>Func not set" error.
+type MockRefreshes struct {
+	contractkit.Recorder
+	ListIntegrationTriggerOwnersFunc   func(context.Context, string) ([]string, error)
+	ClaimIntegrationAccessRefreshFunc  func(context.Context, string, string, time.Time, time.Time, time.Time) (bool, error)
+	FinishIntegrationAccessRefreshFunc func(context.Context, string, string, time.Time, bool, string) error
+}
+
+// ListIntegrationTriggerOwners records the call and delegates to ListIntegrationTriggerOwnersFunc when set.
+func (m *MockRefreshes) ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error) {
+	m.Recorder.Record("ListIntegrationTriggerOwners", ctx, integration)
+	if m.ListIntegrationTriggerOwnersFunc != nil {
+		return m.ListIntegrationTriggerOwnersFunc(ctx, integration)
+	}
+	return nil, contractkit.MockNotSet("MockRefreshes", "ListIntegrationTriggerOwners")
+}
+
+// ClaimIntegrationAccessRefresh records the call and delegates to ClaimIntegrationAccessRefreshFunc when set.
+func (m *MockRefreshes) ClaimIntegrationAccessRefresh(ctx context.Context, userID string, integrationID string, now time.Time, leaseUntil time.Time, dueBefore time.Time) (bool, error) {
+	m.Recorder.Record("ClaimIntegrationAccessRefresh", ctx, userID, integrationID, now, leaseUntil, dueBefore)
+	if m.ClaimIntegrationAccessRefreshFunc != nil {
+		return m.ClaimIntegrationAccessRefreshFunc(ctx, userID, integrationID, now, leaseUntil, dueBefore)
+	}
+	return false, contractkit.MockNotSet("MockRefreshes", "ClaimIntegrationAccessRefresh")
+}
+
+// FinishIntegrationAccessRefresh records the call and delegates to FinishIntegrationAccessRefreshFunc when set.
+func (m *MockRefreshes) FinishIntegrationAccessRefresh(ctx context.Context, userID string, integrationID string, at time.Time, ok bool, lastError string) error {
+	m.Recorder.Record("FinishIntegrationAccessRefresh", ctx, userID, integrationID, at, ok, lastError)
+	if m.FinishIntegrationAccessRefreshFunc != nil {
+		return m.FinishIntegrationAccessRefreshFunc(ctx, userID, integrationID, at, ok, lastError)
+	}
+	return contractkit.MockNotSet("MockRefreshes", "FinishIntegrationAccessRefresh")
+}
+
+// Compile-time check.
+var _ Refreshes = (*MockRefreshes)(nil)

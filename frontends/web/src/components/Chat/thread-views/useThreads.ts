@@ -16,9 +16,6 @@ import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, isSpa
 import { useActiveThreadIds, useActiveThreads } from "../../../store/threadActivityStore";
 import { useIsChatRunning } from "../../../store/activityStore";
 
-// Re-export utilities for backwards compatibility
-export { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./threadUtils";
-
 export interface ThreadInfo {
   id: string;
   name: string;

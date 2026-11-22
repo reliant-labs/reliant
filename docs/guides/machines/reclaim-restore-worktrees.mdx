@@ -39,6 +39,22 @@ Each machine's daemon does the reclaiming, on that machine only. Before it delet
     Main checkouts and clones are never reclaimed. `reliant worktree reclaim report` prints the last pass's report again, and `--roots path[:depth]` limits the scan to the directories you name.
   </Step>
 
+  <Step title="Try a capture and a restore, without removing anything">
+    `scan --capture` goes one step further than a dry run. Each `auto_safe` worktree is captured into its `refs/reliant/reclaimed/...` ref, and the capture is checked against the files, exactly as a real pass does before it deletes. Nothing is deleted, and every worktree stays where it is:
+
+    ```bash terminal
+    reliant worktree reclaim scan --capture
+    ```
+
+    Each captured entry's **WHY** names its ref and the command that restores it into a new directory:
+
+    ```text terminal
+    auto_safe  would_reclaim  0K  144h0m0s  .../app-feature-done  p-dfe9d53e8fd8995f  captured at refs/reliant/reclaimed/p-dfe9d53e8fd8995f/1763632368000000000-1a2b3c4d and verified; nothing was removed. Try a restore elsewhere: reliant worktree restore refs/reliant/reclaimed/p-dfe9d53e8fd8995f/1763632368000000000-1a2b3c4d --repo /home/you/src/app/.git --to <new dir>
+    ```
+
+    Run that `restore` with a `--to` directory that does not exist yet. The original worktree is still at its own path. When you are done, remove the trial worktree with `git worktree remove <new dir>` and the capture with `git update-ref -d <ref>`. A worktree with work only it holds is not captured, because a real pass captures one only after a person approves it. These trial captures are keyed by the worktree's path. A chat's workspace never applies one on its own: it was never removed, so it has nothing to put back.
+  </Step>
+
   <Step title="Decide on worktrees that hold unsaved work">
     List the worktrees waiting on a decision, with the keys you decide by:
 
@@ -57,19 +73,22 @@ Each machine's daemon does the reclaiming, on that machine only. Before it delet
   </Step>
 
   <Step title="Turn removal on">
-    The pass runs in `dry-run` by default: it reports, and approvals are refused. On a cloud machine it runs on its own every six hours, or every 30 minutes while the disk is under pressure. On your own computer it runs only when you enable the schedule, and the daemon's log says so at start:
+    The pass runs in `dry-run` by default: it reports, and approvals are refused. On a cloud machine it runs on its own every six hours, or every 30 minutes while the disk is under pressure. On your own computer a `dry-run` pass runs only where the storage reaper runs, which it does not by default.
+
+    To have worktrees removed, start the daemon in mode `on`, from the checkout it serves:
+
+    ```bash terminal
+    RELIANT_WORKTREE_RECLAIM=on reliant daemon start
+    ```
+
+    Mode `on` runs the pass on its own schedule, every six hours or every 30 minutes under disk pressure, even with the storage reaper off. The daemon's log says so at start:
 
     ```text logs/tools-daemon.log
     [diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)
+    [diskwatch] Worktree reclaim scheduled on its own (RELIANT_WORKTREE_RECLAIM=on) interval=6h0m0s pressure_interval=30m0s
     ```
 
-    Start the daemon with both settings, from the checkout it serves:
-
-    ```bash terminal
-    RELIANT_STORAGE_REAPER=on RELIANT_WORKTREE_RECLAIM=on reliant daemon start
-    ```
-
-    `RELIANT_STORAGE_REAPER=on` also schedules build-cache trimming on that computer. `RELIANT_WORKTREE_RECLAIM` takes `off`, `dry-run` or `on`. The idle times are `RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE` (default `24h`, at least `1h`) and `RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE` (default `120h`, at least `24h`). Under a service manager, set them in the unit's environment ([run the daemon on your own server](/guides/machines/run-agents-on-your-own-server)).
+    Build-cache trimming stays off unless you also set `RELIANT_STORAGE_REAPER=on`. `RELIANT_WORKTREE_RECLAIM` takes `off`, `dry-run` or `on`. The idle times are `RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE` (default `24h`, at least `1h`) and `RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE` (default `120h`, at least `24h`). Under a service manager, set them in the unit's environment ([run the daemon on your own server](/guides/machines/run-agents-on-your-own-server)).
   </Step>
 
   <Step title="Find a reclaimed worktree's capture">
@@ -77,7 +96,7 @@ Each machine's daemon does the reclaiming, on that machine only. Before it delet
     reliant worktree reclaimed
     ```
 
-    It lists the captures in every repository the machine's reclaim journal names, newest first, with each one's path, branch, work and ref. Add `--repo <checkout>` for one repository, or use git:
+    It lists the captures in every repository the machine's reclaim journal names, newest first, with each one's path, branch, work and ref. Captures made by `scan --capture` are marked `kept in place`. Add `--repo <checkout>` for one repository, or use git:
 
     ```bash terminal
     git -C <repo> for-each-ref refs/reliant/reclaimed
@@ -112,11 +131,22 @@ Each machine's daemon does the reclaiming, on that machine only. Before it delet
 - **Captures stay on one machine.** Nothing is pushed, and no branch is deleted. A capture is lost with that machine's disk, so restore on the machine that reclaimed the worktree.
 - **Captures never expire.** Delete one by hand with `git update-ref -d <ref>` when you no longer need it.
 - **Ignored files are not captured.** A worktree whose ignored files aren't rebuildable output is held instead of reclaimed.
-- **It doesn't run on your own computer by default.** Without `RELIANT_STORAGE_REAPER=on`, only `scan` writes a report there.
+- **It doesn't run on your own computer by default.** Unless you set `RELIANT_WORKTREE_RECLAIM=on` (or `RELIANT_STORAGE_REAPER=on`), only `scan` writes a report there.
+- **It doesn't archive workspaces.** A workspace stays in the app until you archive it. `reliant worktree list` lists a project's workspaces, and `reliant worktree archive <name|id>` archives one, as the app's **Archive** does. An agent's shell is refused `archive`.
 
 ## Troubleshooting
 
 <AccordionGroup>
+  <Accordion title="fatal: cannot remove a locked working tree, lock reason: reliant: worktree …">
+    Reliant locks the checkout of each of its workspaces (`git worktree lock`, reason `reliant: worktree <id>`), so plain git refuses to remove one. Archive the workspace instead: `reliant worktree archive <name|id>`, or **Archive** in the app. Its machine then removes the directory once it is clean, pushed and unused. To remove a checkout by hand anyway, first check that its work is saved, then unlock it and remove it:
+
+    ```bash terminal
+    git worktree unlock <path>
+    git worktree remove <path>
+    ```
+
+    `git worktree remove --force --force <path>` does both, and also discards uncommitted changes. The workspace stays listed in the app until you archive it there.
+  </Accordion>
   <Accordion title="no reclaim report yet: the daemon writes one each pass">
     No pass has run on this machine. Run `reliant worktree reclaim scan` to write one now.
   </Accordion>

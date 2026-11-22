@@ -423,11 +423,11 @@ function AppVersion({ session: s }: { session: SessionSummary }) {
         )
       )}
       {s.release && s.serviceVersion && (
-        <span className="truncate font-mono text-2xs text-ink-muted" title="The frontend's build id, which its source maps are keyed by">
+        <span className="truncate font-mono text-meta text-ink-muted" title="The frontend's build id, which its source maps are keyed by">
           build {s.serviceVersion}
         </span>
       )}
-      {desktop && <span className="truncate text-2xs text-ink-muted">desktop {desktop}</span>}
+      {desktop && <span className="truncate text-meta text-ink-muted">desktop {desktop}</span>}
     </span>
   );
 }

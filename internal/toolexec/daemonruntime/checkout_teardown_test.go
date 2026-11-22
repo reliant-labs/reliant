@@ -333,8 +333,7 @@ func TestTeardownOpIDNamesOneTeardown(t *testing.T) {
 	assert.Error(t, err, "an op id is a file name")
 }
 
-// git.remove with an op id acknowledges it; without one (an older server) it
-// answers exactly as before.
+// git.remove acknowledges its op id, and refuses a request without one.
 func TestGitRemoveAcknowledgesAnOpID(t *testing.T) {
 	t.Parallel()
 	installTestTeardownJournal(t)
@@ -356,12 +355,10 @@ func TestGitRemoveAcknowledgesAnOpID(t *testing.T) {
 	require.NoError(t, err)
 	assert.DirExists(t, clone, "the op already ran; its redelivery deletes nothing")
 
-	legacy, _ := json.Marshal(gitRemoveRequest{Path: clone})
-	out, err = handleGitRemove(context.Background(), legacy)
-	require.NoError(t, err)
-	resp = nil
-	require.NoError(t, json.Unmarshal(out, &resp))
-	assert.Equal(t, map[string]any{"success": true, "removed": true}, resp, "no op id: the old reply, nothing added")
+	noOpID, _ := json.Marshal(gitRemoveRequest{Path: clone})
+	_, err = handleGitRemove(context.Background(), noOpID)
+	assert.ErrorContains(t, err, "op_id")
+	assert.DirExists(t, clone, "a request without an op id deletes nothing")
 }
 
 func TestGitTeardownStatusAnswersAndFences(t *testing.T) {

@@ -25,7 +25,6 @@
  * stale.
  */
 
-import { isForgeShell } from "@/lib/shell";
 import { useCallback, useMemo } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
@@ -93,6 +92,10 @@ export interface Project {
   // The org the project belongs to (Project.org_id). Absent only for a row
   // written before orgs and not yet stamped (an org-scoped list stamps it).
   org_id?: string;
+  // True when the caller reads the project as a viewer (Project.viewer_access):
+  // shared with them to read, so every write, a run started in it included,
+  // is refused.
+  viewer_access?: boolean;
 }
 
 // ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
@@ -156,6 +159,7 @@ export function projectFromProto(proto: ProtoProject): Project {
     is_forge: proto.isForge,
     forge_project_name: proto.forgeProjectName || undefined,
     org_id: proto.orgId || undefined,
+    viewer_access: proto.viewerAccess || undefined,
   };
 }
 
@@ -213,7 +217,8 @@ export function sameProject(a: Project, b: Project): boolean {
     a.remote_url === b.remote_url &&
     a.is_forge === b.is_forge &&
     a.forge_project_name === b.forge_project_name &&
-    a.org_id === b.org_id
+    a.org_id === b.org_id &&
+    a.viewer_access === b.viewer_access
   );
 }
 
@@ -281,10 +286,9 @@ export interface ProjectListView {
 export function useProjects(): ProjectListView {
   const hasSession = useHasSession();
   const org = useOrgScope();
-  // The forge shell (lib/shell.ts) has no Reliant projects: its apps are the
-  // control plane's forge projects, keyed by name. Disabled there, the list
-  // reads empty and settled for every caller.
-  const wanted = hasSession && !isForgeShell();
+  // On both hosts: the forge host mounts the one route tree (U6), projects
+  // and chats included.
+  const wanted = hasSession;
   // Not before the tab's org is known: a list naming no org is every org's.
   // An org that failed to resolve is the list's error, with a Retry.
   const query = useQuery(

@@ -102,7 +102,7 @@ type APIHTTPRoutesDeps struct {
 // working-directory classification to the terminal websocket, and the daemon
 // attachments to the connector endpoint's workspace waker.
 type APIHTTPRoutesStore interface {
-	attachment.Repository
+	attachment.ContentReader
 	mcpserver.AttachmentReader
 	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
@@ -248,6 +248,12 @@ var corsAllowedHeaders = []string{
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
 	"X-Daemon-Last-Seen",
+	// Which client is calling and its version, `<kind>/<version>`
+	// (internal/clientversion). Every first-party client sends it on every
+	// reliant.v1 call; the server judges it against its minimums
+	// (ClientVersionPolicy). Missing here, a client that sends it fails CORS
+	// on every RPC.
+	"Reliant-Client",
 }
 
 // corsExposedHeaders are the response headers cross-origin JavaScript may

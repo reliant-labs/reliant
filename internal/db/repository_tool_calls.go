@@ -96,17 +96,6 @@ func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolC
 	return result, nil
 }
 
-func (r *Repo) ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	calls, err := store.ListToolCallsByChat(ctx, r.ORM(), chatID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tool calls by chat: %w", err)
-	}
-	return calls, nil
-}
-
 // ListToolCallsByMessageIDs batches the message read path's tool-call lookup:
 // loading a page of messages must not issue one query per message.
 func (r *Repo) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error) {

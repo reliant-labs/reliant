@@ -127,8 +127,8 @@ export function JobTimeline({
                     </Link>
                   );
                 })}
-                <span className="absolute -bottom-3 left-0 text-2xs text-ink-subtle">{formatAgo(window.startMs)}</span>
-                <span className="absolute -bottom-3 right-0 text-2xs text-ink-subtle">now</span>
+                <span className="absolute -bottom-3 left-0 text-meta text-ink-subtle">{formatAgo(window.startMs)}</span>
+                <span className="absolute -bottom-3 right-0 text-meta text-ink-subtle">now</span>
               </div>
 
               <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-xs text-ink-muted md:flex-nowrap">

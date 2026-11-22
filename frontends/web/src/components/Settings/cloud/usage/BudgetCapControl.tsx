@@ -154,10 +154,10 @@ export function BudgetCapControl({
               key={option.mode}
               htmlFor={optionId}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 transition-colors",
-                // bg-muted here is INTERACTION state (the selected row), not
-                // structure — the one use ../ui/card.tsx permits it for.
-                selected ? "border-primary bg-muted/40" : "border-border",
+                "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors",
+                // The selected option is marked by its edge and a faint wash of
+                // the accent, never a structural fill.
+                selected ? "border-primary bg-primary/5" : "border-border",
                 (disabledReason || isSubmitting) && "cursor-not-allowed",
               )}
             >

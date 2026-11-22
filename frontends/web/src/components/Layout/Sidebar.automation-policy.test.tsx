@@ -27,6 +27,11 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "./sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 // The machine filter's daemon list: no machines, so the filter is hidden.
 vi.mock("../../hooks/useOnboardingQueries", async (importOriginal) => ({
@@ -141,7 +146,7 @@ function renderSidebar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <Sidebar />
+      <Sidebar pathname="/" />
     </QueryClientProvider>,
   );
 }
@@ -199,7 +204,7 @@ describe("the open chat stays in the sidebar (L2)", () => {
     fixtures.listed = [interactive];
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>,
     );
 
@@ -226,7 +231,7 @@ describe("the open chat stays in the sidebar (L2)", () => {
     act(() => openChat(interactive.id));
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>,
     );
 
@@ -234,13 +239,13 @@ describe("the open chat stays in the sidebar (L2)", () => {
   });
 
   it("does not pin a chat from another project into a one-project list", () => {
-    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
+    // One project in the shell (U6b): its chats only.
+    useShellLastPick.setState({ key: "project-1" });
     fixtures.detail = { ...scheduledRun, projectId: "project-other" };
     openChat(scheduledRun.id);
     renderSidebar();
 
     expect(rowFor(scheduledRun.id)).toBeNull();
-    useWorkspaceStateStore.setState({ projectFilterId: null });
   });
 
   it("pins a chat from any project into the All projects list", () => {
@@ -305,7 +310,7 @@ describe("Move back to Runs", () => {
     fixtures.detail = { ...adoptedRun, adoptedAt: undefined };
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>,
     );
 

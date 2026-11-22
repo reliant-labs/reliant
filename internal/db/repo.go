@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -303,16 +303,18 @@ func isRetryableError(err error) bool {
 	return false
 }
 
-// calculateBackoff calculates the retry delay with exponential backoff and jitter
-func calculateBackoff(attempt int) time.Duration {
-	delay := baseRetryDelay * time.Duration(1<<uint(attempt))
-	if delay > maxRetryDelay {
-		delay = maxRetryDelay
-	}
+// txRetryBackoff is RunTx's wait ladder: baseRetryDelay doubling per retry,
+// capped at maxRetryDelay, then ±25% jitter.
+var txRetryBackoff = retry.Backoff{
+	Initial: baseRetryDelay,
+	Max:     maxRetryDelay,
+	Jitter:  retry.ProportionalJitter(0.25),
+}
 
-	// Add jitter (±25% of delay)
-	jitter := time.Duration(rand.Int63n(int64(delay / 2)))
-	return delay + jitter - delay/4
+// calculateBackoff returns the wait after the failed attempt (0-based):
+// baseRetryDelay<<attempt, capped at maxRetryDelay, ±25%.
+func calculateBackoff(attempt int) time.Duration {
+	return txRetryBackoff.Delay(attempt + 1)
 }
 
 // GetPendingWrites returns 0 — write serialization has been removed (Postgres only).

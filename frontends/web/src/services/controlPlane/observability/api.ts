@@ -27,7 +27,6 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
-  ObservabilityQuotaState,
   AttributeOp as WireAttributeOp,
   MetricType as WireMetricType,
   ObservabilityService,
@@ -53,7 +52,9 @@ import {
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { ObservabilityBillingService, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
+import { getControlPlaneClient } from "../client";
 import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
@@ -581,7 +582,8 @@ export async function getServiceSignals(req: GetServiceSignalsRequest, options: 
 
 // ── Usage and billing ────────────────────────────────────────────────────────
 
-function quotaState(state: ObservabilityQuotaState): QuotaState {
+// The legacy ObservabilityService enum has the same numbers, so either reads here.
+function quotaState(state: ObservabilityQuotaState | number): QuotaState {
   switch (state) {
     case ObservabilityQuotaState.OK:
       return "ok";
@@ -594,11 +596,25 @@ function quotaState(state: ObservabilityQuotaState): QuotaState {
   }
 }
 
+/**
+ * GetObservabilityUsage from ObservabilityBillingService. ObservabilityService's
+ * retired copy is gone from the control plane's contract, so there is no
+ * fallback to it.
+ */
+async function fetchObservabilityUsage(orgId: string) {
+  return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
+}
+
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
 
-/** The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org. */
+/**
+ * The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org.
+ * Served by ObservabilityBillingService (a Postgres read, same admission as the
+ * observability reads), not ObservabilityService, whose copy of this rpc is retired.
+ * It spends no ClickHouse read slot, so it bypasses obsClient's read queue.
+ */
 export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
-  const res = await client().getObservabilityUsage({ orgId });
+  const res = await fetchObservabilityUsage(orgId);
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {
@@ -744,7 +760,7 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
-/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+/** Why a declared spec is not recorded; "unknown" when no reason is given. */
 function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
   switch (gap) {
     case WireDeclaredSpecGap.PENDING:

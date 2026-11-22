@@ -26,7 +26,9 @@ service UsageService {
   // filtered.
   // The response says how complete it is (see LLMUsageCompleteness).
   rpc GetLLMUsage(GetLLMUsageRequest) returns (GetLLMUsageResponse) {
-    option (forge.v1.method) = {activity: {none: "read-only: the caller's own usage totals; changes nothing"}};
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the caller's own usage totals; changes nothing"}
+    };
   }
 }
 

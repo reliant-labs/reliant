@@ -15,6 +15,10 @@ import { PHONE } from './mobileMocks';
 // machine credential, which has no membership list to choose an org from.
 
 const SHOTS = 'e2e/screenshots/org-switcher';
+
+/** An app on Projects (`?show=apps`): its chip, on its project's row or a row of its own (the one drawn at this width). */
+const appOnPage = (page: import('@playwright/test').Page, name: string) =>
+  page.getByTestId('projects-page').getByTestId('app-chip').filter({ hasText: name, visible: true });
 const LOADED = { timeout: 15_000 };
 const errors = new WeakMap<import('@playwright/test').Page, string[]>();
 test.beforeEach(({ page }) => {
@@ -29,8 +33,10 @@ test.afterEach(({ page }) => {
 const ACME = { id: 'org_acme', name: 'Acme', slug: 'acme', role: 'owner', isOwner: true, isDefault: true };
 const SIDE = { id: 'org_side', name: 'Side Project', slug: 'side', role: 'member', isOwner: false, isDefault: false };
 
+// A fixed instant, not one read from the clock: nothing here asserts on the
+// environment's age, so the fixture need not follow the wall clock.
 const SIDE_ENVS = [
-  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: '2026-11-18T13:00:00.000Z' },
 ];
 
 function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void) {
@@ -50,15 +56,16 @@ test.describe('org switcher (desktop)', () => {
   test('lists my orgs with the default marked, and switching changes the org every call names', async ({ page }) => {
     const seen: Array<[string, string | undefined]> = [];
     await mockAppsBackend(page, twoOrgs((rpc, org) => seen.push([rpc, org])));
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
 
     // Starts in the default org: its apps, and never another org on the wire.
-    // A tab with nothing saved may read before the membership list answers,
-    // naming no org, which the control plane answers in the person's default:
-    // the org the tab then resolves to, so that read is not repeated.
-    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
+    // The apps come with the project catalog (ListProjectsWithApps, which
+    // reads the org's apps server-side) and name the tab's org, never
+    // another; a read before the membership list answers names none, which
+    // the server answers in the person's default.
+    await expect(appOnPage(page, 'storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Acme');
-    const initial = seen.filter(([rpc]) => rpc === 'ListEnvironments').map(([, org]) => org);
+    const initial = seen.filter(([rpc]) => rpc === 'ListProjectsWithApps').map(([, org]) => org);
     expect(initial.length).toBeGreaterThan(0);
     expect(initial.every((org) => org === 'org_acme' || org === undefined)).toBe(true);
     // The product's lists wait for the tab's org instead (lib/orgScope): with
@@ -77,13 +84,13 @@ test.describe('org switcher (desktop)', () => {
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
 
     // The other org's apps replace this org's, and the request names the new org.
-    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
+    await expect(appOnPage(page, 'weekend-blog')).toBeVisible(LOADED);
     // Acme's checkout leaves with Acme: projects belong to one org, and the
     // project list is re-read for the new one at once, not on its next fetch.
-    await expect(page.getByTestId('app-row-storefront')).toHaveCount(0);
-    await expect(page.getByTestId('app-row-status-page')).toHaveCount(0);
+    await expect(appOnPage(page, 'storefront')).toHaveCount(0);
+    await expect(appOnPage(page, 'status-page')).toHaveCount(0);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
-    expect(seen.filter(([rpc]) => rpc === 'ListEnvironments').every(([, org]) => org === 'org_side')).toBe(true);
+    expect(seen.filter(([rpc]) => rpc === 'ListProjectsWithApps').every(([, org]) => org === 'org_side')).toBe(true);
     await expect.poll(() => seen.filter(([rpc]) => rpc === 'ListProjects').map(([, org]) => org)).toContain('org_side');
     expect(seen.filter(([rpc]) => rpc === 'ListProjects' || rpc === 'ListChats').every(([, org]) => org === 'org_side')).toBe(true);
     await page.screenshot({ path: `${SHOTS}/desktop-after-switch.png` });
@@ -91,20 +98,20 @@ test.describe('org switcher (desktop)', () => {
 
   test('the choice survives a reload', async ({ page }) => {
     await mockAppsBackend(page, twoOrgs());
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
-    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
+    await expect(appOnPage(page, 'weekend-blog')).toBeVisible(LOADED);
 
     await page.reload();
-    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
+    await expect(appOnPage(page, 'weekend-blog')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
   });
 
   test('a person in one org sees their org and a way to create another', async ({ page }) => {
     await mockAppsBackend(page, { person: true });
-    await page.goto('/apps');
-    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
+    await page.goto('/projects?show=apps');
+    await expect(appOnPage(page, 'storefront')).toBeVisible(LOADED);
     await page.getByTestId('org-switcher').first().click();
     await expect(page.getByTestId('org-create')).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/desktop-single-org.png` });
@@ -120,14 +127,14 @@ test.describe('org switcher (desktop)', () => {
         body: JSON.stringify({ organizations: membership, defaultOrgId: 'org_acme' }),
       }),
     );
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
-    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
+    await expect(appOnPage(page, 'weekend-blog')).toBeVisible(LOADED);
 
     membership = [ACME];
     await page.reload();
-    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
+    await expect(appOnPage(page, 'storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name').first()).toHaveText('Acme');
   });
 });

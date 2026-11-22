@@ -63,7 +63,7 @@ export function FunnelChart({ steps: raw, compact, label = "journeys" }: { steps
             <li key={`${step.event}-${index}`} data-step={step.event}>
               {index > 0 && !compact && (
                 <p
-                  className={cn("flex items-center gap-1.5 py-1 pl-5 text-2xs tabular-nums text-ink-muted", index === worst && "text-warning-ink")}
+                  className={cn("flex items-center gap-1.5 py-1 pl-5 text-meta tabular-nums text-ink-muted", index === worst && "text-warning-ink")}
                   data-testid="obs-funnel-dropoff"
                 >
                   <span aria-hidden="true">↓</span>

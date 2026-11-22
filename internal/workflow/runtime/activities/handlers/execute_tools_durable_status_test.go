@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -219,7 +220,7 @@ func TestDurableStatus_ActivityRetryDoesNotDuplicateRows(t *testing.T) {
 		f.executeTool(t, toolCallID, "bash", `{"command":"ls"}`, executor)
 	}
 
-	calls, err := f.h.Repo().ListToolCallsByChat(ctx, f.chatID)
+	calls, err := store.ListToolCallsByChat(ctx, f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1, "a retried activity must converge on one row, not append")
 	assert.Equal(t, toolCallID, calls[0].ID)
@@ -258,7 +259,7 @@ func TestDurableStatus_ParallelToolsEachGetARow(t *testing.T) {
 		},
 	}, &output))
 
-	calls, err := f.h.Repo().ListToolCallsByChat(ctx, f.chatID)
+	calls, err := store.ListToolCallsByChat(ctx, f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 2)
 

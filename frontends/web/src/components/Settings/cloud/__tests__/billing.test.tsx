@@ -108,7 +108,11 @@ vi.mock('@/hooks/observability-queries', async () => {
 
 vi.mock('@/hooks/observability-billing-queries', async () => {
   const { ConnectError, Code } = await import('@connectrpc/connect')
-  return { useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }) }
+  return {
+    useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }),
+    // The limits strip's monitoring row.
+    useObsBillingLimits: () => ({ data: undefined, error: new ConnectError('Not deployed', Code.Unimplemented) }),
+  }
 })
 
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
@@ -186,6 +190,7 @@ describe('BillingSection', () => {
       'Overview',
       'Change plan',
       'Usage & invoices',
+      'App hosting',
       'Reliant AI',
     ])
   })

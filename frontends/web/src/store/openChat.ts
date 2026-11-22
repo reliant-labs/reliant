@@ -25,13 +25,26 @@ import { useProjectStore } from "./projectStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useNewChatMachineStore } from "./newChatMachineStore";
+import { useNewChatAppStore } from "./newChatAppStore";
+import { markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
+import type { NewChatSearch } from "../routeSchemas";
 
 
 /**
- * Select immediately, then follow its project/workspace with main's identity
- * fence. All source entry points share the same epoch as the main helper.
+ * Open a chat: go to its URL (`/c/<id>`, a push, so Back returns to what was
+ * on screen), and select it at once, then follow its project/workspace with
+ * main's identity fence. All source entry points share the same epoch as the
+ * main helper.
+ *
+ * The URL is the authority (lib/chatRoute.ts): the route would open the chat
+ * by itself once it commits (hooks/useChatRoute.ts). Selecting here as well
+ * keeps a click's stream request in the click's own task, as before chats
+ * had URLs; the route then finds the chat already open.
  */
 export function openChat(chat: Chat, isCurrent?: () => boolean): Promise<void> {
+  if (isCurrent && !isCurrent()) return Promise.resolve();
+  seedChatDetail(chat);
+  navigateToChatUrl(chat.id, { orgId: chat.orgId });
   return openChatInWorkspace(chat, { navigate: true, isCurrent });
 }
 
@@ -42,6 +55,13 @@ export function openChat(chat: Chat, isCurrent?: () => boolean): Promise<void> {
  * of theirs). It is not remembered as the context project's last chat either.
  */
 export function openSharedChat(chat: Chat): void {
+  seedChatDetail(chat);
+  navigateToChatUrl(chat.id, { orgId: chat.orgId });
+  selectSharedChat(chat);
+}
+
+/** Show a shared chat (openSharedChat) without touching the URL: the route's own open. */
+export function selectSharedChat(chat: Chat): void {
   beginWorkspaceOpen();
   seedChatDetail(chat);
   // Shared again after the viewer lost it: this open is the person asking,
@@ -89,20 +109,75 @@ export function newChatTargetProjectId(): string | null {
   return useWorkspaceStateStore.getState().lastProjectId;
 }
 
+/** Where a new chat starts: its project, workspace and machine, and the app it is about. */
+export interface NewChatTarget {
+  projectId?: string | null;
+  worktreeId?: string | null;
+  daemonId?: string | null;
+  /** The app the chat is started from (Chat.app_name, newChatAppStore); none for every other new chat. */
+  appName?: string | null;
+}
+
+/** The new-chat route's search for `target` (`/new?project=&machine=&ws=&app=`). */
+export function newChatSearchOf(target: NewChatTarget): NewChatSearch {
+  return {
+    project: target.projectId ?? undefined,
+    machine: target.daemonId ?? undefined,
+    ws: target.worktreeId ?? undefined,
+    app: target.appName ?? undefined,
+  };
+}
+
+/** Whether the new-chat view already shows `search`'s draft context (the `/new` route applies each one once). */
+export function isNewChatApplied(search: NewChatSearch): boolean {
+  return newChatAppliedKey() === newChatTargetKey(search) && useChatStore.getState().activeChatId === null;
+}
+
 /**
  * Show the new-chat view, in `projectId` (default: newChatTargetProjectId)
  * and the workspace `worktreeId` (default: the open chat's, when it is in that
  * project; else the project's main workspace). `daemonId` names the machine
  * the chat should run on (newChatMachineStore); without it the view picks.
+ * `appName` tags the chat with the app it is started from (newChatAppStore);
+ * every new chat opened without one carries none, whatever was set before.
+ *
+ * Goes to `/new` with that context in its search (a push from a chat, a
+ * replace when the new-chat view is already on screen), so a refresh keeps
+ * the draft's project, machine and workspace, and applies it at once.
  */
-export async function openNewChat(
-  target: { projectId?: string | null; worktreeId?: string | null; daemonId?: string | null } = {},
-): Promise<void> {
+export function openNewChat(target: NewChatTarget = {}): Promise<void> {
+  const search = newChatSearchOf({ ...target, projectId: target.projectId ?? newChatTargetProjectId() });
+  navigateToNewChatUrl(search);
+  return applyNewChat(target);
+}
+
+/**
+ * Show the new-chat view for `target` without touching the URL: the `/new`
+ * route's own apply. Records the context as applied at once, with when it
+ * is on screen (lib/chatRoute.ts newChatAppliedShown), so the route neither
+ * applies it twice nor mirrors the view's old context over it meanwhile.
+ */
+export function applyNewChat(target: NewChatTarget = {}): Promise<void> {
+  let settle: (shown: boolean) => void = () => {};
+  const shown = new Promise<boolean>((resolve) => {
+    settle = resolve;
+  });
+  markNewChatApplied(newChatSearchOf({ ...target, projectId: target.projectId ?? newChatTargetProjectId() }), shown);
+  const done = showNewChat(target);
+  done.then(
+    () => settle(true),
+    () => settle(false),
+  );
+  return done;
+}
+
+async function showNewChat(target: NewChatTarget): Promise<void> {
   const isLatest = beginWorkspaceOpen();
   const projectId = target.projectId ?? newChatTargetProjectId();
   if (projectId && target.daemonId) {
     useNewChatMachineStore.getState().offer({ projectId, daemonId: target.daemonId });
   }
+  useNewChatAppStore.getState().set(projectId && target.appName ? { projectId, appName: target.appName } : null);
   const projectStore = useProjectStore.getState();
   let contextProjectId = projectStore.currentProject?.id;
   const activeChatId = useChatStore.getState().activeChatId;

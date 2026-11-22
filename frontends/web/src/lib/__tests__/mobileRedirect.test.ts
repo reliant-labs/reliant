@@ -109,6 +109,23 @@ describe('shouldRedirectToMobile', () => {
     // A prefix match, not a substring one.
     expect(shouldRedirectToMobile(phone({ pathname: '/forgery' }))).toBe(true)
   })
+
+  it('leaves Projects on a phone, and the retired /apps and /sites that redirect there (U6)', () => {
+    // The drawer's Apps opens Projects narrowed to the apps; an old /apps link
+    // redirects there. Handing either off would land the phone on the chat list.
+    for (const pathname of ['/projects', '/o/acme/projects', '/apps', '/o/acme/apps', '/sites', '/o/acme/sites']) {
+      expect(shouldRedirectToMobile(phone({ pathname, search: '?show=apps' })), pathname).toBe(false)
+    }
+    expect(shouldRedirectToMobile(phone({ pathname: '/projectsx' }))).toBe(true)
+  })
+
+  it('leaves Projects and a project page on a phone: one responsive page, no /m twin', () => {
+    for (const pathname of ['/projects', '/projects/p-1', '/projects/p-1/workspaces', '/o/acme/projects/p-1/settings']) {
+      expect(shouldRedirectToMobile(phone({ pathname })), pathname).toBe(false)
+    }
+    // The chat home filtered to a project is still the chat surface.
+    expect(shouldRedirectToMobile(phone({ pathname: '/project/p-1' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {
@@ -126,6 +143,11 @@ describe('mobilePathFor', () => {
     expect(mobilePathFor('/inbox/')).toBe('/m/inbox')
     // A run is a chat.
     expect(mobilePathFor('/workflows/runs/chat_123')).toBe('/m/chats/chat_123')
+    // A chat, a thread of it (the phone picks threads in its own sheet), a draft; either URL form.
+    expect(mobilePathFor('/c/chat_123')).toBe('/m/chats/chat_123')
+    expect(mobilePathFor('/o/acme/c/chat_123/t/thread_9')).toBe('/m/chats/chat_123')
+    expect(mobilePathFor('/c/a%2Fb')).toBe('/m/chats/a%2Fb')
+    expect(mobilePathFor('/o/acme/new')).toBe('/m/new')
     expect(mobilePathFor('/workflows')).toBe('/m/workflows')
     expect(mobilePathFor('/workflows/library')).toBe('/m/workflows')
     // A workflow's page — where an automation link lands — is its viewer.

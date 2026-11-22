@@ -45,13 +45,18 @@ const PAGES: ConsolePage[] = [
   { kind: "dashboard", dashKind: "workspace", key: "checkout latency/2" },
   { kind: "storage" },
   { kind: "data" },
-  { kind: "users" },
+  { kind: "auth" },
+  { kind: "auth", tab: "sign-in" },
   { kind: "environments" },
   { kind: "environment", env: "prod" },
   { kind: "environment", env: "pr 12/x" },
   { kind: "secrets" },
   { kind: "domains" },
   { kind: "activity" },
+  { kind: "vulnerabilities" },
+  { kind: "vulnerability", advisory: "CVE-2026-4101" },
+  { kind: "vulnerability", advisory: "GHSA-7f3x-q2mv-9hc4" },
+  { kind: "sboms" },
 ];
 
 describe("console paths", () => {
@@ -63,7 +68,10 @@ describe("console paths", () => {
     expect(consolePath("control-plane", { kind: "workload", env: "prod", name: "admin-server" })).toBe("/forge/p/control-plane/workloads/prod/admin-server");
     expect(consolePath("control-plane", { kind: "storage" })).toBe("/forge/p/control-plane/storage");
     expect(consolePath("control-plane", { kind: "data" })).toBe("/forge/p/control-plane/data");
-    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/users");
+    // The old Users page is Auth's first tab (U6d): its path is Auth's.
+    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth", tab: "sign-in" })).toBe("/forge/p/control-plane/auth/sign-in");
   });
 
   it("pins a workload's page to its environment, as an environment's page is", () => {
@@ -78,13 +86,17 @@ describe("console paths", () => {
     expect(consolePageOf(consolePath("my shop", page))).toEqual({ project: "my shop", page });
   });
 
+  it("reads /observability as Observability's own Overview (U6e), and builds it back", () => {
+    expect(consolePageOf("/forge/p/x/observability")).toEqual({ project: "x", page: { kind: "obs-overview" } });
+    expect(consolePath("x", { kind: "obs-overview" })).toBe("/forge/p/x/observability");
+  });
+
   it("knows a path outside the console, or a page that does not exist, is not one", () => {
     expect(consolePageOf("/forge")).toBeNull();
     expect(consolePageOf("/forge/env/prod")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/workloads")).toBeNull();
     expect(consolePageOf("/forge/p/x/nope")).toBeNull();
     // The retired pages are redirects, not pages.
-    expect(consolePageOf("/forge/p/x/observability")).toBeNull();
     expect(consolePageOf("/forge/p/x/monitoring")).toBeNull();
     expect(consolePageOf("/forge/p/x/settings")).toBeNull();
     // A dashboard is addressed by its kind: a template is no page, and nothing nests below a dashboard.
@@ -92,6 +104,16 @@ describe("console paths", () => {
     expect(consolePageOf("/forge/p/x/observability/dashboards/workspace")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/dashboards/workspace/a/b")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/logs/workspace/a")).toBeNull();
+  });
+
+  it("puts Vulnerabilities and SBOMs under Security", () => {
+    expect(consolePath("shop", { kind: "vulnerabilities" })).toBe("/forge/p/shop/security/vulnerabilities");
+    expect(consolePath("shop", { kind: "vulnerability", advisory: "CVE-2026-4101" })).toBe("/forge/p/shop/security/vulnerabilities/CVE-2026-4101");
+    expect(consolePath("shop", { kind: "sboms" })).toBe("/forge/p/shop/security/sboms");
+    // The section itself is a redirect, and nothing nests below an advisory or the SBOMs.
+    expect(consolePageOf("/forge/p/shop/security")).toBeNull();
+    expect(consolePageOf("/forge/p/shop/security/vulnerabilities/CVE-1/x")).toBeNull();
+    expect(consolePageOf("/forge/p/shop/security/sboms/x")).toBeNull();
   });
 
   it("puts a dashboard under Observability › Dashboards, by kind and key", () => {
@@ -154,6 +176,10 @@ describe("redirects from the retired URLs", () => {
     [{ tab: "secrets", secret: "DATABASE_URL" }, "/forge/p/shop/secrets?env=prod&secret=DATABASE_URL"],
     [{ tab: "observability" }, "/forge/p/shop?env=prod"],
     [{ tab: "observability", view: "usage" }, "/settings/billing"],
+    // The control plane's queued-deploy link names its org: the environment
+    // page asks before switching to it, so the redirect must not drop it.
+    [{ org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&org=org-b"],
+    [{ tab: "identity", org: "org-b" }, "/forge/p/shop/environments/prod?env=prod&tab=identity&org=org-b"],
   ])("/forge/env/prod %o → %s", (search, target) => {
     expect(legacyEnvTarget("shop", "prod", search)).toBe(target);
   });

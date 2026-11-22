@@ -79,6 +79,12 @@ ARG BRANCH=unknown
 # on registration. 0 = unordered, which is also what a plain `docker build`
 # gets: the build context has no .git to read it from.
 ARG COMMIT_TIME=0
+# selfupdate.managedBy marks this image's binary as the platform's: a workspace
+# pod's daemon is copied out of this image, and the image is its version, so
+# `reliant update` and `daemon start --auto-update` must never replace it
+# (forge pkg/selfupdate Detect; internal/cliupdate OwnerWorkspaceImage). The
+# standalone CLI archives (release.yml build-backend) stay unstamped: they are
+# self-owned.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath \
@@ -86,7 +92,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
                 -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} \
                 -X github.com/reliant-labs/reliant/internal/version.Date=${BUILD_DATE} \
                 -X github.com/reliant-labs/reliant/internal/version.Branch=${BRANCH} \
-                -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}" \
+                -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME} \
+                -X github.com/reliant-labs/forge/pkg/selfupdate.managedBy=reliant-workspace-image" \
       -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────

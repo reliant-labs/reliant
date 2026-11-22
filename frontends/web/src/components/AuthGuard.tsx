@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { useAuthMode } from '@/hooks/useAuthMode'
@@ -7,6 +7,9 @@ import { LoadingSpinner } from './Layout/LoadingSpinner'
 import { loadConfig } from '@/lib/config_gen'
 import { signInRedirectFor } from '@/lib/returnTo'
 import { authPath, homePath, verifyEmailPath } from '@/lib/paths'
+import { isForgeShell } from '@/lib/shell'
+import { GUARDED_ROUTE_IDS, landingJourneyHoldsSignIn } from './ForgeShell/landingJourney'
+import { orgFreeRouteId } from '@/lib/paths/org'
 
 const allowAnonymousAutoSignIn = (): boolean => loadConfig().AUTO_ANON_SIGN_IN === 'true'
 
@@ -16,7 +19,7 @@ interface AuthGuardProps {
   requireEmailVerification?: boolean
   /**
    * Send a signed-out visitor to sign in with `?redirect=<this page>`, so a
-   * deep link ("Open in Reliant" from the forge console, a link in an email)
+   * deep link (a shared console link, a link in an email)
    * lands where it was going instead of on `/`. The sign-in screen honours a
    * same-origin `redirect` through email, OAuth and magic links alike.
    */
@@ -35,7 +38,15 @@ export function AuthGuard({
   const search = useSearch({ strict: false }) as { redirect?: string } | undefined
   const anonSignInAttempted = useRef(false)
   const here = useRouterState({ select: (s) => s.location.href })
+  const journeyLayout = useRouterState({ select: (s) => s.matches.some((m) => GUARDED_ROUTE_IDS.includes(orgFreeRouteId(m.routeId))) })
   const signInRedirect = returnHere ? signInRedirectFor(here) : undefined
+  // On the forge brand (lib/shell.ts), a signed-out visitor the landing page
+  // sent for the forge journey is taken to the public demo instead
+  // (ForgeLandingJourney, at the root): sign-in waits rather than racing that
+  // navigation. Decided once: while the journey's navigation is under way the
+  // location already carries its `?tour=` and the held choice is spent, and
+  // re-deciding then would send the visitor to sign in after all.
+  const [journeyHoldsSignIn] = useState(() => journeyLayout && requireAuth && isForgeShell() && landingJourneyHoldsSignIn(here))
 
   useEffect(() => {
     if (!initialized) {
@@ -51,8 +62,14 @@ export function AuthGuard({
 
     // Check authentication first
     if (requireAuth && !user) {
+      // Already on the way: the location moves to the sign-in page before
+      // this layout unmounts, and asking again from there would replace the
+      // `redirect` back to this page with none.
+      if (here.split(/[?#]/, 1)[0] === authPath()) return
       // For apikey mode, don't navigate — AuthGuard renders ApiKeyLogin inline
       if (authMode === 'apikey') return
+      // The landing journey is taking this visitor to the demo (above).
+      if (journeyHoldsSignIn) return
 
       // Optional zero-friction onboarding: sign in anonymously when explicitly enabled.
       if (authMode === 'supabase' && allowAnonymousAutoSignIn() && !anonSignInAttempted.current) {
@@ -82,7 +99,7 @@ export function AuthGuard({
       navigate({ to: verifyEmailPath() })
       return
     }
-  }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate, search, authMode, authModeLoading, signInAnonymously, signInRedirect])
+  }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate, search, authMode, authModeLoading, signInAnonymously, signInRedirect, journeyHoldsSignIn, here])
 
   // Auth is still resolving, or an effect above is about to redirect. These are
   // never instant: authMode alone costs a /health round-trip, so returning null

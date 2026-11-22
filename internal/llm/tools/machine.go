@@ -69,6 +69,7 @@ var machineBoundTools = map[string]string{
 	ToolFindReplace:      "edits the user's files through the daemon client",
 	ToolMoveCode:         "edits the user's files through the daemon client",
 	ToolSaveAttachment:   "its only job is writing a file to the user's disk",
+	ToolPresentImage:     "reads the user's files through the daemon client",
 	ToolComponentLibrary: "installs components into the user's checkout",
 	ToolWorktree:         "creates and deletes git worktrees on disk",
 	ToolWaitForMachine:   "waits for the run's machine; a run with no machine has none to wait for",
@@ -113,6 +114,8 @@ var serverSafeTools = map[string]struct{}{
 	ToolListMachines: {}, ToolManageMachine: {}, ToolManageMachinePool: {},
 	// Raises an approval card and reads the connection the person made.
 	ToolProposeConnection: {},
+	// Forge Changes live in the control plane, reached as the user.
+	ToolListChanges: {}, ToolGetChange: {}, ToolManageChange: {}, ToolChangeResults: {},
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and

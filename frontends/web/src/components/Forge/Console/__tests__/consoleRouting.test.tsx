@@ -176,6 +176,8 @@ vi.mock("@/components/Forge/Org", async () => {
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
+import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
+
 import { ConsoleLayout } from "../ConsoleLayout";
 import { useForgeConsole } from "../consoleContext";
 import {
@@ -212,7 +214,11 @@ function probe(name: string): RouteComponent {
   };
 }
 
-function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean } = {}) {
+function renderAt(
+  initialEntry: string,
+  options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean; inShell?: boolean } = {},
+) {
+  const inShell = options.inShell ?? false;
   const root = createRootRoute({ component: () => <Outlet /> });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const forge = createForgeConsoleRoutes(() => authenticated, {
@@ -223,16 +229,34 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
     releases: probe("releases"),
     release: probe("release"),
     observabilityView: options.metrics ? MetricsExplorerPage : probe("observability-view"),
+    obsOverview: probe("obs-overview"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
-    users: probe("users"),
+    auth: probe("auth"),
+    vulnerabilities: probe("vulnerabilities"),
+    vulnerability: probe("vulnerability"),
+    sboms: probe("sboms"),
+    tests: probe("tests"),
+    testsCoverage: probe("tests-coverage"),
+    testsRuns: probe("tests-runs"),
+    testsRun: probe("tests-run"),
+    testsFlaky: probe("tests-flaky"),
+    testsFlakyTest: probe("tests-flaky-test"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
     domains: probe("domains"),
     activity: probe("activity"),
+    services: probe("services"),
+    service: probe("service"),
+    usage: probe("usage"),
+    events: probe("events"),
+    analytics: probe("analytics"),
+    speedInsights: probe("speed-insights"),
+    experiments: probe("experiments"),
+    experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -241,7 +265,7 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
-  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/projects", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
     routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
@@ -249,7 +273,9 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
   render(
     <QueryClientProvider client={queryClient}>
       <ObservabilityApiProvider api={createFixtureApi({ onCall: options.onObsCall })}>
-        <RouterProvider router={router} />
+        <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
+          <RouterProvider router={router} />
+        </ShellFrameContext.Provider>
       </ObservabilityApiProvider>
     </QueryClientProvider>,
   );
@@ -278,12 +304,12 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+  it("names no project, so lands on the apps (Projects) rather than guessing one", async () => {
     // The persisted last project used to be opened here; the list of every
     // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/apps");
+    await landsOn(router, "/projects", { show: "apps" });
     expect(await screen.findByTestId("apps")).toBeInTheDocument();
     expect(restoreLastProject).not.toHaveBeenCalled();
   });
@@ -308,7 +334,7 @@ describe("the way in: /forge", () => {
     const user = userEvent.setup();
     const router = renderAt("/forge?project=gone");
     await screen.findByTestId("forge-project-picker");
-    await user.click(await screen.findByTestId("forge-project-option-project-a"));
+    await user.click(await screen.findByTestId("project-selector-row-project-a"));
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-a" }));
     await landsOn(router, "/forge/p/alpha");
   });
@@ -460,9 +486,10 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
   });
 
-  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+  it("opens Observability's own Overview at /observability (U6e)", async () => {
     const router = renderAt("/forge/p/alpha/observability?env=e2e");
-    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "obs-overview");
+    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
   });
 
   it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {
@@ -517,6 +544,62 @@ describe("the environment scope", () => {
     );
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("routes Auth's tabs, and sends the old Users URL to Auth with its search", async () => {
+    const router = renderAt("/forge/p/alpha/auth/sign-in?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "auth");
+    await landsOn(router, "/forge/p/alpha/auth/sign-in", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
+    await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
+  it("routes Security › Vulnerabilities with its filters in the URL", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities?env=e2e&severity=high&fixable=yes&kev=1&exempt=1&release=v1.4.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerabilities");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities", { env: "e2e", severity: "high", fixable: "yes", kev: "1", exempt: "1", release: "v1.4.0" });
+  });
+
+  it("routes one advisory, and lands /security on Vulnerabilities", async () => {
+    const router = renderAt("/forge/p/alpha/security/vulnerabilities/CVE-2026-4101?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerability");
+    await landsOn(router, "/forge/p/alpha/security/vulnerabilities/CVE-2026-4101", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/security?env=e2e");
+    await landsOn(redirected, "/forge/p/alpha/security/vulnerabilities", { env: "e2e" });
+  });
+
+  it("routes Security › SBOMs", async () => {
+    const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
+    await landsOn(router, "/forge/p/alpha/security/sboms", { env: "e2e", release: "v1.5.0" });
+  });
+
+  it.each([
+    ["/forge/p/alpha/tests?env=e2e&branch=main", "tests", "/forge/p/alpha/tests", { env: "e2e", branch: "main" }],
+    [
+      "/forge/p/alpha/tests/coverage?env=e2e&path=internal/billing/refund.go&commit=9f3c&lane=unit&base=77e0c1d",
+      "tests-coverage",
+      "/forge/p/alpha/tests/coverage",
+      { env: "e2e", path: "internal/billing/refund.go", commit: "9f3c", lane: "unit", base: "77e0c1d" },
+    ],
+    ["/forge/p/alpha/tests/runs?env=e2e", "tests-runs", "/forge/p/alpha/tests/runs", { env: "e2e" }],
+    ["/forge/p/alpha/tests/runs/01JD7Q?env=e2e", "tests-run", "/forge/p/alpha/tests/runs/01JD7Q", { env: "e2e" }],
+    ["/forge/p/alpha/tests/flaky?env=e2e", "tests-flaky", "/forge/p/alpha/tests/flaky", { env: "e2e" }],
+    ["/forge/p/alpha/tests/flaky/dGVzdA?env=e2e", "tests-flaky-test", "/forge/p/alpha/tests/flaky/dGVzdA", { env: "e2e" }],
+  ])("routes the Tests page %s", async (url, page, path, search) => {
+    const router = renderAt(url);
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", page);
+    await landsOn(router, path, search);
+    // The Tests pages narrow by their own `environment`: the bar draws no env picker (useRouteUsesEnvScope).
+    expect(router.state.matches.some((match) => match.staticData?.envScope === false)).toBe(true);
+  });
+
+  it("keeps the env scope on the pages that read it", async () => {
+    const router = renderAt("/forge/p/alpha/releases?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "releases");
+    expect(router.state.matches.some((match) => match.staticData?.envScope === false)).toBe(false);
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {
@@ -596,7 +679,7 @@ describe("the nav", () => {
     // The console's own "Observability" parent is gone; its views sit in their groups.
     expect(within(nav).queryByText("Observability")).toBeNull();
     expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Issues›Errors");
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
   });
 
   it("marks an environment whose deploy is queued", async () => {
@@ -621,5 +704,33 @@ describe("leaving the console", () => {
     await screen.findByTestId("page");
     await user.keyboard("{Escape}");
     await landsOn(router, "/");
+  });
+});
+
+// U6: in the product the console renders inside the one shell, whose left nav
+// draws the app's sections (Layout/sidebar/AppsNavSection). The console then
+// has NO nav column of its own: a slim bar with the breadcrumb and the one
+// environment selector, over the page.
+describe("inside the one shell", () => {
+  it("draws no nav column, only the breadcrumb and the scope over the page", async () => {
+    renderAt("/forge/p/alpha/observability/errors?env=prod", { inShell: true });
+    const page = await screen.findByTestId("page");
+    expect(page).toHaveAttribute("data-page", "observability-view");
+    expect(page).toHaveAttribute("data-env", "prod");
+    expect(document.querySelector("aside")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "alpha" })).toBeNull();
+    expect(screen.queryByTestId("forge-shell")).toBeNull();
+    const frame = screen.getByTestId("forge-console-frame");
+    expect(frame.className).toContain("forge-ui");
+    const header = screen.getByTestId("forge-console-header");
+    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Performance & issues›Errors");
+    // Inside the shell the frame (AppShellFrame) is the one main landmark: the console's body is a plain region.
+    expect(within(frame).queryByRole("main")).toBeNull();
+    expect(frame).toContainElement(page);
+  });
+
+  it("still defaults the scope and reflects it into the URL", async () => {
+    const router = renderAt("/forge/p/alpha/releases", { inShell: true });
+    await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });
   });
 });

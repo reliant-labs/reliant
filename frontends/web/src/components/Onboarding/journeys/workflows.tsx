@@ -24,7 +24,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
-import { reliantAppOrigin } from "../../../lib/shell";
+import { CHAT_SHELL_PREFIXES } from "../../../lib/chatRoute";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
 import type { TourEventMap, TourEventName } from "../tourEvents";
@@ -35,7 +35,7 @@ import { layoutActions } from "./layoutActions";
 import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
-import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
+import { homePath, newWorkflowPath, projectChatsPath, workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
@@ -168,11 +168,14 @@ export const workflowsJourney: Journey = {
   // finished v2 see v3 once.
   version: 3,
   controls: "callout",
-  // Workflows need Reliant; the forge shell links here instead.
+  // The tour runs in the Reliant tour shell: it seeds its example into the
+  // current project, which the forge brand's visitor (no onboarding, maybe
+  // no project) may not have. There its end card opens the Workflows area
+  // instead, in this app (one shell).
   shells: ["reliant"],
   elsewhere: {
-    label: "Try AI workflows in Reliant",
-    href: () => `${reliantAppOrigin()}/?journey=workflows`,
+    label: "Try AI workflows",
+    href: () => workflowLibraryPath(),
   },
   title: "Use AI workflows",
   description:
@@ -244,9 +247,11 @@ export const workflowsJourney: Journey = {
       ],
       route: {
         path: "/project/",
+        // The chat shell, open on a chat or a draft, is the same page (lib/chatRoute.ts).
+        alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
-          return projectId ? { to: projectPath(projectId) } : { to: homePath() };
+          return projectId ? { to: projectChatsPath(projectId) } : { to: homePath() };
         },
         label: "Open the chat",
       },

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /apps as one table: an app per row, the site it opens at (its custom domain
+ * The apps list (Projects' apps; once the page /apps) as one table: an app per row, the site it opens at (its custom domain
  * once live), each environment's health and the last deploy — and no API
  * links, which are not a destination for a person.
  */
@@ -31,10 +31,9 @@ vi.mock("@/hooks/observability-queries", () => ({
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({ data: state.alerts }),
 }));
-vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("../startBuilding", () => ({ useStartBuildingApp: () => vi.fn() }));
 
-import { AppsBody, AppsPage } from "../AppsPage";
+import { AppsBody } from "../AppsPage";
 
 const env = (name: string, over: Partial<AppEnv> = {}): AppEnv => ({
   id: `${name}-id`,
@@ -71,7 +70,7 @@ beforeEach(() => {
 
 describe("the Apps page", () => {
   it("is one accessible table, a row per app, each opening the app's console", () => {
-    render(<AppsPage />);
+    render(<AppsBody />);
     const table = screen.getByRole("table", { name: "Apps" });
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["App", "Site", "Environments", "Last deploy"]);
     const row = screen.getByTestId("app-row-storefront");
@@ -80,7 +79,7 @@ describe("the Apps page", () => {
   });
 
   it("links the site at prod's address — the custom domain when that is the one live", () => {
-    render(<AppsPage />);
+    render(<AppsBody />);
     const site = within(screen.getByTestId("app-row-storefront")).getByTestId("app-live-link");
     expect(site).toHaveAttribute("href", "https://shop.example.com");
     expect(site).toHaveAttribute("target", "_blank");
@@ -88,7 +87,7 @@ describe("the Apps page", () => {
   });
 
   it("shows every environment's health and counts previews", () => {
-    render(<AppsPage />);
+    render(<AppsBody />);
     const row = screen.getByTestId("app-row-storefront");
     expect(within(row).getByTestId("app-env-prod")).toHaveAttribute("data-verdict", "converged");
     expect(within(row).getByTestId("app-env-staging")).toHaveAttribute("data-verdict", "converging");
@@ -101,7 +100,7 @@ describe("the Apps page", () => {
       { envId: "prod-id", state: "firing" },
       { envId: "prod-id", state: "resolved" },
     ];
-    render(<AppsPage />);
+    render(<AppsBody />);
     const row = screen.getByTestId("app-row-storefront");
     const prod = within(row).getByTestId("app-env-prod");
     expect(prod).toHaveAttribute("data-firing", "2");
@@ -113,7 +112,7 @@ describe("the Apps page", () => {
   });
 
   it("never links an API, and says why there is nothing to open", () => {
-    render(<AppsPage />);
+    render(<AppsBody />);
     const ledger = screen.getByTestId("app-row-ledger");
     expect(within(ledger).queryByTestId("app-live-link")).toBeNull();
     expect(ledger).toHaveTextContent("No public site");
@@ -122,14 +121,14 @@ describe("the Apps page", () => {
 
   it("does not claim 'not deployed' when deployments could not be read", () => {
     state.availability = "unreachable";
-    render(<AppsPage />);
+    render(<AppsBody />);
     expect(screen.getByTestId("app-row-newsletter")).toHaveTextContent("Unavailable");
     expect(screen.getByTestId("app-row-newsletter")).not.toHaveTextContent("Not deployed yet");
   });
 
   it("does not claim 'not deployed' for an app whose environment status could not be read", () => {
     state.apps = [{ name: "trader", envs: [env("staging", { release: "", deployedAt: undefined, verdict: "unknown", unread: true })], previews: 0 }];
-    render(<AppsPage />);
+    render(<AppsBody />);
     const row = screen.getByTestId("app-row-trader");
     expect(row).toHaveTextContent("Unavailable");
     expect(row).not.toHaveTextContent("Not deployed yet");
@@ -140,19 +139,19 @@ describe("the Apps page", () => {
   it("shows skeleton rows while loading, and the build prompt when there is nothing", () => {
     state.loading = true;
     state.apps = [];
-    const { unmount } = render(<AppsPage />);
+    const { unmount } = render(<AppsBody />);
     expect(screen.getByTestId("apps-list")).toHaveAttribute("aria-busy", "true");
     expect(screen.getAllByText("Loading…").length).toBeGreaterThan(0);
     unmount();
     state.loading = false;
-    render(<AppsPage />);
+    render(<AppsBody />);
     expect(screen.getByTestId("apps-empty")).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
   });
 
   it("highlights the app a claim just made the user's own", () => {
     state.search = { claimed: "storefront" };
-    render(<AppsPage />);
+    render(<AppsBody />);
     expect(screen.getByTestId("app-row-storefront")).toHaveAttribute("data-highlighted", "true");
     expect(screen.getByTestId("apps-claimed")).toHaveTextContent("storefront is yours now");
   });

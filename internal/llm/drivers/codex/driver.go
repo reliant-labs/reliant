@@ -778,13 +778,15 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 	usage := responseswire.TokenUsage(resp.Usage)
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
-	c.logServedResponse(resp, upstreamRequestID)
+	premature := responseswire.PrematureStop(resp, nil, len(toolCalls), content)
+	c.logServedResponse(resp, upstreamRequestID, premature)
 
 	return &llm.DriverResponse{
 		Content:            content,
 		ToolCalls:          toolCalls,
 		Usage:              usage,
 		FinishReason:       finishReason,
+		PrematureStop:      premature,
 		UpstreamRequestID:  upstreamRequestID,
 		UpstreamProxymanID: upstreamProxymanID,
 	}, nil
@@ -870,6 +872,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		currentContent := ""
 		toolCallsByID := make(map[string]*message.ToolCall)
 		var finalResp *responses.Response
+		// Assistant messages as output_item.done delivered them, for
+		// responseswire.PrematureStop when the terminal output is empty.
+		var streamedMessages []responses.ResponseOutputMessage
 
 		for ; hasNext; hasNext = stream.Next() {
 			ev := stream.Current()
@@ -891,6 +896,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				// Detect reasoning item completion
 				if reasoning := v.Item.AsReasoning(); reasoning.Type == "reasoning" {
 					eventChan <- llm.DriverEvent{Type: llm.EventThinkingStop}
+				}
+				if msg := v.Item.AsMessage(); msg.Type == "message" {
+					streamedMessages = append(streamedMessages, msg)
 				}
 
 				// Handle function call completion
@@ -971,6 +979,13 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				finalResp = &v.Response
 
 			case responses.ResponseFailedEvent:
+				// The Codex backend refuses an oversized prompt here, not with
+				// an HTTP 400: an error, so call_llm can shrink the request.
+				if err := responseswire.ContextOverflowFailure(&v.Response); err != nil {
+					logging.WarnContext(ctx, "[Codex] Response failed: prompt exceeds the context window", "error", err)
+					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+					return
+				}
 				// Likewise terminal. Ignoring it reported a failed response as
 				// a clean end of turn.
 				finalResp = &v.Response
@@ -1065,7 +1080,8 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		usage := responseswire.TokenUsage(finalResp.Usage)
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
-		c.logServedResponse(finalResp, upstreamRequestID)
+		premature := responseswire.PrematureStop(finalResp, streamedMessages, len(finalToolCalls), currentContent)
+		c.logServedResponse(finalResp, upstreamRequestID, premature)
 
 		eventChan <- llm.DriverEvent{
 			Type: llm.EventComplete,
@@ -1076,6 +1092,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				Usage:              usage,
 				FinishReason:       finishReason,
 				Phase:              responseswire.AssistantPhase(finalResp),
+				PrematureStop:      premature,
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},

@@ -433,7 +433,7 @@ func TestListAccessRoutedTriggers(t *testing.T) {
 	routed("trg-acc-foreign-conn", strp("conn-foreign"), true, "github")
 	routed("trg-acc-off", nil, false, "github")
 	routed("trg-acc-slack", nil, true, "slack")
-	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "11", now, []core.IntegrationAccessGrant{
+	if err := store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), storetest.SeedUserID, "github", "11", now, []core.IntegrationAccessGrant{
 		{AccountKey: "100", ResourceKey: "1"},
 	}); err != nil {
 		t.Fatalf("ReplaceIntegrationAccess: %v", err)

@@ -8,6 +8,7 @@ import {
   resolveChatThreadMode,
   setChatThreadMode,
   useChatThreadMode,
+  useChatViewOverride,
 } from "../useChatThreadMode";
 
 const store = new Map<string, string>();
@@ -139,5 +140,30 @@ describe("useChatThreadMode", () => {
     store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto");
     const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
     expect(result.current.mode).toBe("detailed");
+  });
+});
+
+describe("a chat's URL naming the mode (?view=, hooks/useChatRoute.ts)", () => {
+  afterEach(() => useChatViewOverride.setState({ routed: false, view: null }));
+
+  it("shows the URL's mode over the preference", () => {
+    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "simplified");
+    useChatViewOverride.setState({ routed: true, view: "detailed" });
+    const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
+    expect(result.current).toEqual({ mode: "detailed", preference: "simplified" });
+  });
+
+  it("records a choice made on a chat's page in its URL as well as the preference", () => {
+    useChatViewOverride.setState({ routed: true, view: null });
+    act(() => setChatThreadMode("detailed"));
+    expect(useChatViewOverride.getState().view).toBe("detailed");
+    expect(setSettingIfChanged).toHaveBeenCalledWith(SETTINGS_KEYS.CHAT_THREAD_MODE, "detailed");
+    act(() => setChatThreadMode("auto"));
+    expect(useChatViewOverride.getState().view).toBeNull();
+  });
+
+  it("names no URL mode off a chat's page", () => {
+    act(() => setChatThreadMode("detailed"));
+    expect(useChatViewOverride.getState().view).toBeNull();
   });
 });

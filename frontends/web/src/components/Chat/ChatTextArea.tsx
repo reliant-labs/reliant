@@ -3,7 +3,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useState,
+  useMemo,
   forwardRef,
   useImperativeHandle,
 } from "react";
@@ -12,6 +12,7 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useSurface } from "../../lib/surfaceContext";
 import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { composerMaxHeight } from "./composerHeight";
+import { examplePromptFor } from "./examplePrompt";
 import { takeSwitchFocus } from "./composerSwitchFocus";
 import { useCoarsePointer } from "./useCoarsePointer";
 import {
@@ -64,60 +65,6 @@ interface ChatTextAreaProps {
   slashCommands?: SlashCommand[];
 }
 
-// Example prompts that rotate randomly
-const EXAMPLE_PROMPTS = [
-  "Add authentication to my API",
-  "Refactor this component to use hooks",
-  "Fix the bug in the checkout flow",
-  "Write tests for the user service",
-  "Optimize this database query",
-  "Add dark mode to my app",
-  "Create a REST API for users",
-  "Set up CI/CD pipeline",
-  "Improve the error handling",
-  "Add input validation to this form",
-  "Convert this to TypeScript",
-  "Make this component responsive",
-  "Add logging to track errors",
-  "Implement caching for this endpoint",
-  "Review and improve this code",
-  "Build a user dashboard",
-  "Add pagination to this list",
-  "Create a file upload feature",
-  "Implement real-time notifications",
-  "Add search functionality",
-  "Build a payment integration",
-  "Create an admin panel",
-  "Add email verification",
-  "Implement password reset",
-  "Build a comment system",
-  "Add rate limiting",
-  "Create a webhook handler",
-  "Implement OAuth login",
-  "Add database migrations",
-  "Build a chat feature",
-  "Create export to CSV",
-  "Add image compression",
-  "Implement lazy loading",
-  "Build a filter system",
-  "Add analytics tracking",
-  "Create a scheduling system",
-  "Implement drag and drop",
-  "Add multi-language support",
-  "Build a notification system",
-  "Create API documentation",
-  "Add error monitoring",
-  "Implement data validation",
-  "Build a settings page",
-  "Add role-based permissions",
-  "Create a backup system",
-  "Implement infinite scroll",
-  "Add keyboard shortcuts",
-  "Build a reporting dashboard",
-  "Create a mobile app version",
-  "Add WebSocket support",
-];
-
 /** Focus the composer with the caret after any draft, ready to keep typing. */
 function focusAtEnd(el: HTMLTextAreaElement): void {
   el.focus();
@@ -147,17 +94,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
     useImperativeHandle(ref, () => textareaRef.current!, []);
     const activeChatId = useActiveChatId();
 
-    // Pick a random example prompt and update when chat changes
-    const [examplePrompt, setExamplePrompt] = useState(() => {
-      const randomIndex = Math.floor(Math.random() * EXAMPLE_PROMPTS.length);
-      return EXAMPLE_PROMPTS[randomIndex];
-    });
-
-    // Re-randomize when switching chats (not chatId, because new chats have no chatId yet)
-    useEffect(() => {
-      const randomIndex = Math.floor(Math.random() * EXAMPLE_PROMPTS.length);
-      setExamplePrompt(EXAMPLE_PROMPTS[randomIndex]);
-    }, [activeChatId]);
+    // A new example when switching chats (keyed on the active chat, not
+    // chatId, because new chats have no chatId yet).
+    const examplePrompt = useMemo(() => examplePromptFor(activeChatId), [activeChatId]);
 
     const defaultPlaceholder = `Ask Reliant, e.g. "${examplePrompt}"`;
 
@@ -191,7 +130,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       el.style.height = "auto";
       el.style.maxHeight = `${maxHeight}px`;
       // Empty, the box is one line whatever the placeholder: Chromium counts a
-      // wrapped placeholder in scrollHeight, and a random example prompt that
+      // wrapped placeholder in scrollHeight, and an example prompt that
       // wrapped would grow the composer (and reflow the screen) with nothing
       // typed. The placeholder itself is clipped to one line in CSS.
       const contentHeight = el.value === "" ? minHeight : el.scrollHeight;

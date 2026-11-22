@@ -30,6 +30,11 @@
  * Observability has no home of its own: its health strip is the Overview's,
  * so the parent row opens its first view.
  *
+ * In the product the console renders inside the one shell, whose left nav
+ * draws these sections inline under the open app (ConsoleLayout,
+ * ConsoleFrame.tsx, Layout/sidebar/AppsNavSection.tsx): this column is the
+ * frame of the public demo and the dev preview harnesses only.
+ *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
  * inline, and the group holding the current page stays open. Observability
@@ -38,7 +43,7 @@
  */
 
 import { memo, type ReactNode } from "react";
-import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
+import { Activity, Database, FlaskConical, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
@@ -49,6 +54,8 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
+  ANALYTICS_TAB_LABELS,
+  AUTH_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -56,6 +63,8 @@ import {
   withSearch,
   type ConsolePage,
 } from "./paths";
+import { consoleNavEntries } from "./consoleNavRegistry";
+import { testIdParts } from "../Tests/flakyModel";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -78,6 +87,15 @@ export interface ConsoleNavInput {
   dashboardTitle?: string;
   /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
   optionalViews?: { profiles: boolean };
+  /**
+   * Whether the Experiments row is listed (Forge Changes). Off until the
+   * control plane serves ChangesService: the web config's CHANGES_UI
+   * (lib/changesFeature.ts). The open page lists it regardless. When chat
+   * 411eb83a's console nav registry lands, this becomes a
+   * registerConsoleNavEntry({ id: "experiments", after: "product-analytics",
+   * available }) beside the route instead of a field here.
+   */
+  experiments?: boolean;
   /**
    * Whether Observability is expanded — the reader's remembered choice
    * (obsNavOpen.ts). Omitted, it starts expanded and toggles for the visit.
@@ -104,7 +122,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, experiments = false, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -122,6 +140,9 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
     items: [
       row("Overview", { kind: "overview" }, icon(Home), { active: is("overview") || is("workload") }),
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
+      ...(experimentsListed(page, experiments)
+        ? [row("Experiments", { kind: "experiments" }, icon(FlaskConical), { active: is("experiments") || is("experiment") })]
+        : []),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
         // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
@@ -158,7 +179,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Data", { kind: "data" }, icon(Database)),
       row("Storage", { kind: "storage" }, icon(HardDrive)),
-      row("Users", { kind: "users" }, icon(Users)),
+      // Auth (U6d): Users and Sign-in tabs; the old Users page redirects to it.
+      row("Auth", { kind: "auth" }, icon(Users), { active: is("auth") || is("users") }),
       ...configureNavRows({ page, envs }, href),
     ],
     footer: [row("Activity", { kind: "activity" }, icon(Activity))],
@@ -166,6 +188,11 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
 }
 
 /** The Configure section: Environments (each long-lived one, previews as one row), Secrets, Domains. */
+/** The Experiments row is listed when its flag is on, and always while one of its pages is open. */
+export function experimentsListed(page: ConsolePage, flag: boolean): boolean {
+  return flag || page.kind === "experiments" || page.kind === "experiment";
+}
+
 export function configureNavRows({ page, envs }: Pick<ConsoleNavInput, "page" | "envs">, href: (target: ConsolePage) => string): SidebarNavItem[] {
   const long = envs.filter((candidate) => !candidate.preview);
   const previews = envs.filter((candidate) => candidate.preview);
@@ -225,6 +252,8 @@ export function consoleCrumbs(
       return [{ label: "Releases" }];
     case "release":
       return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
+    case "obs-overview":
+      return [{ label: "Observability" }, { label: "Overview" }];
     case "obs-view":
       return [{ label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) }, { label: OBS_NAV_LABELS[page.view] }];
     case "dashboard":
@@ -249,6 +278,44 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "services":
+      return [{ label: "Services" }];
+    case "service":
+      return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
+    case "events":
+      return [{ label: "Product analytics" }, { label: "Events & metrics" }];
+    case "analytics":
+      return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
+    case "speed-insights":
+      return [{ label: "Observability" }, { label: "Speed insights" }];
+    case "extension":
+      return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
+    case "tests":
+      return [{ label: "Tests" }, { label: "Overview" }];
+    case "tests-coverage":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Coverage" }];
+    case "tests-runs":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Runs" }];
+    case "tests-run":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Runs", href: href({ kind: "tests-runs" }) }, { label: page.run }];
+    case "tests-flaky":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests" }];
+    case "tests-flaky-test":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests", href: href({ kind: "tests-flaky" }) }, { label: testIdParts(page.test).name }];
+    case "auth":
+      return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
+    case "experiments":
+      return [{ label: "Experiments" }];
+    case "experiment":
+      return [{ label: "Experiments", href: href({ kind: "experiments" }) }, { label: "Change" }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 
@@ -328,30 +395,7 @@ function ConsoleShellImpl({
         navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
         headerContent={
           <>
-            <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
-              <Link
-                href={nav.linkTo ? nav.linkTo({ kind: "overview" }) : withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
-                className="truncate hover:text-ink"
-              >
-                {nav.project}
-              </Link>
-              {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
-                  <span aria-hidden="true" className="text-ink-subtle">
-                    ›
-                  </span>
-                  {crumb.href ? (
-                    <Link href={crumb.href} className="truncate hover:text-ink">
-                      {crumb.label}
-                    </Link>
-                  ) : (
-                    <span aria-current="page" className="truncate font-medium text-ink">
-                      {crumb.label}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </nav>
+            <ConsoleBreadcrumb project={nav.project} env={nav.env} linkTo={nav.linkTo} crumbs={crumbs} />
             {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
@@ -367,6 +411,46 @@ function ConsoleShellImpl({
         {children}
       </SidebarLayout>
     </div>
+  );
+}
+
+/** The console's breadcrumb: the app (its Overview), then the page's trail. */
+export function ConsoleBreadcrumb({
+  project,
+  env,
+  linkTo,
+  crumbs,
+}: {
+  project: string;
+  env: string;
+  linkTo?: (target: ConsolePage) => string;
+  crumbs: { label: string; href?: string }[];
+}) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
+      <Link
+        href={linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env })}
+        className="truncate hover:text-ink"
+      >
+        {project}
+      </Link>
+      {crumbs.map((crumb, index) => (
+        <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
+          <span aria-hidden="true" className="text-ink-subtle">
+            ›
+          </span>
+          {crumb.href ? (
+            <Link href={crumb.href} className="truncate hover:text-ink">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span aria-current="page" className="truncate font-medium text-ink">
+              {crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }
 

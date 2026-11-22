@@ -26,6 +26,18 @@
 // The attribute names are a contract with control-plane's machine-health
 // dashboard and its Machine* alert rules; rename one and rename it there.
 //
+// Self-hosted machines. A machine a person (or the platform) runs pairs with
+// us but ships no logs anywhere, so the Sampler does not run there. Instead
+// every daemon that can read /proc sends its host's load and memory on each
+// heartbeat (HostStats, DaemonHeartbeat.machine_stats) beside the disk report
+// it already sends. The daemon gateway, whose own logs land in tenant zero
+// (ServiceName daemon-gateway), writes the same two messages from those
+// heartbeats once a minute (HeartbeatLines) for the machines it is told to
+// watch: those in its MACHINE_STATS_ORGS that carry the durable label
+// MACHINE_STATS_LABEL (default monitor=platform), never a managed workspace.
+// Those lines carry machine_source=heartbeat and the machine's name, daemon
+// id and org id; HeartbeatLines' comment has their keys.
+//
 //forge:exclude-contract: one concrete sampler over the machine's own /proc and the slot pool; its collaborators (DiskSource, SlotSource) are the narrow func types declared here, and tests drive it through a fake /proc
 package machinehealth
 
@@ -159,24 +171,17 @@ func (s *Sampler) Sample() (health []any, volumes [][]any) {
 
 	if s.cfg.Disk != nil {
 		if rep, ok := s.cfg.Disk(); ok {
-			minRatio, minLabel := math.Inf(1), ""
-			for _, v := range rep.GetVolumes() {
-				if v.GetTotalBytes() == 0 {
-					continue
-				}
-				ratio := float64(v.GetFreeBytes()) / float64(v.GetTotalBytes())
+			sized, fullest := sizedVolumes(rep)
+			for _, sv := range sized {
 				volumes = append(volumes, []any{
-					"volume", v.GetLabel(),
-					"free_ratio", round3(ratio),
-					"free_bytes", v.GetFreeBytes(),
-					"total_bytes", v.GetTotalBytes(),
+					"volume", sv.v.GetLabel(),
+					"free_ratio", round3(sv.freeRatio),
+					"free_bytes", sv.v.GetFreeBytes(),
+					"total_bytes", sv.v.GetTotalBytes(),
 				})
-				if ratio < minRatio {
-					minRatio, minLabel = ratio, v.GetLabel()
-				}
 			}
-			if minLabel != "" {
-				health = append(health, "disk_min_free_ratio", round3(minRatio), "disk_min_free_volume", minLabel)
+			if fullest != nil && fullest.v.GetLabel() != "" {
+				health = append(health, "disk_min_free_ratio", round3(fullest.freeRatio), "disk_min_free_volume", fullest.v.GetLabel())
 			}
 		}
 	}

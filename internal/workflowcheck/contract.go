@@ -66,11 +66,12 @@ type Firing struct {
 	Scope triggerspec.Scope
 }
 
-// Store is what the service reads and writes. *db.Repo satisfies it.
+// Store is what the service reads and writes. store.WorkflowCheckRunExtStore
+// satisfies it.
 type Store interface {
-	// CreateWorkflowCheckRun inserts row; false when the firing already has
+	// InsertWorkflowCheckRun inserts row; false when the firing already has
 	// a check of that name.
-	CreateWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error)
+	InsertWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error)
 	// MarkWorkflowCheckRunsStarted stamps the checks of chatID's launch
 	// firing as started (the first stamp stands) and makes them due.
 	MarkWorkflowCheckRunsStarted(ctx context.Context, chatID string, at time.Time) error

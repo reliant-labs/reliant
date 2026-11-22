@@ -9,14 +9,15 @@
  * declared id is recognised, applicable or not.
  *
  * The forge journey is built in. The workflows journey is REGISTERED by the
- * shells that run Reliant code (journeys/catalog.ts, imported by routes.tsx
- * and forgeShellRoutes.tsx): its content pulls in Reliant's workflow hooks and
+ * shells that run Reliant code (journeys/catalog.ts, imported by routes.tsx,
+ * on both app hosts): its content pulls in Reliant's workflow hooks and
  * stores, which the forge demo's own bundle must not contain. Until it is
  * registered (the demo, forever) `workflows` is WORKFLOWS_ELSEWHERE: no steps,
- * never available here, only its "Try it in Reliant" link for the end card.
+ * never available here, only its link for the end card: into the app, on the
+ * forge host the demo's sign-up goes to too (Forge/Demo/DemoCta.tsx).
  */
 
-import { reliantAppOrigin } from "../../../lib/shell";
+import { forgeAppOrigin } from "../../../lib/shell";
 import type { Journey, JourneyStep, StepPresentation } from "../types";
 import {
   JOURNEY_IDS,
@@ -29,14 +30,15 @@ import { forgeJourney } from "./forge";
 
 /**
  * The workflows journey where its content is not loaded (the forge demo
- * bundle). Its version, title and link match journeys/workflows.tsx; a test
- * holds them together.
+ * bundle). Its version, title and label match journeys/workflows.tsx; a test
+ * holds them together. Its link leaves the demo for the app, where the landing
+ * journey (`?journey=workflows`) is held through sign-in.
  */
 export const WORKFLOWS_ELSEWHERE: Journey = {
   id: "workflows",
   version: 3,
   shells: ["reliant"],
-  elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` },
+  elsewhere: { label: "Try AI workflows", href: () => `${forgeAppOrigin()}/?journey=workflows` },
   title: "Use AI workflows",
   description:
     "See a finished workflow on the canvas: agent steps, edges, a loop, a branch that asks you first, a schedule, and where it runs.",

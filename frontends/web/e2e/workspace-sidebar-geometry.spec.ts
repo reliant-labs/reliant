@@ -8,7 +8,8 @@ test('New workspace matches every selector, including after the controls wrap', 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await mockAppsBackend(page);
   await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  // New chat is a link in the one shell's nav (U6), to the new-chat view.
+  await page.getByRole('link', { name: 'New chat', exact: true }).click();
   const controls = page.locator('[data-onboarding="workspace-buttons"]');
   await expect(controls.getByRole('button', { name: 'New workspace', exact: true })).toBeVisible();
   await expect(controls.getByTestId('new-chat-project-chip')).toBeVisible();
@@ -44,6 +45,8 @@ for (const { width, electron } of [200, 240].flatMap((width) =>
       if (desktop) window.RELIANT_CONFIG = { isElectron: true, isDev: true } as typeof window.RELIANT_CONFIG;
     }, { desktop: electron, panelWidth: width });
     await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
+    // The right panel is closed by default (#3010): open it the way a person does.
+    await page.getByRole('button', { name: 'Toggle File Browser' }).click();
     const sidebar = page.locator('[data-onboarding="right-sidebar"]');
     const tabs = sidebar.getByRole('tab');
     await expect(tabs).toHaveCount(electron ? 5 : 4);

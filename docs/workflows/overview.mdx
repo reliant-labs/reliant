@@ -81,13 +81,15 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 **Landing Page** (`landing-page`) and **Pitch Deck** (`pitch-deck`) are content pipelines: a short scoping conversation, a content review loop, a visual review loop, then a handoff that serves the result at a preview URL. When they finish, the chat switches to a plain agent so you can keep iterating.
 
+**Patch vulnerabilities** (`vuln-patch`) fixes the vulnerabilities forge found in an env's release and opens one pull request. In a fresh worktree it runs `reliant forge vuln patch <env> --no-pr --verify --json`, which bumps each vulnerable dependency, base image or Go toolchain to its fix and runs the project's gate. When the bump breaks the build or tests, or a finding has no deterministic route, a restricted agent (a shell with no credentials) takes over in the same run for at most `max_agent_iterations` attempts. After each attempt the workflow itself checks the result: no test deleted or skipped, the verify command passes, and `reliant forge vuln scan . --json` no longer reports the targeted findings. The pull request opens on a `vuln-patch/` branch only when that check passes; otherwise the run fails with the agent's summary and opens nothing. Set `patch_mode: agent` to skip the bump (a fix only in a new major), and `approve_code_changes` to approve agent changes beyond the dependency manifests before the PR opens. It never merges.
+
 **Create a Workflow** (`build-workflow`) turns a conversation about what you want to automate into a workflow, building and testing any integrations it needs first.
 
 **Import from Claude Code / Cursor** (`migrate`) brings configuration across from Claude Code, Cursor, Codex, or Windsurf.
 
 **Autopilot** is five workflows that run only as [automations](/automations/overview), never from a chat: PR review (`autopilot-pr-review`), security review (`autopilot-security-review`), issue worker (`autopilot-issue-worker`), review responder (`autopilot-review-responder`) and on-call (`autopilot-oncall`). They are listed in the library, where you enable them; see [Autopilot](/guides/autopilot).
 
-The rest ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output), `scope-conversation` (a reusable scoping conversation), and the steps the Autopilot workflows share. They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
+The rest ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output), `scope-conversation` (a reusable scoping conversation), and the steps the Autopilot workflows and `vuln-patch` share. They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
 
 ### Inputs an integration defines
 

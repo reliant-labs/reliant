@@ -14,21 +14,20 @@
 // tombstone so a delivery still in flight cannot run, and answers "fenced",
 // which settles the op as not run.
 //
-// A daemon older than op ids ignores the id and answers the old way: a reply
-// is then the synchronous outcome, exactly as before. If it does not reply in
-// time, the op stays pending and git.teardown_status fails as an unknown
-// command, so the op is released after LegacyGrace instead (the old daemon's
-// delete either finished or failed by then; before this protocol nothing held
-// creation back at all).
+// A daemon older than op ids cannot say how an op ended: git.teardown_status
+// fails there as an unknown command, which Query reports as
+// ErrMachineOutdated. The op stays pending until the machine is updated; the
+// updated daemon has never seen the id, so its first status answer fences it
+// and settles it as not run.
 //
 //forge:not-a-component: nothing constructs it: Query and Settle are functions that take their collaborators per call, from internal/handlers/project and internal/workspacecreate
 package checkoutteardown
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -37,11 +36,10 @@ import (
 // checkout_teardown.go).
 const StatusCommand = "git.teardown_status"
 
-// LegacyGrace is how long a pending op sent to a daemon that cannot
-// acknowledge ops holds creation back. The old daemon's remove is one
-// RemoveAll and its reclone ran under the 30s command timeout, so either has
-// long ended by then.
-const LegacyGrace = 30 * time.Minute
+// ErrMachineOutdated is a machine whose Reliant predates acknowledged
+// teardowns: it cannot say how an op ended, so nothing is released or sent
+// until it is updated.
+var ErrMachineOutdated = errors.New("the machine's Reliant is too old to confirm how a checkout remove or reclone ended; update it")
 
 // outdatedMarker is the phrase a daemon's unknown-command error carries
 // (daemonruntime unknownCommandError; daemonerr.IsOutdated reads the same).
@@ -64,14 +62,14 @@ const (
 
 // Ack is a daemon's acknowledgement of an op: the op_id / op_state / error
 // fields of a git.remove or git.reclone reply, or a git.teardown_status reply.
-// OpID is empty in a reply from a daemon that predates op ids.
 type Ack struct {
 	OpID    string `json:"op_id,omitempty"`
 	OpState string `json:"op_state,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
-// Acknowledged reports whether the reply came from a daemon that knows op ids.
+// Acknowledged reports whether the reply acknowledged an op. A reply that does
+// not came from a daemon that predates op ids (ErrMachineOutdated).
 func (a Ack) Acknowledged() bool { return a.OpID != "" && a.OpState != "" }
 
 // State is the server state an acknowledged op_state settles to; pending for
@@ -106,39 +104,22 @@ func Settle(ctx context.Context, store Store, op *db.CheckoutTeardown, ack Ack) 
 	return store.SettleCheckoutTeardown(ctx, op.ID, state, detail)
 }
 
-// LegacyPendingError is a pending op on a daemon too old to say how it ended:
-// it holds creation back until Until.
-type LegacyPendingError struct {
-	Teardown *db.CheckoutTeardown
-	Until    time.Time
-}
-
-func (e *LegacyPendingError) Error() string {
-	return fmt.Sprintf("the machine's Reliant is too old to confirm the %s finished; it is released at %s",
-		e.Teardown.Kind, e.Until.UTC().Format(time.RFC3339))
-}
-
 // Query asks the machine how op ended and records the answer, returning the
 // row as it then is (still pending when the op is running). An error means
-// the machine could not say: unreachable, timed out, or — as a
-// *LegacyPendingError — too old to know ops, within LegacyGrace. Past the
-// grace an old machine's op is settled expired.
-func Query(ctx context.Context, store Store, m Machine, op *db.CheckoutTeardown, now time.Time) (*db.CheckoutTeardown, error) {
+// the machine could not say: unreachable, timed out, or too old to know ops
+// (ErrMachineOutdated, which the op stays pending through until the machine
+// is updated).
+func Query(ctx context.Context, store Store, m Machine, op *db.CheckoutTeardown) (*db.CheckoutTeardown, error) {
 	if op.State != db.CheckoutTeardownPending {
 		return op, nil
 	}
 	var ack Ack
 	err := m.Send(ctx, StatusCommand, map[string]string{"op_id": op.ID}, &ack, statusTimeoutMs)
 	if err != nil {
-		if !strings.Contains(err.Error(), outdatedMarker) {
-			return op, err
+		if strings.Contains(err.Error(), outdatedMarker) {
+			return op, fmt.Errorf("%w: %w", ErrMachineOutdated, err)
 		}
-		until := op.CreatedAt.Add(LegacyGrace)
-		if now.Before(until) {
-			return op, &LegacyPendingError{Teardown: op, Until: until}
-		}
-		return store.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownExpired,
-			"the machine cannot confirm how it ended (its Reliant predates acknowledged teardowns); released after "+LegacyGrace.String())
+		return op, err
 	}
 	return Settle(ctx, store, op, ack)
 }

@@ -19,7 +19,7 @@ interface SettingsNavigationProps {
   isCollapsed?: boolean;
 }
 
-interface SectionItem {
+export interface SectionItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -58,7 +58,17 @@ function isItemActive(item: SectionItem, activeSection: SettingsSection, activeT
   return !item.tabs || item.tabs.includes(resolveAISettingsTab(activeTab));
 }
 
-interface SectionGroup {
+/** Where `item`'s entry goes: its section, and its tab when that is not the section's default. */
+export function settingsItemEntry(item: SectionItem): SettingsNavEntry {
+  return entryOf(item);
+}
+
+/** Whether `item` is the page on screen (its section, and one of its tabs). */
+export function isSettingsItemCurrent(item: SectionItem, activeSection: SettingsSection, activeTab?: SettingsTab): boolean {
+  return isItemActive(item, activeSection, activeTab);
+}
+
+export interface SectionGroup {
   label: string;
   items: SectionItem[];
   /** Folded behind its heading until opened, or until the active section is inside it. */
@@ -124,12 +134,12 @@ const sectionGroups: SectionGroup[] = [
     ],
   },
   {
-    label: "Machines & projects",
+    label: "Sandboxes & projects",
     items: [
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
-      { id: "machines", label: "Machines", icon: Server },
+      { id: "machines", label: "Agent sandboxes", icon: Server },
       { id: "projects", label: "Projects", icon: FolderOpen },
     ],
   },
@@ -175,6 +185,20 @@ export function showDeveloperSettings(): boolean {
 function isItemVisible(item: SectionItem): boolean {
   if (item.id === "developer") return showDeveloperSettings();
   return true;
+}
+
+/**
+ * The sections as the shell's Settings drill-in lists them (U6c: Settings
+ * replaces the left nav instead of opening a second column): each group's
+ * visible sections, then About.
+ */
+export function settingsNavGroups(): { groups: SectionGroup[]; about: SectionItem } {
+  return {
+    groups: sectionGroups
+      .map((group) => ({ ...group, items: group.items.filter(isItemVisible) }))
+      .filter((group) => group.items.length > 0),
+    about: ABOUT,
+  };
 }
 
 /** Sidebar entries in display order (About last, as the footer); used for keyboard nav. */
@@ -256,6 +280,7 @@ export function SettingsNavigation({
 
   const build = appBuild();
   const version = formatVersion(build?.version, build?.commit);
+  const footerLabel = version ? `Reliant ${version} · About` : "About";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -302,22 +327,28 @@ export function SettingsNavigation({
         {isCollapsed ? (
           renderItem(ABOUT)
         ) : (
-          <button
-            onClick={() => onSectionChange(ABOUT.id)}
-            aria-label={ABOUT.label}
-            aria-current={activeSection === ABOUT.id ? "page" : undefined}
-            data-section-id={ABOUT.id}
-            data-nav-key={ABOUT.id}
-            className={cn(
-              "flex w-full cursor-pointer items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-left text-xs transition-all",
-              activeSection === ABOUT.id
-                ? "border-primary bg-primary/10 text-primary-ink font-medium"
-                : "border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-            )}
-          >
-            <ABOUT.icon className="h-4 w-4 flex-shrink-0" />
-            <span>{version ? `Reliant ${version} · About` : "About"}</span>
-          </button>
+          // One line, whatever the version: a long one (a `.dirty` or sha
+          // build) is truncated, and the tooltip shows it whole.
+          <Tooltip content={footerLabel} side="right" triggerClassName="block w-full">
+            <button
+              onClick={() => onSectionChange(ABOUT.id)}
+              aria-label={ABOUT.label}
+              aria-current={activeSection === ABOUT.id ? "page" : undefined}
+              data-section-id={ABOUT.id}
+              data-nav-key={ABOUT.id}
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-left text-xs transition-all",
+                activeSection === ABOUT.id
+                  ? "border-primary bg-primary/10 text-primary-ink font-medium"
+                  : "border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              <ABOUT.icon className="h-4 w-4 flex-shrink-0" />
+              <span data-testid="settings-footer-label" className="min-w-0 truncate">
+                {footerLabel}
+              </span>
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>

@@ -96,11 +96,6 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 			t.Fatal(err)
 		}
 		requireSameBlock(t, "FindContentBlock "+want.ID, want, got)
-		twin, err := f.env.Repo.GetContentBlock(ctx, want.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		requireSameBlock(t, "Repo.GetContentBlock "+want.ID, want, twin)
 	}
 	if got, err := store.FindContentBlock(ctx, o, "absent"); err != nil || got != nil {
 		t.Fatalf("FindContentBlock(absent) = %v, %v", got, err)
@@ -115,7 +110,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if *bad.Content != "bad \uFFFD byte" {
 		t.Fatalf("caller's block content = %q; want it repaired in place", *bad.Content)
 	}
-	if got, _ := f.env.Repo.GetContentBlock(ctx, bad.ID); *got.Content != "bad \uFFFD byte" {
+	if got, _ := store.FindContentBlock(ctx, o, bad.ID); *got.Content != "bad \uFFFD byte" {
 		t.Fatalf("stored content = %q", *got.Content)
 	}
 
@@ -125,7 +120,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if err := store.InsertContentBlockOnce(ctx, o, again); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.env.Repo.CreateContentBlockIfNotExists(ctx, again); err != nil {
+	if err := store.InsertContentBlockOnce(ctx, f.env.Repo.ORM(), again); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := store.FindContentBlock(ctx, o, again.ID); *got.Content != "content "+again.ID {
@@ -198,7 +193,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		delta := fmt.Sprintf("<%d '\\ ?>", i)
 		if i%2 == 0 {
-			err = f.env.Repo.AppendToContentBlock(ctx, "m1-b0", delta)
+			err = store.AppendToContentBlock(ctx, f.env.Repo.ORM(), "m1-b0", delta)
 		} else {
 			err = store.AppendToContentBlock(ctx, o, "m1-b0", delta)
 		}
@@ -213,7 +208,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if want := "<0 '\\ ?><1 '\\ ?><2 '\\ ?><3 '\\ ?><4 '\\ ?><5 '\\ ?>"; *got.Content != want || *got.Version != 6 {
 		t.Fatalf("content %q version %d; want %q version 6", *got.Content, *got.Version, want)
 	}
-	if err := f.env.Repo.AppendToolInputDelta(ctx, f.chat, "m1-b1", `,"x":1}`); err != nil {
+	if err := store.AppendToolInputDelta(ctx, f.env.Repo.ORM(), "m1-b1", `,"x":1}`); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AppendToolInputDelta(ctx, o, "m1-b1", "?"); err != nil {

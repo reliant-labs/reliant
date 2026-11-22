@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	task "github.com/reliant-labs/reliant/internal/handlers/task"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -20,13 +20,13 @@ import (
 func TestCreateTask_Generated(t *testing.T) {
 	t.Parallel()
 
-	var created *db.Task
-	repo := newTaskRepo()
-	repo.CreateTaskFunc = func(_ context.Context, tk *db.Task) error {
+	var created *core.Task
+	repo := newTaskMocks()
+	repo.Tasks.InsertTaskFunc = func(_ context.Context, tk *core.Task) error {
 		created = tk
 		return nil
 	}
-	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
+	svc := task.NewTestTask(t, task.WithTaskDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateTaskRequest, pb.CreateTaskResponse]{
 		{

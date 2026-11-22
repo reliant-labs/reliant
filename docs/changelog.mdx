@@ -13,6 +13,128 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.28.0" description="November 22, 2026">
+### 11 new features, 13 fixes and 17 other changes
+
+Every pull request merged since v1.27.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: one project selector — pinned, recent, apps, ⌘K (U7)** [#2995](https://github.com/reliant-labs/reliant/pull/2995)
+- **web: Overview vulnerabilities card (SBOM W2)** [#3226](https://github.com/reliant-labs/reliant/pull/3226)
+- **projects: read coverage source from GitHub at view time** [#3182](https://github.com/reliant-labs/reliant/pull/3182)
+- **web: filter the chat list by several projects (choose N of M)** [#3027](https://github.com/reliant-labs/reliant/pull/3027)
+- **cli: reliant update installs the newest signed release** [#3240](https://github.com/reliant-labs/reliant/pull/3240)
+- **web: one shell — the nav model (U6 2a/16)** [#3191](https://github.com/reliant-labs/reliant/pull/3191)
+- **workflow: built-in vuln-patch workflow (deterministic bump, agent takeover, verify gate, PR)** [#3236](https://github.com/reliant-labs/reliant/pull/3236)
+- **web: Tests pages — coverage, runs and flaky tests in the project shell** [#3207](https://github.com/reliant-labs/reliant/pull/3207)
+- **web: the one shell lists Experiments behind CHANGES_UI; re-capture the visual baselines** [#3265](https://github.com/reliant-labs/reliant/pull/3265)
+- **tools: present_image shows a file from the machine in the chat timeline** [#3224](https://github.com/reliant-labs/reliant/pull/3224)
+- **web: Patch and Patch-with-agent buttons start the vuln-patch workflow (SBOM W3)** [#3251](https://github.com/reliant-labs/reliant/pull/3251)
+
+#### Changed
+
+- **tools: ask_user questions say who 'I' and 'you' are** [#3216](https://github.com/reliant-labs/reliant/pull/3216)
+- **web: assert DesktopUpdateRequiredError after #2989 removed the bridge fallback** [#3231](https://github.com/reliant-labs/reliant/pull/3231)
+- **electron: release-config KCL tests skip when kcl or forge is missing, not only the control-plane checkout** [#3218](https://github.com/reliant-labs/reliant/pull/3218)
+- **one canonical definition of each product; agent-facing deploy guide** [#3220](https://github.com/reliant-labs/reliant/pull/3220)
+- **seed: drop vocab workarounds forge now handles and pin the new inbox and incident tables** [#3228](https://github.com/reliant-labs/reliant/pull/3228)
+- **pin: forge@7cb21c2dc (G8 upstream-token passthrough, forge test flakes, PGO refresh)** [#3245](https://github.com/reliant-labs/reliant/pull/3245)
+- **pin: @reliantlabs/forge-web-runtime@0.13.21, as promoted in v1.30.0-rc.1** [#3249](https://github.com/reliant-labs/reliant/pull/3249)
+- **daemon: exec.bg_list reads listening ports from procfs, not lsof, on Linux** [#3234](https://github.com/reliant-labs/reliant/pull/3234)
+- **web: re-capture the chat filter baselines over main's shell after #3027** [#3250](https://github.com/reliant-labs/reliant/pull/3250)
+- **llm: ask every account's availability report at once, not one after another** [#3238](https://github.com/reliant-labs/reliant/pull/3238)
+- **web: the Playwright e2e follows the one shell (#3191)** [#3259](https://github.com/reliant-labs/reliant/pull/3259)
+- **contract: re-vendor control-plane's public protos at 47c387280172** [#3138](https://github.com/reliant-labs/reliant/pull/3138)
+- **Learn pages for the project shell** [#3089](https://github.com/reliant-labs/reliant/pull/3089)
+- **facade: plan, task and attachment handlers take the generated stores** [#3246](https://github.com/reliant-labs/reliant/pull/3246)
+- **prove_test: say how to prove a fix in another git worktree** [#3223](https://github.com/reliant-labs/reliant/pull/3223)
+- **release: declare server-image inputs and stamp the commit time so releases reuse the image** [#3232](https://github.com/reliant-labs/reliant/pull/3232)
+- **advertise the docs MCP server (docs.reliantlabs.io/mcp) to coding agents** [#3271](https://github.com/reliant-labs/reliant/pull/3271)
+
+#### Fixed
+
+- **cli: scenario run for one named workflow reports an orphan scenarios dir instead of refusing** [#3222](https://github.com/reliant-labs/reliant/pull/3222)
+- **mcp: let the daemon resolve the global skills directory** [#3225](https://github.com/reliant-labs/reliant/pull/3225)
+- **tools: carry user attachments to sub-agents and warn on save_attachment extension mismatch** [#3219](https://github.com/reliant-labs/reliant/pull/3219)
+- **hosteduse: never read the proxy environment for the private controller** [#3227](https://github.com/reliant-labs/reliant/pull/3227)
+- **electron: stop setting the dead RELIANT_DATA_DIR for the backend** [#3230](https://github.com/reliant-labs/reliant/pull/3230)
+- **observability: list process.* and system.* metrics as forge built-ins in the metric catalog** [#3242](https://github.com/reliant-labs/reliant/pull/3242)
+- **mailbox: drain queued agent messages at READ COMMITTED so concurrent drains in one chat stop failing with 40001** [#3221](https://github.com/reliant-labs/reliant/pull/3221)
+- **projects: drop the per-user project keys so a path can be a project in each org** [#2887](https://github.com/reliant-labs/reliant/pull/2887)
+- **proto: buf-format coverage_source.proto so the release gate's lint is green** [#3257](https://github.com/reliant-labs/reliant/pull/3257)
+- **web: the Playwright e2e follows the one shell (apps, claim, onboarding)** [#3261](https://github.com/reliant-labs/reliant/pull/3261)
+- **web: the phone drawer's rows are 44px touch targets; the e2e opens it at its top level** [#3262](https://github.com/reliant-labs/reliant/pull/3262)
+- **web: Projects says what a finished claim did — the app is yours, which free site is paused — and highlights its row (#3258)** [#3266](https://github.com/reliant-labs/reliant/pull/3266)
+- **ci: release-config renders through forge env kcl eval --format json; stock kcl lacks forge's kcl_plugin** [#3272](https://github.com/reliant-labs/reliant/pull/3272)
+
+</Update>
+
+<Update label="v1.27.0" description="November 21, 2026">
+### 5 new features, 1 fix and 4 other changes
+
+Every pull request merged since v1.26.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: restyle — dashboards** [#3011](https://github.com/reliant-labs/reliant/pull/3011)
+- **web: Experiments page and agent tools for Forge Changes** [#3082](https://github.com/reliant-labs/reliant/pull/3082)
+- **cli: machine create, delete and grow-disk; preview access list, set, remove and default** [#3125](https://github.com/reliant-labs/reliant/pull/3125)
+- **projects: ListProjectsWithApps — projects with their linked apps, under authorization** [#2983](https://github.com/reliant-labs/reliant/pull/2983)
+- **web: chats and threads are URLs (U5)** [#2999](https://github.com/reliant-labs/reliant/pull/2999)
+
+#### Changed
+
+- **db: delete 43 facade methods with no production consumers** [#3057](https://github.com/reliant-labs/reliant/pull/3057)
+- **auth: mark the caller resolvers //forge:resolves-caller for the unscoped_auth audit** [#3032](https://github.com/reliant-labs/reliant/pull/3032)
+- **web: re-capture visual baselines after #2999 and a dirty-tree #3185 capture** [#3208](https://github.com/reliant-labs/reliant/pull/3208)
+- **pin: forge@d9ca020 (forge main: v1.9.x incl. #2636's deprecated-alias restore; supersedes #2988)** [#3195](https://github.com/reliant-labs/reliant/pull/3195)
+
+#### Fixed
+
+- **machines: label and pool writes need a person's login** [#2971](https://github.com/reliant-labs/reliant/pull/2971)
+
+</Update>
+
+<Update label="v1.26.0" description="November 21, 2026">
+### 8 new features, 10 fixes and 5 other changes
+
+Every pull request merged since v1.25.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **projects: internal ensure-for-app endpoint — a deploy's app gets a linked project in its org** [#3088](https://github.com/reliant-labs/reliant/pull/3088)
+- **config: typed client version policy, served on SystemService** [#3062](https://github.com/reliant-labs/reliant/pull/3062)
+- **web: restyle — chat** [#3010](https://github.com/reliant-labs/reliant/pull/3010)
+- **workflows: pin a workflow or node to a machine pool or labels** [#2966](https://github.com/reliant-labs/reliant/pull/2966)
+- **web: App hosting billing tab — editable budget, usage projection, free tier, limits strip, and billing for any org** [#3068](https://github.com/reliant-labs/reliant/pull/3068)
+- **worktree: list and archive workspaces from the CLI, scan --capture, and reclaim mode on without the storage reaper** [#3163](https://github.com/reliant-labs/reliant/pull/3163)
+- **deploy: declare the reliant CLI as build-only GoBuild variants** [#3037](https://github.com/reliant-labs/reliant/pull/3037)
+- **grpc: identify clients by Reliant-Client and refuse ones below the minimum** [#3069](https://github.com/reliant-labs/reliant/pull/3069)
+
+#### Changed
+
+- **playwright: run the E2E jobs in the pinned Playwright image instead of installing system packages** [#2916](https://github.com/reliant-labs/reliant/pull/2916)
+- **call a hosted Forge API from a frontend hosted elsewhere, preview fork guard, declared direct apply** [#3148](https://github.com/reliant-labs/reliant/pull/3148)
+- **release: one desktop pack script for release.yml and forge's ShellBuild** [#3041](https://github.com/reliant-labs/reliant/pull/3041)
+- **ci: main's release gate runs static as three parts, four balanced go shards, a warm golangci-lint and 2 Playwright workers** [#3166](https://github.com/reliant-labs/reliant/pull/3166)
+- **handlers: one rpc per file in project, worktree, worktree_reclaim, plan, task, repo** [#3007](https://github.com/reliant-labs/reliant/pull/3007)
+
+#### Fixed
+
+- **workflow: an interrupt settles the tool step in flight instead of re-dispatching it** [#3135](https://github.com/reliant-labs/reliant/pull/3135)
+- **workflow: YAML aliases expand templates like the value they point to** [#3015](https://github.com/reliant-labs/reliant/pull/3015)
+- **grpc: validate the ensure request's ids without a raw UserID comparison (TestNoRawOwnershipComparisons, red on main since #3088)** [#3184](https://github.com/reliant-labs/reliant/pull/3184)
+- **cli: daemon logs -n past 1MB, token rejection reasons, status while pairing, hidden token prompt, data dir held while awaiting credentials** [#3112](https://github.com/reliant-labs/reliant/pull/3112)
+- **workflow: a command node reattaches to its daemon command after a transport drop** [#2985](https://github.com/reliant-labs/reliant/pull/2985)
+- **triggers: ListTriggers resolves next fire times in parallel under a 3s budget** [#3144](https://github.com/reliant-labs/reliant/pull/3144)
+- **daemon: remove the credential.helper an old daemon wrote into each clone** [#2987](https://github.com/reliant-labs/reliant/pull/2987)
+- **mcp: chrome-devtools screenshots are saved by the daemon under the chat's path rules** [#2925](https://github.com/reliant-labs/reliant/pull/2925)
+- **merge-gate: mark a failed phase the runner's OOM killer ended with GATE-INFRA: oom** [#3175](https://github.com/reliant-labs/reliant/pull/3175)
+- **web: read observability usage from ObservabilityBillingService and derive env kind from placement fields** [#3013](https://github.com/reliant-labs/reliant/pull/3013)
+
+</Update>
+
 <Update label="v1.25.0" description="November 21, 2026">
 ### 11 new features, 29 fixes and 7 other changes
 

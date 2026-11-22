@@ -40,6 +40,8 @@ export interface RouteTarget {
 export interface JourneyRoute {
   /** Pathname prefix the step needs, e.g. "/workflows/library" or "/workflow/". */
   path: string;
+  /** Other pathname prefixes the step's page is also at (the chat shell is at `/project/…`, `/c/…` and `/new`). */
+  alsoAt?: readonly string[];
   /**
    * Where to go: static, or built from the journey context (a slug a
    * previous step recorded). Its `search` is merged into the current search
@@ -229,8 +231,9 @@ export interface Journey {
   finish?: (shell: TourShell) => RouteTarget | null;
   /**
    * How to reach this journey from a shell it doesn't run in: the end card's
-   * "Try the other journey" becomes this external link (e.g. the forge shell
-   * → "Try AI workflows in Reliant").
+   * "Try the other journey" becomes this link — an app path opens in place
+   * (the forge brand → the Workflows area), a URL in a new tab (the public
+   * demo → the app).
    */
   elsewhere?: { label: string; href: () => string };
   /**

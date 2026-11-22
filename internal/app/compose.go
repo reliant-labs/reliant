@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
@@ -57,6 +58,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/handlers/pull_request_record"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/repo"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -96,6 +98,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/reliant-labs/reliant/internal/servergateway"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -192,6 +195,8 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
+		MachineStats:    machineStatsSelection(g.GatewayConfig),
+		ClientVersions:  g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -683,6 +688,7 @@ func (g *Graph) newUserChain() (*grpcserver.UserChain, error) {
 		Auth:                g.UserAuth(),
 		AllowedEmailDomains: g.ApiServerConfig.GetAllowedEmailDomains(),
 		Logger:              g.Log,
+		ClientVersions:      g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -714,7 +720,8 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		// Every request's context carries membership (authz).
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
-		Policies: g.OrgPolicyResolver(),
+		Policies:       g.OrgPolicyResolver(),
+		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
@@ -970,6 +977,8 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgProviderAccount: g.OrgProviderAccount(),
 		OrgUsage:           g.OrgUsage(),
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
+		CoverageSource:     g.CoverageSource(),
+		PullRequestRecord:  g.PullRequestRecord(),
 	})
 }
 
@@ -1001,10 +1010,10 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 // newAttachment constructs the attachment handler (internal/handlers/attachment).
 func (g *Graph) newAttachment() (*attachment.Service, error) {
 	return attachment.New(attachment.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		API:    g.ApiServerConfig,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Attachments: store.NewAttachmentExtStore(g.Database().ORM()),
+		API:         g.ApiServerConfig,
 	})
 }
 
@@ -1240,19 +1249,31 @@ func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 
 // newTask constructs the task handler (internal/handlers/task).
 func (g *Graph) newTask() (*task.Service, error) {
+	repo := g.Database()
 	return task.New(task.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Tasks:   store.NewTaskExtStore(repo.ORM()),
+		Plans:   store.NewPlanExtStore(repo.ORM()),
+		Threads: store.NewThreadExtStore(repo.ORM()),
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Refetch: repo,
+		Tx:      repo.ORM(),
 	})
 }
 
 // newPlan constructs the plan handler (internal/handlers/plan).
 func (g *Graph) newPlan() (*plan.Service, error) {
+	repo := g.Database()
 	return plan.New(plan.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Plans:   store.NewPlanExtStore(repo.ORM()),
+		Tasks:   store.NewTaskExtStore(repo.ORM()),
+		Threads: store.NewThreadExtStore(repo.ORM()),
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Refetch: repo,
+		Tx:      repo.ORM(),
 	})
 }
 
@@ -1275,7 +1296,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Orgs:         g.OrgResolver(),
+		// The Projects list reads the org's hosted apps as the caller; nil
+		// self-hosted, where it lists them as unavailable.
+		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
+		Orgs: g.OrgResolver(),
 		// Moving a project is off until control-plane's half is in prod and
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
@@ -1563,5 +1587,36 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
 		Membership:  g.OrgResolver(),
+	})
+}
+
+// newCoverageSource constructs the coverage-source handler
+// (internal/handlers/coverage_source): a covered file's source, read from
+// GitHub with the viewer's own token once control-plane confirms a retained
+// coverage report names it. Without a control plane, or without a way to
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
+	blobs, err := CoverageSourceBlobs(g.Database(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	if err != nil {
+		return nil, err
+	}
+	return coverage_source.New(coverage_source.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Projects: g.Database(),
+		Orgs:     g.OrgResolver(),
+		Reports:  CoverageSourceReports(g.ServerProcessConfig.GetControlPlane()),
+		Blobs:    blobs,
+		Now:      nil, // optional — no provider
+	})
+}
+
+// newPullRequestRecord constructs the pull-request-record handler (internal/handlers/pull_request_record).
+func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
+	return pull_request_record.New(pull_request_record.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
 	})
 }

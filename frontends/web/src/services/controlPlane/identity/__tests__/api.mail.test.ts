@@ -3,8 +3,7 @@
 
 /**
  * The wire mapping of mail delivery and returned password-set codes: the
- * enum reaches the tab as a word (UNSPECIFIED, from a server that predates
- * it, as "unknown"), return_code is sent only when asked for, and an absent
+ * enum reaches the tab as a word (UNSPECIFIED as "unknown"), return_code is sent only when asked for, and an absent
  * or empty code maps to null rather than to a blank credential.
  */
 
@@ -90,8 +89,6 @@ describe("identity api: why there is no instance, and named environments", () =>
     [IdentityNotEnabledReason.PENDING, "", "pending"],
     [IdentityNotEnabledReason.NO_SHAPE, "", "no-shape"],
     [IdentityNotEnabledReason.REFUSED, "share_with names nobody", "refused"],
-    // A server that predates the field says only refused.
-    [IdentityNotEnabledReason.UNSPECIFIED, "share_with names nobody", "refused"],
     [IdentityNotEnabledReason.UNSPECIFIED, "", "unknown"],
   ])("maps reason %s (refused %j) to %s", async (wire, refused, want) => {
     rpc.getIdentityStatus.mockResolvedValue({ ...wireStatus(IdentityMailDelivery.NONE), hasInstance: false, notEnabledReason: wire, refused });

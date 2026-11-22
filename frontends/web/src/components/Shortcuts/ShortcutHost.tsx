@@ -33,11 +33,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "../../store/authStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
-import { openProjectSwitcher } from "../../lib/projectSwitcher";
+import { OPEN_PROJECT_SWITCHER_EVENT } from "../../lib/projectSwitcher";
+import { SwitchProjectDialog } from "../Projects/SwitchProjectDialog";
 import {
   useAppKeyboardShortcuts,
   type ShortcutHandlerLookup,
@@ -56,8 +57,10 @@ import { surfaceForPath } from "../../lib/surface";
 import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
-import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { revealShellNav, toggleShellNav } from "../Layout/shell/shellFrame";
+import { homePath, projectChatsPath, settingsPath, workflowsPath } from "@/lib/paths";
 import { orgFreeRouteId } from "@/lib/paths/org";
+import { chatShellRouteOf } from "@/lib/chatRoute";
 
 // Loaded on first open (and warmed once the host is live): they would
 // otherwise ride in the entry chunk to every unauthenticated page.
@@ -122,7 +125,8 @@ export function shortcutScope({
 
 type Overlay =
   | { kind: "palette" }
-  | { kind: "chat-search"; mode: "current" | "history" };
+  | { kind: "chat-search"; mode: "current" | "history" }
+  | { kind: "project-selector" };
 
 interface PendingWorkspaceAction {
   action: () => void;
@@ -139,6 +143,8 @@ interface LiveState {
   workspace: boolean;
   pathname: string;
   navigate: ReturnType<typeof useNavigate>;
+  /** Where the router is going, ahead of the page on screen. */
+  latestPathname: () => string;
 }
 
 interface HostCore {
@@ -208,11 +214,13 @@ function createHostCore(
   };
 
   const navigateToWorkspace = () => {
+    // Already on its way (an open chat navigates to its own URL first, lib/chatRoute.ts).
+    if (chatShellRouteOf(live.current.latestPathname())) return;
     const { navigate } = live.current;
     // The chat workspace's URL carries the sidebar's project filter.
     const projectId = useWorkspaceStateStore.getState().projectFilterId;
     if (projectId) {
-      void navigate({ to: projectPath(projectId), search: {} });
+      void navigate({ to: projectChatsPath(projectId), search: {} });
     } else {
       void navigate({ to: homePath(), search: {} });
     }
@@ -246,23 +254,15 @@ function createHostCore(
     setOverlay(overlay);
   };
 
-  // Adding a project is a dialog; switching is the sidebar's project menu.
-  // Both open over the chat workspace, which is where they act.
+  // Adding a project is a dialog over the chat workspace, which is where it acts.
   const addProject = () => {
     closeOverlays();
     if (!live.current.workspace) navigateToWorkspace();
     openAddProject();
   };
-  const switchProject = () => {
-    closeOverlays();
-    if (live.current.workspace) {
-      openProjectSwitcher();
-    } else {
-      navigateToWorkspace();
-      // The workspace mounts its sidebar on the next frame.
-      requestAnimationFrame(() => openProjectSwitcher());
-    }
-  };
+  // The project selector floats over whatever page is open; picking acts
+  // from there (Projects/SwitchProjectDialog).
+  const switchProject = () => openOverlay({ kind: "project-selector" });
 
   /**
    * Act on the composer on screen; with none, go to the workspace and act on
@@ -311,6 +311,9 @@ function createHostCore(
       else void live.current.navigate({ to: settingsPath() });
     },
     onOpenWorkflows: () => void live.current.navigate({ to: workflowsPath() }),
+    // The nav is the shell's, on every page of it, not the workspace's.
+    onToggleSidebar: toggleShellNav,
+    onFocusLeftSidebar: revealShellNav,
     onOpenProject: addProject,
     onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds
@@ -438,16 +441,19 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   });
 
   const navigate = useNavigate();
+  const router = useRouter();
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const latestPathname = () => router.latestLocation.pathname;
 
   const live = useRef<LiveState>({
     enabled,
     workspace,
     pathname,
     navigate,
+    latestPathname,
   });
   useLayoutEffect(() => {
-    live.current = { enabled, workspace, pathname, navigate };
+    live.current = { enabled, workspace, pathname, navigate, latestPathname };
   });
 
   const [core] = useState(() => createHostCore(live, setOverlay));
@@ -463,6 +469,14 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   }, [core, enabled]);
 
   const closeOverlay = useCallback(() => setOverlay(null), []);
+
+  // openProjectSwitcher (the header, ⌘K's Switch project…) asks by event.
+  useEffect(() => {
+    if (!enabled) return;
+    const open = () => setOverlay({ kind: "project-selector" });
+    window.addEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+    return () => window.removeEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+  }, [enabled]);
 
   return (
     <ShortcutHostContext.Provider value={core.host}>
@@ -515,6 +529,7 @@ function ActiveShortcuts({
     <>
       <SequenceHint pending={pendingSequence} isAvailable={core.isAvailable} />
       <Suspense fallback={null}>
+        {overlay?.kind === "project-selector" && <SwitchProjectDialog open onClose={onCloseOverlay} />}
         {overlay?.kind === "palette" && (
           <CommandPalette isOpen inWorkspace={workspace} onClose={onCloseOverlay} />
         )}

@@ -41,6 +41,7 @@ func InsertStepExecution(ctx context.Context, db orm.Context, exec *core.StepExe
 		ErrorMessage:  validUTF8Ptr(exec.ErrorMessage),
 		Attempt:       exec.Attempt,
 		NodePath:      exec.NodePath,
+		RunID:         exec.RunID,
 	})
 }
 
@@ -197,6 +198,76 @@ ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
+}
+
+// HandledNodeFailure is a node of a completed run whose last attempt failed:
+// the run went on past it, so its failure was handled (core.RunOutcomeFailureHandled).
+// A node failed when its activity did (an error recorded on the attempt), or
+// when it is an action or invoke_tool node that reported is_error: those
+// complete their activity and hand the error to the graph to route on, which
+// is a failure path running. A run node's non-zero exit code is not one: a
+// command's exit status is routinely the answer it was run for.
+type HandledNodeFailure struct {
+	// Node is the node's path in the run (its step id at the top level).
+	Node string `bun:"node"`
+	// Error is the error its last attempt recorded.
+	Error string `bun:"error"`
+}
+
+// FirstHandledNodeFailure returns a node of run workflowID, or of a run under
+// it, whose LAST attempt in run runID failed, or nil when there is none. A
+// root run's workflow id is reused by every run of its chat, so the run's id
+// (step_executions.run_id: the root run's forge.ai.run.id, kept across
+// continue-as-new and shared by its sub-agents) keeps an earlier run's
+// attempts out, however close together the two ran. With a run id, ONLY the
+// attempts recorded under it are the run's: an attempt recorded without one
+// (before the column existed) is never attributed to a known run by when it
+// was recorded, since the previous run on the reused workflow id may have
+// recorded it inside the clock-skew allowance before this one began. Every
+// node attempt the runtime records names its run (the activity input's
+// telemetry: FailStep and RecordToleratedFailure included). Only when runID
+// is empty (a run that predates its id) is an attempt the run's when it was
+// recorded at or after since (the run's start, less clock skew); the zero
+// time then reads every attempt. A node retried to
+// success has a successful last attempt and is not one. Each node is told
+// apart by its path and loop iteration, so one failed iteration of a parallel
+// loop counts even when its siblings passed. The runtime's own bookkeeping
+// steps, and a step that was skipped, are not nodes of the run's work.
+//
+// It reads the run when it has ended, so the node it finds is one the run went
+// on past: a run that a node failure ended is FAILED, not handled. Newest
+// failure first.
+func FirstHandledNodeFailure(ctx context.Context, db orm.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
+	var rows []HandledNodeFailure
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), last_attempt AS (
+    SELECT DISTINCT ON (se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1))
+           coalesce(se.node_path, se.step_id) AS node, se.created_at, se.id,
+           CASE WHEN se.success = 0 AND coalesce(se.error_message, '') <> '' THEN se.error_message
+                WHEN se.activity_name IN ('Action', 'InvokeTool') AND se.output_json IS JSON OBJECT
+                     AND (se.output_json::jsonb->>'is_error') = 'true'
+                THEN coalesce(nullif(left(se.output_json::jsonb->>'content', 2000), ''), 'the node reported is_error')
+           END AS failure
+    FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+    WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'FetchThreadResult', 'Cleanup', 'WorkflowError', 'SkippedStep']::text[])
+      AND CASE WHEN ?2::text <> '' THEN se.run_id = ?2::text
+               ELSE se.created_at >= ?1 END
+    ORDER BY se.workflow_id, coalesce(se.node_path, se.step_id), coalesce(se.loop_node_id, ''), coalesce(se.loop_iteration, -1),
+             se.created_at DESC, se.id DESC
+)
+SELECT node, failure AS error FROM last_attempt
+WHERE failure IS NOT NULL
+ORDER BY created_at DESC, id DESC
+LIMIT 1`, workflowID, since, runID).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
 }
 
 // DeclaredFailureError is the error MarkDeclaredFailureNode records on the
@@ -575,6 +646,7 @@ func stepExecutionToCore(row *StepExecution) *core.StepExecution {
 		ErrorMessage:   row.ErrorMessage,
 		Attempt:        row.Attempt,
 		NodePath:       row.NodePath,
+		RunID:          row.RunID,
 	}
 }
 

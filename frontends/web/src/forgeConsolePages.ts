@@ -1,8 +1,7 @@
 /**
- * The forge console's pages, as the forge shell (forgeShellRoutes.tsx) and the
- * forge demo (demoShellRoutes.tsx) mount them: the same lazy chunks for every
- * route createForgeConsoleRoutes declares. Reliant's tree (routes.tsx) wraps
- * its own in ForgeGate, so it keeps its own map.
+ * The forge console's pages: the lazy chunk for every route
+ * createForgeConsoleRoutes declares, as both trees mount them — the app's
+ * (routes.tsx, on both hosts) and the public demo's (demoShellRoutes.tsx).
  */
 
 import type { ForgeConsoleComponents } from './forgeConsoleRoutes'
@@ -15,6 +14,7 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   workload: lazyRoute(() => import('./components/Forge/Workloads/WorkloadPages'), 'WorkloadPage'),
   releases: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage'),
   release: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage'),
+  obsOverview: lazyRoute(() => import('./components/Forge/Observability/ObsOverview/ObsOverviewPage'), 'ObsOverviewPage'),
   observabilityView: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage'),
   dashboards: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage'),
   dashboard: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage'),
@@ -24,8 +24,25 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   secrets: lazyRoute(() => import('./components/Forge/Console/SecretsPage'), 'SecretsPage'),
   domains: lazyRoute(() => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage'),
   activity: lazyRoute(() => import('./components/Forge/Console/ActivityPage'), 'ActivityPage'),
+  experiments: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentsPage'),
+  experiment: lazyRoute(() => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentPage'),
   data: lazyRoute(() => import('./components/Forge/Data/DataPage'), 'DataPage'),
-  users: lazyRoute(() => import('./components/Forge/Users/UsersPage'), 'UsersPage'),
+  auth: lazyRoute(() => import('./components/Forge/Users/AuthPage'), 'AuthPage'),
+  services: lazyRoute(() => import('./components/Forge/Services/ServicesPages'), 'ServicesPage'),
+  service: lazyRoute(() => import('./components/Forge/Services/ServicesPages'), 'ServicePage'),
+  usage: lazyRoute(() => import('./components/Forge/Usage/ProjectUsagePage'), 'ProjectUsagePage'),
+  events: lazyRoute(() => import('./components/Forge/Analytics/EventsMetricsPage'), 'EventsMetricsPage'),
+  analytics: lazyRoute(() => import('./components/Forge/Analytics/AnalyticsPage'), 'AnalyticsPage'),
+  speedInsights: lazyRoute(() => import('./components/Forge/Analytics/SpeedInsightsPage'), 'SpeedInsightsPage'),
+  vulnerabilities: lazyRoute(() => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage'),
+  vulnerability: lazyRoute(() => import('./components/Forge/Security/VulnerabilityPage'), 'VulnerabilityPage'),
+  sboms: lazyRoute(() => import('./components/Forge/Security/SbomsPage'), 'SbomsPage'),
+  tests: lazyRoute(() => import('./components/Forge/Tests/TestsOverviewPage'), 'TestsOverviewPage'),
+  testsCoverage: lazyRoute(() => import('./components/Forge/Tests/TestsPlaceholderPages'), 'TestsCoveragePage'),
+  testsRuns: lazyRoute(() => import('./components/Forge/Tests/TestsRunsPage'), 'TestsRunsPage'),
+  testsRun: lazyRoute(() => import('./components/Forge/Tests/TestsRunPage'), 'TestsRunPage'),
+  testsFlaky: lazyRoute(() => import('./components/Forge/Tests/TestsFlakyPage'), 'TestsFlakyPage'),
+  testsFlakyTest: lazyRoute(() => import('./components/Forge/Tests/TestsFlakyTestPage'), 'TestsFlakyTestPage'),
   orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
   orgObservability: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute'),
   landing: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute'),

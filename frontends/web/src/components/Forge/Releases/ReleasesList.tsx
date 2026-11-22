@@ -66,6 +66,7 @@ import {
 } from "./releaseModel";
 import { releasesSummary } from "./releasesSummary";
 import { useReleaseData } from "./useReleaseData";
+import { useReleaseTestsColumn } from "../Tests/surfaces/ReleaseTestsColumn";
 
 export interface ReleasesSearch {
   q?: string;
@@ -129,6 +130,8 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
     [model, everyRelease, env, search.q, search.author, search.status, rows.length]
   );
   const bases = useMemo(() => new Map(model?.pipeline.map((cell) => [cell.env.name, cell.base]) ?? []), [model]);
+  // The Tests column (Tests/surfaces): shown once the newest release's tests answer; never on a control plane without them.
+  const testsColumn = useReleaseTestsColumn<ReleaseTableRow>(project, model?.rows[0]?.release.version);
 
   const loading = envsLoading || data.releases.isLoading;
   // No "Cut release" action, though the mockup draws one: a release is cut by
@@ -288,6 +291,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           env={env}
           releaseHref={releaseHref}
           calm={!!led}
+          testsColumn={testsColumn}
           menuFor={(row) => (model ? rowMenu(row, model, env, bases, promote, setPromoting, releaseHref) : [])}
           empty={
             filtered ? (
@@ -573,6 +577,7 @@ function ReleaseTable({
   empty,
   footer,
   calm = false,
+  testsColumn = null,
 }: {
   model: ReleaseModel | null;
   rows: ReleaseRow[];
@@ -584,6 +589,8 @@ function ReleaseTable({
   footer: ReactNode;
   /** One "Live in" column instead of the commit and a column per environment. */
   calm?: boolean;
+  /** The Tests column, after Checks; null while it does not show. */
+  testsColumn?: DataTableColumn<ReleaseTableRow> | null;
 }) {
   const longEnvs = model?.longEnvs ?? [];
   const hasPreviews = (model?.previews.length ?? 0) > 0;
@@ -619,6 +626,7 @@ function ReleaseTable({
         row.release.gitCommit ? <Mono value={row.release.gitCommit} /> : <span className="text-ink-muted">No commit recorded</span>,
     },
     { key: "checks", header: "Checks", render: (_, { row }) => <ChecksMark checks={row.checks} /> },
+    ...(testsColumn ? [testsColumn] : []),
     ...longEnvs.map(
       (candidate): DataTableColumn<ReleaseTableRow> => ({
         key: `env:${candidate.name}`,
@@ -673,7 +681,7 @@ function ReleaseTable({
   };
   // The calm table: what it is, its checks, where it runs now, who shipped it.
   const columns = calm
-    ? [...all.filter((column) => column.key === "release" || column.key === "checks"), liveIn, ...all.filter((column) => column.key === "author" || column.key === "actions")]
+    ? [...all.filter((column) => column.key === "release" || column.key === "checks" || column.key === "tests"), liveIn, ...all.filter((column) => column.key === "author" || column.key === "actions")]
     : all;
   return (
     <Card padding="none" className="overflow-hidden">

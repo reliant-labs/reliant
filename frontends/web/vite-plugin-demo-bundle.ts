@@ -35,16 +35,20 @@ export interface ReliantOnlyRule {
 export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   // Sign-in and sessions.
   { match: "node_modules/@supabase/", why: "Supabase sign-in" },
-  { match: "src/lib/auth/", why: "Reliant auth" },
+  {
+    match: "src/lib/auth/",
+    why: "Reliant auth",
+    // An import-free constant (the API-key principal's id) the org store compares against.
+    except: ["src/lib/auth/apiKeyUser.ts"],
+  },
   { match: "src/lib/supabase.ts", why: "Supabase sign-in" },
   { match: "src/components/Auth/", why: "Reliant sign-in screens" },
   { match: "src/components/AuthGuard.tsx", why: "Reliant sign-in" },
   { match: "src/components/AuthInitializer.tsx", why: "Reliant authenticated startup" },
   { match: "src/components/AuthLayout.tsx", why: "Reliant sign-in" },
   { match: "src/components/AuthScreen.tsx", why: "Reliant sign-in" },
-  // The Reliant app and the other shells' route trees.
-  { match: "src/routes.tsx", why: "Reliant's route tree" },
-  { match: "src/forgeShellRoutes.tsx", why: "the forge shell's route tree" },
+  // The app's route tree (both app hosts: Reliant and the forge brand).
+  { match: "src/routes.tsx", why: "the app's route tree" },
   { match: "src/settingsSectionRoutes.tsx", why: "Reliant settings" },
   { match: "src/settingsConnectorRoutes.tsx", why: "Reliant settings" },
   { match: "src/workflowsAreaRoutes.tsx", why: "Reliant workflows" },
@@ -68,7 +72,13 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/lib/daemon-wait.ts", why: "Reliant daemon" },
   { match: "src/lib/daemon-retry.ts", why: "Reliant daemon" },
   { match: "src/lib/daemon-resume.ts", why: "Reliant daemon" },
-  { match: "src/lib/chat", why: "Reliant chat" },
+  {
+    match: "src/lib/chat",
+    why: "Reliant chat",
+    // Pure: which page names a chat (the one shell's project scope reads it),
+    // and the chat list's project filter as URL/ids.
+    except: ["src/lib/chatRoute.ts", "src/lib/chatProjectFilter.ts"],
+  },
   { match: "src/store/chat", why: "Reliant chat" },
   { match: "src/store/authStore.ts", why: "Reliant auth" },
   { match: "src/api/authProvider.ts", why: "Reliant auth" },
@@ -83,7 +93,23 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   // Settings, billing, orgs, projects: account pages.
   { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/providers/accountFormat.ts"] },
   { match: "src/components/Billing/", why: "billing" },
-  { match: "src/components/Projects/", why: "Reliant projects", except: ["src/components/Projects/cloneTargets.ts"] },
+  {
+    match: "src/components/Projects/",
+    why: "Reliant projects",
+    // The one project selector (U7) is the forge console's app switcher too.
+    // Its data hooks have demo twins (hooks/project-catalog-queries.demo.ts,
+    // hooks/sidebar-project-queries.demo.ts, Apps/startBuilding.demo.ts), so
+    // in the demo it lists the demo's apps and reaches no Reliant code.
+    except: [
+      "src/components/Projects/cloneTargets.ts",
+      "src/components/Projects/ProjectSelector.tsx",
+      "src/components/Projects/AppChip.tsx",
+      "src/components/Projects/ProjectRowSummary.tsx",
+      // The console Overview's form for an app with nothing deployed (U6c);
+      // its chats are twinned (ProjectChats.demo.tsx).
+      "src/components/Projects/NoAppLanding.tsx",
+    ],
+  },
   { match: "src/components/Claim/", why: "the forge shell's claim flow" },
 ];
 

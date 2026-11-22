@@ -24,9 +24,9 @@
  * the same URL (`paths.test.ts` holds every builder to today's URL).
  */
 
-import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
 import type { SettingsSection } from "../../routeSchemas";
 import { orgRootPath, withOrg, type PathContext } from "./org";
+import { withSearch } from "./search";
 
 export { withOrg, type PathContext } from "./org";
 export { withSearch } from "./search";
@@ -68,9 +68,70 @@ export function orgHomePath(org: string): string {
   return orgRootPath(org);
 }
 
-/** The chat home filtered to one project (the sidebar's project filter). */
-export function projectPath(projectId: string, ctx?: PathContext): string {
+/**
+ * One chat (R1, control-plane docs/design/unified-shell-and-projects.md §3.1,
+ * §9): `/c/<chatId>`, `/o/<org>/c/<chatId>` in the org form. Flat, not under
+ * its project: chat ids are global, and a chat can move between projects.
+ * Its view state rides in the search (routeSchemas.ts, ChatViewSearch).
+ */
+export function chatPath(chatId: Segment, ctx?: PathContext): string {
+  return withOrg(`/c/${seg(chatId)}`, ctx);
+}
+
+/** One thread of a chat, in full view (R2): a spawned agent's or a workflow step's. */
+export function threadPath(chatId: Segment, threadId: Segment, ctx?: PathContext): string {
+  return withOrg(`/c/${seg(chatId)}/t/${seg(threadId)}`, ctx);
+}
+
+/**
+ * The new-chat view (R3). Its draft context — the project, machine and
+ * workspace it starts in — rides in the search (`?project=&machine=&ws=`,
+ * routeSchemas.ts NewChatSearch), so a refresh keeps it.
+ */
+export function newChatPath(ctx?: PathContext): string {
+  return withOrg("/new", ctx);
+}
+
+/**
+ * The chat home filtered to one project (the sidebar's project filter,
+ * `/project/<id>`). Not the project's page: that is projectPath. The design
+ * (R6) moves this filter back into the sidebar; until then it is how a
+ * chat's project is opened.
+ */
+export function projectChatsPath(projectId: string, ctx?: PathContext): string {
   return withOrg(`/project/${seg(projectId)}`, ctx);
+}
+
+// ── Projects (the merged list, §8.3–§8.4) ──────────────────────────────────
+
+/** The person's projects: their apps and sites, and their code (components/Projects/ProjectsPage.tsx). */
+export function projectsPath(ctx?: PathContext): string {
+  return withOrg("/projects", ctx);
+}
+
+/** What Projects lists: everything (no filter), only the apps, or only the apps with a live site. */
+export type ProjectsShow = "apps" | "sites";
+
+/** Projects as an href, narrowed to its apps or its sites (`?show=`); every project without one. */
+export function projectsHref(show?: ProjectsShow, ctx?: PathContext): string {
+  return withSearch(projectsPath(ctx), { show });
+}
+
+/** A project page's sub-pages (design §4, R7–R9, R18); the page itself has none. */
+export type ProjectPageTab = "settings" | "workspaces" | "move" | "delete";
+
+/** A project's page: its code, checkouts, apps and chats; `tab` one of its sub-pages. */
+export function projectPath(projectId: string, tab?: ProjectPageTab, ctx?: PathContext): string {
+  return withOrg(`/projects/${seg(projectId)}${tab ? `/${tab}` : ""}`, ctx);
+}
+
+/**
+ * One app's console (`/o/<org>/apps/<name>`; `/forge/p/<name>` with org
+ * links off): `name` is forge.yaml's `name`. The console's own builders
+ * (components/Forge/Console/paths.ts consoleBase) spell the same root.
+ */
+export function appPath(name: string, ctx?: PathContext): string {
+  return withOrg(`/forge/p/${seg(name)}`, ctx);
 }
 
 /** Everything waiting on the person, across every chat and project. */
@@ -80,24 +141,23 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/** The org's apps (components/Apps/AppsPage.tsx); also the forge shell's home. */
-export function appsPath(ctx?: PathContext): string {
-  return withOrg("/apps", ctx);
-}
-
-/** The forge shell's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
-export function sitesPath(ctx?: PathContext): string {
-  return withOrg("/sites", ctx);
-}
-
-/** The forge shell's usage and spend (ForgeShell). */
+/** The org's Usage & billing page (components/Usage/UsageBillingPage.tsx); `usageBillingPath` names the same URL. */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
 }
 
 /**
+ * Usage & billing (components/Usage/UsageBillingPage.tsx): the org's spend
+ * over time, per project, AI and sandbox time, plan, credits and invoices.
+ * The nav footer's entry; Settings › Billing is its admin side.
+ */
+export function usageBillingPath(ctx?: PathContext): string {
+  return usagePath(ctx);
+}
+
+/**
  * The bare console entry, `/forge`: it resolves `?project=` (an old link's
- * app) to that app's console, and otherwise redirects to the apps.
+ * app) to that app's console, and otherwise redirects to Projects' apps.
  */
 export function forgeLandingPath(ctx?: PathContext): string {
   return withOrg("/forge", ctx);
@@ -166,12 +226,28 @@ export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
 }
 
-/** The forge shell's own Settings sections (ForgeShell/ForgeSettingsPage.tsx), at the same paths. */
-export function forgeSettingsPath(section: ForgeSettingsSection): string {
-  return `/settings/${section}`;
+/** The Connectors page's tabs: the integrations agents act through, and MCP servers. */
+export type ConnectorsTab = "integrations" | "mcp";
+
+/**
+ * Connectors (components/Connectors/ConnectorsPage.tsx, U6d): the
+ * integrations and the MCP servers agents use, one page with a tab each
+ * (`?tab=mcp`; absent: Integrations). The Agents area's Connectors row.
+ */
+export function connectorsPath(tab?: ConnectorsTab, ctx?: PathContext): string {
+  return withSearch(withOrg("/connectors", ctx), { tab: tab === "integrations" ? undefined : tab });
 }
 
-/** One machine's page in Settings › Machines. */
+/**
+ * Agent sandboxes: the machines page, Settings › Agent sandboxes (the UI's
+ * name for machines; the section id, routes and APIs keep "machines").
+ * `/machines` and `/o/<org>/machines` redirect here.
+ */
+export function sandboxesPath(): string {
+  return settingsPath("machines");
+}
+
+/** One machine's page in Settings › Agent sandboxes. */
 export function machineSettingsPath(machineId: string): string {
   return `/settings/machines/${seg(machineId)}`;
 }
@@ -260,7 +336,7 @@ export function mobileChatPath(chatId: Segment): string {
 }
 
 /** A workflow chat's run, as the mobile surface shows it. */
-export function mobileChatWorkflowPath(chatId: string): string {
+export function mobileChatWorkflowPath(chatId: Segment): string {
   return `/m/chats/${seg(chatId)}/workflow`;
 }
 

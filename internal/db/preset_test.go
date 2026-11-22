@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // setupPresetTestDB creates a database with migrations for preset testing.
@@ -148,7 +149,7 @@ func TestPresetCRUD(t *testing.T) {
 		}
 
 		// List all user presets
-		presets, err := repo.ListUserPresets(ctx, userID)
+		presets, err := store.ListUserPresets(ctx, repo.ORM(), userID)
 		if err != nil {
 			t.Fatalf("ListUserPresets failed: %v", err)
 		}
@@ -251,7 +252,7 @@ func TestPresetCRUD(t *testing.T) {
 		}
 
 		// Verify it's gone - should return svcerr.NotFound
-		found, err := repo.GetPreset(ctx, saved.ID)
+		found, err := store.GetPreset(ctx, repo.ORM(), saved.ID)
 		if err == nil {
 			t.Error("expected error for deleted preset")
 		}
@@ -273,7 +274,7 @@ func TestPresetCRUD(t *testing.T) {
 			Params: map[string]interface{}{"model": "initial"},
 		}
 
-		result, err := repo.UpsertPreset(ctx, preset)
+		result, err := store.UpsertPreset(ctx, repo.ORM(), preset)
 		if err != nil {
 			t.Fatalf("UpsertPreset failed: %v", err)
 		}
@@ -309,7 +310,7 @@ func TestPresetCRUD(t *testing.T) {
 			Params: map[string]interface{}{"model": "updated"},
 		}
 
-		result, err := repo.UpsertPreset(ctx, updatedPreset)
+		result, err := store.UpsertPreset(ctx, repo.ORM(), updatedPreset)
 		if err != nil {
 			t.Fatalf("UpsertPreset failed: %v", err)
 		}
@@ -389,7 +390,7 @@ func TestPresetProjectScope(t *testing.T) {
 		}
 
 		// List global presets only
-		presets, err := repo.ListUserPresetsGlobal(ctx, userID)
+		presets, err := store.ListUserPresetsGlobal(ctx, repo.ORM(), userID)
 		if err != nil {
 			t.Fatalf("ListUserPresetsGlobal failed: %v", err)
 		}

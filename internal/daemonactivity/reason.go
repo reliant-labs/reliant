@@ -126,13 +126,14 @@ var userActionCommands = map[string]bool{
 	"forge.deploy_start":      true,
 	"forge.promote_apply":     true,
 
-	"fs.copy":              true,
-	"fs.delete":            true,
-	"fs.find_replace":      true,
-	"fs.mkdir":             true,
-	"fs.patch_file":        true,
-	"fs.write_binary_file": true,
-	"fs.write_file":        true,
+	"fs.copy":               true,
+	"fs.create_binary_file": true,
+	"fs.delete":             true,
+	"fs.find_replace":       true,
+	"fs.mkdir":              true,
+	"fs.patch_file":         true,
+	"fs.write_binary_file":  true,
+	"fs.write_file":         true,
 
 	"git.clone":   true,
 	"git.pull":    true,
@@ -148,10 +149,11 @@ var userActionCommands = map[string]bool{
 
 	"localmodels.set_endpoints": true,
 
-	"mcp.call_tool":      true,
-	"mcp.install_bundle": true,
-	"mcp.manage_server":  true,
-	"mcp.write_config":   true,
+	"mcp.call_tool":            true,
+	"mcp.install_bundle":       true,
+	"mcp.install_skill_bundle": true,
+	"mcp.manage_server":        true,
+	"mcp.write_config":         true,
 
 	"project.init_files":    true,
 	"project.init_git_repo": true,

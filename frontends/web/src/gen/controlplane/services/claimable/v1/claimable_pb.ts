@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/claimable/v1/claimable.proto.
  */
 export const file_services_claimable_v1_claimable: GenFile = /*@__PURE__*/
-  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0IoICCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIwCgZsaW1pdHMYBSABKAsyIC5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlTGltaXRzItADCg9DbGFpbWFibGVMaW1pdHMSGAoQbWF4X3N0YXRpY19zaXRlcxgBIAEoBRIdChVtYXhfc3RhdGljX3N0b3JlZF9taWIYAiABKAUSFAoMbWF4X3NlcnZpY2VzGAMgASgFEhQKDG1heF9yZXBsaWNhcxgEIAEoBRIaChJtYXhfbWlncmF0aW9uX2pvYnMYBSABKAUSHwoXd29ya2xvYWRfY3B1X21pbGxpY29yZXMYBiABKAUSGwoTd29ya2xvYWRfbWVtb3J5X21pYhgHIAEoBRImCh53b3JrbG9hZF9lcGhlbWVyYWxfc3RvcmFnZV9taWIYCCABKAUSFQoNbWF4X2RhdGFiYXNlcxgJIAEoBRIaChJkYXRhYmFzZV9pbnN0YW5jZXMYCiABKAUSHwoXZGF0YWJhc2VfY3B1X21pbGxpY29yZXMYCyABKAUSGwoTZGF0YWJhc2VfbWVtb3J5X21pYhgMIAEoBRIcChRkYXRhYmFzZV9zdG9yYWdlX21pYhgNIAEoBRIgChhkYXRhYmFzZV9tYXhfY29ubmVjdGlvbnMYDiABKAUSJQodZGF0YWJhc2VfZGVjbGFyZWRfc3RvcmFnZV9naWIYDyABKAUiTQoZQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIMCgRjb2RlGAEgASgJEhEKCWNvbXBvbmVudBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInsKHUdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlEhEKCWNoYWxsZW5nZRgBIAEoCRIXCg9kaWZmaWN1bHR5X2JpdHMYAiABKA0SLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiJgoPR2V0Q2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpcCChBHZXRDbGFpbVJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8uY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVN0YXRlEhEKCWNsYWltYWJsZRgCIAEoCBIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIRCglob3N0bmFtZXMYBSADKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLcHVyZ2VfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNsYWltZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkEKF09wZW5DbGFpbVNlc3Npb25SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJEhEKCXJldHJ5X2tleRgCIAEoCSJbChhPcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhUKDXJlZnJlc2hfdG9rZW4YAiABKAkSEgoKZXhwaXJlc19pbhgDIAEoAyJqCghGcmVlU2l0ZRIVCg1kZXBsb3ltZW50X2lkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIMCgRuYW1lGAUgASgJEgsKA3VybBgGIAEoCSJ7ChZGcmVlU2l0ZUNob2ljZVJlcXVpcmVkEjAKDWV4aXN0aW5nX3NpdGUYASABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUSLwoMY2xhaW1lZF9zaXRlGAIgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlIl8KFENvbXBsZXRlQ2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJEjIKCWZyZWVfc2l0ZRgCIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZUNob2ljZSIuChdHZXRDbGFpbUZyZWVTaXRlUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCSKWAQoYR2V0Q2xhaW1GcmVlU2l0ZVJlc3BvbnNlEhcKD2Nob2ljZV9yZXF1aXJlZBgBIAEoCBIwCg1leGlzdGluZ19zaXRlGAIgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlEi8KDGNsYWltZWRfc2l0ZRgDIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZSLnAQoVQ29tcGxldGVDbGFpbVJlc3BvbnNlEg4KBm9yZ19pZBgBIAEoCRISCgpjbGFpbV9wYXRoGAIgASgJEhEKCWhvc3RuYW1lcxgDIAMoCRIqCgVob2xkcxgEIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lIb2xkEjsKEWZyZWVfc2l0ZV9vdXRjb21lGAUgASgOMiAuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlT3V0Y29tZRIuCgtwYXVzZWRfc2l0ZRgGIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZSrEAQoOQ2xhaW1hYmxlU3RhdGUSHwobQ0xBSU1BQkxFX1NUQVRFX1VOU1BFQ0lGSUVEEAASGAoUQ0xBSU1BQkxFX1NUQVRFX0xJVkUQARIdChlDTEFJTUFCTEVfU1RBVEVfU1VTUEVOREVEEAISGwoXQ0xBSU1BQkxFX1NUQVRFX0NMQUlNRUQQAxIeChpDTEFJTUFCTEVfU1RBVEVfVEFLRU5fRE9XThAEEhsKF0NMQUlNQUJMRV9TVEFURV9FWFBJUkVEEAUqbwoORnJlZVNpdGVDaG9pY2USIAocRlJFRV9TSVRFX0NIT0lDRV9VTlNQRUNJRklFRBAAEhwKGEZSRUVfU0lURV9DSE9JQ0VfQ0xBSU1FRBABEh0KGUZSRUVfU0lURV9DSE9JQ0VfRVhJU1RJTkcQAiqqAQoPRnJlZVNpdGVPdXRjb21lEiEKHUZSRUVfU0lURV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASIQodRlJFRV9TSVRFX09VVENPTUVfTk9fQ09ORkxJQ1QQARInCiNGUkVFX1NJVEVfT1VUQ09NRV9DTEFJTUVEX1NJVEVfTElWRRACEigKJEZSRUVfU0lURV9PVVRDT01FX0VYSVNUSU5HX1NJVEVfTElWRRADMvoJChBDbGFpbWFibGVTZXJ2aWNlEt4BChRTdGFydENsYWltYWJsZURlcGxveRIsLmNvbnRyb2xwbGFuZS52MS5TdGFydENsYWltYWJsZURlcGxveVJlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZSJporsYZQgAOmE6X3RoZSBjYWxsZXIgaXMgYW4gYW5vbnltb3VzIG1hY2hpbmUgd2l0aCBubyBhY2NvdW50IHlldDsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEn4KFUdldENsYWltYWJsZUNoYWxsZW5nZRItLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlIgaiuxgCCAAShwEKGEdldENsYWltYWJsZUF2YWlsYWJpbGl0eRIwLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0GjEuY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUF2YWlsYWJpbGl0eVJlc3BvbnNlIgaiuxgCCAASVwoIR2V0Q2xhaW0SIC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1SZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVzcG9uc2UiBqK7GAIIABLXAQoQT3BlbkNsYWltU2Vzc2lvbhIoLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2UibqK7GGoIADpmOmR0aGUgY2FsbGVyIGhvbGRzIG9ubHkgdGhlIGNsYWltIHRva2VuIGFuZCBpcyBub3QgeWV0IGEgdXNlcjsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEpgBCg1Db21wbGV0ZUNsYWltEiUuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXNwb25zZSI4orsYNAgBOjAKBWNsYWltEhYKA29yZxIPcmVzcG9uc2Uub3JnX2lkIg9yZXNwb25zZS5vcmdfaWQS0AEKEEdldENsYWltRnJlZVNpdGUSKC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1GcmVlU2l0ZVJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1GcmVlU2l0ZVJlc3BvbnNlImeiuxhjCAE6XzpdYSByZWFkIG9mIHRoZSBjbGFpbSBwcmV2aWV3IGZvciB0aGUgc2lnbmVkLWluIGNhbGxlcjsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkGlqCtRhWChBDbGFpbWFibGVTZXJ2aWNlEgUxLjAuMBo7Tm8tc2lnbnVwIGRlcGxveXMgdGhhdCBhIGh1bWFuIGNhbiBjbGFpbSBiZWZvcmUgdGhleSBleHBpcmVC2QEKE2NvbS5jb250cm9scGxhbmUudjFCDkNsYWltYWJsZVByb3RvUAFaVWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9jbGFpbWFibGUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEilQEKG1N0YXJ0Q2xhaW1hYmxlRGVwbG95UmVxdWVzdBIPCgdwcm9qZWN0GAEgASgJEgsKA2VudhgCIAEoCRIRCglkZXZpY2VfaWQYAyABKAkSFQoNcG93X2NoYWxsZW5nZRgEIAEoCRIRCglwb3dfbm9uY2UYBSABKAkSGwoTcHJvamVjdF9pbnN0YW5jZV9pZBgGIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0IqACCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIwCgZsaW1pdHMYBSABKAsyIC5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlTGltaXRzEhwKFHByb2plY3RfaW5zdGFuY2VfaWRzGAYgASgIItADCg9DbGFpbWFibGVMaW1pdHMSGAoQbWF4X3N0YXRpY19zaXRlcxgBIAEoBRIdChVtYXhfc3RhdGljX3N0b3JlZF9taWIYAiABKAUSFAoMbWF4X3NlcnZpY2VzGAMgASgFEhQKDG1heF9yZXBsaWNhcxgEIAEoBRIaChJtYXhfbWlncmF0aW9uX2pvYnMYBSABKAUSHwoXd29ya2xvYWRfY3B1X21pbGxpY29yZXMYBiABKAUSGwoTd29ya2xvYWRfbWVtb3J5X21pYhgHIAEoBRImCh53b3JrbG9hZF9lcGhlbWVyYWxfc3RvcmFnZV9taWIYCCABKAUSFQoNbWF4X2RhdGFiYXNlcxgJIAEoBRIaChJkYXRhYmFzZV9pbnN0YW5jZXMYCiABKAUSHwoXZGF0YWJhc2VfY3B1X21pbGxpY29yZXMYCyABKAUSGwoTZGF0YWJhc2VfbWVtb3J5X21pYhgMIAEoBRIcChRkYXRhYmFzZV9zdG9yYWdlX21pYhgNIAEoBRIgChhkYXRhYmFzZV9tYXhfY29ubmVjdGlvbnMYDiABKAUSJQodZGF0YWJhc2VfZGVjbGFyZWRfc3RvcmFnZV9naWIYDyABKAUiTQoZQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIMCgRjb2RlGAEgASgJEhEKCWNvbXBvbmVudBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInsKHUdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlEhEKCWNoYWxsZW5nZRgBIAEoCRIXCg9kaWZmaWN1bHR5X2JpdHMYAiABKA0SLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiJgoPR2V0Q2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpcCChBHZXRDbGFpbVJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8uY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVN0YXRlEhEKCWNsYWltYWJsZRgCIAEoCBIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIRCglob3N0bmFtZXMYBSADKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLcHVyZ2VfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNsYWltZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkEKF09wZW5DbGFpbVNlc3Npb25SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJEhEKCXJldHJ5X2tleRgCIAEoCSJbChhPcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhUKDXJlZnJlc2hfdG9rZW4YAiABKAkSEgoKZXhwaXJlc19pbhgDIAEoAyJqCghGcmVlU2l0ZRIVCg1kZXBsb3ltZW50X2lkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIMCgRuYW1lGAUgASgJEgsKA3VybBgGIAEoCSJ7ChZGcmVlU2l0ZUNob2ljZVJlcXVpcmVkEjAKDWV4aXN0aW5nX3NpdGUYASABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUSLwoMY2xhaW1lZF9zaXRlGAIgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlIl8KFENvbXBsZXRlQ2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJEjIKCWZyZWVfc2l0ZRgCIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZUNob2ljZSIuChdHZXRDbGFpbUZyZWVTaXRlUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCSKWAQoYR2V0Q2xhaW1GcmVlU2l0ZVJlc3BvbnNlEhcKD2Nob2ljZV9yZXF1aXJlZBgBIAEoCBIwCg1leGlzdGluZ19zaXRlGAIgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlEi8KDGNsYWltZWRfc2l0ZRgDIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZSLnAQoVQ29tcGxldGVDbGFpbVJlc3BvbnNlEg4KBm9yZ19pZBgBIAEoCRISCgpjbGFpbV9wYXRoGAIgASgJEhEKCWhvc3RuYW1lcxgDIAMoCRIqCgVob2xkcxgEIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lIb2xkEjsKEWZyZWVfc2l0ZV9vdXRjb21lGAUgASgOMiAuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlT3V0Y29tZRIuCgtwYXVzZWRfc2l0ZRgGIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZSrEAQoOQ2xhaW1hYmxlU3RhdGUSHwobQ0xBSU1BQkxFX1NUQVRFX1VOU1BFQ0lGSUVEEAASGAoUQ0xBSU1BQkxFX1NUQVRFX0xJVkUQARIdChlDTEFJTUFCTEVfU1RBVEVfU1VTUEVOREVEEAISGwoXQ0xBSU1BQkxFX1NUQVRFX0NMQUlNRUQQAxIeChpDTEFJTUFCTEVfU1RBVEVfVEFLRU5fRE9XThAEEhsKF0NMQUlNQUJMRV9TVEFURV9FWFBJUkVEEAUqbwoORnJlZVNpdGVDaG9pY2USIAocRlJFRV9TSVRFX0NIT0lDRV9VTlNQRUNJRklFRBAAEhwKGEZSRUVfU0lURV9DSE9JQ0VfQ0xBSU1FRBABEh0KGUZSRUVfU0lURV9DSE9JQ0VfRVhJU1RJTkcQAiqqAQoPRnJlZVNpdGVPdXRjb21lEiEKHUZSRUVfU0lURV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASIQodRlJFRV9TSVRFX09VVENPTUVfTk9fQ09ORkxJQ1QQARInCiNGUkVFX1NJVEVfT1VUQ09NRV9DTEFJTUVEX1NJVEVfTElWRRACEigKJEZSRUVfU0lURV9PVVRDT01FX0VYSVNUSU5HX1NJVEVfTElWRRADMvoJChBDbGFpbWFibGVTZXJ2aWNlEt4BChRTdGFydENsYWltYWJsZURlcGxveRIsLmNvbnRyb2xwbGFuZS52MS5TdGFydENsYWltYWJsZURlcGxveVJlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZSJporsYZQgAOmE6X3RoZSBjYWxsZXIgaXMgYW4gYW5vbnltb3VzIG1hY2hpbmUgd2l0aCBubyBhY2NvdW50IHlldDsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEn4KFUdldENsYWltYWJsZUNoYWxsZW5nZRItLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlIgaiuxgCCAAShwEKGEdldENsYWltYWJsZUF2YWlsYWJpbGl0eRIwLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0GjEuY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUF2YWlsYWJpbGl0eVJlc3BvbnNlIgaiuxgCCAASVwoIR2V0Q2xhaW0SIC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1SZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVzcG9uc2UiBqK7GAIIABLXAQoQT3BlbkNsYWltU2Vzc2lvbhIoLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2UibqK7GGoIADpmOmR0aGUgY2FsbGVyIGhvbGRzIG9ubHkgdGhlIGNsYWltIHRva2VuIGFuZCBpcyBub3QgeWV0IGEgdXNlcjsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEpgBCg1Db21wbGV0ZUNsYWltEiUuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXNwb25zZSI4orsYNAgBOjAKBWNsYWltEhYKA29yZxIPcmVzcG9uc2Uub3JnX2lkIg9yZXNwb25zZS5vcmdfaWQS0AEKEEdldENsYWltRnJlZVNpdGUSKC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1GcmVlU2l0ZVJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1GcmVlU2l0ZVJlc3BvbnNlImeiuxhjCAE6XzpdYSByZWFkIG9mIHRoZSBjbGFpbSBwcmV2aWV3IGZvciB0aGUgc2lnbmVkLWluIGNhbGxlcjsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkGlqCtRhWChBDbGFpbWFibGVTZXJ2aWNlEgUxLjAuMBo7Tm8tc2lnbnVwIGRlcGxveXMgdGhhdCBhIGh1bWFuIGNhbiBjbGFpbSBiZWZvcmUgdGhleSBleHBpcmVC2QEKE2NvbS5jb250cm9scGxhbmUudjFCDkNsYWltYWJsZVByb3RvUAFaVWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9jbGFpbWFibGUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.StartClaimableDeployRequest
@@ -64,6 +64,14 @@ export type StartClaimableDeployRequest = Message<"controlplane.v1.StartClaimabl
    * @generated from field: string pow_nonce = 5;
    */
   powNonce: string;
+
+  /**
+   * Stable forge.yaml project identity. Empty preserves the legacy name/env namespace.
+   * A canonical UUID; does not change the per-device abuse limits.
+   *
+   * @generated from field: string project_instance_id = 6;
+   */
+  projectInstanceId: string;
 };
 
 /**
@@ -236,6 +244,13 @@ export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaim
    * @generated from field: controlplane.v1.ClaimableLimits limits = 5;
    */
   limits?: ClaimableLimits | undefined;
+
+  /**
+   * Whether project_instance_id is supported by both the API and its schema.
+   *
+   * @generated from field: bool project_instance_ids = 6;
+   */
+  projectInstanceIds: boolean;
 };
 
 /**
@@ -578,7 +593,7 @@ export const OpenClaimSessionResponseSchema: GenMessage<OpenClaimSessionResponse
   messageDesc(file_services_claimable_v1_claimable, 12);
 
 /**
- * One static site, named for a person deciding which to keep.
+ * A representative static site identifying an organization in the claim choice.
  *
  * @generated from message controlplane.v1.FreeSite
  */
@@ -633,14 +648,14 @@ export const FreeSiteSchema: GenMessage<FreeSite> = /*@__PURE__*/
  */
 export type FreeSiteChoiceRequired = Message<"controlplane.v1.FreeSiteChoiceRequired"> & {
   /**
-   * The caller's site that holds their free slot now.
+   * The oldest eligible site in the caller's designated org.
    *
    * @generated from field: controlplane.v1.FreeSite existing_site = 1;
    */
   existingSite?: FreeSite | undefined;
 
   /**
-   * The site the claim would add.
+   * The oldest eligible site in the claimed org.
    *
    * @generated from field: controlplane.v1.FreeSite claimed_site = 2;
    */
@@ -664,8 +679,8 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
   claimToken: string;
 
   /**
-   * Which site keeps the free slot when the caller already has a free site.
-   * Ignored (and may be unset) when they do not.
+   * Which organization keeps free hosting if a choice is required. Ignored
+   * when there is no conflict.
    *
    * @generated from field: controlplane.v1.FreeSiteChoice free_site = 2;
    */
@@ -708,7 +723,7 @@ export type GetClaimFreeSiteResponse = Message<"controlplane.v1.GetClaimFreeSite
   choiceRequired: boolean;
 
   /**
-   * Set when choice_required.
+   * Set when choice_required; each names the oldest eligible site in its org.
    *
    * @generated from field: controlplane.v1.FreeSite existing_site = 2;
    */
@@ -761,18 +776,17 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
   holds: DeployHold[];
 
   /**
-   * Path "membership" only: what the claim did about the caller's one free
-   * static slot. This is what happened, which can differ from what was asked
-   * when the situation changed between the choice and the claim.
+   * Path "membership" only: what happened to the free hosting designation.
+   * May differ from the choice if the situation changed before completion.
    *
    * @generated from field: controlplane.v1.FreeSiteOutcome free_site_outcome = 5;
    */
   freeSiteOutcome: FreeSiteOutcome;
 
   /**
-   * The site that is paused because of it (the other one holds the slot). Unset
-   * unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
-   * it runs again when the person subscribes or deletes the other site.
+   * Represents the org that did not get the designation, not the full list of
+   * affected sites. All of that org's free sites can stop. Unset unless the
+   * outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE.
    *
    * @generated from field: controlplane.v1.FreeSite paused_site = 6;
    */
@@ -799,7 +813,7 @@ export enum ClaimableState {
   UNSPECIFIED = 0,
 
   /**
-   * Serving; unclaimed; before expires_at.
+   * Active claim; unclaimed; before expires_at. Does not establish publication or readiness.
    *
    * @generated from enum value: CLAIMABLE_STATE_LIVE = 1;
    */
@@ -841,7 +855,7 @@ export const ClaimableStateSchema: GenEnum<ClaimableState> = /*@__PURE__*/
   enumDesc(file_services_claimable_v1_claimable, 0);
 
 /**
- * Which site keeps the claimer's one free static slot.
+ * Which organization keeps free static hosting.
  *
  * @generated from enum controlplane.v1.FreeSiteChoice
  */
@@ -852,15 +866,16 @@ export enum FreeSiteChoice {
   UNSPECIFIED = 0,
 
   /**
-   * The claimed site is live; the caller's existing free site is paused.
+   * Move the designation to the claimed org. All free sites in the previously
+   * designated org can stop.
    *
    * @generated from enum value: FREE_SITE_CHOICE_CLAIMED = 1;
    */
   CLAIMED = 1,
 
   /**
-   * The caller's existing free site stays live; the claimed site is claimed but
-   * paused.
+   * Keep the current designation. The claim completes, but the claimed org's
+   * free sites can stop.
    *
    * @generated from enum value: FREE_SITE_CHOICE_EXISTING = 2;
    */
@@ -874,7 +889,7 @@ export const FreeSiteChoiceSchema: GenEnum<FreeSiteChoice> = /*@__PURE__*/
   enumDesc(file_services_claimable_v1_claimable, 1);
 
 /**
- * What a membership claim did about the free slot.
+ * What a membership claim did about the free hosting designation.
  *
  * @generated from enum controlplane.v1.FreeSiteOutcome
  */
@@ -885,22 +900,23 @@ export enum FreeSiteOutcome {
   UNSPECIFIED = 0,
 
   /**
-   * Nothing was paused: the caller had no other free site, or the situation
-   * changed since they chose (the other site was deleted, or they subscribed).
+   * No choice was needed at completion.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_NO_CONFLICT = 1;
    */
   NO_CONFLICT = 1,
 
   /**
-   * The claimed site is live; paused_site is the caller's other site.
+   * The claimed org holds the designation; paused_site represents the
+   * previously designated org.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE = 2;
    */
   CLAIMED_SITE_LIVE = 2,
 
   /**
-   * The caller's other site is live; paused_site is the claimed site.
+   * The current org keeps the designation; paused_site represents the
+   * claimed org.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_EXISTING_SITE_LIVE = 3;
    */
@@ -1065,17 +1081,19 @@ export const ClaimableService: GenService<{
    * The org is one more org the caller belongs to; it is not made their
    * default.
    *
-   * FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
-   * (docs/orgs.md). If the caller already has one and the claimed deploy brings
-   * another, the claim needs to know which keeps the slot: set free_site to
-   * FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
-   * is refused (FailedPrecondition, claimable_free_site_choice_required, with a
-   * FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
-   * is no default. The choice is re-checked inside the claim's transaction: if
-   * the other site is gone or the caller subscribed meanwhile, the real state is
-   * applied and the response's free_site_outcome says what happened. To keep
-   * both sites, subscribe first (the claim link stays valid); no choice is
-   * needed afterwards.
+   * FREE STATIC HOSTING. Each founder can designate one organization
+   * (docs/orgs.md). If both organizations have free-tier static sites, moving
+   * the designation can pause all free sites in the previously designated org.
+   * Choose the organization that keeps free hosting with free_site:
+   * FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without a choice the
+   * claim is refused (FailedPrecondition, claimable_free_site_choice_required,
+   * with a FreeSiteChoiceRequired detail naming a representative site in each
+   * org), and nothing changes. The claim re-checks whether the conflict still
+   * exists inside its transaction; free_site_outcome says what happened.
+   * FREE_SITE_CHOICE_CLAIMED moves the designation to the claimed org. Inside
+   * the 30-day move cooldown, this is refused (FailedPrecondition,
+   * claimable_free_hosting_move_cooldown; nothing changes). Set up hosting
+   * billing to keep sites live in both organizations.
    *
    * Completion is ONE compare-and-set on the claimable_deploys row; the first
    * completion wins. It revokes the CLI's token.
@@ -1088,10 +1106,10 @@ export const ClaimableService: GenService<{
     output: typeof CompleteClaimResponseSchema;
   },
   /**
-   * GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
-   * claiming would put a second site on their one free slot, and names both
-   * sites. GetClaim cannot say: it is public and does not know who is asking.
-   * Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+   * GetClaimFreeSite previews whether the signed-in caller must choose which
+   * organization keeps free hosting, with a representative site in each org.
+   * GetClaim is public and cannot make this determination. CompleteClaim
+   * re-checks in its transaction.
    *
    * @generated from rpc controlplane.v1.ClaimableService.GetClaimFreeSite
    */

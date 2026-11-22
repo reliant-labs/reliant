@@ -51,7 +51,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   usePlans: () => ({
     data: {
       plans: [],
-      daemonPricing: { sizes: [{ size: '2xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
+      daemonPricing: { sizes: [{ size: '2xl', hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
     },
   }),
 }))
@@ -318,7 +318,7 @@ describe('machine detail — grow disk', () => {
     expect(notice).toHaveTextContent(/Restart .+ to use the extra 40 GB on its disk/)
 
     await user.click(within(notice).getByRole('button', { name: /^restart$/i }))
-    expect(await screen.findByRole('heading', { name: /restart machine/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /restart sandbox/i })).toBeInTheDocument()
   })
 
   it('offers Grow disk beside Free up space on a volume under pressure', async () => {

@@ -188,6 +188,12 @@ type saveAttachmentStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
+// presentImageStore is present_image's store.
+type presentImageStore interface {
+	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
 // generateImageStore is generate_image's store.
 type generateImageStore interface {
 	CreateAttachment(ctx context.Context, attachment *db.Attachment) error

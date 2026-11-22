@@ -34,8 +34,8 @@ if ! command_exists go; then
     exit 1
 fi
 
-if ! command_exists npm; then
-    echo -e "${RED}❌ npm is not installed${NC}"
+if ! command_exists pnpm; then
+    echo -e "${RED}❌ pnpm is not installed${NC}"
     exit 1
 fi
 
@@ -92,7 +92,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "Building web application..."
-npm run build
+pnpm run build
 
 if [ ! -d "dist" ]; then
     echo -e "${RED}❌ Failed to build web application${NC}"
@@ -107,11 +107,11 @@ cd "$ELECTRON_DIR"
 
 if [ ! -d "node_modules" ]; then
     echo "Installing Electron dependencies..."
-    npm ci
+    pnpm install --frozen-lockfile
 fi
 
 echo "Building Electron application..."
-npm run build:electron
+pnpm run build:electron
 
 echo -e "${GREEN}✅ Electron application built successfully${NC}"
 

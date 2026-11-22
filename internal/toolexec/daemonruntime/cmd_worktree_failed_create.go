@@ -85,8 +85,7 @@ type removeFailedCreateResponse struct {
 	// Checked are the repositories whose worktrees were listed: every
 	// checkout locked for a named id in them is in Checkouts. The server
 	// concludes a row has nothing left only from repositories named here, so
-	// a path this daemon skipped, or an older daemon that does not report
-	// it, settles nothing.
+	// a path this daemon skipped settles nothing.
 	Checked []string `json:"checked,omitempty"`
 	// Unchecked are the repositories whose worktrees could not be listed:
 	// nothing can be concluded about them.

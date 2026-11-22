@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /sites in the forge shell: every static site the organization hosts, where
- * it opens, and the custom domains bound to it (sites.ts). A row opens the
- * app's Domains page in its console, where domains are added and bound.
+ * Projects' Sites filter (`/projects?show=sites`; once the page /sites): every
+ * static site the organization hosts, where it opens, and the custom domains
+ * bound to it (sites.ts). A row opens the app's Domains page in its console,
+ * where domains are added and bound.
  */
 
 import { useMemo } from "react";
@@ -20,7 +21,8 @@ import { consolePath, withSearch } from "../Forge/Console/paths";
 import { RunFromTerminal } from "./RunFromTerminal";
 import { sitesOf, type SiteRow } from "./sites";
 
-export function ForgeSitesPage() {
+/** The sites list; `header: false` under a page that heads it itself (Projects). */
+export function SitesList({ header = true }: { header?: boolean }) {
   const { apps, loading, availability, detail } = useApps();
   const domains = useForgeDomains();
   const rows = useMemo(() => sitesOf(apps, domains.data?.domains ?? []), [apps, domains.data]);
@@ -70,11 +72,13 @@ export function ForgeSitesPage() {
 
   return (
     <div className="space-y-5" data-testid="forge-sites-page">
-      <PageHeader
-        title="Sites"
-        meta={<span>The static sites your organization hosts, and the domains that serve them.</span>}
-        className="mb-0"
-      />
+      {header && (
+        <PageHeader
+          title="Sites"
+          meta={<span>The static sites your organization hosts, and the domains that serve them.</span>}
+          className="mb-0"
+        />
+      )}
       {availability !== "available" && availability !== "no-control-plane" && !loading && (
         <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-ink-muted" role="status">
           {availability === "no-access"

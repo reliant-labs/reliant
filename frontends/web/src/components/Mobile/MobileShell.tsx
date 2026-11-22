@@ -60,7 +60,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { Outlet, useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
@@ -72,7 +72,10 @@ import { useProjectStore } from "../../store/projectStore";
 import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 import { onboardingPath } from "@/lib/paths";
+import { isForgeShell } from "@/lib/shell";
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -81,19 +84,31 @@ export function MobileShell() {
   const currentProject = useProjectStore((s) => s.currentProject);
   const { projects } = useProjects();
 
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const needsOnboarding =
-    !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
+    !isUserLoading &&
+    (!currentUser || !currentUser.onboardingCompleted) &&
+    routeRequiresOnboarding(pathname);
+  // The phone keeps its home rule (homeTarget): on the forge brand the chat
+  // list sends a person who has not onboarded to their apps.
+  const notOnboardedHome = homeTarget(pathname, "onboard", { forgeBrand: isForgeShell() });
 
-  // Same gate the desktop shell applies (see ModernApp) — a user without a
-  // completed setup has no daemon and no project, so every mobile screen would
-  // render empty. Wait for `isUserLoading` to settle first, otherwise the
-  // one-frame `currentUser === undefined` reads as "needs onboarding" and we
-  // bounce a fully-onboarded user.
+  // Same gate the desktop shell applies (see ModernApp), on the same routes:
+  // the chats (onboardingGate.ts). A user without a completed setup has no
+  // daemon, so the chat screens would render empty; machines, projects,
+  // workflows, the Inbox and settings work without one. Wait for
+  // `isUserLoading` to settle first, otherwise the one-frame
+  // `currentUser === undefined` reads as "needs onboarding" and we bounce a
+  // fully-onboarded user.
   useEffect(() => {
     if (isUserLoading) return;
     if (!needsOnboarding) return;
+    if (notOnboardedHome) {
+      navigate({ to: notOnboardedHome, search: {}, replace: true });
+      return;
+    }
     navigate({ to: onboardingPath(), search: (prev) => prev, replace: true });
-  }, [isUserLoading, needsOnboarding, navigate]);
+  }, [isUserLoading, needsOnboarding, notOnboardedHome, navigate]);
 
   // Pick the context project the way the desktop shell does: the last one the
   // user had open, else the most recently used (restoreLastProject). Phone
@@ -129,6 +144,12 @@ export function MobileShell() {
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);
+  // A drill into Agents (or out of Observability) from the shell's drawer lands
+  // on the phone's own screens: open this drawer on the area's rows, so the
+  // nav the person was using stays on screen (U6e; Layout/sidebar/navDrawerHold).
+  useEffect(() => {
+    if (navDrawerHeld()) useMobileDrawerStore.getState().open();
+  }, []);
 
   if (isUserLoading || needsOnboarding) {
     return (

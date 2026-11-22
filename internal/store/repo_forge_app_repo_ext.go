@@ -116,6 +116,47 @@ ORDER BY a.repo_id, a.subpath`, projectID).Scan(ctx, &rows); err != nil {
 	return out, nil
 }
 
+// ListReposHoldingForgeApp returns the repos, of the given projects, in which
+// a daemon recorded a forge app named name (at any subpath), ordered by
+// project and relative path. No project ids is no repos.
+func ListReposHoldingForgeApp(ctx context.Context, db orm.Context, name string, projectIDs []string) ([]*core.Repo, error) {
+	if len(projectIDs) == 0 {
+		return nil, nil
+	}
+	var rows []*Repo
+	if err := db.Bun().NewRaw(`SELECT `+columnsOf[Repo]("r")+` FROM repos r
+WHERE r.project_id = ANY(?1)
+  AND EXISTS (SELECT 1 FROM repo_forge_apps a WHERE a.repo_id = r.id AND a.forge_name = ?0)
+ORDER BY r.project_id, r.relative_path`, name, orm.Arg(projectIDs)).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list repos holding forge app: %w", err)
+	}
+	out := make([]*core.Repo, len(rows))
+	for i, row := range rows {
+		out[i] = repoToCore(row)
+	}
+	return out, nil
+}
+
+// ListRepoForgeAppsByProjects returns every forge app recorded in the repos
+// of every project in projectIDs in one read, ordered by repo and subpath.
+func ListRepoForgeAppsByProjects(ctx context.Context, db orm.Context, projectIDs []string) ([]core.RepoForgeApp, error) {
+	if len(projectIDs) == 0 {
+		return []core.RepoForgeApp{}, nil
+	}
+	var rows []repoForgeAppRow
+	if err := db.Bun().NewRaw(`SELECT a.repo_id, a.subpath, a.forge_name
+FROM repo_forge_apps a JOIN repos r ON r.id = a.repo_id
+WHERE r.project_id = ANY(?0)
+ORDER BY a.repo_id, a.subpath`, orm.Arg(projectIDs)).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list repo forge apps: %w", err)
+	}
+	out := make([]core.RepoForgeApp, len(rows))
+	for i, row := range rows {
+		out[i] = core.RepoForgeApp{RepoID: row.RepoID, Subpath: row.Subpath, Name: row.ForgeName}
+	}
+	return out, nil
+}
+
 // RepoForgeAppExtra carries fields on RepoForgeApp that are NOT columns — computed
 // values, transient state, anything derived rather than stored. RepoForgeApp is
 // embedded on RepoForgeAppExtra (see repo_forge_app_orm.go), so a field added here is a field on

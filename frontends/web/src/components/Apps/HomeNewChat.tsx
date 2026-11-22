@@ -87,6 +87,7 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
       tabId="new-chat"
       onNavigateToWorktrees={onNavigateToWorktrees}
       showProjectChip
+      showAppTag
       onChatCreated={start ? () => setStart(undefined) : undefined}
       composerPrefill={start ? { text: starterPrompt(start, projectName), id: STARTER_PREFILL_ID } : undefined}
       heading={

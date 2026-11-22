@@ -267,6 +267,43 @@ func stampUnsignedCallSteps(history []*content) int {
 	return stamped
 }
 
+// replaceSignaturesWithStandIns rebuilds history for the one retry after the
+// server rejected a thought signature (geminiwire.RecoverSignatureRejection):
+// every signature is removed, and the stand-in goes on the first call of
+// every step. Replayed reasoning parts are dropped with their signatures:
+// they were sent only to carry them, and an unsigned thought part is not
+// something the server asked for. A model turn left with nothing gets the
+// same placeholder convertMessagesWithValidation uses. Returns how many
+// signatures it removed.
+func replaceSignaturesWithStandIns(history []*content) int {
+	removed := 0
+	for _, c := range history {
+		if c == nil {
+			continue
+		}
+		kept := c.Parts[:0]
+		for _, p := range c.Parts {
+			if p == nil {
+				continue
+			}
+			if p.ThoughtSignature != "" {
+				p.ThoughtSignature = ""
+				removed++
+			}
+			if p.Thought {
+				continue
+			}
+			kept = append(kept, p)
+		}
+		c.Parts = kept
+		if len(c.Parts) == 0 {
+			c.Parts = []*part{{Text: "[Empty message]"}}
+		}
+	}
+	stampUnsignedCallSteps(history)
+	return removed
+}
+
 // resolveToolCall finds the tool name and thought signature for a tool result,
 // preferring the name the result already carries.
 func resolveToolCall(messages []message.Message, toolCallID, resultName string) (string, string) {
@@ -355,6 +392,17 @@ func (c *Client) systemInstruction(prompts []string) *content {
 
 // buildEnvelope assembles the full double-wrapped request body.
 func (c *Client) buildEnvelope(messages []message.Message, prompts []string, toolList []toolsPkg.Tool) *requestEnvelope {
+	return c.buildEnvelopeWith(messages, prompts, toolList, false)
+}
+
+// buildEnvelopeWith is buildEnvelope, with every thought signature replaced by
+// the stand-in when standIns is set (the retry after a rejected signature).
+func (c *Client) buildEnvelopeWith(messages []message.Message, prompts []string, toolList []toolsPkg.Tool, standIns bool) *requestEnvelope {
+	contents := convertMessagesWithValidation(messages)
+	if standIns {
+		removed := replaceSignaturesWithStandIns(contents)
+		logging.Debug("[ANTIGRAVITY] Replaced thought signatures with the stand-in", "removed", removed)
+	}
 	generation := &generationConfig{MaxOutputTokens: c.options.MaxTokens}
 	if c.options.Temperature != nil {
 		temp := *c.options.Temperature
@@ -381,7 +429,7 @@ func (c *Client) buildEnvelope(messages []message.Message, prompts []string, too
 		UserAgent:   envelopeUserAgent,
 		RequestType: envelopeRequestType,
 		Request: &generateReq{
-			Contents:          convertMessagesWithValidation(messages),
+			Contents:          contents,
 			SystemInstruction: c.systemInstruction(prompts),
 			Tools:             convertTools(toolList),
 			ToolConfig:        buildToolConfig(c.options.ForceToolChoice, toolList),
@@ -460,17 +508,18 @@ func usage(resp *generateResp) llm.TokenUsage {
 	if resp == nil || resp.UsageMetadata == nil {
 		return llm.TokenUsage{}
 	}
+	// Thought tokens are generated and billed as output but reported apart
+	// from candidatesTokenCount, and the cached prefix is inside
+	// promptTokenCount; geminiwire.Usage.TokenUsage owns both rules.
 	m := resp.UsageMetadata
-	return llm.TokenUsage{
-		TokenCount:  m.TotalTokenCount,
-		InputTokens: m.PromptTokenCount,
-		// Thought tokens are generated and billed as output but reported apart
-		// from candidatesTokenCount.
-		OutputTokens:         m.CandidatesTokenCount + m.ThoughtsTokenCount,
-		ReasoningTokens:      m.ThoughtsTokenCount,
-		CachedInputTokens:    m.CachedContentTokenCount,
-		CacheReadInputTokens: m.CachedContentTokenCount,
-	}
+	return geminiwire.Usage{
+		PromptTokenCount:        m.PromptTokenCount,
+		CachedContentTokenCount: m.CachedContentTokenCount,
+		ToolUsePromptTokenCount: m.ToolUsePromptTokenCount,
+		CandidatesTokenCount:    m.CandidatesTokenCount,
+		ThoughtsTokenCount:      m.ThoughtsTokenCount,
+		TotalTokenCount:         m.TotalTokenCount,
+	}.TokenUsage()
 }
 
 // finishReason maps Gemini finish reasons onto Reliant's.

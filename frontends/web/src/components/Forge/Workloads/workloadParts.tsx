@@ -42,11 +42,11 @@ export function HealthStatus({
     <span className="inline-flex min-w-0 items-center gap-2" title={line || undefined} data-health={workload.health} data-cause={workload.healthCause ?? "none"}>
       <Status tone={status.tone} label={status.label} />
       {note && (
-        <span className="shrink-0 rounded border border-info/40 bg-info/10 px-1.5 py-0.5 text-xs font-medium text-info" data-testid="health-platform-note">
+        <span className="shrink-0 text-meta font-medium text-info" data-testid="health-platform-note">
           {note}
         </span>
       )}
-      {withReason && line && <span className="truncate text-xs text-ink-muted">{line}</span>}
+      {withReason && line && <span className="truncate text-meta text-ink-muted">{line}</span>}
       {withReason && detail && (
         <details className="shrink-0 text-xs text-ink-muted" data-testid="health-details">
           <summary className="cursor-pointer select-none">Details</summary>
@@ -100,7 +100,7 @@ export function WorkloadRelease({
       >
         {shortVersion(workload.releaseVersion)}
       </Link>
-      {declared && <span className="text-xs text-ink-muted">declared</span>}
+      {declared && <span className="text-meta text-ink-muted">declared</span>}
       {drifted && <DriftTag workload={hosted!} />}
     </span>
   );

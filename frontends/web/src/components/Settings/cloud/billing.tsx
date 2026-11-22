@@ -89,11 +89,16 @@ import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 import {
-  VISIBLE_BILLING_TABS,
+  billingTabOrder,
   resolveBillingTab,
   type BillingTab,
   type VisibleBillingTab,
 } from "@/routeSchemas";
+import { isForgeShell } from "@/lib/shell";
+import { LimitsStrip, type LimitRow } from "./LimitsStrip";
+import { BillingOrgGate } from "./BillingOrgGate";
+import { HostingUsagePanel } from "./usage/HostingUsagePanel";
+import { FreeTierCard } from "./usage/FreeTierCard";
 // The two bands. Each owns ONE product's presentation and none of its business
 // rules — they take resolved props and call no mutation, so every purchase
 // still passes through useCloudBillingQueries' identity chokepoint.
@@ -119,7 +124,11 @@ import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { appsPath, onboardingPath, settingsPath } from "@/lib/paths";
+import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+import { useProjectStore } from "@/store/projectStore";
+import { consolePath } from "@/components/Forge/Console/paths";
+import ForgeLink from "@/components/forge-ui/link";
+import { onboardingPath, projectsPath, settingsPath, usageBillingPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -140,12 +149,21 @@ const TAB_META: Record<
   overview: { label: "Overview", icon: CreditCard },
   plans: { label: "Change plan", icon: Cpu },
   usage: { label: "Usage & invoices", icon: BarChart3 },
+  // Independent app hosting, the organization's: its agreement and budget,
+  // usage per app and environment, and the free static tier.
+  hosting: { label: "App hosting", icon: Server },
   // Reliant's managed AI keys and spend. They used to be a tab of Settings →
   // AI, a third place Reliant appeared there; AI now shows Reliant once, as a
   // provider card that links here.
   ai: { label: "Reliant AI", icon: Sparkles },
 };
-const TABS = VISIBLE_BILLING_TABS.map((id) => ({ id, ...TAB_META[id] }));
+const tabsFor = (forgeShell: boolean) => billingTabOrder(forgeShell).map((id) => ({ id, ...TAB_META[id] }));
+
+/** Scroll to a section once the tab that holds it has rendered. */
+function scrollToSection(hash: string | undefined) {
+  if (!hash) return;
+  requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 // Reliant AI's keys and spend tables load only when their tab is opened.
 const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default: m.ReliantAISection })));
@@ -172,6 +190,47 @@ const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default
  * app. The global upgradeInterceptor handles the billing-email-missing / quota
  * modals, so this component only renders inline errors for OTHER failures.
  */
+/**
+ * Usage & billing (components/Usage/UsageBillingPage.tsx, U6c) is the
+ * org-wide read of usage and spend; this page is its admin side, so this line
+ * links back to it. Per-project hosting costs live on each project's Usage
+ * page (U6b round 3, prototype); the line points there too, at the shell's
+ * current project when it has an app.
+ */
+function ProjectCostsPointer() {
+  // The shell's last pick, else the current project's app: no route or catalog read, so Settings renders anywhere.
+  const pick = useShellLastPick((state) => state.key);
+  const current = useProjectStore((state) => state.currentProject);
+  const pickRef = pick && pick !== ALL_PROJECTS_PICK && pick !== SEVERAL_PROJECTS_PICK ? refOfKey(pick) : null;
+  const app =
+    pickRef?.kind === "app"
+      ? pickRef.name
+      : current && (!pickRef || pickRef.id === current.id)
+        ? current.forge_project_name?.trim() || null
+        : null;
+  const shell = { app, name: app };
+  const href = shell.app ? consolePath(shell.app, { kind: "usage" }) : null;
+  return (
+    <p className="-mt-3 text-sm text-muted-foreground" data-testid="billing-project-costs-pointer">
+      Usage and spend across every project are on{" "}
+      <ForgeLink href={usageBillingPath()} className="text-primary-ink hover:underline" data-testid="billing-usage-billing-link">
+        Usage &amp; billing ›
+      </ForgeLink>
+      . Per-project hosting costs are on each project&apos;s Usage page
+      {href ? (
+        <>
+          {" "}
+          —{" "}
+          <ForgeLink href={href} className="text-primary-ink hover:underline">
+            {shell.name ?? shell.app}&apos;s usage
+          </ForgeLink>
+        </>
+      ) : null}
+      .
+    </p>
+  );
+}
+
 export function BillingSection() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
@@ -184,7 +243,9 @@ export function BillingSection() {
   };
   // An inbound `?tab=invoices` is a real link somebody has; it resolves to the
   // merged surface rather than being stripped and silently landing on Overview.
-  const tab: VisibleBillingTab = resolveBillingTab(search.tab);
+  const forgeShell = isForgeShell();
+  const tabs = tabsFor(forgeShell);
+  const tab: VisibleBillingTab = resolveBillingTab(search.tab, forgeShell);
 
   const setTab = (next: VisibleBillingTab) => {
     void navigate({
@@ -192,6 +253,22 @@ export function BillingSection() {
       search: (prev: Record<string, unknown>) => ({ ...prev, tab: next }),
       replace: true,
     });
+  };
+
+  // App hosting moved out of Usage into its own tab. Links already sent
+  // (`?tab=usage#app-hosting`, the hosting checkout's old return URL) still
+  // mean the hosting card, so they land on it.
+  const hash = typeof window === "undefined" ? "" : window.location.hash;
+  useEffect(() => {
+    if (hash === "#app-hosting" && tab !== "hosting") setTab("hosting");
+    else if (hash) scrollToSection(hash.slice(1));
+    // Once per arrival: a later tab click must not be overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash]);
+
+  const openLimit = (target: LimitRow["target"]) => {
+    setTab(target.tab);
+    scrollToSection(target.hash);
   };
 
   const clearCheckout = () => {
@@ -210,9 +287,10 @@ export function BillingSection() {
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
         title="Billing & usage"
-        description="Manage wallet credits, machine subscriptions, independent app hosting billing, usage and invoices."
+        description="App hosting for your organization, plus your machine plan, AI credit, usage and invoices. Each has its own limit."
         className="mb-0"
       />
+      <ProjectCostsPointer />
 
       {/* The route home, hoisted out of the Stripe-return banner.
           It used to render only alongside `?checkout=`, because a hosted
@@ -238,45 +316,50 @@ export function BillingSection() {
         />
       )}
 
-      <div className="overflow-x-auto border-b border-border">
-        <div role="tablist" aria-label="Billing" className="flex w-max min-w-full gap-1">
-          {TABS.map(({ id, label, icon: Icon }) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(id)}
-                className={[
-                  "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4",
-                  active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <BillingOrgGate>
+        <LimitsStrip onOpen={openLimit} />
 
-      {tab === "overview" && (
-        <OverviewTab
-          onGoToPlans={() => setTab("plans")}
-          onGoToUsage={() => setTab("usage")}
-        />
-      )}
-      {tab === "plans" && <PlansTab />}
-      {tab === "usage" && <UsageAndInvoicesTab />}
-      {tab === "ai" && (
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-          <ReliantAISection />
-        </Suspense>
-      )}
+        <div className="overflow-x-auto border-b border-border">
+          <div role="tablist" aria-label="Billing" className="flex w-max min-w-full gap-1">
+            {tabs.map(({ id, label, icon: Icon }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(id)}
+                  className={[
+                    "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {tab === "overview" && (
+          <OverviewTab
+            onGoToPlans={() => setTab("plans")}
+            onGoToUsage={() => setTab("usage")}
+          />
+        )}
+        {tab === "plans" && <PlansTab />}
+        {tab === "usage" && <UsageAndInvoicesTab />}
+        {tab === "hosting" && <HostingTab />}
+        {tab === "ai" && (
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+            <ReliantAISection />
+          </Suspense>
+        )}
+      </BillingOrgGate>
     </div>
   );
 }
@@ -456,7 +539,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: appsPath() });
+          void navigate({ to: projectsPath(), search: { show: "apps" } });
         }}
         leftIcon={<ArrowLeft />}
       >
@@ -842,7 +925,9 @@ function OverviewTab({
     const returnUrl = buildCheckoutReturnUrls(settingsPath("billing")).successUrl;
     portalMutation.mutate(returnUrl, {
       onSuccess: (res) => {
-        void openCheckout(res.portalUrl, returnUrl);
+        openCheckout(res.portalUrl, returnUrl).catch((err) => {
+          setError(formatBillingError(err, "Failed to open billing portal"));
+        });
       },
       onError: (err) => {
         if (!isBackendModalError(err)) {
@@ -1369,37 +1454,61 @@ function PlansTab() {
 // question — "what did I spend and when" — and splitting them made the user
 // check two tabs to reconcile one number.
 //
-// Invoices go ABOVE the daily chart rather than below it: a receipt is looked
-// up by intent, usage is browsed. Putting the dense table under a dense chart
-// would make the deliberate lookup the thing you scroll past.
+// The period's machine usage leads, as one headline figure against its
+// allowance. Invoices come next, ABOVE the observability chart rather than
+// below it: a receipt is looked up by intent, usage is browsed.
 
 function UsageAndInvoicesTab() {
-  // Deployment usage sits beside compute usage because they answer the same
-  // question about two products — "what have I run, and what will it cost" —
-  // and a customer reconciling one bill should not have to find two tabs.
-  //
-  // Gated on `available`, which is false until the public proto subtree
-  // carries the infra-overage pair and DeployService (see ./usage/
-  // useDeployUsage.ts for the exact unblock). A tab that rendered this
-  // half-wired would show a paying customer an empty dashboard about money.
-  const deployUsage = useDeployUsage();
   const obsOrg = useObservabilityOrg();
 
   return (
-    <div className="flex flex-col gap-8">
-      <UsageBillingPanel />
+    // The period's machine usage leads, as the tab's one headline number;
+    // the receipts follow, then the observability usage. (The hosting
+    // agreement is the App hosting tab's.)
+    <div className="flex flex-col gap-12">
+      <UsagePanel />
       <InvoicesPanel />
-      <div className="border-t border-border pt-6">
-        <UsagePanel />
-      </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
-      <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
+      <div id="observability" className="border-t border-border pt-10" data-testid="billing-observability-usage">
         <div id="billing-observability-usage">
           <UsageView orgId={obsOrg.orgId} />
         </div>
       </div>
-      {deployUsage.available && (
+    </div>
+  );
+}
+
+// ── App hosting tab ─────────────────────────────────────────────────────
+//
+// The organization's, not the signed-in person's: one agreement, one budget
+// and one free allowance cover every app and environment in the org. So it
+// is its own tab rather than a section of Usage, which is mostly the
+// person's machines. In the forge console it is the first tab.
+//
+// Agreement first (the anchor every "Set up billing" link targets), then what
+// it is costing and where the month is heading, then the free tier, then the
+// per-resource detail.
+
+function HostingTab() {
+  const org = useActiveOrg();
+  const orgId = org.activeOrgId;
+  const deployUsage = useDeployUsage();
+
+  return (
+    <div className="flex flex-col gap-8" data-testid="billing-hosting-tab">
+      <UsageBillingPanel />
+      {orgId && (
         <div className="border-t border-border pt-6">
+          <HostingUsagePanel orgId={orgId} />
+        </div>
+      )}
+      {orgId && (
+        <div className="border-t border-border pt-6">
+          <FreeTierCard orgId={orgId} orgName={org.active?.name ?? ""} />
+        </div>
+      )}
+      {deployUsage.available && (
+        <div className="border-t border-border pt-10">
           <DeployUsageSection
             summary={deployUsage.summary}
             isLoading={deployUsage.isLoading}
@@ -1432,10 +1541,10 @@ function InvoicesPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
+        <h3 className="text-section text-foreground">
           Invoices
         </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-ui text-muted-foreground">
           View and download your past invoices.
         </p>
       </div>
@@ -1517,13 +1626,18 @@ function UsagePanel() {
   const summary = exactUsageDisplay(data ?? undefined, hoursReference(plansQ.data?.daemonPricing, hoursSizes(allowedSizes), data ?? undefined));
   const measured = measuredMachineUsage(data ?? undefined) && !!summary;
 
+  const used = Math.min(1, Math.max(0, summary?.fraction ?? 0));
+  const over = summary?.capacity.state === "overage" || summary?.capacity.state === "spent";
+
   return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
-        Machine usage and allowance
-      </h3>
-      {data && <p className="text-sm text-muted-foreground">{usageWindowLabel(data)} Hours are counted on your plan's machine size.</p>}
-      {data?.billingHoldReason && <p role="status" className="text-sm text-muted-foreground">{friendlyUsageHold(data.billingHoldReason)}</p>}
+    <section className="flex flex-col gap-6" aria-labelledby="billing-machine-usage">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 id="billing-machine-usage" className="text-section text-foreground">
+          Machine usage and allowance
+        </h3>
+        {data && <p className="text-meta text-muted-foreground">{usageWindowLabel(data)} Hours are counted on your plan&apos;s machine size.</p>}
+      </div>
+      {data?.billingHoldReason && <p role="status" className="text-ui text-muted-foreground">{friendlyUsageHold(data.billingHoldReason)}</p>}
 
       {usageQ.error && (
         <ErrorBanner
@@ -1541,30 +1655,52 @@ function UsagePanel() {
         />
       ) : !measured ? (
         // Withheld by SAYING so: a zero here would read as "ran nothing".
-        <p className="text-sm text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Usage is unavailable right now.
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <UsageStat label="Included this month" value={summary?.includedLabel ?? "Unavailable"} />
-            <UsageStat label="Used" value={summary?.usedLabel ?? "Unavailable"} />
-            <UsageStat label="Extra hours so far" value={measuredWindowCost(data) ?? "Unavailable"} />
+          {/* The headline: hours used this period, against the plan's allowance. */}
+          <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6" data-testid="billing-usage-headline">
+            <div className="min-w-0 flex-1 basis-72">
+              <p className="text-ui font-medium text-foreground">Used this period</p>
+              <p className="mt-1 text-figure tabular-nums text-foreground">{summary?.usedLabel ?? "Unavailable"}</p>
+              {summary?.fraction != null && (
+                <div className="mt-3 max-w-md">
+                  <div
+                    className="h-1.5 overflow-hidden rounded-full bg-border"
+                    role="meter"
+                    aria-label="Allowance used"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(used * 100)}
+                  >
+                    <div className={over ? "h-full rounded-full bg-warning" : "h-full rounded-full bg-primary"} style={{ width: `${used * 100}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-meta tabular-nums text-muted-foreground">
+                    {summary.usedOfIncludedLabel ?? `${Math.round(used * 100)}% of the allowance`}
+                  </p>
+                </div>
+              )}
+            </div>
+            <dl className="flex flex-wrap gap-x-10 gap-y-5">
+              <UsageStat label="Included this month" value={summary?.includedLabel ?? "Unavailable"} />
+              <UsageStat label="Extra hours so far" value={measuredWindowCost(data) ?? "Unavailable"} />
+              {/* Coupon grant is deliberately apart from the period figures:
+                  included/used/overage all reset with the billing period, while
+                  a redeemed grant is a one-time bucket that carries over. */}
+              {summary?.hasGrant && (
+                <UsageStat
+                  label="Coupon hours remaining"
+                  value={summary.grantLabel ?? "Unavailable"}
+                  hint="One-time machine hours from a redeemed coupon. They don't renew, and they're used after your plan's hours, before any extra hours are billed."
+                />
+              )}
+            </dl>
           </div>
 
-          {/* Coupon grant is deliberately outside the four period stats above:
-              included/used/overage all reset with the billing period, while a
-              redeemed grant is a one-time bucket that carries over. */}
-          {summary?.hasGrant && (
-            <UsageStat
-              label="Coupon hours remaining"
-              value={summary.grantLabel ?? "Unavailable"}
-              hint="One-time machine hours from a redeemed coupon. They don't renew, and they're used after your plan's hours, before any extra hours are billed."
-            />
-          )}
-
           <div>
-            <h4 className="mb-2 text-sm font-semibold text-foreground">
+            <h4 className="mb-3 text-ui font-medium text-foreground">
               By machine size
             </h4>
             {data.bySize.length === 0 ? (
@@ -1606,10 +1742,11 @@ function UsagePanel() {
           </div>
         </>
       )}
-    </div>
+    </section>
   );
 }
 
+/** A secondary figure beside the headline: unboxed, a caption over a smaller number. */
 function UsageStat({
   label,
   value,
@@ -1620,16 +1757,9 @@ function UsageStat({
   hint?: string;
 }) {
   return (
-    <Card>
-      <CardContent>
-        {/* Stat caption, deliberately a rung below a section label: it must not
-            compete with the figure under it. See ui/card.tsx. */}
-        <p className="text-xs font-medium text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
+    <div className="min-w-0" title={hint}>
+      <dt className="text-meta text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{value}</dd>
+    </div>
   );
 }

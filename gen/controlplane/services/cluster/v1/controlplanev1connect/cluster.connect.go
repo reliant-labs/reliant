@@ -68,10 +68,10 @@ type ClusterServiceClient interface {
 	// The platform is told the address, the CA and the scoped ServiceAccount
 	// token up front, all required. The token is the ONLY credential the
 	// platform ever uses against the cluster; a request without one is
-	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// InvalidArgument and names `forge cloud cluster connect`. Nothing is installed in
 	// the target cluster.
 	//
-	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cloud cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
 	// them rather than failing on a name collision. That is what makes the
 	// connect command safe to put in a script, and it is why there is no
@@ -161,10 +161,10 @@ type ClusterServiceHandler interface {
 	// The platform is told the address, the CA and the scoped ServiceAccount
 	// token up front, all required. The token is the ONLY credential the
 	// platform ever uses against the cluster; a request without one is
-	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// InvalidArgument and names `forge cloud cluster connect`. Nothing is installed in
 	// the target cluster.
 	//
-	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cloud cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
 	// them rather than failing on a name collision. That is what makes the
 	// connect command safe to put in a script, and it is why there is no

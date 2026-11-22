@@ -20,7 +20,7 @@ const AttachmentContentPathPrefix = "/api/attachments/"
 //
 // authenticate resolves the caller's user id from the request. An attachment
 // owned by someone else is reported as 404, never 403, so ids cannot be probed.
-func AttachmentContentHandler(repo Repository, authenticate func(*http.Request) (string, error)) http.Handler {
+func AttachmentContentHandler(repo ContentReader, authenticate func(*http.Request) (string, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")

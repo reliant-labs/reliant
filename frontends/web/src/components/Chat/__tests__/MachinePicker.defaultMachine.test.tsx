@@ -28,9 +28,9 @@ describe("MachinePicker: the default machine", () => {
     fireEvent.click(screen.getByTestId("machine-picker"));
 
     expect(screen.getByRole("option", { name: /default.*Default/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("button", { name: "Make default your default machine" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make default your default sandbox" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Make cicd your default machine" }));
+    fireEvent.click(screen.getByRole("button", { name: "Make cicd your default sandbox" }));
     expect(onMakeDefault).toHaveBeenCalledWith("d-cicd");
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -38,6 +38,6 @@ describe("MachinePicker: the default machine", () => {
   it("offers nothing when the caller cannot set a default", () => {
     render(<MachinePicker value={DEFAULT_MACHINE} onChange={vi.fn()} daemons={daemons} />);
     fireEvent.click(screen.getByTestId("machine-picker"));
-    expect(screen.queryByRole("button", { name: /your default machine/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /your default sandbox/ })).toBeNull();
   });
 });

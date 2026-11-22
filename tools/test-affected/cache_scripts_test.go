@@ -151,6 +151,84 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	}
 }
 
+// The queue's 16 GiB runner ran out of memory with the demo and release vite
+// builds (9.1 and 11.8 GB RSS) beside test, tsc -b and lint (#2935 and #3009,
+// two entries each). On a small host the gate defers both until every other
+// phase has been waited for, and runs them before an --amend failure resets
+// the tree; on a bigger host they still launch beside the rest.
+func TestMergeGateDefersTheViteBuildsOnASmallHost(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	defer_ := strings.Index(src, "if [ \"$gen_alone\" = 1 ]; then\n    bundles_after=1\n  else\n")
+	demoBG := strings.Index(src, "phase demo demo_build & pids+=($!)")
+	webBG := strings.Index(src, "phase webbuild scripts/web-release-build.sh & pids+=($!)")
+	waitAll := strings.Index(src, "\nfor p in ${pids[@]+\"${pids[@]}\"}; do wait \"$p\" || fail=1; done\n")
+	run := strings.Index(src, "\nif [ \"${bundles_after:-0}\" = 1 ]; then run_bundles || fail=1; fi\n")
+	reset := strings.Index(src, "\nif [ \"$amend\" = 1 ] && [ \"$fail\" != 0 ]")
+	for name, i := range map[string]int{"the small-host branch": defer_, "the background demo build": demoBG,
+		"the background release build": webBG, "the wait for every phase": waitAll, "the deferred run": run, "the --amend reset": reset} {
+		if i < 0 {
+			t.Fatalf("merge-gate.sh has no %s", name)
+		}
+	}
+	if !(defer_ < demoBG && demoBG < webBG && webBG < waitAll && waitAll < run && run < reset) {
+		t.Fatal("merge-gate.sh must launch the vite builds in the background only off a small host, and run the deferred ones after waiting for every phase and before the --amend reset")
+	}
+	if !strings.Contains(src, " demo webbuild golangci ") {
+		t.Error("the summary table must list the webbuild phase's row")
+	}
+}
+
+// run_bundles runs the selected vite builds one after the other, both even
+// when the first fails, and fails if either did.
+func TestMergeGateRunBundlesRunsEachSelectedBuildInTurn(t *testing.T) {
+	root := scriptFixture(t, "merge-gate.sh")
+	b, err := os.ReadFile(filepath.Join(root, "scripts/merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	i := strings.Index(src, "run_bundles() {")
+	if i < 0 {
+		t.Fatal("merge-gate has no run_bundles function")
+	}
+	fn, _, ok := strings.Cut(src[i:], "\n}\n")
+	if !ok {
+		t.Fatal("run_bundles does not end")
+	}
+	for _, tc := range []struct {
+		name, demo, web, fail, want string
+		rc                          int
+	}{
+		{"both", "true", "true", "", "demo webbuild", 0},
+		{"a failed demo still runs the release build", "true", "true", "demo", "demo webbuild", 1},
+		{"release build only", "false", "true", "", "webbuild", 0},
+		{"demo only, failing", "true", "false", "demo", "demo", 1},
+		{"neither", "false", "false", "", "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := filepath.Join(t.TempDir(), "calls")
+			script := fn + "\n}\n" + `phase() { printf '%s ' "$1" >>"$CALLS"; [ "$1" != "$FAIL" ]; }` + "\nrun_bundles"
+			cmd := exec.Command("bash", "-c", script)
+			cmd.Env = append(os.Environ(), "CALLS="+calls, "FAIL="+tc.fail, "webdemo="+tc.demo, "webbuild="+tc.web, "mem_gib=15")
+			out, err := cmd.CombinedOutput()
+			rc := 0
+			if ee, ok := err.(*exec.ExitError); ok {
+				rc = ee.ExitCode()
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := os.ReadFile(calls)
+			if strings.TrimSpace(string(got)) != tc.want || rc != tc.rc {
+				t.Fatalf("phases %q rc %d, want %q rc %d\n%s", got, rc, tc.want, tc.rc, out)
+			}
+		})
+	}
+}
+
 // On a small host the test phase waits for a generate running alone (avg 313s
 // in the merge queue, before the test phase's own ~281s). prewarm_tests
 // compiles the selected test packages in that shadow: niced, a quarter of the
@@ -244,19 +322,19 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			name:      "expanded web tests and full generation",
 			next:      Plan{Go: GoPlan{LaneFull: full}, Web: WebPlan{Tests: []string{"generated.test.ts"}}, ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "true|false|false|false|true|true|false|1",
-			wantDeps:  []string{"npm .", "npm tools/protoc-gen-es", "pnpm frontends/web"},
+			wantDeps:  []string{"pnpm frontends/web", "pnpm tools/protoc-gen-es"},
 		},
 		{
 			name:      "expanded full web lane",
 			next:      Plan{Web: WebPlan{LaneFull: full}},
 			wantState: "false|true|false|false|true|false|false|0",
-			wantDeps:  []string{"npm .", "pnpm frontends/web"},
+			wantDeps:  []string{"pnpm frontends/web"},
 		},
 		{
 			name:       "generated web source needs typecheck without tests",
 			changedWeb: true,
 			wantState:  "false|false|false|false|true|false|false|0",
-			wantDeps:   []string{"npm .", "pnpm frontends/web"},
+			wantDeps:   []string{"pnpm frontends/web"},
 		},
 		{
 			name:      "hook-only generation needs no protoc install",
@@ -268,7 +346,7 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			initial:   Plan{ForgeGen: ForgeGenPlan{LaneFull: full, HooksOnly: true}},
 			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "false|false|false|false|false|true|false|0",
-			wantDeps:  []string{"npm tools/protoc-gen-es"},
+			wantDeps:  []string{"pnpm tools/protoc-gen-es"},
 		},
 		{
 			// Electron and docs run in the merge gate again (#1768). Electron's
@@ -277,13 +355,13 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			name:      "electron lane installs electron; docs installs nothing",
 			next:      Plan{Electron: ElectronPlan{LaneFull: full}, DocGen: DocGenPlan{LaneFull: full}},
 			wantState: "false|false|true|true|false|false|false|0",
-			wantDeps:  []string{"npm .", "npm electron"},
+			wantDeps:  []string{"pnpm electron"},
 		},
 		{
 			name:      "new dependency failure is propagated after waiting",
 			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
 			wantState: "false|false|false|false|false|true|false|0",
-			wantDeps:  []string{"npm tools/protoc-gen-es"},
+			wantDeps:  []string{"pnpm tools/protoc-gen-es"},
 			failedDir: "tools/protoc-gen-es",
 		},
 	} {
@@ -296,27 +374,23 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 				}
 				putFixture(t, dir, name, string(data), 0644)
 			}
-			for _, d := range []string{".", "electron", "tools/protoc-gen-es"} {
-				putFixture(t, dir, filepath.Join(d, "package-lock.json"), "{}", 0644)
+			for _, d := range []string{"frontends/web", "electron", "tools/protoc-gen-es"} {
+				putFixture(t, dir, filepath.Join(d, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", 0644)
 			}
-			putFixture(t, dir, "frontends/web/pnpm-lock.yaml", "lockfileVersion: '9.0'\n", 0644)
 			// Assert the actual frozen-install commands, not just selected dirs.
-			putFixture(t, dir, "bin/npm", `#!/usr/bin/env bash
+			// The fake writes node_modules as a real install does (the gate
+			// stamps its .modules.yaml after a success).
+			putFixture(t, dir, "bin/pnpm", `#!/usr/bin/env bash
 set -euo pipefail
 # electron keeps its install script (it fetches the binary); everything else ignores scripts.
 if [[ $3 = electron ]]; then
-  [[ $# = 6 && $1 = ci && $2 = --prefix && $4 = --no-audit && $5 = --no-fund && $6 = --loglevel=error ]]
+  [[ $# = 6 && $1 = install && $2 = --dir && $4 = --frozen-lockfile && $5 = --config.confirmModulesPurge=false && $6 = --reporter=silent ]]
 else
-  [[ $# = 7 && $1 = ci && $2 = --prefix && $4 = --ignore-scripts && $5 = --no-audit && $6 = --no-fund && $7 = --loglevel=error ]]
+  [[ $# = 7 && $1 = install && $2 = --dir && $4 = --frozen-lockfile && $5 = --ignore-scripts && $6 = --config.confirmModulesPurge=false && $7 = --reporter=silent ]]
 fi
-printf 'npm %s\n' "$3" >>"$INSTALL_LOG"
-[[ $3 != "$FAILED_DIR" ]]
-`, 0755)
-			putFixture(t, dir, "bin/pnpm", `#!/usr/bin/env bash
-set -euo pipefail
-[[ $# = 7 && $1 = install && $2 = --dir && $3 = frontends/web && $4 = --frozen-lockfile && $5 = --ignore-scripts && $6 = --config.confirmModulesPurge=false && $7 = --reporter=silent ]]
 printf 'pnpm %s\n' "$3" >>"$INSTALL_LOG"
 [[ $3 != "$FAILED_DIR" ]]
+mkdir -p "$3/node_modules"
 `, 0755)
 			putFixture(t, dir, "changed-1", "", 0644)
 			changed := ""

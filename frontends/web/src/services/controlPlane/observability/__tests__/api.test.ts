@@ -21,9 +21,16 @@ import {
   WorkloadReleaseBasis,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DeclaredSpecGap, WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import {
+  GetObservabilityUsageResponseSchema,
+  ObservabilityQuotaState,
+  ServiceUsageSchema,
+  SignalUsageSchema,
+} from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 import {
   composeLogQuery,
+  getObservabilityUsage,
   getServiceOverview,
   getTrace,
   getWorkload,
@@ -48,16 +55,27 @@ const client = {
   listAttributeValues: vi.fn(),
   listWorkloads: vi.fn(),
   getWorkload: vi.fn(),
+  getObservabilityUsage: vi.fn(),
 };
+/** The service each client was built for, by its proto type name. */
+const services: string[] = [];
 
-vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
+vi.mock("../../client", () => ({
+  getControlPlaneClient: (service: { typeName: string }) => {
+    services.push(service.typeName);
+    return client;
+  },
+}));
 
 const env = { orgId: "org-1", envIds: ["env-1"], filters: [] };
 const window = { startMs: Date.UTC(2026, 9, 12, 6), endMs: Date.UTC(2026, 9, 12, 7) };
 const ts = (ms: number, extraNanos = 0) =>
   create(TimestampSchema, { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1e6 + extraNanos });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  services.length = 0;
+});
 
 describe("request shape", () => {
   it("scopes SearchLogs by org, env, services and window, newest first", async () => {
@@ -333,7 +351,9 @@ describe("errors", () => {
     expect(obsRetry(0, notSetUp)).toBe(false);
     // Only the hourly allowance is "over-quota"; any other ResourceExhausted is "busy" (quota.test.ts).
     expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("busy");
-    expect(obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted))).toBe("over-quota");
+    expect(
+      obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted, { "x-forge-error-reason": "obs_query_quota" }))
+    ).toBe("over-quota");
     expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
@@ -620,5 +640,67 @@ describe("workloads: the server's verdict, pods, jobs and the declaration", () =
     });
     const detail = await getWorkload({ ...env, window, workload: "api" });
     expect(detail.workloads[0]!.declared).toMatchObject({ specRecorded: false, specGap: want });
+  });
+});
+
+describe("usage", () => {
+  it("reads the org's usage from ObservabilityBillingService and maps it", async () => {
+    client.getObservabilityUsage.mockResolvedValue(
+      create(GetObservabilityUsageResponseSchema, {
+        periodStart: ts(Date.UTC(2026, 9, 1)),
+        periodEnd: ts(Date.UTC(2026, 10, 1)),
+        measuredThrough: ts(Date.UTC(2026, 9, 12, 6)),
+        usedBytes: 20n,
+        allowanceBytes: 10n,
+        overageCents: 250n,
+        projectedBytes: 30n,
+        projectedOverageCents: 500n,
+        rateCentsPerGb: "25.0000",
+        state: ObservabilityQuotaState.OVER_100,
+        usageState: ObservabilityQuotaState.OVER_150,
+        funded: true,
+        spendCapCents: 5000n,
+        bySignal: [create(SignalUsageSchema, { signal: "traces", billedBytes: 7n, storedBytes: 8n, rows: 9n })],
+        byService: [create(ServiceUsageSchema, { service: "api", signal: "bogus", billedBytes: 3n })],
+      })
+    );
+    const usage = await getObservabilityUsage("org-1");
+    expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
+    expect(client.getObservabilityUsage).toHaveBeenCalledWith({ orgId: "org-1" });
+    expect(usage).toMatchObject({
+      periodStartMs: Date.UTC(2026, 9, 1),
+      periodEndMs: Date.UTC(2026, 10, 1),
+      measuredThroughMs: Date.UTC(2026, 9, 12, 6),
+      usedBytes: 20,
+      allowanceBytes: 10,
+      overageCents: 250,
+      projectedBytes: 30,
+      projectedOverageCents: 500,
+      rateCentsPerGb: "25.0000",
+      state: "over_100",
+      usageState: "over_150",
+      funded: true,
+      exempt: false,
+      spendCapCents: 5000,
+      bySignal: [{ signal: "traces", billedBytes: 7, storedBytes: 8, rows: 9 }],
+      byService: [{ service: "api", signal: "logs", billedBytes: 3 }],
+    });
+  });
+
+
+  it("surfaces the billing service's error", async () => {
+    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
+    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code: Code.PermissionDenied });
+    expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
+    expect(client.getObservabilityUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [ObservabilityQuotaState.OK, "ok"],
+    [ObservabilityQuotaState.UNSPECIFIED, "unknown"],
+  ] as const)("maps quota state %s to %s, and no measurement to null", async (state, want) => {
+    client.getObservabilityUsage.mockResolvedValue(create(GetObservabilityUsageResponseSchema, { state, usageState: state }));
+    const usage = await getObservabilityUsage("org-1");
+    expect(usage).toMatchObject({ state: want, usageState: want, measuredThroughMs: null });
   });
 });

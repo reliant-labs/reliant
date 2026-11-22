@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 const {
   canCheckForUpdates,
   classifyCheckResult,
+  cleanMinVersion,
   createDownloadRunner,
+  createForcedUpdate,
   createMenuUpdateCheck,
   isUpdatePending,
   nextUpdateState,
@@ -120,6 +122,203 @@ test("nextUpdateState keeps what was found through a check and a failed download
   });
   assert.equal(nextUpdateState(downloading, { type: "downloaded", version: "1.14.0" }).type, "downloaded");
   assert.equal(nextUpdateState(null, { type: "error", error: "offline" }), null);
+});
+
+test("nextUpdateState: forced marks the state, keeps a found update, and stays forced", () => {
+  // Nothing found yet: the forced state itself.
+  assert.deepEqual(nextUpdateState(null, { type: "forced", minVersion: "1.9.0" }), {
+    type: "forced",
+    forced: true,
+    minVersion: "1.9.0",
+  });
+  // A found or downloading update becomes the forced one.
+  const downloading = { type: "download-progress", version: "1.14.0", progress: { percent: 40 } };
+  const forcedDownload = nextUpdateState(downloading, { type: "forced", minVersion: "1.9.0" });
+  assert.equal(forcedDownload.type, "download-progress");
+  assert.equal(forcedDownload.forced, true);
+
+  // Every later state keeps the mark: the update is no longer optional.
+  let state = nextUpdateState(null, { type: "forced", minVersion: "1.9.0" });
+  for (const event of [
+    { type: "checking" },
+    { type: "available", version: "1.14.0" },
+    { type: "download-progress", version: "1.14.0", progress: { percent: 10 } },
+    { type: "error", error: "stalled" },
+    { type: "not-available" },
+    { type: "downloaded", version: "1.14.0" },
+  ]) {
+    state = nextUpdateState(state, event);
+    assert.equal(state.forced, true, `after ${event.type}`);
+    assert.equal(state.minVersion, "1.9.0", `after ${event.type}`);
+  }
+  assert.equal(state.type, "downloaded");
+  // A failed forced download still falls back to a retryable "available".
+  assert.equal(nextUpdateState(forcedDownload, { type: "error", error: "x" }).type, "available");
+  // Without "forced", nothing is marked.
+  assert.equal(nextUpdateState(null, { type: "available", version: "1.14.0" }).forced, undefined);
+});
+
+function forcedUpdate({ status = null, downloading = false, check, download, install } = {}) {
+  const calls = { announced: [], checks: 0, downloads: 0, installs: 0 };
+  let current = status;
+  const run = createForcedUpdate({
+    getStatus: () => current,
+    isDownloading: () => downloading,
+    check: async () => {
+      calls.checks += 1;
+      const result = await (check ? check() : AVAILABLE);
+      if (result && result.isUpdateAvailable) current = { type: "available", version: result.updateInfo.version };
+      return result;
+    },
+    download: async () => {
+      calls.downloads += 1;
+      const result = await (download ? download() : { success: true });
+      if (!result.error) current = { type: "downloaded", version: "1.14.0" };
+      return result;
+    },
+    install: async () => {
+      calls.installs += 1;
+      return install ? install() : { success: true };
+    },
+    announce: (minVersion) => calls.announced.push(minVersion),
+  });
+  return { run, calls };
+}
+
+test("forced update: checks, downloads and installs without waiting for the user", async () => {
+  const { run, calls } = forcedUpdate();
+  assert.deepEqual(await run("1.9.0"), { outcome: "installing" });
+  assert.deepEqual(calls, { announced: ["1.9.0"], checks: 1, downloads: 1, installs: 1 });
+});
+
+test("forced update: installs a downloaded update at once, and joins a download in flight", async () => {
+  const ready = forcedUpdate({ status: { type: "downloaded", version: "1.14.0" } });
+  assert.deepEqual(await ready.run("1.9.0"), { outcome: "installing" });
+  assert.equal(ready.calls.checks, 0);
+  assert.equal(ready.calls.downloads, 0);
+  assert.equal(ready.calls.installs, 1);
+
+  // A download already running: no check (it would discard the download),
+  // the runner's download() joins it.
+  const inFlight = forcedUpdate({ status: { type: "available", version: "1.14.0" }, downloading: true });
+  assert.deepEqual(await inFlight.run("1.9.0"), { outcome: "installing" });
+  assert.equal(inFlight.calls.checks, 0);
+  assert.equal(inFlight.calls.downloads, 1);
+
+  // An update already found needs no second check either.
+  const found = forcedUpdate({ status: { type: "available", version: "1.14.0" } });
+  await found.run("1.9.0");
+  assert.equal(found.calls.checks, 0);
+});
+
+test("forced update: reports a feed with nothing newer, and an inactive updater, without installing", async () => {
+  const upToDate = forcedUpdate({ check: async () => UP_TO_DATE });
+  assert.deepEqual(await upToDate.run("1.9.0"), { outcome: "up-to-date" });
+  assert.equal(upToDate.calls.installs, 0);
+
+  const inactive = forcedUpdate({ check: async () => null });
+  assert.deepEqual(await inactive.run("1.9.0"), { outcome: "inactive" });
+});
+
+test("forced update: a failed check, download or install is an error the dialog can retry", async () => {
+  const badCheck = forcedUpdate({
+    check: async () => {
+      throw new Error("offline");
+    },
+  });
+  assert.deepEqual(await badCheck.run("1.9.0"), { outcome: "error", error: "offline" });
+
+  const badDownload = forcedUpdate({ download: async () => ({ error: "stalled" }) });
+  assert.deepEqual(await badDownload.run("1.9.0"), { outcome: "error", error: "stalled" });
+  assert.equal(badDownload.calls.installs, 0);
+  // The retry runs again rather than replaying the failure.
+  assert.deepEqual(await badDownload.run("1.9.0"), { outcome: "error", error: "stalled" });
+  assert.equal(badDownload.calls.downloads, 2);
+
+  const badInstall = forcedUpdate({ install: async () => ({ error: "locked" }) });
+  assert.deepEqual(await badInstall.run("1.9.0"), { outcome: "error", error: "locked" });
+});
+
+test("forced update: a second request while it runs joins the first", async () => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { run, calls } = forcedUpdate({
+    check: async () => {
+      await gate;
+      return AVAILABLE;
+    },
+  });
+  const first = run("1.9.0");
+  const second = run("1.9.0");
+  release();
+  assert.equal(await first, await second);
+  assert.equal(calls.checks, 1);
+  assert.equal(calls.installs, 1);
+});
+
+// main.js keeps the one updater state every window reads (get-update-status)
+// by folding each broadcast through nextUpdateState, the forced announcement
+// included. So the forced mark lives in the main process, not only in the
+// window that asked: a "not-available" from the feed, and a background
+// check's events after it, leave it forced, and a window that opens later
+// reads it forced. A retry checks the feed again rather than settling on the
+// previous check's "not-available".
+test("forced update: the main process's state stays forced, and a retry checks the feed again", async () => {
+  let state = null;
+  const broadcast = (event) => (state = nextUpdateState(state, event));
+  const feed = [UP_TO_DATE, AVAILABLE];
+  const calls = { checks: 0, downloads: 0, installs: 0 };
+  const run = createForcedUpdate({
+    getStatus: () => state,
+    isDownloading: () => false,
+    // What main.js's autoUpdater listeners broadcast for each check.
+    check: async () => {
+      calls.checks += 1;
+      broadcast({ type: "checking" });
+      const result = feed.shift();
+      broadcast(
+        result.isUpdateAvailable
+          ? { type: "available", version: result.updateInfo.version }
+          : { type: "not-available", version: result.updateInfo.version },
+      );
+      return result;
+    },
+    download: async () => {
+      calls.downloads += 1;
+      broadcast({ type: "downloaded", version: "1.14.0" });
+      return { success: true };
+    },
+    install: async () => {
+      calls.installs += 1;
+      return { success: true };
+    },
+    announce: (minVersion) => broadcast({ type: "forced", minVersion }),
+  });
+
+  assert.deepEqual(await run("1.9.0"), { outcome: "up-to-date" });
+  // The feed said nothing newer; the state a new window reads is still forced.
+  assert.equal(state.type, "not-available");
+  assert.equal(state.forced, true);
+  assert.equal(state.minVersion, "1.9.0");
+  // A background check's events after it do not unforce it either.
+  broadcast({ type: "checking" });
+  broadcast({ type: "not-available", version: "1.13.0" });
+  assert.equal(state.forced, true);
+
+  // Try again: the feed is asked again, and now has the release.
+  assert.deepEqual(await run("1.9.0"), { outcome: "installing" });
+  assert.deepEqual(calls, { checks: 2, downloads: 1, installs: 1 });
+  assert.equal(state.type, "downloaded");
+  assert.equal(state.forced, true);
+});
+
+test("cleanMinVersion passes a version token and nothing else", () => {
+  assert.equal(cleanMinVersion("1.9.0"), "1.9.0");
+  assert.equal(cleanMinVersion("1.9.0-dev+abc"), "1.9.0-dev+abc");
+  assert.equal(cleanMinVersion(""), "");
+  assert.equal(cleanMinVersion(undefined), "");
+  assert.equal(cleanMinVersion("1.9.0; rm -rf /"), "");
+  assert.equal(cleanMinVersion({}), "");
 });
 
 function menuCheck({ status = null, downloading = false, check }) {

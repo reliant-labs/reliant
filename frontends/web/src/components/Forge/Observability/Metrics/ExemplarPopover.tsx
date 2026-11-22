@@ -90,7 +90,7 @@ export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen,
           );
         })}
       </div>
-      <p className="mt-1 text-2xs text-ink-muted">
+      <p className="mt-1 text-meta text-ink-muted">
         {outside ? "Exemplars outside the chart's axis: a dot is one sampled observation; open it for its trace." : "Exemplars: a dot is one sampled observation; open it for its trace."}
       </p>
     </div>
@@ -161,7 +161,7 @@ export function ExemplarPopover({ at, bucketStartMs, exemplars, isLoading, error
                 <span className="text-ink-muted">{formatTimestamp(e.timeMs)}</span>
               </div>
               {Object.keys(e.attributes).length > 0 && (
-                <p className="mt-0.5 truncate font-mono text-2xs text-ink-muted" title={Object.entries(e.attributes).map(([k, v]) => `${k}=${v}`).join(" ")}>
+                <p className="mt-0.5 truncate font-mono text-meta text-ink-muted" title={Object.entries(e.attributes).map(([k, v]) => `${k}=${v}`).join(" ")}>
                   {Object.entries(e.attributes)
                     .map(([k, v]) => `${k}=${v}`)
                     .join(" ")}

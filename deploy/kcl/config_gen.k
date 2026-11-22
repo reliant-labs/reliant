@@ -1036,7 +1036,7 @@ databaseConfigEnvMap = lambda c: DatabaseConfig, config_secrets: [str] -> {str: 
 }
 
 # forge:section schema GatewayConfig
-# forge:hash=35c51b96a6cd71c695dd3abf34a9229020ac446ae5ab848bc54c5f7a124d70ad
+# forge:hash=ec0b55452fbe13b9fb1f54eda11e7c3d4b97c7992c1ab98537926ec7e890733b
 schema GatewayConfig:
     # Daemon bidi-streaming gRPC listen port
     daemon_port: int = 9190
@@ -1054,6 +1054,10 @@ schema GatewayConfig:
     liveness_paths: str = "/health,/healthz"
     # Readiness probe paths on the health port (comma-separated)
     readiness_paths: str = "/ready,/readyz"
+    # Comma-separated org ids whose labelled self-hosted machines' heartbeat stats the gateway logs as machine health/machine volume lines (empty: off)
+    machine_stats_orgs: str = ""
+    # Durable machine label (key=value) that opts a self-hosted machine in MACHINE_STATS_ORGS into heartbeat machine stats
+    machine_stats_label: str = "monitor=platform"
 
     check:
         bind_address != "", "bind_address = \"\" cannot reach the process: an empty BIND_ADDRESS counts as unset, so it would load the default \"0.0.0.0\" — set a value, or pass --bind-address= in the workload's args to make it empty"
@@ -1061,6 +1065,7 @@ schema GatewayConfig:
         shutdown_timeout != "", "shutdown_timeout = \"\" cannot reach the process: an empty SHUTDOWN_TIMEOUT counts as unset, so it would load the default \"30s\" — set a value"
         liveness_paths != "", "liveness_paths = \"\" cannot reach the process: an empty LIVENESS_PATHS counts as unset, so it would load the default \"/health,/healthz\" — set a value, or change its default in the proto"
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
+        machine_stats_label != "", "machine_stats_label = \"\" cannot reach the process: an empty MACHINE_STATS_LABEL counts as unset, so it would load the default \"monitor=platform\" — set a value, or change its default in the proto"
 
 # forge:section env-map gatewayConfigEnvMap
 # forge:hash=75338f8396ade46e7bb1b1e73e8d3602328b23801bc177205a4e6967b731288c
@@ -1107,7 +1112,7 @@ gatewayConfigEnvMap = lambda c: GatewayConfig, config_secrets: [str] -> {str: st
         "gatewayConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of GatewayConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section gatewayConfigEnvMap values (root)
-        # forge:hash=f91d502c3382f9de4e17ad2a038e9c9e4ca6286b85d3aa33e700347a50a90868
+        # forge:hash=988996283a5d12316eb58bb27b4086d9e4ffeaf6d05d0babc97aca3202b66263
         "TOOLS_DAEMON_PORT" = str(c.daemon_port)
         "HEALTH_PORT" = str(c.health_port)
         "BIND_ADDRESS" = c.bind_address
@@ -1116,6 +1121,8 @@ gatewayConfigEnvMap = lambda c: GatewayConfig, config_secrets: [str] -> {str: st
         "SHUTDOWN_TIMEOUT" = c.shutdown_timeout
         "LIVENESS_PATHS" = c.liveness_paths
         "READINESS_PATHS" = c.readiness_paths
+        "MACHINE_STATS_ORGS" = c.machine_stats_orgs
+        "MACHINE_STATS_LABEL" = c.machine_stats_label
 
         # forge:section gatewayConfigEnvMap values (end)
         # forge:hash=2b8f6204f2c68402c876fd8d54a8c388e760c33f13a08e1ad2b5ed8fa2dc72af
@@ -1282,14 +1289,14 @@ schema ServerProcessConfigAnalytics:
     disabled: bool = False
 
 # forge:section schema ServerProcessConfigLLM
-# forge:hash=e5f33e134984577eb877450c159fb680136935899802c2958823fc764ceb0167
+# forge:hash=a835a5739e99e33d2c064b2e85b1afd0a0d1b0a76ba9cce9d9208df619d35ff0
 # ServerProcessConfigLLM is the llm block (LLMConfig) — author its values in config.k as `llm.<field> = ...`.
 schema ServerProcessConfigLLM:
     # Reliant LLM gateway base URL
     reliant_api_base_url: str = ""
-    # Vertex AI project (required to call Vertex AI models)
+    # Vertex AI project every call targets (default: the connected service-account key's project)
     vertexai_project: str = ""
-    # Vertex AI region
+    # Vertex AI region for connected Vertex AI accounts
     vertexai_location: str = "us-central1"
     # Cut a stream that sends no bytes for this long
     stream_idle_timeout: str = "90s"
@@ -1832,7 +1839,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=c1c9c606b347224d8438d125f275a2ae62602816dccf78ecb8c4109de175bce9
+# forge:hash=46ca38865e5c6926be988b4cc4fb9f18b295cf04e769951df69d2962403d824b
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1840,7 +1847,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 schema ReliantProcess:
     # Every `reliant` process: the binary-wide root config.
     reliant_config?: ReliantConfig
-    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`.
+    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -1882,6 +1889,9 @@ schema ReliantProcess:
 # config_secrets names the sensitive fields the workload reads, across both
 # configs; each is routed to the config that declares it.
 #
+# A config with no required field may be left unset on the ReliantProcess:
+# it then projects as its defaults, `<Config> {}`.
+#
 #     env = config_gen.reliantProcessEnvMap(appcfg.reliant_process, (w.command or []) + (w.args or []), w.config_secrets) | w.env
 reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [str] -> {str: str | forge.SecretRef} {
     _at = [_i for _i, _a in argv if _a == "reliant" or _a.endswith("/reliant")]
@@ -1890,7 +1900,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _path = _rest[:_flags[0]] if _flags else _rest
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
-    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["project"], ["providers"], ["trigger"], ["workflow"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -1898,23 +1908,9 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _cmd_sensitive: [str] = API_SERVER_CONFIG_SENSITIVE_ENV if _cmd == "api_server_config" else DAEMON_CONFIG_SENSITIVE_ENV if _cmd == "daemon_config" else DAEMON_STATUS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_status_config" else DAEMON_STOP_CONFIG_SENSITIVE_ENV if _cmd == "daemon_stop_config" else DAEMON_LOGS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_logs_config" else DAEMON_REGISTER_CONFIG_SENSITIVE_ENV if _cmd == "daemon_register_config" else GATEWAY_CONFIG_SENSITIVE_ENV if _cmd == "gateway_config" else WORKER_CONFIG_SENSITIVE_ENV if _cmd == "worker_config" else PREVIEW_U_R_L_CONFIG_SENSITIVE_ENV if _cmd == "preview_url_config" else []
     assert all _n in config_secrets { _n in _root_sensitive or _n in _sub_sensitive or _n in _cmd_sensitive }, \
         "reliantProcessEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _root_sensitive and _n not in _sub_sensitive and _n not in _cmd_sensitive]}, which is not a `sensitive` field of the config(s) a `reliant` process running ${_path} loads. Sensitive fields: ${sorted(_root_sensitive + _sub_sensitive + _cmd_sensitive)}."
-    assert p.reliant_config not in [None, Undefined], "reliantProcessEnvMap: every `reliant` process loads ReliantConfig — set `reliant_config` on the ReliantProcess."
-    assert not _in_cli_config or p.cli_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, which loads CLIConfig — set `cli_config` on the ReliantProcess."
-    assert not _in_database_config or p.database_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, `reliant db migrate`, `reliant db vault`, which loads DatabaseConfig — set `database_config` on the ReliantProcess."
-    assert not _in_server_process_config or p.server_process_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, which loads ServerProcessConfig — set `server_process_config` on the ReliantProcess."
-    assert not _in_vault_maintenance_config or p.vault_maintenance_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant db vault`, which loads VaultMaintenanceConfig — set `vault_maintenance_config` on the ReliantProcess."
-    assert _cmd != "api_server_config" or p.api_server_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant server api`, which loads ApiServerConfig — set `api_server_config` on the ReliantProcess."
-    assert _cmd != "daemon_config" or p.daemon_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon start`, which loads DaemonConfig — set `daemon_config` on the ReliantProcess."
-    assert _cmd != "daemon_status_config" or p.daemon_status_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon status`, which loads DaemonStatusConfig — set `daemon_status_config` on the ReliantProcess."
-    assert _cmd != "daemon_stop_config" or p.daemon_stop_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon stop`, which loads DaemonStopConfig — set `daemon_stop_config` on the ReliantProcess."
-    assert _cmd != "daemon_logs_config" or p.daemon_logs_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon logs`, which loads DaemonLogsConfig — set `daemon_logs_config` on the ReliantProcess."
-    assert _cmd != "daemon_register_config" or p.daemon_register_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant daemon register`, which loads DaemonRegisterConfig — set `daemon_register_config` on the ReliantProcess."
-    assert _cmd != "gateway_config" or p.gateway_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant server gateway`, which loads GatewayConfig — set `gateway_config` on the ReliantProcess."
-    assert _cmd != "worker_config" or p.worker_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant server worker`, which loads WorkerConfig — set `worker_config` on the ReliantProcess."
-    assert _cmd != "preview_url_config" or p.preview_url_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant preview-url`, which loads PreviewURLConfig — set `preview_url_config` on the ReliantProcess."
-    _root_env = reliantConfigEnvMap(p.reliant_config, [_n for _n in config_secrets if _n in _root_sensitive])
-    _sub_env = {} | (cLIConfigEnvMap(p.cli_config, [_n for _n in config_secrets if _n in C_L_I_CONFIG_SENSITIVE_ENV]) if _in_cli_config else {}) | (databaseConfigEnvMap(p.database_config, [_n for _n in config_secrets if _n in DATABASE_CONFIG_SENSITIVE_ENV]) if _in_database_config else {}) | (serverProcessConfigEnvMap(p.server_process_config, [_n for _n in config_secrets if _n in SERVER_PROCESS_CONFIG_SENSITIVE_ENV]) if _in_server_process_config else {}) | (vaultMaintenanceConfigEnvMap(p.vault_maintenance_config, [_n for _n in config_secrets if _n in VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV]) if _in_vault_maintenance_config else {})
-    _cmd_env = apiServerConfigEnvMap(p.api_server_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "api_server_config" else daemonConfigEnvMap(p.daemon_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_config" else daemonStatusConfigEnvMap(p.daemon_status_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_status_config" else daemonStopConfigEnvMap(p.daemon_stop_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_stop_config" else daemonLogsConfigEnvMap(p.daemon_logs_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_logs_config" else daemonRegisterConfigEnvMap(p.daemon_register_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_register_config" else gatewayConfigEnvMap(p.gateway_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "gateway_config" else workerConfigEnvMap(p.worker_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "worker_config" else previewURLConfigEnvMap(p.preview_url_config, [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "preview_url_config" else {}
+    _root_env = reliantConfigEnvMap((p.reliant_config if p.reliant_config not in [None, Undefined] else ReliantConfig {}), [_n for _n in config_secrets if _n in _root_sensitive])
+    _sub_env = {} | (cLIConfigEnvMap((p.cli_config if p.cli_config not in [None, Undefined] else CLIConfig {}), [_n for _n in config_secrets if _n in C_L_I_CONFIG_SENSITIVE_ENV]) if _in_cli_config else {}) | (databaseConfigEnvMap((p.database_config if p.database_config not in [None, Undefined] else DatabaseConfig {}), [_n for _n in config_secrets if _n in DATABASE_CONFIG_SENSITIVE_ENV]) if _in_database_config else {}) | (serverProcessConfigEnvMap((p.server_process_config if p.server_process_config not in [None, Undefined] else ServerProcessConfig {}), [_n for _n in config_secrets if _n in SERVER_PROCESS_CONFIG_SENSITIVE_ENV]) if _in_server_process_config else {}) | (vaultMaintenanceConfigEnvMap((p.vault_maintenance_config if p.vault_maintenance_config not in [None, Undefined] else VaultMaintenanceConfig {}), [_n for _n in config_secrets if _n in VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV]) if _in_vault_maintenance_config else {})
+    _cmd_env = apiServerConfigEnvMap((p.api_server_config if p.api_server_config not in [None, Undefined] else ApiServerConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "api_server_config" else daemonConfigEnvMap((p.daemon_config if p.daemon_config not in [None, Undefined] else DaemonConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_config" else daemonStatusConfigEnvMap((p.daemon_status_config if p.daemon_status_config not in [None, Undefined] else DaemonStatusConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_status_config" else daemonStopConfigEnvMap((p.daemon_stop_config if p.daemon_stop_config not in [None, Undefined] else DaemonStopConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_stop_config" else daemonLogsConfigEnvMap((p.daemon_logs_config if p.daemon_logs_config not in [None, Undefined] else DaemonLogsConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_logs_config" else daemonRegisterConfigEnvMap((p.daemon_register_config if p.daemon_register_config not in [None, Undefined] else DaemonRegisterConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_register_config" else gatewayConfigEnvMap((p.gateway_config if p.gateway_config not in [None, Undefined] else GatewayConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "gateway_config" else workerConfigEnvMap((p.worker_config if p.worker_config not in [None, Undefined] else WorkerConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "worker_config" else previewURLConfigEnvMap((p.preview_url_config if p.preview_url_config not in [None, Undefined] else PreviewURLConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "preview_url_config" else {}
     _root_env | _sub_env | _cmd_env
 }
 
@@ -1958,7 +1954,7 @@ ROOTS: {str: Root} = {
     }
     "gateway" = Root {
         args = ["server", "gateway"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "MACHINE_STATS_ORGS", "MACHINE_STATS_LABEL", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
     }
@@ -1994,6 +1990,16 @@ rootEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
 
 # workloadEnvMap is a workload's config env: rootEnvMap for a workload bound
 # to a root, reliantProcessEnvMap (its config_secrets) for any other.
+#
+# The caller layers the workload's own env over it (`| w.env`), so a name
+# the workload sets wins. A plain value is left out here rather than merged:
+# KCL's union refuses a string under a reference, and that is exactly
+# `forge.bucket_env("UPLOADS", "uploads")` over a typed config block whose
+# unset leaves project as "" (`conflicting values on the attribute
+# 'UPLOADS_ENDPOINT'`). A string the workload overrides with a string is
+# replaced either way.
 workloadEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
-    rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _all = rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _own = w.env or {}
+    {_k: _v for _k, _v in _all if _k not in _own or typeof(_v) != "str"}
 }

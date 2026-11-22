@@ -6,6 +6,26 @@ description: "Reliant concepts and glossary: machines, daemons, chats, projects,
 
 Reliant is a cloud service. Its servers run your agents and call the AI model, and a **daemon** on a machine you choose does the hands-on work with your code. Everything else in Reliant is built from the handful of concepts below.
 
+## The four products
+
+Reliant is four products. Each has a one-line definition here and a page of its own.
+
+### Forge
+
+**Forge** is an open-source framework and CLI that puts guardrails on any app and deploys it with no account: `npx -y @reliantlabs/forge@latest env deploy prod --claimable`. It also runs as an MCP server for Claude Code, Codex and Cursor. **Related**: [Forge overview](/forge/overview), [Deploy without an account](/forge/deploy-without-an-account)
+
+### Reliant Cloud
+
+**Reliant Cloud** is a hosting and delivery platform, like GitLab, Vercel and Supabase in one, that runs what you ship with Forge and monitors it. **Related**: [Reliant Cloud (hosting)](/hosting/overview), [Observability](/hosting/observability)
+
+### Reliant Workflows
+
+**Reliant Workflows** are multi-agent workflows in YAML, on any model, that run on triggers. **Autopilot** uses them to review pull requests, work issues and investigate alerts; it never merges or releases on its own today. **Related**: [Workflows overview](/workflows/overview), [Reliant quick start](/getting-started/quick-start)
+
+### Reliant Engine (coming soon)
+
+**Reliant Engine** will run Reliant Workflows inside your own app, under your brand. It is coming soon and is not available yet.
+
 ## How the pieces fit
 
 You use Reliant from the web app or the desktop app. When you send a message, Reliant's servers run the agent loop: they call the model, and whenever the model wants to read a file or run a command, they send that request to your machine's daemon and pass the result back to the model. Your repository stays on that machine. See [Privacy & Security](/help/privacy) for exactly what is stored where.
@@ -26,7 +46,7 @@ A **project** is a code repository, or several, that your agents work in. A clou
 
 ## Forge
 
-Reliant and Forge are two halves of one workflow. Reliant is the harness: the agents, workflows and machines that do the work. **Forge** is the foundation: the framework for the app those agents build and run. Forge is built into the `reliant` binary, so everything below is available as `reliant forge …`.
+Forge is built into the `reliant` binary, so everything below is available as `reliant forge …`.
 
 ### Forge project
 
@@ -42,9 +62,9 @@ An **environment** is a place the project runs, declared as code under `deploy/k
 
 ### Hosting
 
-**Reliant hosting** is where `staging` and `prod` run by default: your services, workers and jobs, a managed Postgres, and frontends published as static sites behind a CDN, each with a hostname, with custom domains and managed secrets. It needs a Reliant Compute plan, except for a single static site per person (across the organizations they own without a plan), which has a free tier. See the [pricing page](https://reliantlabs.io/pricing) for current plans.
+**Reliant hosting**, the hosting part of Reliant Cloud, is where `staging` and `prod` run by default: your services, workers and jobs, a managed Postgres, and frontends published as static sites behind a CDN, each with a hostname, with custom domains and managed secrets. It needs a Reliant Compute plan, except for a single static site per person (across the organizations they own without a plan), which has a free tier. See the [pricing page](https://reliantlabs.io/pricing) for current plans.
 
-**Related**: [Hosting on Reliant](/hosting/overview)
+**Related**: [Reliant Cloud](/hosting/overview)
 
 ### Build an App workflow
 

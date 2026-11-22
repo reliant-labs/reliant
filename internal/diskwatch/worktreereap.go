@@ -47,7 +47,7 @@ import (
 //
 // It rides the storage reaper's schedule and single-flight
 // (RELIANT_STORAGE_REAPER), at its own slower cadence: one pass runs git over
-// every worktree of every repository.
+// every worktree of every repository. It never runs without the reaper.
 //
 // The daemon's in-process sweep (WorktreeSweep, worktreereclaim.SweepMachine)
 // rides the same schedule. It reaches every linked worktree on the machine,
@@ -55,6 +55,14 @@ import (
 // admission lease, which this subprocess cannot. Its mode
 // (RELIANT_WORKTREE_RECLAIM) decides what runs: on, the sweep alone; dry-run,
 // the sweep's report and then this reap as before; off, this reap alone.
+//
+// Mode on is the one setting that does not need the storage reaper: where
+// RELIANT_STORAGE_REAPER leaves the reaper off (a person's own machine, by
+// default), RunReaper still runs the sweep on this schedule, in the same
+// single-flight, and no other worktree work (reaper.go, runReaperOff). Dry-run and off
+// keep riding the reaper, so no machine starts a pass, or an Inbox item, that
+// it did not have before; and forge's subprocess reap only ever runs with the
+// reaper.
 
 const (
 	// WorktreeReapInterval is how often the worktree reap runs.
@@ -189,6 +197,12 @@ func (w *Watcher) worktreePressure() bool {
 // worktreeReapTick runs a worktree reap if one is due and no reaper pass is
 // running. It reports whether it reaped any repository.
 func (w *Watcher) worktreeReapTick(ctx context.Context) bool {
+	return w.worktreeTick(ctx, true)
+}
+
+// worktreeTick is worktreeReapTick; forgeReap false runs the in-process sweep
+// alone, for a daemon whose storage reaper is off (worktreeSweepRunsAlone).
+func (w *Watcher) worktreeTick(ctx context.Context, forgeReap bool) bool {
 	pressure := w.worktreePressure()
 	if !w.worktreeReapDue(w.now(), pressure) {
 		return w.worktreeApprovalTick(ctx, pressure)
@@ -201,14 +215,23 @@ func (w *Watcher) worktreeReapTick(ctx context.Context) bool {
 	if pressure {
 		trigger = "pressure"
 	}
-	return w.worktreeReapPass(ctx, trigger) > 0
+	return w.worktreeReapPass(ctx, trigger, forgeReap) > 0
+}
+
+// worktreeSweepRunsAlone reports whether the in-process sweep is scheduled
+// even with the storage reaper off: only in mode on, the one mode a person
+// sets to have worktrees reclaimed. The default, dry-run, keeps riding the
+// reaper (see the header).
+func (w *Watcher) worktreeSweepRunsAlone() bool {
+	s := w.worktreeSweep()
+	return s.Run != nil && s.Mode == "on"
 }
 
 // worktreeReapPass reaps the worktrees of every repository the worktree root
 // leads to, and returns how many repositories it ran over. The caller holds
-// the reaper single-flight. A failure is a WARN line: a failed clean-up must
-// not take the daemon down.
-func (w *Watcher) worktreeReapPass(ctx context.Context, trigger string) (reaped int) {
+// the reaper single-flight. forgeReap false runs only the in-process sweep. A
+// failure is a WARN line: a failed clean-up must not take the daemon down.
+func (w *Watcher) worktreeReapPass(ctx context.Context, trigger string, forgeReap bool) (reaped int) {
 	defer func() {
 		if r := recover(); r != nil {
 			logging.WarnContext(ctx, "[diskwatch] Worktree reap panicked", "trigger", trigger, "panic", fmt.Sprint(r))
@@ -220,9 +243,12 @@ func (w *Watcher) worktreeReapPass(ctx context.Context, trigger string) (reaped 
 
 	if s := w.worktreeSweep(); s.Run != nil && s.Mode != "off" && s.Mode != "" {
 		s.Run(ctx, trigger, trigger == "pressure", false)
-		if s.Mode == "on" {
+		if s.Mode == "on" || !forgeReap {
 			return 1 // the sweep is this machine's only worktree deleter
 		}
+	}
+	if !forgeReap {
+		return 0
 	}
 
 	var repos []string

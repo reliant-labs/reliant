@@ -10,10 +10,10 @@ import type { Fixtures } from '../rpc'
 import { DAY, FIXED_NOW, HOUR, MIN, USER, iso } from './base'
 
 const ENVIRONMENTS = [
-  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
-  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PREVIEW', createdAt: iso(5 * HOUR) },
-  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(9 * DAY) },
+  { id: 'env-shop-prod', name: 'prod', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-staging', name: 'staging', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(30 * DAY) },
+  { id: 'env-shop-pr12', name: 'pr-12', project: 'shopfront', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(5 * HOUR) },
+  { id: 'env-ledger-prod', name: 'prod', project: 'ledger', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: iso(9 * DAY) },
 ]
 
 const deployment = (name: string, tier: string, verdict: string, url = '', extra: Record<string, unknown> = {}) => ({
@@ -88,6 +88,25 @@ const SERVICE_OVERVIEW = SERVICES.map((s, i) => {
   }
 })
 
+/**
+ * GetServiceOverview per service: only the services the request names
+ * (`scope.services`; all of them when it names none), and only for prod,
+ * where they run. Grouped by environment, each row says it is prod's, so a
+ * staging api or a cron job never borrows prod api's numbers (Services matches
+ * rows by name and environment).
+ */
+function serviceOverview(req: Record<string, unknown>) {
+  const only = requestedServices(req)
+  const groupBy = Array.isArray(req.groupBy) ? req.groupBy.map(String) : []
+  const inScope = prodInScope(req)
+  const services = inScope
+    ? SERVICE_OVERVIEW.filter((row) => only.length === 0 || only.includes(row.service)).map((row) =>
+        groupBy.includes('deployment.environment.name') ? { ...row, group: { 'deployment.environment.name': 'prod' } } : row,
+      )
+    : []
+  return { services, trendStepSeconds: 3600, unavailableSections: [] }
+}
+
 const issue = (id: string, o: { title: string; culprit: string; type: string; service: string; status: string; events: number; affected: number; first: number; last: number; platform?: string }) => ({
   id, platform: o.platform ?? 'ISSUE_PLATFORM_SERVER', envId: 'env-shop-prod', envName: 'prod', service: o.service,
   fingerprint: `fp-${id}`, fpVersion: 1, title: o.title, culprit: o.culprit, exceptionType: o.type, status: o.status,
@@ -114,12 +133,47 @@ const RED_NOW = {
   requests: 3_950_000, errors: 20_100, p95: 180,
 }
 const RED_BEFORE = { requests: 3_610_000, errors: 17_300, p95: 196 }
-function queryPanel(req: Record<string, unknown>) {
+
+// The same panel narrowed to one service (`scope.services`, a service's page
+// and Services' charts): each service's share of the app's requests
+// and errors, and its own p95. A service not listed here (the static site, a
+// cron job, the database) serves no traced requests, so it answers no series,
+// the way ClickHouse answers an empty filter, rather than the app's numbers.
+const RED_SHARE: Record<string, { requests: number; errors: number; p95: number }> = {
+  api: { requests: 0.93, errors: 0.71, p95: 180 },
+  worker: { requests: 0.07, errors: 0.29, p95: 420 },
+}
+
+/** Whether the request's environments include a prod one (none named: every environment). The services run in prod. */
+export function prodInScope(req: Record<string, unknown>): boolean {
+  const envIds = ((req.scope ?? {}) as { envIds?: unknown }).envIds
+  const scoped = Array.isArray(envIds) ? envIds.map(String) : []
+  return scoped.length === 0 || scoped.some((id) => id.endsWith('-prod'))
+}
+
+/** The services a request narrows to (`scope.services`); empty for the whole app. */
+export function requestedServices(req: Record<string, unknown>): string[] {
+  const services = ((req.scope ?? {}) as { services?: unknown }).services
+  return Array.isArray(services) ? services.map(String) : []
+}
+
+export function queryPanel(req: Record<string, unknown>) {
   const panel = (req.panel ?? {}) as { id?: string; kind?: string }
   if (!String(panel.id ?? '').startsWith('observability-home-')) return {}
   const range = ((req.scope ?? {}) as { timeRange?: { start?: string; end?: string } }).timeRange
   const end = range?.end ? Date.parse(range.end) : FIXED_NOW
-  const totals = end < FIXED_NOW - 5 * MIN ? RED_BEFORE : RED_NOW
+  const app = end < FIXED_NOW - 5 * MIN ? RED_BEFORE : RED_NOW
+  const only = requestedServices(req)
+  let totals = app
+  if (only.length > 0 || !prodInScope(req)) {
+    const shares = prodInScope(req) ? only.map((name) => RED_SHARE[name]).filter((share) => share !== undefined) : []
+    if (shares.length === 0) return { panelId: panel.id, kind: panel.kind === 'number' ? 'number' : 'line', unit: '', stepSeconds: panel.kind === 'number' ? 0 : 3600, series: [] }
+    totals = {
+      requests: Math.round(app.requests * shares.reduce((sum, share) => sum + share.requests, 0)),
+      errors: Math.round(app.errors * shares.reduce((sum, share) => sum + share.errors, 0)),
+      p95: Math.max(...shares.map((share) => share.p95)),
+    }
+  }
   const at = (ago: number) => new Date(FIXED_NOW - ago).toISOString()
   const wave = (i: number, phase: number) => 1 + 0.3 * Math.sin((i + phase) / 3.2)
   const line = (label: string, per: number, phase: number) => ({
@@ -146,14 +200,53 @@ function queryPanel(req: Record<string, unknown>) {
   }
 }
 
+// shopfront's own dashboards: one from its repo, one saved in the org (the
+// project shell lists an app's own dashboards under Overview).
+const customDashboard = (source: 'DASHBOARD_SOURCE_REPO' | 'DASHBOARD_SOURCE_WORKSPACE' | 'DASHBOARD_SOURCE_GENERATED', key: string, title: string) => ({
+  ref: { source, projectId: 'shopfront', key }, source, title, description: '', readOnly: source === 'DASHBOARD_SOURCE_REPO',
+  starred: false, panelCount: 4, previewPanels: [], tags: [], group: '',
+})
+
+/** The Overview's Vulnerabilities card: shopfront's prod and staging, scanned 2h ago against a current database. */
+const vulnEnv = (id: string, name: string, version: string, counts: Record<string, number>, kev: number, fixable: number) => ({
+  environmentId: id, environmentName: name, releaseId: `rel-${version}`, releaseVersion: version,
+  counts: { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0, ...counts },
+  kevCount: kev, fixableCount: fixable, blockingCount: kev, exemptCount: 0,
+  coverage: { artifacts: 3, withSbom: 3, scanned: 3 },
+  lastScannedAt: iso(2 * HOUR), scanState: 'VULNERABILITY_SCAN_STATE_SCANNED',
+})
+const VULN_SUMMARY = {
+  environments: [
+    vulnEnv('env-shop-prod', 'prod', '20261118.121200-a1b2c3d4e5f6', { critical: 1, high: 2, medium: 3, low: 1 }, 1, 4),
+    vulnEnv('env-shop-staging', 'staging', '20261118.144000-f6e5d4c3b2a1', { high: 1, medium: 2 }, 0, 2),
+  ],
+  database: { scanner: 'grype', scannerVersion: 'v0.122.1', schema: 'v6.1.10', builtAt: iso(12 * HOUR), stale: false },
+}
+
 export const consoleFixtures: Fixtures = {
+  'controlplane.v1.DashboardService/ListDashboards': (req) =>
+    req.projectId === 'shopfront'
+      ? {
+          dashboards: [
+            customDashboard('DASHBOARD_SOURCE_REPO', 'checkout-funnel', 'Checkout funnel'),
+            customDashboard('DASHBOARD_SOURCE_WORKSPACE', 'order-latency', 'Order latency'),
+            // forge's generated Product analytics hub (Insights in the project shell).
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'product-overview', 'shopfront: product overview'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'users', 'shopfront: users'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'product', 'shopfront: product'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'acquisition', 'shopfront: acquisition'),
+          ],
+          canWrite: true,
+        }
+      : { dashboards: [], canWrite: true },
   'controlplane.v1.ObservabilityService/QueryPanel': queryPanel,
+  'controlplane.v1.VulnerabilityService/GetVulnerabilitySummary': (req) => (req.project === 'shopfront' ? VULN_SUMMARY : { environments: [] }),
   'controlplane.v1.IssuesService/ListIssues': (req) => {
     const statuses = (req.statuses as string[] | undefined) ?? []
     return { issues: statuses.length ? ISSUES.filter((i) => statuses.includes(i.status)) : ISSUES, nextPageToken: '' }
   },
   'controlplane.v1.ObservabilityService/ListWorkloads': { workloads: WORKLOADS, truncated: false, jobs: [], jobsTruncated: false },
-  'controlplane.v1.ObservabilityService/GetServiceOverview': { services: SERVICE_OVERVIEW, trendStepSeconds: 3600, unavailableSections: [] },
+  'controlplane.v1.ObservabilityService/GetServiceOverview': serviceOverview,
   'controlplane.v1.DeployService/ListEnvironments': (req) => ({
     environments: req.project ? ENVIRONMENTS.filter((e) => e.project === req.project) : ENVIRONMENTS,
   }),

@@ -43,11 +43,11 @@ const PLANS = {
   ],
   daemonPricing: {
     sizes: [
-      { size: "s1", multiplier: 1n, hourlyPriceCents: "10", storageGib: 30n },
-      { size: "s2", multiplier: 1n, hourlyPriceCents: "10.05", storageGib: 30n },
-      { size: "m", multiplier: 1n, hourlyPriceCents: "14.6", storageGib: 50n },
-      { size: "l", multiplier: 2n, hourlyPriceCents: "29.2", storageGib: 80n },
-      { size: "xl", multiplier: 4n, hourlyPriceCents: "58.4", storageGib: 120n },
+      { size: "s1", hourlyPriceCents: "10", storageGib: 30n },
+      { size: "s2", hourlyPriceCents: "10.05", storageGib: 30n },
+      { size: "m", hourlyPriceCents: "14.6", storageGib: 50n },
+      { size: "l", hourlyPriceCents: "29.2", storageGib: 80n },
+      { size: "xl", hourlyPriceCents: "58.4", storageGib: 120n },
     ],
     storageCentsPerGibMonth: "25",
     placeholder: false,
@@ -156,7 +156,7 @@ const SURFACES: Record<string, { title: string; fixtures?: Fixtures; render: () 
     render: () => <LocalModelsSection />,
   },
   tokens: { title: "Settings → Access tokens", render: () => <TokenSettings /> },
-  "pair-machine": { title: "Settings → Machines: pair a machine", width: 560, render: () => <PairMachinePanel mode="reference" /> },
+  "pair-machine": { title: "Settings → Agent sandboxes: pair a computer", width: 560, render: () => <PairMachinePanel mode="reference" /> },
   "provider-helper": { title: "Provider sign-in helper", width: 560, render: () => <OAuthHelperPanel providerName="Claude" available={false} loading={false} connecting={false} onRetry={() => {}} onConnect={() => {}} /> },
   // Provider accounts list only for a session; the token is never sent anywhere.
   "mobile-providers": { title: "Mobile: AI providers", width: 390, signedIn: true, render: () => <MobileAIProvidersPanel /> },

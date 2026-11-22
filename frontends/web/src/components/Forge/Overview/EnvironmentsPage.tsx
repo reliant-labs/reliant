@@ -32,7 +32,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleDashed, Layers } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -110,9 +110,14 @@ export function useEnvironmentRows(envs: LiveEnv[], project: string, linkOf: (en
 export function EnvironmentsPage() {
   const navigate = useNavigate();
   const { roster, href, forgeProject } = useForgeConsole();
+  // Deployments › Previews (U6e): `?show=previews` lists the preview environments alone.
+  const previewsOnly = (useSearch({ strict: false }) as { show?: string }).show === "previews";
   const backendEnvs = useMemo(
-    () => roster.envs.filter((env) => env.source === "backend" && env.live).map((env) => env.live!),
-    [roster.envs]
+    () =>
+      roster.envs
+        .filter((env) => env.source === "backend" && env.live && (!previewsOnly || env.live.kind === "preview"))
+        .map((env) => env.live!),
+    [roster.envs, previewsOnly]
   );
   const checkoutEnvs = useMemo(() => roster.envs.filter((env) => env.source === "checkout"), [roster.envs]);
   const linkOf = useCallback(
@@ -134,8 +139,14 @@ export function EnvironmentsPage() {
 
   const header = (
     <PageHeader
-      title="Environments"
-      meta={<span>What each one runs, whether it is healthy, how its last deploy went, and whether that release proved good</span>}
+      title={previewsOnly ? "Previews" : "Environments"}
+      meta={
+        <span>
+          {previewsOnly
+            ? "Short-lived environments, one per branch or pull request: what each runs and whether it is healthy"
+            : "What each one runs, whether it is healthy, how its last deploy went, and whether that release proved good"}
+        </span>
+      }
       className="mb-0"
     />
   );
@@ -159,6 +170,10 @@ export function EnvironmentsPage() {
 
       {rows.length === 0 && unread ? (
         <DeployStatusUnread state={unread} testId="forge-environments-unread" />
+      ) : rows.length === 0 && previewsOnly ? (
+        <p className="text-ui text-ink-muted" data-testid="forge-environments-no-previews">
+          No preview environments right now. A preview is created per branch or pull request when one deploys, and listed here while it runs.
+        </p>
       ) : rows.length === 0 ? (
         <div data-testid="forge-environments-empty">
           <GettingStarted
@@ -188,9 +203,9 @@ export function EnvironmentsPage() {
         <EnvironmentList rows={rows} onOpen={openEnv} />
       )}
 
-      {checkoutEnvs.length > 0 && <UnregisteredEnvs envs={checkoutEnvs} onOpen={openEnv} />}
+      {!previewsOnly && checkoutEnvs.length > 0 && <UnregisteredEnvs envs={checkoutEnvs} onOpen={openEnv} />}
 
-      <RetainedDatabases project={forgeProject} />
+      {!previewsOnly && <RetainedDatabases project={forgeProject} />}
     </div>
   );
 }

@@ -182,6 +182,15 @@ func (c *LocalClient) WriteBinaryFile(ctx context.Context, path string, content 
 	}, nil
 }
 
+// CreateBinaryFile writes raw bytes to a new file (WriteNewFile).
+func (c *LocalClient) CreateBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error) {
+	modTime, err := WriteNewFile(path, content)
+	if err != nil {
+		return nil, err
+	}
+	return &WriteResult{Created: true, ModTime: modTime, BytesWritten: len(content)}, nil
+}
+
 // PatchFile applies a set of edits to a file.
 func (c *LocalClient) PatchFile(ctx context.Context, path string, edits []PatchEdit) (*PatchResult, error) {
 	if err := daemonpolicy.DenyCredentialFile(path); err != nil {

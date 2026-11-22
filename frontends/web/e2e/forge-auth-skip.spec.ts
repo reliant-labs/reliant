@@ -1,9 +1,12 @@
 import { expect, test, type Route } from '@playwright/test';
 
 // forge.reliantlabs.io/auth, signed out, "Skip for now": the guest session it
-// mints must land on the Apps page. It used to bounce / → /apps → / and stop
-// on a blank page with no console error (the forge root's <Navigate> did not
-// redirect a second visit to `/`).
+// mints must land on their projects (where their apps are). It used to bounce
+// / → /apps → / and stop on a blank page with no console error (the forge
+// root's <Navigate> did not redirect a second visit to `/`). The forge host
+// now mounts the app's one route tree (routes.tsx, U6): a guest has not
+// onboarded, so the home sends them to /projects (the daemonless home,
+// OnboardingFlow/onboardingGate.ts homeTarget) on every visit.
 
 const LOADED = { timeout: 20_000 };
 const json = (route: Route, body: unknown) =>
@@ -23,6 +26,11 @@ async function mockForgeGuest(page: import('@playwright/test').Page) {
   const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
+  // The guest's own record: not onboarded. (With no record at all the home
+  // sends them to the wizard, which asks again: onboardingGate.ts chatRouteAction.)
+  await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
+    json(route, { user: { id: GUEST.id, email: '', onboardingCompleted: false } }),
+  );
   await page.route('**/health', (route) => json(route, { auth_mode: 'supabase' }));
   await page.route('**/supabase/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^.*\/supabase/, '');
@@ -45,7 +53,7 @@ async function mockForgeGuest(page: import('@playwright/test').Page) {
 
 }
 
-test('"Skip for now" on the forge host lands a signed-out visitor on /apps, not a blank page', async ({ page }) => {
+test('"Skip for now" on the forge host lands a signed-out visitor on their projects, not a blank page', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await mockForgeGuest(page);
@@ -53,28 +61,28 @@ test('"Skip for now" on the forge host lands a signed-out visitor on /apps, not 
   await page.goto('/auth?shell=forge');
   await page.getByRole('button', { name: /skip for now/i }).click();
 
-  await expect(page).toHaveURL(/\/apps$/, LOADED);
-  await expect(page.getByTestId('forge-shell-layout')).toBeVisible(LOADED);
+  await expect(page).toHaveURL(/\/projects$/, LOADED);
+  await expect(page.getByTestId('projects-page')).toBeVisible(LOADED);
   // Settled, not passing through: still here, still rendered.
   await page.waitForTimeout(1500);
-  await expect(page).toHaveURL(/\/apps$/);
-  await expect(page.getByTestId('forge-shell-layout')).toBeVisible();
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.getByTestId('projects-page')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-// The root redirect on its own: the guest is already on /apps and `/` is visited
+// The root redirect on its own: the guest is already on /projects and `/` is visited
 // again (twice). The forge root used to render nothing for the second visit.
-test('revisiting / on the forge host always ends on /apps', async ({ page }) => {
+test('revisiting / on the forge host always ends on their projects', async ({ page }) => {
   await mockForgeGuest(page);
   await page.goto('/auth?shell=forge');
   await page.getByRole('button', { name: /skip for now/i }).click();
-  await expect(page).toHaveURL(/\/apps$/, LOADED);
+  await expect(page).toHaveURL(/\/projects$/, LOADED);
 
   for (let i = 0; i < 2; i++) {
     await page.evaluate(() =>
       (globalThis as unknown as { __RELIANT_ROUTER: { navigate: (o: { to: string }) => Promise<void> } }).__RELIANT_ROUTER.navigate({ to: '/' }),
     );
-    await expect(page).toHaveURL(/\/apps$/, LOADED);
-    await expect(page.getByTestId('forge-shell-layout')).toBeVisible(LOADED);
+    await expect(page).toHaveURL(/\/projects$/, LOADED);
+    await expect(page.getByTestId('projects-page')).toBeVisible(LOADED);
   }
 });

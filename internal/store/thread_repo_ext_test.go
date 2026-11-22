@@ -131,14 +131,14 @@ func TestThreadQueries(t *testing.T) {
 		},
 		"children": {
 			func() ([]*core.Thread, error) { return store.ListChildThreads(ctx, env.ORM, "th-root") },
-			func() ([]*core.Thread, error) { return env.Repo.ListChildThreads(ctx, "th-root") },
+			func() ([]*core.Thread, error) { return store.ListChildThreads(ctx, env.Repo.ORM(), "th-root") },
 		},
 		"by origin": {
 			func() ([]*core.Thread, error) {
 				return store.ListThreadsByOrigin(ctx, env.ORM, "th-chat", core.ThreadOriginSpawn)
 			},
 			func() ([]*core.Thread, error) {
-				return env.Repo.ListThreadsByOrigin(ctx, "th-chat", core.ThreadOriginSpawn)
+				return store.ListThreadsByOrigin(ctx, env.Repo.ORM(), "th-chat", core.ThreadOriginSpawn)
 			},
 		},
 	}
