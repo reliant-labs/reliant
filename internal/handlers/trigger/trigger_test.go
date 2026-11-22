@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -139,7 +141,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID}))
 
-	deps := Deps{Repo: repo, Syncer: backend, Fires: backend}
+	deps := Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}
 	return &triggerTestEnv{
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
 		deps:      deps,
@@ -347,7 +349,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)}))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))

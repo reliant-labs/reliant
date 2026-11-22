@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -200,7 +202,7 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 		env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventLaunched, &done)
 	}
 	counting := &triggerQueryCounter{Repository: env.repo}
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: counting, Syncer: env.backend, Fires: env.backend}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: counting, Projects: projectaccesstest.For(counting), Syncer: env.backend, Fires: env.backend}))
 	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)
