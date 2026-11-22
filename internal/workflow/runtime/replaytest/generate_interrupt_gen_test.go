@@ -60,7 +60,7 @@ func TestGenerateFixture_InterruptDuringToolBatch(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Success, "SendAgentMessage refused: %s", resp.Message)
 
-	interrupter := threads.NewService(h.Stack.Repo, threads.WithTemporalSignaler(h.Stack.Temporal))
+	interrupter := threads.New(threads.Deps{Repo: h.Stack.Repo, Signaler: h.Stack.Temporal})
 	_, err = interrupter.InterruptThread(h.Ctx, threads.InterruptThreadOpts{UserID: h.UserID, ChatID: chatID, ThreadID: workflowID})
 	require.NoError(t, err, "InterruptThread")
 

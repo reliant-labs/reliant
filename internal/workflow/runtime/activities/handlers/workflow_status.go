@@ -12,6 +12,8 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.temporal.io/sdk/activity"
+
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -23,7 +25,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
-	"go.temporal.io/sdk/activity"
 )
 
 // ============================================================================
@@ -909,7 +910,7 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 		if thread == "" {
 			thread = input.WorkflowID
 		}
-		if last, err := threads.NewService(a.repo).LastAssistantMessage(ctx, thread); err == nil {
+		if last, err := threads.New(threads.Deps{Repo: a.repo}).LastAssistantMessage(ctx, thread); err == nil {
 			summary = last.Content
 		} else {
 			logging.WarnContext(ctx, "[WorkflowStatus] Could not read final assistant text for run event",

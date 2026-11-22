@@ -44,7 +44,7 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 		WorkflowName: &workflowName, State: db.ChatStateIdle, WorkflowID: &chatID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,

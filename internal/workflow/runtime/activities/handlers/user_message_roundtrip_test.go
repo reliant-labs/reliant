@@ -45,7 +45,7 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo *db.Repo) (chatID, workfl
 	chatID = createTestChatForConversation(t, repo)
 	workflowID = chatID // Root workflow ID = chat ID (standard pattern)
 
-	svc = threads.NewService(repo)
+	svc = threads.New(threads.Deps{Repo: repo})
 
 	// Mimics StartChat: CreateWorkflowWithThread before any messages
 	wf := &db.Workflow{
@@ -528,7 +528,7 @@ func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testin
 	thread := workflowID
 
 	// Verify: CW exists (created by CreateWorkflowWithThread)
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo})
 	cw, err := svc.GetLatestContextWindow(ctx, thread)
 	require.NoError(t, err)
 	require.NotNil(t, cw, "Context window should exist from CreateWorkflowWithThread")
@@ -569,7 +569,7 @@ func TestUserMessageRoundTrip_ContextWindowIDConsistency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Save another message via threads.Service.SaveMessage
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo})
 	result, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  thread,

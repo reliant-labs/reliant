@@ -154,7 +154,7 @@ Use spawn_send to message an agent that is still running.`
 
 // NewSpawnStatusTool builds the spawn_status tool.
 func NewSpawnStatusTool(deps SpawnStatusDeps) Tool {
-	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, tree: deps.Tree, backoff: deps.Backoff, threads: threads.NewService(deps.Store)})
+	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, tree: deps.Tree, backoff: deps.Backoff, threads: threads.New(threads.Deps{Repo: deps.Store})})
 }
 
 func (s *spawnStatusTool) Name() string {

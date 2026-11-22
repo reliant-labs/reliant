@@ -21,7 +21,7 @@ import (
 )
 
 func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity {
-	return NewDrainAgentMessagesActivity(h.Repo(), threads.NewService(h.Repo()))
+	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo()}))
 }
 
 func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {

@@ -275,7 +275,7 @@ func saveHiddenNudge(t *testing.T, h *IdempotencyTestHelper, chatID, kind string
 	t.Helper()
 	text, _ := continuationNudgeText(kind)
 	key := "seed-" + uuid.NewString()
-	_, err := threads.NewService(h.Repo()).SaveMessage(context.Background(), threads.SaveMessageOpts{
+	_, err := threads.New(threads.Deps{Repo: h.Repo()}).SaveMessage(context.Background(), threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       chatID,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),

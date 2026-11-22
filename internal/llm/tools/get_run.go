@@ -37,7 +37,7 @@ type getRunTool struct {
 func NewGetRunTool(repo getRunStore) Tool {
 	t := &getRunTool{repo: repo}
 	if repo != nil {
-		t.threads = threads.NewService(repo)
+		t.threads = threads.New(threads.Deps{Repo: repo})
 	}
 	return NewToolWrapper[GetRunParams, ToolResponse](t)
 }

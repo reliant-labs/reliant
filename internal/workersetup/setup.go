@@ -42,13 +42,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
 
-	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // maxHeartbeatThrottleInterval is worker.Options.MaxHeartbeatThrottleInterval.
@@ -264,7 +265,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	// Create threads service
-	threadsService := threads.NewService(cfg.Database)
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
