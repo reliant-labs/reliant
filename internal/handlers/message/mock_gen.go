@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=d44265c3d00c19eaf23c1133414a5b21fe9d05e936a852fd48419b5df02980af
+// forge:hash=a5afef406c70c98de846baf4b7cbae6785ad3ce8b81f8af7d1559b8e4230c6a0
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -31,7 +31,6 @@ type MockRepository struct {
 	ListContentBlocksFunc         func(context.Context, string) ([]*db.MessageContentBlock, error)
 	GetAttachmentsByIDsFunc       func(context.Context, []string) ([]*db.Attachment, error)
 	ListToolCallsByMessageIDsFunc func(context.Context, []string) ([]*db.ToolCall, error)
-	SenderTitlesFunc              func(context.Context, []string) (map[string]string, error)
 }
 
 // GetMessage records the call and delegates to GetMessageFunc when set.
@@ -79,14 +78,31 @@ func (m *MockRepository) ListToolCallsByMessageIDs(ctx context.Context, messageI
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByMessageIDs")
 }
 
-// SenderTitles records the call and delegates to SenderTitlesFunc when set.
-func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
-	m.Recorder.Record("SenderTitles", ctx, threadIDs)
-	if m.SenderTitlesFunc != nil {
-		return m.SenderTitlesFunc(ctx, threadIDs)
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockSenders
+// forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9
+
+// MockSenders is a test mock for the Senders interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSenders.<Method>Func not set" error.
+type MockSenders struct {
+	contractkit.Recorder
+	SenderTitlesByThreadIDsFunc func(context.Context, []string) (map[string]string, error)
+}
+
+// SenderTitlesByThreadIDs records the call and delegates to SenderTitlesByThreadIDsFunc when set.
+func (m *MockSenders) SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitlesByThreadIDs", ctx, threadIDs)
+	if m.SenderTitlesByThreadIDsFunc != nil {
+		return m.SenderTitlesByThreadIDsFunc(ctx, threadIDs)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
+	return nil, contractkit.MockNotSet("MockSenders", "SenderTitlesByThreadIDs")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Senders = (*MockSenders)(nil)

@@ -26,25 +26,3 @@ func (r *Repo) FindMessage(ctx context.Context, id string) (*Message, error) {
 	}
 	return msg, nil
 }
-
-// IsLatestTurnInThread reports whether messageID is the newest turn of the
-// thread: its newest message that is not a system note. Notes the server posts
-// about a run are not turns, so they never make an unanswered message look
-// answered (the same rule as ThreadAwaitsReply).
-//
-// A user message that is not the latest turn has been followed by one, so a run
-// has already read it. A false answer for an id that is not in the thread at
-// all is also correct: nothing there is waiting to be read.
-func (r *Repo) IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error) {
-	if threadID == "" {
-		return false, fmt.Errorf("thread ID cannot be empty")
-	}
-	if messageID == "" {
-		return false, fmt.Errorf("message ID cannot be empty")
-	}
-	turn, err := store.LatestTurnInThread(ctx, r.ORM(), threadID)
-	if err != nil {
-		return false, fmt.Errorf("failed to read the latest turn: %w", err)
-	}
-	return turn != nil && turn.ID == messageID, nil
-}

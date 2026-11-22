@@ -100,7 +100,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 	svc := &Service{
 		deps: Deps{
 			Repo:   repo,
-			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal,
+			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal,
 			Router: &placingRouter{wakeRecordingRouter: wake, defaultID: laptop, known: map[string]bool{vm: true, laptop: true}},
 		},
 		threads: threads.NewService(repo),

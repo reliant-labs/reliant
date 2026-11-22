@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -42,18 +43,20 @@ type CleanupOutput struct {
 // - Cleaning up any pending tool execution requests
 // - Notifying the UI of the cancelled state
 type CleanupActivity struct {
-	repo      CleanupStore
-	approvals ApprovalResolveStore
-	workflows WorkflowLoader
+	repo       CleanupStore
+	approvals  ApprovalResolveStore
+	workflows  WorkflowLoader
+	toolBlocks ToolResultFinder
 }
 
-// NewCleanupActivity creates a new CleanupActivity; approvals closes the run's
-// pending approvals and workflows reads a spawn's child run.
-func NewCleanupActivity(repo CleanupStore, approvals ApprovalResolveStore, workflows WorkflowLoader) *CleanupActivity {
+// NewCleanupActivity creates a new CleanupActivity; Approvals closes the run's
+// pending approvals and Workflows reads a spawn's child run.
+func NewCleanupActivity(deps CleanupDeps) *CleanupActivity {
 	return &CleanupActivity{
-		repo:      repo,
-		approvals: approvals,
-		workflows: workflows,
+		repo:       deps.Store,
+		approvals:  deps.Approvals,
+		workflows:  deps.Workflows,
+		toolBlocks: deps.ToolBlocks,
 	}
 }
 
@@ -187,7 +190,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 			}
 
 			// Check if there's a matching tool_result
-			resultBlock, err := a.repo.GetToolResultBlock(ctx, toolCallID)
+			resultBlock, err := a.toolBlocks.FindToolBlock(ctx, toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 			if err != nil {
 				logging.ErrorContext(ctx, "[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 				continue

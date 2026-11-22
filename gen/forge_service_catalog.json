@@ -55749,6 +55749,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Messages",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Messages",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.OrgResolver",
       "methods": [],
@@ -55824,6 +55835,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Senders",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Spawns",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
       "methods": [],
@@ -55841,6 +55863,17 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "ToolBlocks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ToolBlocks",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56359,6 +56392,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Message",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Senders",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -57314,6 +57358,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Senders",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],

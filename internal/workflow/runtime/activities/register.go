@@ -277,7 +277,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo, approvals, workflowRuns))
+	var toolBlocks handlers.ToolResultFinder
+	if deps.Repo != nil {
+		toolBlocks = store.NewMessageContentBlockExtStore(deps.Repo.ORM())
+	}
+	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(handlers.CleanupDeps{Store: deps.Repo, ToolBlocks: toolBlocks, Approvals: approvals, Workflows: workflowRuns}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo, workflowRuns))
 
