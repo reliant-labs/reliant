@@ -62,6 +62,7 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("workflow: Deps.Projects is required")
+	}
 	if d.Pools == nil {
 		return fmt.Errorf("workflow: Deps.Pools is required")
 	}
