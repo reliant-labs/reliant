@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -94,14 +95,20 @@ func newStorageIdleReportCmd() *cobra.Command {
 }
 
 func newStorageIdleScanCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, skipProcesses bool
 	var stateDir string
 	c := &cobra.Command{
 		Use:   "scan",
 		Short: "Run a dry-run idle reclaim pass now and print what it would remove",
 		Long: `Run one dry-run pass in this process with the daemon's thresholds and its
 record of use, and print what it would remove and why it would keep the
-rest. It removes nothing and does not replace the daemon's report.`,
+rest. It removes nothing and does not replace the daemon's report.
+
+A process can only inspect another process of the same user when that one
+allows it, and the daemon does not, so from a shell every directory the
+daemon holds a file in looks in use. --skip-process-check leaves the process
+check out of the scan to estimate what a pass would free; the daemon's own
+passes always make it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadRootConfig(cmd)
@@ -124,6 +131,9 @@ rest. It removes nothing and does not replace the daemon's report.`,
 			r.WorktreeSweepOn = worktreeReclaimConfig(cfg).Mode == worktreereclaim.SweepOn
 			r.StateDir = "" // a scan does not replace the daemon's report
 			r.Records = nil
+			if skipProcesses {
+				r.ProcessUse = func(context.Context, []string) error { return nil }
+			}
 			rep := r.Pass(cmd.Context(), true, "cli")
 			if asJSON {
 				return writeJSON(cmd.OutOrStdout(), rep)
@@ -133,6 +143,7 @@ rest. It removes nothing and does not replace the daemon's report.`,
 		},
 	}
 	c.Flags().BoolVar(&asJSON, "json", false, "print the report as JSON")
+	c.Flags().BoolVar(&skipProcesses, "skip-process-check", false, "estimate without the process check, which a shell cannot make against the daemon's own process")
 	stateDirFlag(c, &stateDir)
 	return c
 }
