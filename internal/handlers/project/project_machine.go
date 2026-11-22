@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -204,7 +205,7 @@ func (s *Service) checkoutOn(ctx context.Context, projectID, daemonID string) (*
 // org's, recorded there before machines kept to their org) is not this
 // folder's project in scope's org; a nil scope matches every org's.
 func (s *Service) projectAtPathOn(ctx context.Context, userID, daemonID, path string, scope *core.OrgScope) (*db.Project, error) {
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, daemonID)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine's projects"))
 	}

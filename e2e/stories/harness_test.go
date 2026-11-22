@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -431,6 +432,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:   slog.Default(),
 		Config:   &typedconfig.Config{},
 		Repo:     s.Repo,
+		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
 		Syncer:   triggerSyncer,
 		Fires:    triggerFires,

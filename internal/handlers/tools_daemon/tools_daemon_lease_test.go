@@ -217,7 +217,13 @@ type leaseRecordingRepo struct {
 
 var _ Repository = (*leaseRecordingRepo)(nil)
 
-func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
+func (r *leaseRecordingRepo) GetProjectByRemoteURLAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
+}
+
+var _ ProjectLookups = (*leaseRecordingRepo)(nil)
+
+func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
 	r.stateEntered <- struct{}{}
 	<-r.release
 	return nil, nil

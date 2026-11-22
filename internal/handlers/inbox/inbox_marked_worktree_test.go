@@ -85,7 +85,7 @@ func markedFixtureSweeper(t *testing.T) (*inboxFixture, *unmarkSender, string, *
 	require.NoError(t, err)
 	require.True(t, ok)
 	sender := &unmarkSender{mark: "m-1"}
-	sweeper := worktreesweep.New(f.repo, sender).WithAutoArchive(worktreesweep.AutoArchiveOn, autoArchiveOf(f.repo), nil).WithReclaimMarks(store.NewWorktreeExtStore(f.repo.ORM()), 0, 0)
+	sweeper := worktreesweep.New(realStorage(f.repo), sender).WithAutoArchive(worktreesweep.AutoArchiveOn, autoArchiveOf(f.repo), nil).WithReclaimMarks(store.NewWorktreeExtStore(f.repo.ORM()), 0, 0)
 	f.withSweeper(t, sweeper)
 	return f, sender, id, sweeper
 }

@@ -177,7 +177,7 @@ func TestDaemonQueries(t *testing.T) {
 	if w, _ := env.Repo.GetWorktree(ctx, "wt-d"); w.DaemonID != nil {
 		t.Fatalf("worktree still bound to removed daemon: %v", *w.DaemonID)
 	}
-	if pds, _ := env.Repo.ListProjectDaemonsForDaemon(ctx, "d2"); len(pds) != 0 {
+	if pds, _ := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "d2"); len(pds) != 0 {
 		t.Fatalf("installs on removed daemon survived: %+v", pds)
 	}
 	if owner, removed, err := store.DeleteDaemonRow(ctx, env.ORM, "d4"); err != nil || !removed || owner != "u1" {

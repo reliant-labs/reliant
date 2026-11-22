@@ -113,8 +113,9 @@ type WorkflowStatusOutput struct {
 // WorkflowStatusActivity implements TypedActivity[WorkflowStatusInput, WorkflowStatusOutput]
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
-	repo WorkflowStatusStore
-	runs RunRecords
+	repo      WorkflowStatusStore
+	runs      RunRecords
+	workflows WorkflowRuns
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
@@ -125,6 +126,7 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 	return &WorkflowStatusActivity{
 		repo:       deps.Repo,
 		runs:       deps.Runs,
+		workflows:  deps.Workflows,
 		trackerFor: analytics.ForUser,
 	}
 }
@@ -138,7 +140,7 @@ func (a *WorkflowStatusActivity) Name() string {
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
 	// A worker built without a database cannot record a run's outcome: say so
 	// (Temporal retries the activity) rather than dereference a missing store.
-	if a.repo == nil || a.runs == nil {
+	if a.repo == nil || a.runs == nil || a.workflows == nil {
 		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
 	}
 	// How the run ended, judged before the status write it lands with.
@@ -697,7 +699,7 @@ func (a *WorkflowStatusActivity) trackPausedForMachine(ctx context.Context, inpu
 // workflow subtree ended without its threads is exactly what
 // ReapOrphanedThreads exists to find.
 func (a *WorkflowStatusActivity) cascadeTerminalStatus(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
-	if err := a.repo.CascadeTerminalStatusToDescendants(ctx, workflowID, reason); err != nil {
+	if err := a.workflows.CascadeTerminalStatusToDescendants(ctx, workflowID, reason); err != nil {
 		return err
 	}
 	// Threads are not a workflows row and need their own cascade call — see
@@ -712,7 +714,7 @@ func (a *WorkflowStatusActivity) cascadeTerminalStatus(ctx context.Context, work
 // does not exist yet.
 func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input WorkflowStatusInput) error {
 	// Check if workflow already exists (e.g., branched chat with pending status)
-	existingWorkflow, err := a.repo.GetWorkflow(ctx, input.WorkflowID)
+	existingWorkflow, err := a.workflows.LoadWorkflow(ctx, input.WorkflowID)
 	if err == nil && existingWorkflow != nil {
 		if existingWorkflow.Status.State == db.WorkflowStateActive {
 			return nil // Already running
@@ -749,7 +751,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 			SpawnedByNodeID: spawnedByNodeID,
 			LoopIteration:   input.LoopIteration,
 			CreatedAt:       time.Now().UTC(),
-			OwnerUserID:     resolveRunOwner(ctx, a.repo, nil, input.ChatID),
+			OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, nil, input.ChatID),
 		}
 
 		// Root workflow - thread already exists from ChatService
@@ -788,7 +790,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 				SpawnedByNodeID: spawnedByNodeID,
 				LoopIteration:   input.LoopIteration,
 				CreatedAt:       time.Now().UTC(),
-				OwnerUserID:     resolveRunOwner(ctx, a.repo, &parentID, input.ChatID),
+				OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, &parentID, input.ChatID),
 			}
 			if createErr := a.repo.CreateWorkflow(ctx, childWorkflow); createErr != nil {
 				return fmt.Errorf("child workflow %s does not exist (lookup: %v) and create-on-missing failed: %w", input.WorkflowID, err, createErr)
@@ -983,7 +985,7 @@ func temporalRunID(ctx context.Context) string {
 // a stale checkpoint is harmless for completed/cancelled workflows because
 // SendMessage only consults it for failed/terminated predecessors.
 func (a *WorkflowStatusActivity) clearCheckpoint(ctx context.Context, workflowID string) {
-	if err := a.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
+	if err := a.workflows.ClearWorkflowCheckpoint(ctx, workflowID); err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to clear workflow checkpoint",
 			"workflowID", workflowID,
 			"error", err)
@@ -1003,7 +1005,7 @@ func (a *WorkflowStatusActivity) getWorkflowWithRetry(ctx context.Context, workf
 			case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
 			}
 		}
-		workflow, err := a.repo.GetWorkflow(ctx, workflowID)
+		workflow, err := a.workflows.LoadWorkflow(ctx, workflowID)
 		if err == nil && workflow != nil {
 			return workflow, nil
 		}

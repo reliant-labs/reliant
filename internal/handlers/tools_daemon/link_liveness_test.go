@@ -165,9 +165,6 @@ func linkTestService(t *testing.T) (svc *Service, conn *daemonConnection, link *
 	}
 	repo := &MockRepository{
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return projects, nil },
-		// The machine has no checkout on record yet: every project is new.
-		ListProjectDaemonsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemon, error) { return nil, nil },
-
 		RecordObservedProjectDaemonInScopeFunc: func(_ context.Context, _, _, path string, _ *string, _ *core.OrgScope) (bool, error) {
 			mu.Lock()
 			upserted = append(upserted, path)
@@ -175,7 +172,7 @@ func linkTestService(t *testing.T) (svc *Service, conn *daemonConnection, link *
 			return true, nil
 		},
 	}
-	svc = newTestService(repo, &MockMachineCheckouts{ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) { return nil, nil }})
+	svc = newTestServiceWithInstalls(repo, noInstalls(), &MockMachineCheckouts{ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) { return nil, nil }})
 	t.Cleanup(svc.Close)
 	ready = &readyRecorder{}
 	svc.AddConnectionListener(ready)

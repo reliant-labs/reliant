@@ -67,11 +67,11 @@ var _ CloneDispatcher = (*cloneStubControlPlane)(nil)
 func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.Repo, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
-	svc := NewTestProject(t, WithProjectDeps(Deps{
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{
 		Repo: repo, Projects: projectaccesstest.For(repo),
 		Router:       &createProjectRowRouter{resolveID: "daemon-abc"},
 		ControlPlane: cp,
-	}))
+	})))
 	return svc, repo, cleanup
 }
 
@@ -373,6 +373,8 @@ func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *conn
 		Logger:      slog.New(slog.DiscardHandler),
 		Config:      &typedconfig.Config{},
 		Repo:        repo,
+		Projects:    store.NewProjectExtStore(repo.ORM()),
+		Installs:    store.NewProjectDaemonExtStore(repo.ORM()),
 		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
 		LocalModels: store.NewDaemonExtStore(repo.ORM()),
 		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),

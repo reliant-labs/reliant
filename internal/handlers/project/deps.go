@@ -33,6 +33,20 @@ type Detachments interface {
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 }
 
+// ProjectLookups finds the user's project in one org (nil scope: any org).
+// Projects are unique per (org, user, path) and (org, user, remote_url).
+// store.ProjectExtStore satisfies it.
+type ProjectLookups interface {
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+}
+
+// DaemonInstalls lists the checkouts a machine holds.
+// store.ProjectDaemonExtStore satisfies it.
+type DaemonInstalls interface {
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+}
+
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's projects and chats that have
@@ -42,11 +56,6 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
-	// GetProjectByPathAndUserInScope and GetProjectByRemoteURLAndUserInScope
-	// find the user's project in one org (nil scope: any org). Projects are
-	// unique per (org, user, path) and (org, user, remote_url).
-	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
-	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
@@ -71,7 +80,6 @@ type Repository interface {
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	// GetDaemon completes projectcheckout.Reader: whose machine an install
 	// is, and what to call it in a sentence.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)

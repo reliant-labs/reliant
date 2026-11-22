@@ -302,8 +302,144 @@ func (m *MockNotices) ListPersonallyFundedTriggers(ctx context.Context, userID s
 // Compile-time check.
 var _ Notices = (*MockNotices)(nil)
 
+// forge:section MockStorage
+// forge:hash=a53eb5eec9e31f1e7542f9b63af81305822f498bfe5e52724501a41af38c57cc
+
+// MockStorage is a test mock for the Storage interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockStorage.<Method>Func not set" error.
+type MockStorage struct {
+	contractkit.Recorder
+	ListHeldWorktreesForUserFunc            func(context.Context, string) ([]*core.HeldWorktree, error)
+	MergeUnownedWorktreeCleanupMetadataFunc func(context.Context, string, func(m *core.CleanupMetadata) bool) (bool, error)
+	AdoptWorktreeDaemonFunc                 func(context.Context, string, string) (string, error)
+	GetWorktreeFunc                         func(context.Context, string) (*core.Worktree, error)
+	ListAttachedDaemonIDsForUserFunc        func(context.Context, string, time.Duration) ([]string, error)
+	ListDaemonStorageStateFunc              func(context.Context, string) (map[string]string, error)
+	ListLiveWorktreePathsForUserFunc        func(context.Context, string) ([]core.WorktreePath, error)
+	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
+	ListWorktreesForReclaimFunc             func(context.Context) ([]*core.ReclaimCandidate, error)
+	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
+	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
+	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
+}
+
+// ListHeldWorktreesForUser records the call and delegates to ListHeldWorktreesForUserFunc when set.
+func (m *MockStorage) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	m.Recorder.Record("ListHeldWorktreesForUser", ctx, userID)
+	if m.ListHeldWorktreesForUserFunc != nil {
+		return m.ListHeldWorktreesForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListHeldWorktreesForUser")
+}
+
+// MergeUnownedWorktreeCleanupMetadata records the call and delegates to MergeUnownedWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	m.Recorder.Record("MergeUnownedWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeUnownedWorktreeCleanupMetadataFunc != nil {
+		return m.MergeUnownedWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return false, contractkit.MockNotSet("MockStorage", "MergeUnownedWorktreeCleanupMetadata")
+}
+
+// AdoptWorktreeDaemon records the call and delegates to AdoptWorktreeDaemonFunc when set.
+func (m *MockStorage) AdoptWorktreeDaemon(ctx context.Context, id string, daemonID string) (string, error) {
+	m.Recorder.Record("AdoptWorktreeDaemon", ctx, id, daemonID)
+	if m.AdoptWorktreeDaemonFunc != nil {
+		return m.AdoptWorktreeDaemonFunc(ctx, id, daemonID)
+	}
+	return "", contractkit.MockNotSet("MockStorage", "AdoptWorktreeDaemon")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockStorage) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "GetWorktree")
+}
+
+// ListAttachedDaemonIDsForUser records the call and delegates to ListAttachedDaemonIDsForUserFunc when set.
+func (m *MockStorage) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
+	m.Recorder.Record("ListAttachedDaemonIDsForUser", ctx, userID, staleThreshold)
+	if m.ListAttachedDaemonIDsForUserFunc != nil {
+		return m.ListAttachedDaemonIDsForUserFunc(ctx, userID, staleThreshold)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListAttachedDaemonIDsForUser")
+}
+
+// ListDaemonStorageState records the call and delegates to ListDaemonStorageStateFunc when set.
+func (m *MockStorage) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {
+	m.Recorder.Record("ListDaemonStorageState", ctx, userID)
+	if m.ListDaemonStorageStateFunc != nil {
+		return m.ListDaemonStorageStateFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListDaemonStorageState")
+}
+
+// ListLiveWorktreePathsForUser records the call and delegates to ListLiveWorktreePathsForUserFunc when set.
+func (m *MockStorage) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
+	m.Recorder.Record("ListLiveWorktreePathsForUser", ctx, userID)
+	if m.ListLiveWorktreePathsForUserFunc != nil {
+		return m.ListLiveWorktreePathsForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListLiveWorktreePathsForUser")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockStorage) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListReposByProject")
+}
+
+// ListWorktreesForReclaim records the call and delegates to ListWorktreesForReclaimFunc when set.
+func (m *MockStorage) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
+	m.Recorder.Record("ListWorktreesForReclaim", ctx)
+	if m.ListWorktreesForReclaimFunc != nil {
+		return m.ListWorktreesForReclaimFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockStorage", "ListWorktreesForReclaim")
+}
+
+// MergeWorktreeCleanupMetadata records the call and delegates to MergeWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
+	m.Recorder.Record("MergeWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeWorktreeCleanupMetadataFunc != nil {
+		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return contractkit.MockNotSet("MockStorage", "MergeWorktreeCleanupMetadata")
+}
+
+// TryAdvisoryLock records the call and delegates to TryAdvisoryLockFunc when set.
+func (m *MockStorage) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
+	m.Recorder.Record("TryAdvisoryLock", ctx, key)
+	if m.TryAdvisoryLockFunc != nil {
+		return m.TryAdvisoryLockFunc(ctx, key)
+	}
+	return nil, false, contractkit.MockNotSet("MockStorage", "TryAdvisoryLock")
+}
+
+// UpdateWorktreeCleanupMetadata records the call and delegates to UpdateWorktreeCleanupMetadataFunc when set.
+func (m *MockStorage) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error {
+	m.Recorder.Record("UpdateWorktreeCleanupMetadata", ctx, id, metadata)
+	if m.UpdateWorktreeCleanupMetadataFunc != nil {
+		return m.UpdateWorktreeCleanupMetadataFunc(ctx, id, metadata)
+	}
+	return contractkit.MockNotSet("MockStorage", "UpdateWorktreeCleanupMetadata")
+}
+
+// Compile-time check.
+var _ Storage = (*MockStorage)(nil)
+
 // forge:section MockRepository
-// forge:hash=e6ab17e4d73d882a704887df4de8da790faf6a0feae576f4c4e7750a42071572
+// forge:hash=4085ccc457b3c2cdae9222d9ba124ad3f53f7b07aacece926f0e50b45e2fc307
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -313,144 +449,24 @@ var _ Notices = (*MockNotices)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	ListHeldWorktreesForUserFunc            func(context.Context, string) ([]*core.HeldWorktree, error)
-	ListDaemonStorageStateFunc              func(context.Context, string) (map[string]string, error)
-	MergeUnownedWorktreeCleanupMetadataFunc func(context.Context, string, func(m *core.CleanupMetadata) bool) (bool, error)
-	AdoptWorktreeDaemonFunc                 func(context.Context, string, string) (string, error)
-	GetWorktreeFunc                         func(context.Context, string) (*core.Worktree, error)
-	ListAttachedDaemonIDsForUserFunc        func(context.Context, string, time.Duration) ([]string, error)
-	ListLiveWorktreePathsForUserFunc        func(context.Context, string) ([]core.WorktreePath, error)
-	ListReposByProjectFunc                  func(context.Context, string) ([]*core.Repo, error)
-	ListWorktreesForReclaimFunc             func(context.Context) ([]*core.ReclaimCandidate, error)
-	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
-	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
-	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
-	GetWorkflowDraftBySlugFunc              func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlugFunc             func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetPresetBySlugFunc                     func(context.Context, string, string) (*db.Preset, error)
-	GetPresetBySlugAndProjectFunc           func(context.Context, string, string, string) (*db.Preset, error)
-	GetProjectWorkflowsJSONFunc             func(context.Context, string) (*string, error)
-	GetProjectPresetsJSONFunc               func(context.Context, string) (*string, error)
-	GetProjectMachineWorkflowsJSONFunc      func(context.Context, string, string) (*string, bool, error)
-	GetProjectMachinePresetsJSONFunc        func(context.Context, string, string) (*string, bool, error)
-	WorkflowSourceDiagnosticFunc            func(context.Context, string, string, string) (string, error)
-	AssignUnassignedOrgFunc                 func(context.Context, string, string) error
-	HasRejectedOrgKeysFunc                  func(context.Context) (bool, error)
-	ListRejectedOrgKeysInFunc               func(context.Context, []string) ([]core.ProviderAccount, error)
-	ListTriggersFunc                        func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	ListTriggerRegistrationsFunc            func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
-	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
-	ListDaemonsByUserIDFunc                 func(context.Context, string) ([]*db.Daemon, error)
-	GetChatFunc                             func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                          func(context.Context, string) (*db.Project, error)
-}
-
-// ListHeldWorktreesForUser records the call and delegates to ListHeldWorktreesForUserFunc when set.
-func (m *MockRepository) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	m.Recorder.Record("ListHeldWorktreesForUser", ctx, userID)
-	if m.ListHeldWorktreesForUserFunc != nil {
-		return m.ListHeldWorktreesForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListHeldWorktreesForUser")
-}
-
-// ListDaemonStorageState records the call and delegates to ListDaemonStorageStateFunc when set.
-func (m *MockRepository) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {
-	m.Recorder.Record("ListDaemonStorageState", ctx, userID)
-	if m.ListDaemonStorageStateFunc != nil {
-		return m.ListDaemonStorageStateFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonStorageState")
-}
-
-// MergeUnownedWorktreeCleanupMetadata records the call and delegates to MergeUnownedWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
-	m.Recorder.Record("MergeUnownedWorktreeCleanupMetadata", ctx, id, fn)
-	if m.MergeUnownedWorktreeCleanupMetadataFunc != nil {
-		return m.MergeUnownedWorktreeCleanupMetadataFunc(ctx, id, fn)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "MergeUnownedWorktreeCleanupMetadata")
-}
-
-// AdoptWorktreeDaemon records the call and delegates to AdoptWorktreeDaemonFunc when set.
-func (m *MockRepository) AdoptWorktreeDaemon(ctx context.Context, id string, daemonID string) (string, error) {
-	m.Recorder.Record("AdoptWorktreeDaemon", ctx, id, daemonID)
-	if m.AdoptWorktreeDaemonFunc != nil {
-		return m.AdoptWorktreeDaemonFunc(ctx, id, daemonID)
-	}
-	return "", contractkit.MockNotSet("MockRepository", "AdoptWorktreeDaemon")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockRepository) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorktree")
-}
-
-// ListAttachedDaemonIDsForUser records the call and delegates to ListAttachedDaemonIDsForUserFunc when set.
-func (m *MockRepository) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
-	m.Recorder.Record("ListAttachedDaemonIDsForUser", ctx, userID, staleThreshold)
-	if m.ListAttachedDaemonIDsForUserFunc != nil {
-		return m.ListAttachedDaemonIDsForUserFunc(ctx, userID, staleThreshold)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAttachedDaemonIDsForUser")
-}
-
-// ListLiveWorktreePathsForUser records the call and delegates to ListLiveWorktreePathsForUserFunc when set.
-func (m *MockRepository) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	m.Recorder.Record("ListLiveWorktreePathsForUser", ctx, userID)
-	if m.ListLiveWorktreePathsForUserFunc != nil {
-		return m.ListLiveWorktreePathsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListLiveWorktreePathsForUser")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
-}
-
-// ListWorktreesForReclaim records the call and delegates to ListWorktreesForReclaimFunc when set.
-func (m *MockRepository) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	m.Recorder.Record("ListWorktreesForReclaim", ctx)
-	if m.ListWorktreesForReclaimFunc != nil {
-		return m.ListWorktreesForReclaimFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListWorktreesForReclaim")
-}
-
-// MergeWorktreeCleanupMetadata records the call and delegates to MergeWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
-	m.Recorder.Record("MergeWorktreeCleanupMetadata", ctx, id, fn)
-	if m.MergeWorktreeCleanupMetadataFunc != nil {
-		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
-	}
-	return contractkit.MockNotSet("MockRepository", "MergeWorktreeCleanupMetadata")
-}
-
-// TryAdvisoryLock records the call and delegates to TryAdvisoryLockFunc when set.
-func (m *MockRepository) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	m.Recorder.Record("TryAdvisoryLock", ctx, key)
-	if m.TryAdvisoryLockFunc != nil {
-		return m.TryAdvisoryLockFunc(ctx, key)
-	}
-	return nil, false, contractkit.MockNotSet("MockRepository", "TryAdvisoryLock")
-}
-
-// UpdateWorktreeCleanupMetadata records the call and delegates to UpdateWorktreeCleanupMetadataFunc when set.
-func (m *MockRepository) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error {
-	m.Recorder.Record("UpdateWorktreeCleanupMetadata", ctx, id, metadata)
-	if m.UpdateWorktreeCleanupMetadataFunc != nil {
-		return m.UpdateWorktreeCleanupMetadataFunc(ctx, id, metadata)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateWorktreeCleanupMetadata")
+	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetPresetBySlugFunc                func(context.Context, string, string) (*db.Preset, error)
+	GetPresetBySlugAndProjectFunc      func(context.Context, string, string, string) (*db.Preset, error)
+	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
+	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
+	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
+	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
+	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
+	AssignUnassignedOrgFunc            func(context.Context, string, string) error
+	HasRejectedOrgKeysFunc             func(context.Context) (bool, error)
+	ListRejectedOrgKeysInFunc          func(context.Context, []string) ([]core.ProviderAccount, error)
+	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
+	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
+	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
+	ListDaemonsByUserIDFunc            func(context.Context, string) ([]*db.Daemon, error)
+	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
+	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
 }
 
 // GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.

@@ -85,7 +85,7 @@ func TestGeneratedStoreRoundTripsAgainstPostgres(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateProjectDaemon: %v", err)
 	}
-	listed, err := env.Repo.ListProjectDaemonsForDaemon(ctx, "daemon-generated")
+	listed, err := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "daemon-generated")
 	if err != nil {
 		t.Fatalf("Repo.ListProjectDaemonsForDaemon: %v", err)
 	}
