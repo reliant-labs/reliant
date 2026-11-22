@@ -57725,6 +57725,17 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Rows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Rows",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Settler",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Settler",
       "methods": [],

@@ -1947,17 +1947,6 @@ func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
-// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
-// key, or (nil, nil) when there is none.
-func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
-	// An empty key means the caller opted out of idempotency, not that it is
-	// asking about the rows that happen to have no key.
-	if projectID == "" || key == "" {
-		return nil, nil
-	}
-	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
-}
-
 // GetLiveWorktreeByName returns the project's unarchived worktree called
 // name, or (nil, nil). At most one exists.
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
@@ -2061,13 +2050,6 @@ func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
