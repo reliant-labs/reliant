@@ -87,7 +87,7 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=27f8ea5ae6c53b6fd22b55cad1d16e61257572d1d57dc5dc6b46dd07c77ddfd3
+// forge:hash=3b14e925f1e1dba5bc284ccfadc6596ffbde75fa792019a7042c95de74f0d819
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -136,8 +136,6 @@ type MockRepository struct {
 	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
 	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc   func(context.Context, string) ([]*core.ProjectDaemon, error)
-	SetAutomationTokenFunc             func(context.Context, string, string, string) error
-	DeleteAutomationTokenFunc          func(context.Context, string, string) error
 	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
 }
 
@@ -490,24 +488,6 @@ func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, proje
 		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
-}
-
-// SetAutomationToken records the call and delegates to SetAutomationTokenFunc when set.
-func (m *MockRepository) SetAutomationToken(ctx context.Context, userID string, daemonID string, token string) error {
-	m.Recorder.Record("SetAutomationToken", ctx, userID, daemonID, token)
-	if m.SetAutomationTokenFunc != nil {
-		return m.SetAutomationTokenFunc(ctx, userID, daemonID, token)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetAutomationToken")
-}
-
-// DeleteAutomationToken records the call and delegates to DeleteAutomationTokenFunc when set.
-func (m *MockRepository) DeleteAutomationToken(ctx context.Context, userID string, daemonID string) error {
-	m.Recorder.Record("DeleteAutomationToken", ctx, userID, daemonID)
-	if m.DeleteAutomationTokenFunc != nil {
-		return m.DeleteAutomationTokenFunc(ctx, userID, daemonID)
-	}
-	return contractkit.MockNotSet("MockRepository", "DeleteAutomationToken")
 }
 
 // ListTriggers records the call and delegates to ListTriggersFunc when set.

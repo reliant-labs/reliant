@@ -2294,27 +2294,6 @@ func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *stri
 	return r.UpdateSetting(ctx, setting)
 }
 
-func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error) {
-	if userID == "" || daemonID == "" {
-		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.GetAutomationToken(ctx, userID, daemonID)
-}
-
-func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.SetAutomationToken(ctx, userID, daemonID, token)
-}
-
-func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.DeleteAutomationToken(ctx, userID, daemonID)
-}
-
 // ==================== Visibility Methods ====================
 
 // ListVisibilityOverrides returns all user overrides for a given item type.
@@ -4541,11 +4520,10 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// EnableCredentialSealing gives the api_keys and provider_accounts stores
-// their vault; without one, automation tokens and provider credentials cannot
-// be read or written. Call once at boot, before serving.
+// EnableCredentialSealing gives the provider_accounts store its vault; without
+// one, provider credentials cannot be read or written. Call once at boot,
+// before serving.
 func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
-	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
 }
 

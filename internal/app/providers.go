@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -648,6 +649,20 @@ type VaultDeps struct {
 // generated when self-hosted. A missing or malformed key fails startup.
 func NewVault(d VaultDeps) (vault.Service, error) {
 	return db.BootVault(d.Ctx, d.DB, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
+}
+
+// AutomationTokensDeps is the database the delegated automation tokens live in and
+// the vault that seals them.
+type AutomationTokensDeps struct {
+	DB    *db.Repo
+	Vault vault.Service
+}
+
+// NewAutomationTokens is the only path to the api_keys table: the api-server's
+// trigger handler stores a minted daemon:resume token through it and the worker's
+// router reads it back.
+func NewAutomationTokens(d AutomationTokensDeps) (automationtokens.Service, error) {
+	return automationtokens.NewInstrumented(automationtokens.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
 }
 
 // PauseServiceDeps is what pauses and resumes runs.

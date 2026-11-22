@@ -21,6 +21,7 @@
         "Approval",
         "Attachment",
         "AutomationTakeover",
+        "AutomationTokens",
         "Background",
         "Catalog",
         "Chat",
@@ -489,6 +490,7 @@
         "AccountRecorder",
         "AccountUsagePoller",
         "AgentRuns",
+        "AutomationTokens",
         "ChatUpdateHub",
         "DBRepo",
         "Database",
@@ -53872,6 +53874,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "AutomationTokens",
+      "name": "AutomationTokens",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewAutomationTokens"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Background",
       "name": "Background",
       "kind": "component",
@@ -55516,6 +55530,19 @@
       ],
       "providers": [
         "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTokens",
+      "field": "Vault",
+      "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
       ],
       "resolution": "composition_expression"
     },
@@ -57193,6 +57220,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationKeyStore",
+      "methods": [],
+      "candidates": [
+        "AutomationTokens"
+      ],
+      "providers": [
+        "AutomationTokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Catalog",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.IntegrationCatalog",
       "methods": [],
@@ -57368,6 +57408,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "WorkerDaemonRouter",
+      "field": "AutomationTokens",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "AutomationTokens"
+      ],
+      "providers": [
+        "AutomationTokens"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "WorkerIntegrationCredentials",

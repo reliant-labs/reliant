@@ -51,6 +51,11 @@ type Deps struct {
 	// forge:optional-dep
 	ControlPlane AutomationTokens
 
+	// AutomationKeys holds each daemon's delegated token the minted one is
+	// stored in (credentials/automationtokens). Required with ControlPlane.
+	// forge:optional-dep
+	AutomationKeys AutomationKeyStore
+
 	// The inbound kinds (webhook, integration and workflow-event triggers).
 	// Each is optional; a kind whose dependency is missing is rejected with
 	// Unavailable at write time rather than stored unable to fire.
@@ -181,6 +186,9 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
 	}
+	if d.ControlPlane != nil && d.AutomationKeys == nil {
+		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
+	}
 	return nil
 }
 
@@ -212,7 +220,7 @@ func New(deps Deps) (*Service, error) {
 		s.publicURL = strings.TrimSpace(deps.Integrations.GetPublicUrl())
 	}
 	if deps.ControlPlane != nil {
-		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.Repo, triggers: deps.Repo}
+		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.AutomationKeys, triggers: deps.Repo}
 	}
 	return s, nil
 }
