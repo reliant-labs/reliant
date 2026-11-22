@@ -141,8 +141,8 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if _, err := f.env.Repo.GetContentBlockByToolCallID(ctx, "call-absent"); err == nil {
 		t.Fatal("Repo.GetContentBlockByToolCallID(absent) = nil error; want not found")
 	}
-	if res, err := f.env.Repo.GetToolResultBlock(ctx, "call-n2-b2"); err != nil || res == nil || res.ID != "n2-b2" {
-		t.Fatalf("Repo.GetToolResultBlock = %+v, %v; want n2-b2", res, err)
+	if res, err := store.FindToolBlock(ctx, f.env.ORM, "call-n2-b2", toolResultT); err != nil || res == nil || res.ID != "n2-b2" {
+		t.Fatalf("FindToolBlock = %+v, %v; want n2-b2", res, err)
 	}
 
 	// The node columns: "" on the core type is NULL.
@@ -151,8 +151,8 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if err := store.InsertContentBlock(ctx, o, noded); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := f.env.Repo.GetToolResultBlock(ctx, *noded.ToolCallID); err != nil || res == nil || res.NodeID != "node" || res.NodePath != "a/b" {
-		t.Fatalf("Repo.GetToolResultBlock(noded) = %+v, %v; want its node", res, err)
+	if res, err := store.FindToolBlock(ctx, f.env.ORM, *noded.ToolCallID, toolResultT); err != nil || res == nil || res.NodeID != "node" || res.NodePath != "a/b" {
+		t.Fatalf("FindToolBlock(noded) = %+v, %v; want its node", res, err)
 	}
 	var nullNodes int
 	if err := f.env.SQL.QueryRowContext(ctx, `SELECT count(*) FROM message_content_blocks WHERE message_id = 'm0' AND node_id IS NULL`).Scan(&nullNodes); err != nil || nullNodes != 3 {

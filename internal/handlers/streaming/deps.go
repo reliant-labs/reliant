@@ -60,5 +60,12 @@ type Repository interface {
 	// GetAttachmentsByIDs and GetContextUsage are called directly too; the
 	// roles below already declare them.
 	threads.Repository
-	messageproto.Reader
+	messageproto.ToolCallReader
+}
+
+// Senders titles the senders of the messages a read assembles (a sender that
+// is another run's main thread is titled by that run).
+// store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }

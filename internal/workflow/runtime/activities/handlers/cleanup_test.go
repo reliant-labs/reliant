@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // setupTestRepo creates an in-memory test database
@@ -133,7 +134,7 @@ func TestCleanupActivity_CancelsApprovals(t *testing.T) {
 	require.Len(t, pending, 2)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 2, output.ApprovalsCancelled)
@@ -162,7 +163,7 @@ func TestCleanupActivity_NoApprovals(t *testing.T) {
 	chatID := createTestChat(t, repo)
 
 	// Run cleanup activity (no approvals to cancel)
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ApprovalsCancelled)
@@ -216,19 +217,19 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 	require.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL, blocks[0].BlockType)
 
 	// Verify no tool_result exists
-	resultBlock, err := repo.GetToolResultBlock(ctx, toolCallID)
+	resultBlock, err := store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	require.NoError(t, err)
 	require.Nil(t, resultBlock, "should have no tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled, "should have cancelled 1 orphaned tool call")
 	require.Equal(t, 0, output.ApprovalsCancelled)
 
 	// Verify a tool_result block was persisted (new behavior)
-	resultBlock, err = repo.GetToolResultBlock(ctx, toolCallID)
+	resultBlock, err = store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	require.NoError(t, err)
 	require.NotNil(t, resultBlock, "should have created a tool_result block")
 	require.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, resultBlock.BlockType)
@@ -332,12 +333,12 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the tool_result exists
-	resultBlock, err := repo.GetToolResultBlock(ctx, toolCallID)
+	resultBlock, err := store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	require.NoError(t, err)
 	require.NotNil(t, resultBlock, "should have tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled, "should NOT cancel tool calls that have results")
@@ -377,7 +378,7 @@ func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ApprovalsCancelled, "Only the pending approval should be cancelled")
@@ -431,7 +432,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 
 	// First cleanup - should create repair
 	output1, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
@@ -439,7 +440,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 	require.Equal(t, 1, output1.ToolCallsCancelled)
 
 	// Verify tool_result was created
-	resultBlock, err := repo.GetToolResultBlock(ctx, toolCallID)
+	resultBlock, err := store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	require.NoError(t, err)
 	require.NotNil(t, resultBlock)
 
@@ -450,7 +451,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 
 	// Verify only one tool_result exists (GetToolResultBlock returns first match)
 	// We can verify by checking there's still just one result block
-	resultBlock2, err := repo.GetToolResultBlock(ctx, toolCallID)
+	resultBlock2, err := store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	require.NoError(t, err)
 	require.NotNil(t, resultBlock2)
 	require.Equal(t, resultBlock.ID, resultBlock2.ID, "should return the same result block")
@@ -504,14 +505,14 @@ func TestCleanupActivity_MultipleOrphanedToolCalls(t *testing.T) {
 	}
 
 	// Run cleanup
-	activity := NewCleanupActivity(repo)
+	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM())})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 3, output.ToolCallsCancelled, "should repair all 3 orphaned tool calls")
 
 	// Verify all tool_results were created
 	for _, toolCallID := range toolCallIDs {
-		resultBlock, err := repo.GetToolResultBlock(ctx, toolCallID)
+		resultBlock, err := store.FindToolBlock(ctx, repo.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 		require.NoError(t, err)
 		require.NotNil(t, resultBlock, "should have tool_result for %s", toolCallID)
 		require.NotNil(t, resultBlock.IsError)

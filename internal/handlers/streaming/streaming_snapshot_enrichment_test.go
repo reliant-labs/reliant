@@ -85,7 +85,7 @@ func TestChatSnapshot_CarriesSpawnChildWorkflowID(t *testing.T) {
 		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
@@ -131,7 +131,7 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 		Status:     db.ToolCallStatusExecuting,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock

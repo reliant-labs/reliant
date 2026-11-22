@@ -28,6 +28,9 @@ type Deps struct {
 	// call plus the roles of threads.Service and messageproto, which the
 	// snapshot reads messages and tool calls through.
 	Repo Repository
+	// Senders titles the senders of the messages a snapshot assembles
+	// (store.ThreadExtStore satisfies it).
+	Senders Senders
 	// SpawnCalls maps child threads to their spawn tool calls for the
 	// reconnect snapshot.
 	SpawnCalls SpawnCalls
@@ -90,6 +93,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("streaming: Deps.Repo is required")
+	}
+	if d.Senders == nil {
+		return fmt.Errorf("streaming: Deps.Senders is required")
 	}
 	if d.SpawnCalls == nil {
 		return fmt.Errorf("streaming: Deps.SpawnCalls is required")

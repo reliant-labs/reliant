@@ -139,7 +139,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()),
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 			Temporal: temporal,
 		},
 		// TerminateChat delegates execution state and reconciliation to the

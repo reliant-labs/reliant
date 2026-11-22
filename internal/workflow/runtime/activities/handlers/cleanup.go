@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -42,13 +43,15 @@ type CleanupOutput struct {
 // - Cleaning up any pending tool execution requests
 // - Notifying the UI of the cancelled state
 type CleanupActivity struct {
-	repo CleanupStore
+	repo       CleanupStore
+	toolBlocks ToolResultFinder
 }
 
 // NewCleanupActivity creates a new CleanupActivity
-func NewCleanupActivity(repo CleanupStore) *CleanupActivity {
+func NewCleanupActivity(deps CleanupDeps) *CleanupActivity {
 	return &CleanupActivity{
-		repo: repo,
+		repo:       deps.Store,
+		toolBlocks: deps.ToolBlocks,
 	}
 }
 
@@ -179,7 +182,7 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 			}
 
 			// Check if there's a matching tool_result
-			resultBlock, err := a.repo.GetToolResultBlock(ctx, toolCallID)
+			resultBlock, err := a.toolBlocks.FindToolBlock(ctx, toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 			if err != nil {
 				logging.ErrorContext(ctx, "[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 				continue

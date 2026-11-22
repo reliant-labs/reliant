@@ -88,7 +88,7 @@ func TestChatSnapshot_ThreadCompletingDuringSnapshotIsNotShownRunning(t *testing
 	}
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, raceTestUserID)
 
-	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: &MockSpawnCalls{}})).buildChatSnapshotByID(ctx, raceTestChatID)
+	snapshot, latestSeq, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: &MockSenders{}, SpawnCalls: &MockSpawnCalls{}})).buildChatSnapshotByID(ctx, raceTestChatID)
 	require.NoError(t, err)
 	require.Equal(t, int64(5), latestSeq)
 

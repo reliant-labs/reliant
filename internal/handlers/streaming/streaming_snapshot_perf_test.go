@@ -314,7 +314,7 @@ func TestChatOpenLargeChatPerf(t *testing.T) {
 		require.NoError(t, err)
 	}
 	repo := perfRepo(t, dsn, rtt/2)
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
 
 	// The chat_snapshot.* / chat_stream.* spans, averaged per name.
 	recorder := tracetest.NewSpanRecorder()

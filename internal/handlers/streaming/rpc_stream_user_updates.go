@@ -571,7 +571,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	}
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.display_lookups", func(ctx context.Context) error {
-			lookups = messageproto.LoadDisplayLookups(ctx, s.deps.Repo, displayable, messageBlocks)
+			lookups = messageproto.LoadDisplayLookups(ctx, messageproto.NewReader(s.deps.Repo, s.deps.Senders), displayable, messageBlocks)
 			return nil
 		})
 		return nil

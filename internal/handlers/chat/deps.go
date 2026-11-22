@@ -13,6 +13,8 @@ import (
 	"context"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -37,6 +39,21 @@ type OrgResolver interface {
 type Questions interface {
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+}
+
+// Messages reads one message by id and a thread's newest turn: the send's
+// idempotency check asks whether a client message id is already taken and
+// whether anything answered it. store.MessageExtStore satisfies it.
+type Messages interface {
+	FindMessage(ctx context.Context, id string) (*core.Message, error)
+	LatestTurnInThread(ctx context.Context, threadID string) (*core.Message, error)
+}
+
+// ToolBlocks reads tool-call and tool-result content blocks by tool call id.
+// store.MessageContentBlockExtStore satisfies it.
+type ToolBlocks interface {
+	FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+	ListToolBlocks(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
 }
 
 // Spawns reads the spawn tree a branch inherits and a resumed run is rebuilt
@@ -93,7 +110,6 @@ type Repository interface {
 	ReviveThread(ctx context.Context, threadID string) (int64, error)
 	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
-	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
 	// ClaimUserActivation records a message as the user's activation (their
 	// first typed message ever) once, durably, and reports whether this call
@@ -108,8 +124,6 @@ type Repository interface {
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
-	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
@@ -170,5 +184,12 @@ type Repository interface {
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore
-	messageproto.Reader
+	messageproto.ToolCallReader
+}
+
+// Senders titles the senders of the messages a read assembles (a sender that
+// is another run's main thread is titled by that run).
+// store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }

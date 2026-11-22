@@ -287,9 +287,6 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	if awaits, err := f.env.Repo.ThreadAwaitsReply(ctx, f.main); err != nil || !awaits {
 		t.Fatalf("Repo.ThreadAwaitsReply = %v, %v; want true", awaits, err)
 	}
-	if latest, err := f.env.Repo.IsLatestTurnInThread(ctx, f.main, "m4"); err != nil || !latest {
-		t.Fatalf("Repo.IsLatestTurnInThread(m4) = %v, %v; want true", latest, err)
-	}
 	if none, err := store.LatestMessageInThread(ctx, o, "no-thread"); err != nil || none != nil {
 		t.Fatalf("LatestMessageInThread(empty) = %v, %v; want nil", none, err)
 	}

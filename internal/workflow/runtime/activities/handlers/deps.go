@@ -160,6 +160,20 @@ type CallLLMStore interface {
 	daemonplacement.Installs
 }
 
+// ToolResultFinder reads the tool_result block a tool call was answered with.
+// store.MessageContentBlockExtStore satisfies it.
+type ToolResultFinder interface {
+	FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+}
+
+// CleanupDeps is what a CleanupActivity is built from.
+type CleanupDeps struct {
+	// Store is what the activity reads and writes.
+	Store CleanupStore
+	// ToolBlocks finds the result a tool call already has.
+	ToolBlocks ToolResultFinder
+}
+
 // CleanupStore is what CleanupActivity reads and writes when it closes out a
 // run: pending approvals, unanswered tool calls and their synthetic results.
 type CleanupStore interface {
@@ -170,7 +184,6 @@ type CleanupStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
-	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
 	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error

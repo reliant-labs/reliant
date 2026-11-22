@@ -1075,6 +1075,9 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
+		Messages:    store.NewMessageExtStore(g.Database().ORM()),
+		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
@@ -1218,9 +1221,10 @@ func (g *Graph) newMCP() (*mcp.Service, error) {
 // newMessage constructs the message handler (internal/handlers/message).
 func (g *Graph) newMessage() (*message.Service, error) {
 	return message.New(message.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Repo:    g.Database(),
+		Senders: store.NewThreadExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1402,6 +1406,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),

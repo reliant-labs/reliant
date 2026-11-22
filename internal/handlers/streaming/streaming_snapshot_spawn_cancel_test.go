@@ -104,7 +104,7 @@ func TestChatSnapshot_ThreadUpdateCarriesSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -194,7 +194,7 @@ func TestChatSnapshot_ResumedSpawnUsesNewestToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, firstWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -266,7 +266,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stated)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Senders: store.NewThreadExtStore(repo.ORM()), SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	for _, u := range snapshot.OtherUpdates {
