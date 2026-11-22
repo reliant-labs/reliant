@@ -24,6 +24,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -1030,15 +1031,24 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 }
 
 // newAccount constructs the account handler (internal/handlers/account). Its
-// purge runs on the raw *sql.DB: an ordered multi-statement transaction across
-// every user-owned table, which the per-entity Repository surface cannot
-// express. The control plane is wired only when this deployment HAS one:
-// self-hosted reliant has no platform account to delete.
+// purge is an ordered multi-statement transaction across every user-owned
+// table, with each credential package deleting its own rows inside it. The
+// control plane is wired only when this deployment HAS one: self-hosted
+// reliant has no platform account to delete.
 func (g *Graph) newAccount() (*account.Service, error) {
+	purger, err := accountpurge.New(accountpurge.Deps{
+		DB:          g.Database().ORM(),
+		Automation:  g.AutomationTokens(),
+		Accounts:    g.ProviderAccounts(),
+		Connections: g.ConnectionVault(),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return account.New(account.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		SQL:          g.Database().DB.SQLDB(),
+		Purger:       purger,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
@@ -1521,10 +1531,11 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 // newUsage constructs the usage handler (internal/handlers/usage).
 func (g *Graph) newUsage() (*usage.Service, error) {
 	return usage.New(usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.ProviderAccounts(),
+		Now:      nil, // optional — no provider
 	})
 }
 
@@ -1621,11 +1632,12 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // through control-plane (OrgUsageListPrices; nil shows no estimates).
 func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 	return org_usage.New(org_usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Prices: OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.ProviderAccounts(),
+		Prices:   OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Now:      nil, // optional — no provider
 	})
 }
 

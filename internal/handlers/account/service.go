@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -22,11 +22,9 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// SQL is the raw database handle the purge runs on. Not a Repository:
-	// the purge is an ordered multi-statement transaction across 23 tables,
-	// which is not expressible through the per-entity Repository surface and
-	// should not be smeared across it.
-	SQL *sql.DB
+	// Purger previews and runs the account purge: an ordered multi-statement transaction
+	// across every user-owned table, with each credential package deleting its own rows.
+	Purger Purger
 
 	// ControlPlane deletes the caller's platform account (billing identity,
 	// daemons, PII) before the local purge, and quotes their wallet for the
@@ -35,6 +33,12 @@ type Deps struct {
 	// account to delete, and deletes only local data.
 	// forge:optional-dep
 	ControlPlane ControlPlane
+}
+
+// Purger is the slice of accountpurge.Purger account deletion uses.
+type Purger interface {
+	Preview(ctx context.Context, userID string) (accountpurge.Counts, error)
+	Purge(ctx context.Context, userID string) (int64, error)
 }
 
 // ControlPlane is the slice of controlplane.Service account deletion uses.
@@ -54,8 +58,8 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("account: Deps.Config is required")
 	}
-	if d.SQL == nil {
-		return fmt.Errorf("account: Deps.SQL is required")
+	if d.Purger == nil {
+		return fmt.Errorf("account: Deps.Purger is required")
 	}
 	return nil
 }
