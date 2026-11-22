@@ -47,7 +47,6 @@ type machineStores struct {
 	store.TriggerEventExtStore
 	store.TriggerExtStore
 	store.ChatsWithActivityExtStore
-	store.MachinePoolExtStore
 }
 
 func newMachineRegistry(db orm.Context) machineRegistry {
@@ -56,7 +55,6 @@ func newMachineRegistry(db orm.Context) machineRegistry {
 		TriggerEventExtStore:      store.NewTriggerEventExtStore(db),
 		TriggerExtStore:           store.NewTriggerExtStore(db),
 		ChatsWithActivityExtStore: store.NewChatsWithActivityExtStore(db),
-		MachinePoolExtStore:       store.NewMachinePoolExtStore(db),
 	}
 }
 
