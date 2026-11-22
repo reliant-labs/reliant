@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
@@ -313,7 +314,7 @@ func TestHasFreshIntegrationAccess(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := prBase
-	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "99", at,
+	if err := store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), storetest.SeedUserID, "github", "99", at,
 		[]core.IntegrationAccessGrant{{AccountKey: "inst", ResourceKey: "42"}}); err != nil {
 		t.Fatal(err)
 	}

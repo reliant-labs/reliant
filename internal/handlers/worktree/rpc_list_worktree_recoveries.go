@@ -13,7 +13,7 @@ import (
 
 func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *connect.Request[pb.ListWorktreeRecoveriesRequest]) (*connect.Response[pb.ListWorktreeRecoveriesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	rows, err := s.deps.Repo.ListWorktreeRecoveries(ctx, userID, req.Msg.GetProjectId())
+	rows, err := s.deps.Recoveries.ListWorktreeRecoveries(ctx, userID, req.Msg.GetProjectId())
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

@@ -30,17 +30,21 @@ type ShortcutsConfig struct {
 
 // Shortcut represents a single keyboard shortcut.
 //
-// Binding is the desktop (Electron) default. WebBinding overrides it in a
-// browser tab, where many chords are reserved — see config/shortcuts.yaml for
-// the conflict rules. When WebBinding is empty the same chord is used on both.
+// Binding is the shortcut on every surface, desktop app and browser tab alike.
+// WebBinding overrides it in a browser tab, and is discouraged — see
+// config/shortcuts.yaml for the rules. When WebBinding is empty the same chord
+// is used on both. DesktopAliases are older chords that also fire in the
+// desktop app, so a shortcut can leave a chord the browser reserves without
+// breaking desktop muscle memory.
 type Shortcut struct {
-	ID          string `yaml:"id"`
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Category    string `yaml:"category"`
-	Binding     string `yaml:"binding"`
-	WebBinding  string `yaml:"web_binding"`
-	Handler     string `yaml:"handler"`
+	ID             string   `yaml:"id"`
+	Name           string   `yaml:"name"`
+	Description    string   `yaml:"description"`
+	Category       string   `yaml:"category"`
+	Binding        string   `yaml:"binding"`
+	WebBinding     string   `yaml:"web_binding"`
+	DesktopAliases []string `yaml:"desktop_aliases"`
+	Handler        string   `yaml:"handler"`
 	// Context names the focus surface this shortcut belongs to. Defaults to
 	// "global" when omitted.
 	Context string `yaml:"context"`
@@ -95,11 +99,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error parsing YAML: %v\n", err)
 		os.Exit(1)
 	}
-	for _, s := range config.Shortcuts {
-		if s.DesktopOnly && s.WebBinding != "" {
-			fmt.Fprintf(os.Stderr, "Error: shortcut %q is desktop_only and also declares a web_binding\n", s.ID)
-			os.Exit(1)
-		}
+	if err := validate(config); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(tsOutput), 0o755); err != nil {
@@ -134,6 +136,29 @@ func main() {
 	}
 
 	fmt.Printf("Generated shortcuts: %s (%d shortcuts), %s\n", tsOutput, len(config.Shortcuts), mdOutput)
+}
+
+// validate rejects declarations the TypeScript side cannot represent
+// faithfully. The chord rules themselves (no hard-reserved binding, no
+// conflicts) are enforced by frontends/web/src/lib/keyboard/__tests__/bindings.test.ts,
+// which knows the browser's reserved set.
+func validate(config ShortcutsConfig) error {
+	for _, s := range config.Shortcuts {
+		if s.DesktopOnly && s.WebBinding != "" {
+			return fmt.Errorf("shortcut %q is desktop_only and also declares a web_binding", s.ID)
+		}
+		seen := map[string]bool{s.Binding: true}
+		for _, alias := range s.DesktopAliases {
+			if strings.TrimSpace(alias) == "" {
+				return fmt.Errorf("shortcut %q declares an empty desktop alias", s.ID)
+			}
+			if seen[alias] {
+				return fmt.Errorf("shortcut %q repeats %q in desktop_aliases", s.ID, alias)
+			}
+			seen[alias] = true
+		}
+	}
+	return nil
 }
 
 func generateTypeScript(config ShortcutsConfig) string {
@@ -185,6 +210,13 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
 			escapeJS(s.Binding), escapeJS(s.EffectiveWebBinding()),
 			s.EffectiveContext(), s.Handler)
 
+		if len(s.DesktopAliases) > 0 {
+			quoted := make([]string, len(s.DesktopAliases))
+			for i, alias := range s.DesktopAliases {
+				quoted[i] = "'" + escapeJS(alias) + "'"
+			}
+			fmt.Fprintf(&sb, ",\n    desktopAliases: [%s]", strings.Join(quoted, ", "))
+		}
 		if s.AllowInInput {
 			sb.WriteString(",\n    allowInInput: true")
 		}
@@ -234,11 +266,15 @@ weight: 60
 
 Reliant includes keyboard shortcuts for common actions. All shortcuts can be customized in Settings → Keyboard Shortcuts.
 
-Some shortcuts differ between the desktop app and the browser. Browsers reserve
-chords like ` + "`Cmd+T`" + ` and ` + "`Cmd+W`" + ` for their own tabs and windows and will not
-release them to a web page, so those actions use a different chord on the web —
-usually a ` + "`Cmd+K`" + ` sequence. Where the **Browser** column is blank the shortcut
-is the same on both.
+The shortcuts are the same in the desktop app and in a browser tab. ` + "`Cmd`" + ` is
+` + "`Ctrl`" + ` on Windows and Linux.
+
+Where a browser has its own use for a chord that a web page may take, like
+` + "`Cmd+P`" + ` (print) or ` + "`Cmd+L`" + ` (the address bar), Reliant takes it. Chords a
+browser never releases to a web page, like ` + "`Cmd+T`" + ` and ` + "`Cmd+W`" + `, are not
+used; those actions have a chord that works everywhere — often a ` + "`Cmd+K`" + `
+sequence — and the desktop app also keeps the familiar chord, listed under
+**Also in the desktop app**.
 
 A ` + "`Cmd+K`" + ` sequence's second key can be typed with ` + "`Cmd`" + ` released or still held.
 
@@ -258,8 +294,8 @@ A ` + "`Cmd+K`" + ` sequence's second key can be typed with ` + "`Cmd`" + ` rele
 		}
 
 		fmt.Fprintf(&sb, "## %s\n\n", cat)
-		sb.WriteString("| Desktop | Browser | Action |\n")
-		sb.WriteString("|---------|---------|--------|\n")
+		sb.WriteString("| Shortcut | Also in the desktop app | Action |\n")
+		sb.WriteString("|----------|-------------------------|--------|\n")
 
 		// Sort by name within category
 		sort.Slice(shortcuts, func(i, j int) bool {
@@ -267,14 +303,17 @@ A ` + "`Cmd+K`" + ` sequence's second key can be typed with ` + "`Cmd`" + ` rele
 		})
 
 		for _, s := range shortcuts {
-			desktop := fmt.Sprintf("`%s`", formatBindingForDocs(s.Binding))
-			web := ""
+			binding := fmt.Sprintf("`%s`", formatBindingForDocs(s.Binding))
 			if s.DesktopOnly {
-				web = "desktop app only"
+				binding += " (desktop app only)"
 			} else if s.WebBinding != "" && s.WebBinding != s.Binding {
-				web = fmt.Sprintf("`%s`", formatBindingForDocs(s.WebBinding))
+				binding += fmt.Sprintf(" (browser: `%s`)", formatBindingForDocs(s.WebBinding))
 			}
-			fmt.Fprintf(&sb, "| %s | %s | %s |\n", desktop, web, s.Name)
+			aliases := make([]string, len(s.DesktopAliases))
+			for i, alias := range s.DesktopAliases {
+				aliases[i] = fmt.Sprintf("`%s`", formatBindingForDocs(alias))
+			}
+			fmt.Fprintf(&sb, "| %s | %s | %s |\n", binding, strings.Join(aliases, ", "), s.Name)
 		}
 		sb.WriteString("\n")
 	}

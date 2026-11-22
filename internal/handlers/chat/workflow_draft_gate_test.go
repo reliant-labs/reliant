@@ -7,11 +7,13 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A draft is never runnable (specs/workflow-draft-lifecycle.md). The request-
@@ -48,7 +50,7 @@ nodes:
 	}))
 
 	t.Run("StartChat", func(t *testing.T) {
-		chatService := &Service{deps: Deps{Repo: repo}}
+		chatService := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
 		_, err := chatService.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 			ProjectId: projectID,
 			Workflow:  "gate-draft",

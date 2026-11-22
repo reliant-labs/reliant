@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -24,6 +25,20 @@ const (
 	// resource's org asked to make it private.
 	ReasonOrgAdminRequired = "org_admin_required"
 )
+
+// applyShareChange sets the visibility and records its share event in one
+// transaction. It reports whether anything changed: a no-op, a missing row, and
+// a row whose owner or org no longer match write nothing. Deciding whether the
+// actor may make the change is the caller's (internal/authz).
+func (s *Service) applyShareChange(ctx context.Context, c core.ShareChange) (bool, error) {
+	var changed bool
+	err := s.deps.Tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		changed, err = s.deps.Shares.ApplyShareChange(ctx, c)
+		return err
+	})
+	return changed, err
+}
 
 // visibilityFrom is the visibility a request asks for.
 func visibilityFrom(v pb.ResourceVisibility) (core.Visibility, error) {

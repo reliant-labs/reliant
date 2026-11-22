@@ -8375,30 +8375,6 @@ type GetCurrentUserComputeUsageResponse struct {
 	// False means every metered field below carries NO information and must
 	// not be rendered as a value.
 	UsageMeasured bool `protobuf:"varint,10,opt,name=usage_measured,json=usageMeasured,proto3" json:"usage_measured,omitempty"`
-	// The plan allowance for this period, in small-daemon-seconds.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	IncludedSmallDaemonSeconds int64 `protobuf:"varint,11,opt,name=included_small_daemon_seconds,json=includedSmallDaemonSeconds,proto3" json:"included_small_daemon_seconds,omitempty"`
-	// Consumed this period: drained counter + undrained segments.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	UsedSmallDaemonSeconds int64 `protobuf:"varint,12,opt,name=used_small_daemon_seconds,json=usedSmallDaemonSeconds,proto3" json:"used_small_daemon_seconds,omitempty"`
-	// max(0, included − used). Never negative.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	RemainingSmallDaemonSeconds int64 `protobuf:"varint,13,opt,name=remaining_small_daemon_seconds,json=remainingSmallDaemonSeconds,proto3" json:"remaining_small_daemon_seconds,omitempty"`
-	// One-time coupon grant still unspent, in small-daemon-seconds. Reported
-	// alongside the allowance rather than folded into it: the allowance
-	// refills every period, a grant depletes once. Spent after the allowance
-	// and before overage.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	GrantedSmallDaemonSecondsRemaining int64 `protobuf:"varint,14,opt,name=granted_small_daemon_seconds_remaining,json=grantedSmallDaemonSecondsRemaining,proto3" json:"granted_small_daemon_seconds_remaining,omitempty"`
-	// Sum of the multipliers of the daemons running right now (the burn rate
-	// in SDS per second). Zero when nothing runs.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	RunningMultiplier int64 `protobuf:"varint,15,opt,name=running_multiplier,json=runningMultiplier,proto3" json:"running_multiplier,omitempty"`
 	// Exact rational weighted-second accounting; no legacy integer truncation.
 	PricingVersion                string `protobuf:"bytes,23,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
 	AllowanceWeightedSeconds      string `protobuf:"bytes,24,opt,name=allowance_weighted_seconds,json=allowanceWeightedSeconds,proto3" json:"allowance_weighted_seconds,omitempty"`
@@ -8488,46 +8464,6 @@ func (x *GetCurrentUserComputeUsageResponse) GetUsageMeasured() bool {
 		return x.UsageMeasured
 	}
 	return false
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *GetCurrentUserComputeUsageResponse) GetIncludedSmallDaemonSeconds() int64 {
-	if x != nil {
-		return x.IncludedSmallDaemonSeconds
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *GetCurrentUserComputeUsageResponse) GetUsedSmallDaemonSeconds() int64 {
-	if x != nil {
-		return x.UsedSmallDaemonSeconds
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *GetCurrentUserComputeUsageResponse) GetRemainingSmallDaemonSeconds() int64 {
-	if x != nil {
-		return x.RemainingSmallDaemonSeconds
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *GetCurrentUserComputeUsageResponse) GetGrantedSmallDaemonSecondsRemaining() int64 {
-	if x != nil {
-		return x.GrantedSmallDaemonSecondsRemaining
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *GetCurrentUserComputeUsageResponse) GetRunningMultiplier() int64 {
-	if x != nil {
-		return x.RunningMultiplier
-	}
-	return 0
 }
 
 func (x *GetCurrentUserComputeUsageResponse) GetPricingVersion() string {
@@ -8632,17 +8568,7 @@ func (x *GetCurrentUserComputeUsageResponse) GetPlanPriceCents() int64 {
 type SizeUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Size  string                 `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	Multiplier int64 `protobuf:"varint,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
-	// Deprecated whole seconds; exact rational field is canonical.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	RunningSeconds int64 `protobuf:"varint,3,opt,name=running_seconds,json=runningSeconds,proto3" json:"running_seconds,omitempty"`
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	IncludedSmallDaemonSeconds int64 `protobuf:"varint,4,opt,name=included_small_daemon_seconds,json=includedSmallDaemonSeconds,proto3" json:"included_small_daemon_seconds,omitempty"`
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	OverageSeconds int64 `protobuf:"varint,5,opt,name=overage_seconds,json=overageSeconds,proto3" json:"overage_seconds,omitempty"`
-	// overage_seconds × this size's hourly price / 3600, in cents, as an exact
+	// exact_overage_seconds × this size's hourly price / 3600, in cents, as an exact
 	// decimal string rounded half-up to 4 places.
 	OverageCostCents        string `protobuf:"bytes,6,opt,name=overage_cost_cents,json=overageCostCents,proto3" json:"overage_cost_cents,omitempty"`
 	PricingVersion          string `protobuf:"bytes,7,opt,name=pricing_version,json=pricingVersion,proto3" json:"pricing_version,omitempty"`
@@ -8689,38 +8615,6 @@ func (x *SizeUsage) GetSize() string {
 		return x.Size
 	}
 	return ""
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *SizeUsage) GetMultiplier() int64 {
-	if x != nil {
-		return x.Multiplier
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *SizeUsage) GetRunningSeconds() int64 {
-	if x != nil {
-		return x.RunningSeconds
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *SizeUsage) GetIncludedSmallDaemonSeconds() int64 {
-	if x != nil {
-		return x.IncludedSmallDaemonSeconds
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *SizeUsage) GetOverageSeconds() int64 {
-	if x != nil {
-		return x.OverageSeconds
-	}
-	return 0
 }
 
 func (x *SizeUsage) GetOverageCostCents() string {
@@ -8777,12 +8671,9 @@ type StorageUsage struct {
 	IncludedGib int64 `protobuf:"varint,2,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`
 	// max(0, provisioned − included): what bills right now.
 	ExtraGib int64 `protobuf:"varint,3,opt,name=extra_gib,json=extraGib,proto3" json:"extra_gib,omitempty"`
-	// Billed excess GiB × seconds so far this period.
-	//
-	// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-	ExtraGibSeconds      int64  `protobuf:"varint,4,opt,name=extra_gib_seconds,json=extraGibSeconds,proto3" json:"extra_gib_seconds,omitempty"`
+	// Billed excess GiB × seconds so far this period, as an exact rational.
 	ExactExtraGibSeconds string `protobuf:"bytes,8,opt,name=exact_extra_gib_seconds,json=exactExtraGibSeconds,proto3" json:"exact_extra_gib_seconds,omitempty"`
-	// extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
+	// exact_extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
 	CostCents string `protobuf:"bytes,5,opt,name=cost_cents,json=costCents,proto3" json:"cost_cents,omitempty"`
 	// cost_cents plus extra_gib carried to the end of the period.
 	ProjectedCostCents string `protobuf:"bytes,6,opt,name=projected_cost_cents,json=projectedCostCents,proto3" json:"projected_cost_cents,omitempty"`
@@ -8839,14 +8730,6 @@ func (x *StorageUsage) GetIncludedGib() int64 {
 func (x *StorageUsage) GetExtraGib() int64 {
 	if x != nil {
 		return x.ExtraGib
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in services/billing/v1/billing.proto.
-func (x *StorageUsage) GetExtraGibSeconds() int64 {
-	if x != nil {
-		return x.ExtraGibSeconds
 	}
 	return 0
 }
@@ -10300,19 +10183,14 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x06period\x18\x01 \x01(\tH\x00R\x06period\x88\x01\x01\x12\x1a\n" +
 	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_periodB\t\n" +
-	"\a_org_id\"\xab\f\n" +
+	"\a_org_id\"\x85\v\n" +
 	"\"GetCurrentUserComputeUsageResponse\x12?\n" +
 	"\x1cestimated_overage_cost_cents\x18\x04 \x01(\x01R\x19estimatedOverageCostCents\x12=\n" +
 	"\fperiod_start\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
 	"period_end\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12%\n" +
 	"\x0eusage_measured\x18\n" +
-	" \x01(\bR\rusageMeasured\x12E\n" +
-	"\x1dincluded_small_daemon_seconds\x18\v \x01(\x03B\x02\x18\x01R\x1aincludedSmallDaemonSeconds\x12=\n" +
-	"\x19used_small_daemon_seconds\x18\f \x01(\x03B\x02\x18\x01R\x16usedSmallDaemonSeconds\x12G\n" +
-	"\x1eremaining_small_daemon_seconds\x18\r \x01(\x03B\x02\x18\x01R\x1bremainingSmallDaemonSeconds\x12V\n" +
-	"&granted_small_daemon_seconds_remaining\x18\x0e \x01(\x03B\x02\x18\x01R\"grantedSmallDaemonSecondsRemaining\x121\n" +
-	"\x12running_multiplier\x18\x0f \x01(\x03B\x02\x18\x01R\x11runningMultiplier\x12'\n" +
+	" \x01(\bR\rusageMeasured\x12'\n" +
 	"\x0fpricing_version\x18\x17 \x01(\tR\x0epricingVersion\x12<\n" +
 	"\x1aallowance_weighted_seconds\x18\x18 \x01(\tR\x18allowanceWeightedSeconds\x12:\n" +
 	"\x19consumed_weighted_seconds\x18\x19 \x01(\tR\x17consumedWeightedSeconds\x12<\n" +
@@ -10328,15 +10206,9 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\astorage\x18\x14 \x01(\v2\x1d.controlplane.v1.StorageUsageR\astorage\x12?\n" +
 	"\x1cprojected_period_total_cents\x18\x15 \x01(\tR\x19projectedPeriodTotalCents\x12(\n" +
 	"\x10plan_price_cents\x18\x16 \x01(\x03R\x0eplanPriceCentsJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\x12\x10\x13R\x10included_minutesR\fused_minutesR\x0foverage_minutesR\fby_workspaceR\x06by_dayR\x19granted_minutes_remainingR\x0esuspended_disk\"\x80\x04\n" +
+	"J\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x12\x10\x13R\x10included_minutesR\fused_minutesR\x0foverage_minutesR\fby_workspaceR\x06by_dayR\x19granted_minutes_remainingR\x1dincluded_small_daemon_secondsR\x19used_small_daemon_secondsR\x1eremaining_small_daemon_secondsR&granted_small_daemon_seconds_remainingR\x12running_multiplierR\x0esuspended_disk\"\xa0\x03\n" +
 	"\tSizeUsage\x12\x12\n" +
-	"\x04size\x18\x01 \x01(\tR\x04size\x12\"\n" +
-	"\n" +
-	"multiplier\x18\x02 \x01(\x03B\x02\x18\x01R\n" +
-	"multiplier\x12+\n" +
-	"\x0frunning_seconds\x18\x03 \x01(\x03B\x02\x18\x01R\x0erunningSeconds\x12E\n" +
-	"\x1dincluded_small_daemon_seconds\x18\x04 \x01(\x03B\x02\x18\x01R\x1aincludedSmallDaemonSeconds\x12+\n" +
-	"\x0foverage_seconds\x18\x05 \x01(\x03B\x02\x18\x01R\x0eoverageSeconds\x12,\n" +
+	"\x04size\x18\x01 \x01(\tR\x04size\x12,\n" +
 	"\x12overage_cost_cents\x18\x06 \x01(\tR\x10overageCostCents\x12'\n" +
 	"\x0fpricing_version\x18\a \x01(\tR\x0epricingVersion\x12\x1f\n" +
 	"\vcost_weight\x18\b \x01(\tR\n" +
@@ -10344,17 +10216,17 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x15exact_running_seconds\x18\t \x01(\tR\x13exactRunningSeconds\x12:\n" +
 	"\x19included_weighted_seconds\x18\n" +
 	" \x01(\tR\x17includedWeightedSeconds\x122\n" +
-	"\x15exact_overage_seconds\x18\v \x01(\tR\x13exactOverageSeconds\"\xde\x02\n" +
+	"\x15exact_overage_seconds\x18\v \x01(\tR\x13exactOverageSecondsJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\n" +
+	"multiplierR\x0frunning_secondsR\x1dincluded_small_daemon_secondsR\x0foverage_seconds\"\xc7\x02\n" +
 	"\fStorageUsage\x12'\n" +
 	"\x0fprovisioned_gib\x18\x01 \x01(\x03R\x0eprovisionedGib\x12!\n" +
 	"\fincluded_gib\x18\x02 \x01(\x03R\vincludedGib\x12\x1b\n" +
-	"\textra_gib\x18\x03 \x01(\x03R\bextraGib\x12.\n" +
-	"\x11extra_gib_seconds\x18\x04 \x01(\x03B\x02\x18\x01R\x0fextraGibSeconds\x125\n" +
+	"\textra_gib\x18\x03 \x01(\x03R\bextraGib\x125\n" +
 	"\x17exact_extra_gib_seconds\x18\b \x01(\tR\x14exactExtraGibSeconds\x12\x1d\n" +
 	"\n" +
 	"cost_cents\x18\x05 \x01(\tR\tcostCents\x120\n" +
 	"\x14projected_cost_cents\x18\x06 \x01(\tR\x12projectedCostCents\x12-\n" +
-	"\x13cents_per_gib_month\x18\a \x01(\tR\x10centsPerGibMonth\"P\n" +
+	"\x13cents_per_gib_month\x18\a \x01(\tR\x10centsPerGibMonthJ\x04\b\x04\x10\x05R\x11extra_gib_seconds\"P\n" +
 	"'GetCurrentUserComputeEligibilityRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"\xb9\x03\n" +

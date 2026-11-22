@@ -107,6 +107,9 @@ func TestNoStarSelects(t *testing.T) {
 		".git": true, "node_modules": true, "testdata": true, "vendor": true,
 		"tmp": true, "data": true, "dist": true, ".reliant": true,
 		"gen": true, "web": true, "electron": true, "proto-vendor": true,
+		// forge's per-checkout state (a recorded test run adds a directory
+		// under .forge/tests/runs/ that would key this test's cache entry).
+		".forge": true,
 	}
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(repo, func(path string, d fs.DirEntry, err error) error {

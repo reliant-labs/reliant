@@ -28,7 +28,7 @@ func TestTaskTenantIsolation(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestTask(t, WithTaskDeps(Deps{Repo: repo}))
+	svc := NewTestTask(t, WithTaskDeps(RealDeps(repo)))
 
 	// A task of its own per case, in the fixture's shared plan, so a write
 	// case never changes what a later case reads.

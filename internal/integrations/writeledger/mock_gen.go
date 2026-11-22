@@ -74,6 +74,42 @@ func (m *MockService) BeginPush(ctx context.Context, p Push) (*PushIntent, error
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
+// forge:section MockReader
+// forge:hash=d8f90e995e215e8f3506e9aeecde7a3afe5ae9f1ca0ddd9f96599a924ade0520
+
+// MockReader is a test mock for the Reader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockReader.<Method>Func not set" error.
+type MockReader struct {
+	contractkit.Recorder
+	GetIntegrationWriteByObjectFunc func(context.Context, string, string, string, string) (*core.IntegrationWrite, error)
+	ListRecentIntegrationWritesFunc func(context.Context, string, string, time.Time, int) ([]*core.IntegrationWrite, error)
+}
+
+// GetIntegrationWriteByObject records the call and delegates to GetIntegrationWriteByObjectFunc when set.
+func (m *MockReader) GetIntegrationWriteByObject(ctx context.Context, integration string, scope string, objectKind string, objectID string) (*core.IntegrationWrite, error) {
+	m.Recorder.Record("GetIntegrationWriteByObject", ctx, integration, scope, objectKind, objectID)
+	if m.GetIntegrationWriteByObjectFunc != nil {
+		return m.GetIntegrationWriteByObjectFunc(ctx, integration, scope, objectKind, objectID)
+	}
+	return nil, contractkit.MockNotSet("MockReader", "GetIntegrationWriteByObject")
+}
+
+// ListRecentIntegrationWrites records the call and delegates to ListRecentIntegrationWritesFunc when set.
+func (m *MockReader) ListRecentIntegrationWrites(ctx context.Context, integration string, scope string, since time.Time, limit int) ([]*core.IntegrationWrite, error) {
+	m.Recorder.Record("ListRecentIntegrationWrites", ctx, integration, scope, since, limit)
+	if m.ListRecentIntegrationWritesFunc != nil {
+		return m.ListRecentIntegrationWritesFunc(ctx, integration, scope, since, limit)
+	}
+	return nil, contractkit.MockNotSet("MockReader", "ListRecentIntegrationWrites")
+}
+
+// Compile-time check.
+var _ Reader = (*MockReader)(nil)
+
 // forge:section MockPruner
 // forge:hash=060d9402082862871de04a897bea63b8219ae86ce5bc1a7a09e841f76bef7b9e
 

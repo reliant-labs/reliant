@@ -52,14 +52,13 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
-	"ListAnswerablePendingQuestionsByUser": readCallersFilter,
-	"ListArchivedChats":                    readCallersFilter,
-	"ListChats":                            readCallersFilter,
-	"ListInboxPending":                     readCallersFilter,
-	"ListMainWorktreesForUser":             readCallersFilter,
-	"ListProjects":                         readCallersFilter,
-	"ListRuns":                             readCallersFilter,
-	"ListTriggers":                         readCallersFilter,
+	"ListArchivedChats":        readCallersFilter,
+	"ListChats":                readCallersFilter,
+	"ListInboxPending":         readCallersFilter,
+	"ListMainWorktreesForUser": readCallersFilter,
+	"ListProjects":             readCallersFilter,
+	"ListRuns":                 readCallersFilter,
+	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	"ListPendingTriggerOffers": readCallersFilter,
@@ -75,14 +74,11 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves": readCallersFilter,
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
 	"ListDeletedProjects":         readCallersFilter,
-	"FindProjectOrgMoveByRequest": readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
-	"ListWorktreeRecoveries":      readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
@@ -95,16 +91,9 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUserInScope":      readCallersFilter,
 	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
-	// The shared lists read OTHER users' rows of one org; SharingService
-	// passes each through authz.SharedChatsFor / SharedProjectsFor,
-	// which is where a viewer is decided.
-	"ListSharedChats":    readCallersFilter,
-	"ListSharedProjects": readCallersFilter,
-
 	"FiringsSinceLastSuccess":          readParentAuthorized,
 	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
 	"GetPresetBySlugAndProject":        readParentAuthorized,
-	"GetWorktreeRecovery":              readParentAuthorized,
 	"ListPresetsByTag":                 readParentAuthorized,
 	"ListTriggerChanges":               readParentAuthorized,
 	"ListTriggerRegistrations":         readParentAuthorized,
@@ -112,10 +101,8 @@ var userScopedReads = map[string]string{
 	"ListWorktrees":                    readParentAuthorized,
 	// The worktree tool's get: a worktree it found by name in the run's own
 	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"ListChatsForWorktree":  readParentAuthorized,
 	"RecentTriggerFirings":  readParentAuthorized,
 	"RecentTriggerOutcomes": readParentAuthorized,
-	"WorkflowSlugExists":    readParentAuthorized,
 
 	"GetAnalyticsEnabled":         readPersonal,
 	"GetAutomationToken":          readPersonal,
@@ -125,7 +112,6 @@ var userScopedReads = map[string]string{
 	"GetLatestUserUpdateSequence":     readPersonal,
 	"GetMachinePoolByName":            readPersonal,
 	"GetMachinePoolForUser":           readPersonal,
-	"GetModelEndpoint":                readPersonal,
 	"GetPresetBySlug":                 readPersonal,
 	"GetPrivacySettings":              readPersonal,
 	"GetProviderAccountWithSecrets":   readPersonal,
@@ -137,7 +123,6 @@ var userScopedReads = map[string]string{
 	"ListLLMUsageDaily":               readPersonal,
 	"ListLLMUsageDetail":              readPersonal,
 	"ListMachinePoolsForUser":         readPersonal,
-	"ListModelEndpoints":              readPersonal,
 	"ListProviderAccounts":            readPersonal,
 	"ListProviderAccountsWithSecrets": readPersonal,
 	"ListSettings":                    readPersonal,
@@ -151,10 +136,8 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListHeldWorktreesForUser":          readOrgless,
-	"ListMarkedWorktreesForUser":        readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountLiveLaunchedRuns":            readBackground,
 	"CountTriggerCapacityHeldByMember": readBackground,
 	"HasEnabledTriggerOfKind":          readBackground,
 	"ListCapacityWakeTargets":          readBackground,

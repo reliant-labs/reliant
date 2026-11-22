@@ -45,9 +45,6 @@ const (
 	// ObservabilityServiceListMetricsProcedure is the fully-qualified name of the
 	// ObservabilityService's ListMetrics RPC.
 	ObservabilityServiceListMetricsProcedure = "/controlplane.v1.ObservabilityService/ListMetrics"
-	// ObservabilityServiceQueryMetricProcedure is the fully-qualified name of the
-	// ObservabilityService's QueryMetric RPC.
-	ObservabilityServiceQueryMetricProcedure = "/controlplane.v1.ObservabilityService/QueryMetric"
 	// ObservabilityServiceGetMetricProcedure is the fully-qualified name of the ObservabilityService's
 	// GetMetric RPC.
 	ObservabilityServiceGetMetricProcedure = "/controlplane.v1.ObservabilityService/GetMetric"
@@ -90,9 +87,6 @@ const (
 	// ObservabilityServiceGetDashboardsProcedure is the fully-qualified name of the
 	// ObservabilityService's GetDashboards RPC.
 	ObservabilityServiceGetDashboardsProcedure = "/controlplane.v1.ObservabilityService/GetDashboards"
-	// ObservabilityServiceGetObservabilityUsageProcedure is the fully-qualified name of the
-	// ObservabilityService's GetObservabilityUsage RPC.
-	ObservabilityServiceGetObservabilityUsageProcedure = "/controlplane.v1.ObservabilityService/GetObservabilityUsage"
 	// ObservabilityServiceGetReleaseHealthProcedure is the fully-qualified name of the
 	// ObservabilityService's GetReleaseHealth RPC.
 	ObservabilityServiceGetReleaseHealthProcedure = "/controlplane.v1.ObservabilityService/GetReleaseHealth"
@@ -120,16 +114,6 @@ type ObservabilityServiceClient interface {
 	// ListMetrics returns the metric names the org has, with their type and unit,
 	// so a metric picker has something to offer. Max range 30 days.
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
-	// QueryMetric returns time series for one metric: an aggregation, optional
-	// group-by attribute keys, and a step. Max range 30 days.
-	//
-	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
-	// runs the same evaluator and also returns series_meta, series_total and
-	// warnings. Removed in a follow-up once the console and forge's cloud backend
-	// no longer call it.
-	//
-	// Deprecated: do not use.
-	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes
 	// temporalities, every attribute key with its distinct-value estimate (and
@@ -227,17 +211,6 @@ type ObservabilityServiceClient interface {
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
-	// GetObservabilityUsage returns the org's month-to-date observability usage
-	// against its included allowance: billed bytes, projected overage, a
-	// per-signal and per-service breakdown, and the quota state the gateway is
-	// enforcing. It is a plain Postgres read of what the hourly meter wrote
-	// (nothing here queries ClickHouse), so it works when the tenant is
-	// unreachable. Membership-checked on org_id.
-	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
-	// Kept until deployed clients have migrated; it remains Postgres-only.
-	//
-	// Deprecated: do not use.
-	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it
 	// compares the window before the promotion with the window after, per service,
@@ -316,12 +289,6 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+ObservabilityServiceListMetricsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
-			connect.WithClientOptions(opts...),
-		),
-		queryMetric: connect.NewClient[v1.QueryMetricRequest, v1.QueryMetricResponse](
-			httpClient,
-			baseURL+ObservabilityServiceQueryMetricProcedure,
-			connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
 			connect.WithClientOptions(opts...),
 		),
 		getMetric: connect.NewClient[v1.GetMetricRequest, v1.GetMetricResponse](
@@ -409,12 +376,6 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
 			connect.WithClientOptions(opts...),
 		),
-		getObservabilityUsage: connect.NewClient[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse](
-			httpClient,
-			baseURL+ObservabilityServiceGetObservabilityUsageProcedure,
-			connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
-			connect.WithClientOptions(opts...),
-		),
 		getReleaseHealth: connect.NewClient[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetReleaseHealthProcedure,
@@ -442,7 +403,6 @@ type observabilityServiceClient struct {
 	listTraces                *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
 	getTrace                  *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
 	listMetrics               *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
-	queryMetric               *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
 	getMetric                 *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
 	listMetricExemplars       *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
 	getServiceGraph           *connect.Client[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse]
@@ -457,7 +417,6 @@ type observabilityServiceClient struct {
 	getWorkload               *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
 	getManagedDatabaseMetrics *connect.Client[v1.GetManagedDatabaseMetricsRequest, v1.GetManagedDatabaseMetricsResponse]
 	getDashboards             *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
-	getObservabilityUsage     *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
 	getReleaseHealth          *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
 	getUserActivity           *connect.Client[v1.GetUserActivityRequest, v1.GetUserActivityResponse]
 	listFrontendReplay        *connect.Client[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse]
@@ -481,13 +440,6 @@ func (c *observabilityServiceClient) GetTrace(ctx context.Context, req *connect.
 // ListMetrics calls controlplane.v1.ObservabilityService.ListMetrics.
 func (c *observabilityServiceClient) ListMetrics(ctx context.Context, req *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error) {
 	return c.listMetrics.CallUnary(ctx, req)
-}
-
-// QueryMetric calls controlplane.v1.ObservabilityService.QueryMetric.
-//
-// Deprecated: do not use.
-func (c *observabilityServiceClient) QueryMetric(ctx context.Context, req *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
-	return c.queryMetric.CallUnary(ctx, req)
 }
 
 // GetMetric calls controlplane.v1.ObservabilityService.GetMetric.
@@ -560,13 +512,6 @@ func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *con
 	return c.getDashboards.CallUnary(ctx, req)
 }
 
-// GetObservabilityUsage calls controlplane.v1.ObservabilityService.GetObservabilityUsage.
-//
-// Deprecated: do not use.
-func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, req *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
-	return c.getObservabilityUsage.CallUnary(ctx, req)
-}
-
 // GetReleaseHealth calls controlplane.v1.ObservabilityService.GetReleaseHealth.
 func (c *observabilityServiceClient) GetReleaseHealth(ctx context.Context, req *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
 	return c.getReleaseHealth.CallUnary(ctx, req)
@@ -599,16 +544,6 @@ type ObservabilityServiceHandler interface {
 	// ListMetrics returns the metric names the org has, with their type and unit,
 	// so a metric picker has something to offer. Max range 30 days.
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
-	// QueryMetric returns time series for one metric: an aggregation, optional
-	// group-by attribute keys, and a step. Max range 30 days.
-	//
-	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
-	// runs the same evaluator and also returns series_meta, series_total and
-	// warnings. Removed in a follow-up once the console and forge's cloud backend
-	// no longer call it.
-	//
-	// Deprecated: do not use.
-	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes
 	// temporalities, every attribute key with its distinct-value estimate (and
@@ -706,17 +641,6 @@ type ObservabilityServiceHandler interface {
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
-	// GetObservabilityUsage returns the org's month-to-date observability usage
-	// against its included allowance: billed bytes, projected overage, a
-	// per-signal and per-service breakdown, and the quota state the gateway is
-	// enforcing. It is a plain Postgres read of what the hourly meter wrote
-	// (nothing here queries ClickHouse), so it works when the tenant is
-	// unreachable. Membership-checked on org_id.
-	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
-	// Kept until deployed clients have migrated; it remains Postgres-only.
-	//
-	// Deprecated: do not use.
-	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it
 	// compares the window before the promotion with the window after, per service,
@@ -791,12 +715,6 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		ObservabilityServiceListMetricsProcedure,
 		svc.ListMetrics,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
-		connect.WithHandlerOptions(opts...),
-	)
-	observabilityServiceQueryMetricHandler := connect.NewUnaryHandler(
-		ObservabilityServiceQueryMetricProcedure,
-		svc.QueryMetric,
-		connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetMetricHandler := connect.NewUnaryHandler(
@@ -884,12 +802,6 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
 		connect.WithHandlerOptions(opts...),
 	)
-	observabilityServiceGetObservabilityUsageHandler := connect.NewUnaryHandler(
-		ObservabilityServiceGetObservabilityUsageProcedure,
-		svc.GetObservabilityUsage,
-		connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
 	observabilityServiceGetReleaseHealthHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetReleaseHealthProcedure,
 		svc.GetReleaseHealth,
@@ -918,8 +830,6 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetTraceHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListMetricsProcedure:
 			observabilityServiceListMetricsHandler.ServeHTTP(w, r)
-		case ObservabilityServiceQueryMetricProcedure:
-			observabilityServiceQueryMetricHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetMetricProcedure:
 			observabilityServiceGetMetricHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListMetricExemplarsProcedure:
@@ -948,8 +858,6 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetManagedDatabaseMetricsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetDashboardsProcedure:
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
-		case ObservabilityServiceGetObservabilityUsageProcedure:
-			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetReleaseHealthProcedure:
 			observabilityServiceGetReleaseHealthHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetUserActivityProcedure:
@@ -979,10 +887,6 @@ func (UnimplementedObservabilityServiceHandler) GetTrace(context.Context, *conne
 
 func (UnimplementedObservabilityServiceHandler) ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListMetrics is not implemented"))
-}
-
-func (UnimplementedObservabilityServiceHandler) QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryMetric is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetMetric(context.Context, *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error) {
@@ -1039,10 +943,6 @@ func (UnimplementedObservabilityServiceHandler) GetManagedDatabaseMetrics(contex
 
 func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetDashboards is not implemented"))
-}
-
-func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetObservabilityUsage is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {

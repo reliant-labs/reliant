@@ -24,7 +24,7 @@ func TestListChatPlans_Generated(t *testing.T) {
 		now := time.Now()
 		return []*db.Plan{{ID: "plan-1", Title: "Ship it", CreatedAt: now, UpdatedAt: now}}, nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListChatPlansRequest, pb.ListChatPlansResponse]{
 		{

@@ -1,7 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 package core
 
-import "time"
+import (
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+)
+
+// ErrNoPersonalFundingQuestion is an answer to a chat that has no open question.
+var ErrNoPersonalFundingQuestion = svcerr.FailedPrecondition("the chat has no open question about using your own account")
 
 // PersonalFunding is one chat's question "continue on your own account?" and
 // its answer (control-plane docs/design/org-provider-accounts.md §10): before

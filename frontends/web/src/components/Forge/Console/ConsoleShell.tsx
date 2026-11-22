@@ -64,6 +64,7 @@ import {
   type ConsolePage,
 } from "./paths";
 import { consoleNavEntries } from "./consoleNavRegistry";
+import { testIdParts } from "../Tests/flakyModel";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -291,6 +292,18 @@ export function consoleCrumbs(
       return [{ label: "Observability" }, { label: "Speed insights" }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
+    case "tests":
+      return [{ label: "Tests" }, { label: "Overview" }];
+    case "tests-coverage":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Coverage" }];
+    case "tests-runs":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Runs" }];
+    case "tests-run":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Runs", href: href({ kind: "tests-runs" }) }, { label: page.run }];
+    case "tests-flaky":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests" }];
+    case "tests-flaky-test":
+      return [{ label: "Tests", href: href({ kind: "tests" }) }, { label: "Flaky tests", href: href({ kind: "tests-flaky" }) }, { label: testIdParts(page.test).name }];
     case "auth":
       return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
     case "experiments":

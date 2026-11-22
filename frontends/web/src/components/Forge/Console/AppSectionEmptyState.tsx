@@ -64,6 +64,13 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Vulnerabilities", shows: "The known vulnerabilities in what your app's releases ship" };
     case "sboms":
       return { title: "SBOMs", shows: "What each release artifact is made of, and its scan" };
+    case "tests":
+    case "tests-coverage":
+    case "tests-runs":
+    case "tests-run":
+    case "tests-flaky":
+    case "tests-flaky-test":
+      return { title: "Tests", shows: "Coverage, test runs and flaky tests, per commit, branch and release" };
     case "extension": {
       const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
       return { title: label, shows: `${label} for your app` };

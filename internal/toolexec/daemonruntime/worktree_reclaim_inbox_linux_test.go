@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -130,7 +131,11 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 
 	// The Inbox lists it on the machine's item.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	inboxSvc, err := inbox.New(inbox.Deps{Logger: logger, Config: config.Defaults(), Repo: repo})
+	inboxSvc, err := inbox.New(inbox.Deps{
+		Logger: logger, Config: config.Defaults(), Repo: repo,
+		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:      store.NewWorktreeExtStore(repo.ORM()),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -20,9 +21,10 @@ import (
 // Service owns the run lifecycle: making a chat's run stop, and making it
 // execute again. See the package doc for what that ownership covers.
 type Service struct {
-	repo     Repository
-	temporal TemporalClient
-	pause    PauseController
+	repo      Repository
+	questions Questions
+	temporal  TemporalClient
+	pause     PauseController
 
 	// cancelGrace, cancelSettle and cancelPoll override cancelGrace,
 	// cancelSettleTimeout and cancelPollInterval when positive; tests shrink
@@ -34,10 +36,11 @@ type Service struct {
 	sleep func(ctx context.Context, d time.Duration)
 }
 
-// NewService builds a run-lifecycle service over the chat store, Temporal, and
-// the pause/reset controller.
-func NewService(repo Repository, temporal TemporalClient, pause PauseController) *Service {
-	return &Service{repo: repo, temporal: temporal, pause: pause}
+// New builds a run-lifecycle service over the chat store, its question store,
+// Temporal, and the pause/reset controller. Plain Deps, not a forge contract
+// package: it is built by hand in the worker and the chat handler.
+func New(deps Deps) *Service {
+	return &Service{repo: deps.Repo, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -686,7 +689,7 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 	// Every pending question, not the newest: each spawned agent is a thread of
 	// the run being terminated and can be parked on its own question.
-	questions, err := s.repo.ListPendingQuestionsByChat(ctx, chatID)
+	questions, err := s.questions.ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to look up pending questions while terminating",
 			"chatID", chatID, "error", err)

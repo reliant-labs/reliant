@@ -34,6 +34,10 @@
  *       /security/vulnerabilities/$advisory one advisory across the project
  *       /security/sboms                     each release artifact's SBOM and scan
  *       /security                           → /security/vulnerabilities
+ *       /tests                              Tests › Overview (`branch`)
+ *       /tests/coverage                     coverage tree and a file's lines (`path`, `commit`, `lane`, `base`)
+ *       /tests/runs[/$run]                  recorded runs (`branch`, `commit`, `release`, `lane`, `source`, `status`), and one run
+ *       /tests/flaky[/$test]                flaky tests (`state`), and one test (its id as base64url)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -74,6 +78,10 @@ import {
   forgeConsoleEnvironmentsSearchSchema,
   forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
+  forgeConsoleTestsCoverageSearchSchema,
+  forgeConsoleTestsFlakySearchSchema,
+  forgeConsoleTestsRunsSearchSchema,
+  forgeConsoleTestsSearchSchema,
   forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
@@ -141,6 +149,18 @@ export interface ForgeConsoleComponents {
   vulnerability: RouteComponent
   /** Security › SBOMs: each release artifact's SBOM and its scan. */
   sboms: RouteComponent
+  /** Tests › Overview: one branch's coverage, pass rate, flaky tests and last run. */
+  tests: RouteComponent
+  /** Tests › Coverage. */
+  testsCoverage: RouteComponent
+  /** Tests › Runs. */
+  testsRuns: RouteComponent
+  /** One recorded run. */
+  testsRun: RouteComponent
+  /** Tests › Flaky tests. */
+  testsFlaky: RouteComponent
+  /** One test's flake record. */
+  testsFlakyTest: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -463,6 +483,51 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleSbomsSearchSchema,
     component: components.sboms,
   })
+  // Tests (components/Forge/Tests). The bare segment is its Overview. Each page
+  // narrows by its own `?environment=`, never the console's scope, so none draws
+  // the env picker (`envScope: false`, useRouteUsesEnvScope).
+  const testsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests',
+    validateSearch: forgeConsoleTestsSearchSchema,
+    staticData: { envScope: false },
+    component: components.tests,
+  })
+  const testsCoverageRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests/coverage',
+    validateSearch: forgeConsoleTestsCoverageSearchSchema,
+    staticData: { envScope: false },
+    component: components.testsCoverage,
+  })
+  const testsRunsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests/runs',
+    validateSearch: forgeConsoleTestsRunsSearchSchema,
+    staticData: { envScope: false },
+    component: components.testsRuns,
+  })
+  const testsRunRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests/runs/$run',
+    validateSearch: forgeConsoleSearchSchema,
+    staticData: { envScope: false },
+    component: components.testsRun,
+  })
+  const testsFlakyRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests/flaky',
+    validateSearch: forgeConsoleTestsFlakySearchSchema,
+    staticData: { envScope: false },
+    component: components.testsFlaky,
+  })
+  const testsFlakyTestRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'tests/flaky/$test',
+    validateSearch: forgeConsoleSearchSchema,
+    staticData: { envScope: false },
+    component: components.testsFlakyTest,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -519,6 +584,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       vulnerabilitiesRoute,
       vulnerabilityRoute,
       sbomsRoute,
+      testsRoute,
+      testsCoverageRoute,
+      testsRunsRoute,
+      testsRunRoute,
+      testsFlakyRoute,
+      testsFlakyTestRoute,
     ]),
   ])
 }

@@ -19,8 +19,34 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// forge:section MockQuestions
+// forge:hash=e9104c8e0d0cad6ebd732125a99f0aa6c109ac34cf335ce77ab838330d05a7fe
+
+// MockQuestions is a test mock for the Questions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestions.<Method>Func not set" error.
+type MockQuestions struct {
+	contractkit.Recorder
+	ListPendingQuestionsByChatFunc func(context.Context, string) ([]*db.Question, error)
+}
+
+// ListPendingQuestionsByChat records the call and delegates to ListPendingQuestionsByChatFunc when set.
+func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
+	m.Recorder.Record("ListPendingQuestionsByChat", ctx, chatID)
+	if m.ListPendingQuestionsByChatFunc != nil {
+		return m.ListPendingQuestionsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "ListPendingQuestionsByChat")
+}
+
+// Compile-time check.
+var _ Questions = (*MockQuestions)(nil)
+
 // forge:section MockReconcilerStore
-// forge:hash=3846e326af2bb0ba35d72f5e9b3194ae87b277e7f22e29c0fb1e4e2679690685
+// forge:hash=ffc09a8b057721272a3565af69098c6aac1df56de218ed0bfbb64cea3330d89b
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -44,7 +70,6 @@ type MockReconcilerStore struct {
 	ReapOrphanedWorkflowDescendantsFunc             func(context.Context) ([]db.ReapedWorkflow, error)
 	ReapOrphanedThreadsFunc                         func(context.Context) ([]db.ReapedThread, error)
 	GetThreadFunc                                   func(context.Context, string) (*db.Thread, error)
-	ListPendingQuestionsByChatFunc                  func(context.Context, string) ([]*db.Question, error)
 	ListPendingApprovalsByChatFunc                  func(context.Context, string) ([]*db.Approval, error)
 	ListStaleApprovalsFunc                          func(context.Context, int) ([]db.StaleApproval, error)
 	ResolvePendingApprovalFunc                      func(context.Context, string, int32, string, string) (bool, error)
@@ -208,15 +233,6 @@ func (m *MockReconcilerStore) GetThread(ctx context.Context, id string) (*db.Thr
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetThread")
-}
-
-// ListPendingQuestionsByChat records the call and delegates to ListPendingQuestionsByChatFunc when set.
-func (m *MockReconcilerStore) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
-	m.Recorder.Record("ListPendingQuestionsByChat", ctx, chatID)
-	if m.ListPendingQuestionsByChatFunc != nil {
-		return m.ListPendingQuestionsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListPendingQuestionsByChat")
 }
 
 // ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.

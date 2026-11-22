@@ -13,6 +13,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `action-pins.md` — the reviewed action-to-commit pins in privileged workflows, how to change one, and the live verification after a change.
 - `cli-release-artifacts.md` — the standalone `reliant` CLI archives, their Sigstore signature and the public `daemon-channels.json` manifest each release tag publishes: schema, verification, pipeline and first-release check.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
+- `observability-attributes.md` — every span name and attribute reliant's agent and workflow telemetry emits (run, node, agent turn, LLM call, tool call, `run.exec`, `integration.call`, `trigger.fire`), the rules a span follows (`org.id`, opaque ids, no content or error text), how to add one, and what tenant export relies on.
 - `redundant-index-drop-rollout.md` — the post-deploy plan check for the 2026-11-10 `chat_updates`/`messages` index drops, and the fix-forward migration that recreates one.
 - `inbox-firings-rollout.md` — post-deploy ListInbox latency check for reliant#2736's bounded Inbox reads and `idx_chats_daemon_blocked`, its failure criteria, and the application rollback (the index stays).
 - `chat-list-live-index-rollout.md` — post-deploy check that reliant#2945's `idx_chats_user_live_last_active` built valid and ListChats adopts it, the fix-forward for a failed build, and the application rollback (the index stays).

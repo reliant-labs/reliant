@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -119,9 +120,10 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 
 	service := &Service{
 		deps: Deps{
-			Repo: repo,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
 		},
-		runs: runs.NewService(repo, nil, pauseController),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: nil, Pause: pauseController}),
 		threads: threads.NewService(repo,
 			threads.WithToolCanceler(daemonRouter),
 		),

@@ -35,12 +35,14 @@ type Store interface {
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	// A chat's question before it moves from its org's accounts to the
-	// person's own, and the person's per-org preference (org-provider-accounts §10).
-	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
-	AnswerPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
 	SetString(ctx context.Context, userID string, projectID *string, key, value string) error
+}
+
+// PersonalFunding is the chat's question and the person's answer to it.
+type PersonalFunding interface {
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+	AnswerChatPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
 }
 
 // Deps holds dependencies for the provider_account service. The rpc methods on *Service are
@@ -50,6 +52,9 @@ type Deps struct {
 	Config *config.Config
 	// Store holds accounts, their limit state and thread assignments.
 	Store Store
+	// Funding holds a chat's question before it moves from its org's accounts
+	// to the person's own (org-provider-accounts §10); store.ChatPersonalFundingExtStore.
+	Funding PersonalFunding
 	// ValidateKey checks a pasted API key against its provider before it is stored
 	// (keyvalidate.Validate in production). ok=false carries a message for the user.
 	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
@@ -86,6 +91,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Config == nil {
 		return fmt.Errorf("provider_account: Deps.Config is required")
+	}
+	if d.Funding == nil {
+		return fmt.Errorf("provider_account: Deps.Funding is required")
 	}
 	if d.Store == nil {
 		return fmt.Errorf("provider_account: Deps.Store is required")

@@ -128,7 +128,7 @@ test("every shortcut menu item delivers its id on the menu-shortcut channel", ()
 
 test("menu items carry the resolved accelerators, and none for context-resolved chords", () => {
   const remapped = resolveMenuAccelerators({
-    newChat: "Cmd+Alt+N",
+    newChat: "Cmd+Shift+Y",
     nextChat: "Shift+Cmd+Down",
     selectionDownComposer: "Cmd+Shift+Down",
     selectionUpMonaco: "Cmd+Shift+Up",
@@ -147,7 +147,7 @@ test("menu items carry the resolved accelerators, and none for context-resolved 
       assert.equal(items[id].accelerator, undefined, `${items[id].label} must not claim its chord`);
     }
   }
-  assert.equal(menuShortcutItems({ accelerators: remapped, deliver: () => {} }).newChat.accelerator, "CmdOrCtrl+Alt+N");
+  assert.equal(menuShortcutItems({ accelerators: remapped, deliver: () => {} }).newChat.accelerator, "CmdOrCtrl+Shift+Y");
 });
 
 test("File › New Tab with the window closed to the tray brings it back instead of opening a second", async () => {

@@ -99,6 +99,12 @@ const (
 	// The restart did not happen as asked; detail says why. What the daemon
 	// does next is in detail too.
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED DaemonUpgradeState = 5
+	// A daemon that updates itself (`reliant daemon start --auto-update`, on a
+	// person's machine) has downloaded and verified a newer release and keeps
+	// serving until a quiet moment (no tool call or background process
+	// running, no recent activity), when it drains and installs it. A gateway
+	// keeps routing tool requests to it.
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED DaemonUpgradeState = 6
 )
 
 // Enum value maps for DaemonUpgradeState.
@@ -110,6 +116,7 @@ var (
 		3: "DAEMON_UPGRADE_STATE_DRAINED",
 		4: "DAEMON_UPGRADE_STATE_AWAITING_OWNER",
 		5: "DAEMON_UPGRADE_STATE_FAILED",
+		6: "DAEMON_UPGRADE_STATE_STAGED",
 	}
 	DaemonUpgradeState_value = map[string]int32{
 		"DAEMON_UPGRADE_STATE_UNSPECIFIED":    0,
@@ -118,6 +125,7 @@ var (
 		"DAEMON_UPGRADE_STATE_DRAINED":        3,
 		"DAEMON_UPGRADE_STATE_AWAITING_OWNER": 4,
 		"DAEMON_UPGRADE_STATE_FAILED":         5,
+		"DAEMON_UPGRADE_STATE_STAGED":         6,
 	}
 )
 
@@ -6866,14 +6874,15 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x1cFILE_CHANGE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18FILE_CHANGE_TYPE_CREATED\x10\x01\x12\x1c\n" +
 	"\x18FILE_CHANGE_TYPE_UPDATED\x10\x02\x12\x1c\n" +
-	"\x18FILE_CHANGE_TYPE_DELETED\x10\x03*\xeb\x01\n" +
+	"\x18FILE_CHANGE_TYPE_DELETED\x10\x03*\x8c\x02\n" +
 	"\x12DaemonUpgradeState\x12$\n" +
 	" DAEMON_UPGRADE_STATE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cDAEMON_UPGRADE_STATE_CURRENT\x10\x01\x12!\n" +
 	"\x1dDAEMON_UPGRADE_STATE_UPDATING\x10\x02\x12 \n" +
 	"\x1cDAEMON_UPGRADE_STATE_DRAINED\x10\x03\x12'\n" +
 	"#DAEMON_UPGRADE_STATE_AWAITING_OWNER\x10\x04\x12\x1f\n" +
-	"\x1bDAEMON_UPGRADE_STATE_FAILED\x10\x05*z\n" +
+	"\x1bDAEMON_UPGRADE_STATE_FAILED\x10\x05\x12\x1f\n" +
+	"\x1bDAEMON_UPGRADE_STATE_STAGED\x10\x06*z\n" +
 	"\x12MachineHealthState\x12$\n" +
 	" MACHINE_HEALTH_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17MACHINE_HEALTH_STATE_OK\x10\x01\x12!\n" +
