@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 func TestListProjectDaemonsForDaemon_Generated(t *testing.T) {
@@ -26,7 +27,7 @@ func TestListProjectDaemonsForDaemon_Generated(t *testing.T) {
 			{ProjectID: "p-2", DaemonID: daemonID, Path: "/theirs"},
 		}, nil
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Installs: installs}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Installs: installs}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListProjectDaemonsForDaemonRequest, pb.ListProjectDaemonsForDaemonResponse]{
 		{
