@@ -331,7 +331,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
 		TagPrefs:           g.Database(),
-		LocalModels:        local.NewRepoDirectory(g.Database()),
+		LocalModels:        local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -1072,10 +1072,11 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database()),
+		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:        g.OrgResolver(),
 	})
 }
@@ -1230,7 +1231,8 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
+		Machines:    g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),
@@ -1325,6 +1327,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{
 			Store:  g.Database(),
@@ -1341,11 +1344,12 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Signals:  g.PauseService(),
-		Messages: g.Chat(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Signals:   g.PauseService(),
+		Messages:  g.Chat(),
 	})
 }
 

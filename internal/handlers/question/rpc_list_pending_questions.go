@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -61,7 +62,7 @@ func (s *Service) ListPendingQuestions(
 	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
-	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
+	questions, err := s.deps.Questions.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 	}
@@ -73,7 +74,7 @@ func (s *Service) ListPendingQuestions(
 // read (an org they left, a credential's other org) is not listed, as GetChat
 // would not show its chat. Owner reads only: no viewer is served here.
 func (s *Service) pendingQuestionsOfUser(ctx context.Context, userID string) ([]*db.Question, error) {
-	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
+	questions, err := s.deps.Questions.ListAnswerablePendingQuestionsByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

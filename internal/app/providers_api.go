@@ -422,6 +422,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
+		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1249,7 +1250,12 @@ type WorkflowReconcilerDeps struct {
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
-	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
+	r := reconciliation.New(reconciliation.Deps{
+		Store:     d.DB,
+		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Temporal:  d.Temporal.Client,
+		Config:    cfg,
+	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})

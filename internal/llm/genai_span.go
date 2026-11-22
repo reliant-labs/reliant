@@ -3,13 +3,12 @@ package llm
 
 import (
 	"context"
-	"errors"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -29,6 +28,8 @@ import (
 // CallLLM persists the partial turn from exactly those events.
 type GenAISpan struct {
 	span       trace.Span
+	ctx        context.Context
+	provider   string
 	requested  string
 	retries    int
 	firstToken bool
@@ -66,7 +67,7 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 	ctx, span := otel.Tracer("reliant.llm").Start(ctx, name,
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(attrs...))
-	return ctx, &GenAISpan{span: span, requested: requested}
+	return ctx, &GenAISpan{span: span, ctx: ctx, provider: provider, requested: requested}
 }
 
 // Observe records what a streamed event says about the call: the response
@@ -144,19 +145,26 @@ func (s *GenAISpan) RecordResponse(resp *DriverResponse, servedModel string) {
 	s.span.SetAttributes(attrs...)
 }
 
-// RecordError records err on the span. A cancellation is the caller hanging
-// up (the user pressed stop, a newer turn superseded this one), not a
+// RecordError records err's class on the span (ErrorType): error.type, and an
+// error status described by the same code. A cancellation is the caller
+// hanging up (the user pressed stop, a newer turn superseded this one), not a
 // provider failure, so it sets no error status.
+//
+// The error's text is never on the span or in the log: a provider can echo
+// anything into it, the prompt included. Only the error class and call metadata
+// are logged on the call's context, alongside its run ids and trace.
 func (s *GenAISpan) RecordError(err error) {
 	if err == nil {
 		return
 	}
-	s.span.RecordError(err)
-	if errors.Is(err, context.Canceled) {
-		s.span.SetAttributes(attribute.String(telemetry.AttrErrorType, telemetry.ErrorTypeCanceled))
+	errType := ErrorType(err)
+	telemetry.SetAISpanError(s.span, err, errType)
+	if errType == telemetry.ErrorTypeCanceled {
 		return
 	}
-	s.span.SetStatus(codes.Error, err.Error())
+	logging.WarnContext(s.ctx, "LLM provider call failed",
+		telemetry.AttrErrorType, errType,
+		"provider", s.provider, "model", s.requested)
 }
 
 // End ends the span.

@@ -14,11 +14,13 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -71,7 +73,7 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 			deps: Deps{
 				Repo: repo, Temporal: temporal, Router: router,
 			}, threads: threads.NewService(repo),
-			runs: runs.NewService(repo, temporal, nil),
+			runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
 		repo: repo, ctx: ctx, router: router, temporal: temporal, projectID: projectID,
 	}

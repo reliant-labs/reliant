@@ -219,8 +219,22 @@ type spawnStatusStore interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	LastThreadActivityByChat(ctx context.Context, chatID string) (map[string]time.Time, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]db.ProviderBackoff, error)
+}
+
+// SpawnQuestions is what spawn_status reads to say which agents are waiting on
+// the user: each thread's newest pending blocking question. store.QuestionExtStore
+// satisfies it.
+type SpawnQuestions interface {
+	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
+}
+
+// SpawnStatusDeps is what the spawn_status tool is built from.
+type SpawnStatusDeps struct {
+	// Store reads the spawn tree, signals and messages.
+	Store spawnStatusStore
+	// Questions reads the pending questions agents are parked on.
+	Questions SpawnQuestions
 }
 
 // spawnSendStore is spawn_send's store.

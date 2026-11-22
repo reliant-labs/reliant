@@ -69,8 +69,44 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
+// forge:section MockQuestions
+// forge:hash=7b9363788c6bce7ad85ce7b778f6e92573acc04e8f12608a607983e62143d652
+
+// MockQuestions is a test mock for the Questions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestions.<Method>Func not set" error.
+type MockQuestions struct {
+	contractkit.Recorder
+	PendingQuestionsByThreadFunc   func(context.Context, string) (map[string]*db.Question, error)
+	ListPendingQuestionsByChatFunc func(context.Context, string) ([]*db.Question, error)
+}
+
+// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
+func (m *MockQuestions) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
+	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
+	if m.PendingQuestionsByThreadFunc != nil {
+		return m.PendingQuestionsByThreadFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "PendingQuestionsByThread")
+}
+
+// ListPendingQuestionsByChat records the call and delegates to ListPendingQuestionsByChatFunc when set.
+func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
+	m.Recorder.Record("ListPendingQuestionsByChat", ctx, chatID)
+	if m.ListPendingQuestionsByChatFunc != nil {
+		return m.ListPendingQuestionsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "ListPendingQuestionsByChat")
+}
+
+// Compile-time check.
+var _ Questions = (*MockQuestions)(nil)
+
 // forge:section MockRepository
-// forge:hash=de86ab3eb2d8e74c9553e8f346177ce9cd9e9df73e4e9049313f043c5c59821b
+// forge:hash=4e67902191bb4265cce1c19bb21a2c131d8d9eefa990942da087964b13f850d2
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -116,7 +152,6 @@ type MockRepository struct {
 	ListToolResultBlocksFunc                                 func(context.Context, string) ([]*db.MessageContentBlock, error)
 	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
-	PendingQuestionsByThreadFunc                             func(context.Context, string) (map[string]*db.Question, error)
 	EnqueueAgentMessageFunc                                  func(context.Context, *db.AgentMessage) error
 	EnqueueAgentMessageOnceFunc                              func(context.Context, *db.AgentMessage) (bool, error)
 	GetAgentMessageFunc                                      func(context.Context, string) (*db.AgentMessage, error)
@@ -197,7 +232,6 @@ type MockRepository struct {
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
 	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
-	ListPendingQuestionsByChatFunc                           func(context.Context, string) ([]*db.Question, error)
 	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
@@ -563,15 +597,6 @@ func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([
 		return m.ListMessagesByIDsFunc(ctx, ids)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
-}
-
-// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
-func (m *MockRepository) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
-	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
-	if m.PendingQuestionsByThreadFunc != nil {
-		return m.PendingQuestionsByThreadFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "PendingQuestionsByThread")
 }
 
 // EnqueueAgentMessage records the call and delegates to EnqueueAgentMessageFunc when set.
@@ -1292,15 +1317,6 @@ func (m *MockRepository) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 		return m.CascadeTerminalStatusToThreadSubtreeFunc(ctx, workflowID, reason)
 	}
 	return contractkit.MockNotSet("MockRepository", "CascadeTerminalStatusToThreadSubtree")
-}
-
-// ListPendingQuestionsByChat records the call and delegates to ListPendingQuestionsByChatFunc when set.
-func (m *MockRepository) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
-	m.Recorder.Record("ListPendingQuestionsByChat", ctx, chatID)
-	if m.ListPendingQuestionsByChatFunc != nil {
-		return m.ListPendingQuestionsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListPendingQuestionsByChat")
 }
 
 // ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.

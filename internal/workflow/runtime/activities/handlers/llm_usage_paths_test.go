@@ -415,7 +415,9 @@ func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "frontends", "electron", "docs", "research", "proto-vendor":
+			// .forge: per-checkout state; a recorded test run adds a
+			// directory there that would key this test's cache entry.
+			case ".git", ".forge", "node_modules", "frontends", "electron", "docs", "research", "proto-vendor":
 				return filepath.SkipDir
 			}
 			return nil

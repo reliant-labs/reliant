@@ -11,9 +11,11 @@ import (
 	"go.temporal.io/api/enums/v1"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // StartChat is the first send; SendMessage is every send after it. These tests
@@ -41,10 +43,11 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:     repo,
-			Temporal: temporal,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Temporal:  temporal,
 		},
-		runs: runs.NewService(repo, temporal, nil),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	before := transcriptBodies(t, ctx, repo, fx.chatID)
@@ -98,10 +101,11 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 			temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 			service := &Service{
 				deps: Deps{
-					Repo:     repo,
-					Temporal: temporal,
+					Repo:      repo,
+					Questions: store.NewQuestionExtStore(repo.ORM()),
+					Temporal:  temporal,
 				},
-				runs: runs.NewService(repo, temporal, nil),
+				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 			}
 
 			resp, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))

@@ -180,3 +180,16 @@ type storedProviderPolicy struct {
 // bind or scan.
 type ChatSelectionExtra struct {
 }
+
+// ChatFundingOrder is the funding order a person chose for chatID (the chat's provider policy,
+// which only a person may change), "" when it inherits.
+func ChatFundingOrder(ctx context.Context, db orm.Context, chatID string) (string, error) {
+	if chatID == "" {
+		return "", fmt.Errorf("chat ID cannot be empty")
+	}
+	sel, err := GetChatSelection(ctx, db, chatID, false)
+	if err != nil || sel == nil {
+		return "", err
+	}
+	return string(sel.Policy.Funding), nil
+}

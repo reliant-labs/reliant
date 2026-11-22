@@ -19,6 +19,7 @@ import (
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // These tests run the service over a real database: ownership, ordering and the legacy-table
@@ -39,7 +40,8 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(cleanup)
 	e := &env{t: t, repo: repo, valid: func(string, string) (bool, string) { return true, "ok" }}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
-		Store: repo,
+		Store:   repo,
+		Funding: store.NewChatPersonalFundingExtStore(repo.ORM()),
 		ValidateKey: func(_ context.Context, p models.Family, key string) (bool, string) {
 			e.keys = append(e.keys, key)
 			return e.valid(string(p), key)

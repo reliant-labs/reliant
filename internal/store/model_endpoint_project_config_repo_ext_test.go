@@ -28,7 +28,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if direct.CreatedAt.IsZero() || direct.UpdatedAt.IsZero() {
 		t.Fatalf("InsertModelEndpoint stamps = {%v, %v}, want both set", direct.CreatedAt, direct.UpdatedAt)
 	}
-	twin, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	twin, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil {
 		t.Fatalf("Repo.GetModelEndpoint: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestModelEndpointQueries(t *testing.T) {
 		t.Fatalf("Repo.GetModelEndpoint = %+v, want the store's write with the empty defaults", twin)
 	}
 
-	if err := env.Repo.CreateModelEndpoint(ctx, &core.ModelEndpoint{
+	if err := store.InsertModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{
 		ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:11434", Route: core.ModelEndpointRouteViaDaemon,
 		DaemonID: strp("daemon-1"), CredentialConnectionID: strp("conn-1"), HeaderNames: []string{"X-Org", "X-Team"},
 		ModelsJSON: `[{"id":"llama"}]`, ProbeJSON: `{"ok":true}`,
@@ -67,7 +67,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModelEndpoints: %v", err)
 	}
-	twinListed, err := env.Repo.ListModelEndpoints(ctx, owner)
+	twinListed, err := store.ListModelEndpoints(ctx, env.ORM, owner)
 	if err != nil {
 		t.Fatalf("Repo.ListModelEndpoints: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.ReplaceModelEndpoint(ctx, env.ORM, replace); err != nil {
 		t.Fatalf("ReplaceModelEndpoint: %v", err)
 	}
-	twin, err = env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	twin, err = store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil || twin.Name != "c-direct" || twin.BaseURL != "https://llm.example/v2" || len(twin.HeaderNames) != 1 || twin.ModelsJSON != `[{"id":"m"}]` ||
 		!twin.UpdatedAt.After(before) || !sameInstant(twin.UpdatedAt, replace.UpdatedAt) || !sameInstant(twin.CreatedAt, direct.CreatedAt) {
 		t.Fatalf("Repo.GetModelEndpoint after ReplaceModelEndpoint = %+v, %v", twin, err)
@@ -96,7 +96,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.ReplaceModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{ID: "me-direct", UserID: owner, Name: "a-daemon", BaseURL: "x", Route: core.ModelEndpointRouteDirect}); !errors.Is(err, core.ErrModelEndpointNameTaken) {
 		t.Fatalf("ReplaceModelEndpoint(taken name) err = %v, want ErrModelEndpointNameTaken", err)
 	}
-	if err := env.Repo.UpdateModelEndpoint(ctx, &core.ModelEndpoint{ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:1", Route: core.ModelEndpointRouteDirect}); err != nil {
+	if err := store.ReplaceModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:1", Route: core.ModelEndpointRouteDirect}); err != nil {
 		t.Fatalf("Repo.UpdateModelEndpoint: %v", err)
 	}
 	got, err = store.GetModelEndpoint(ctx, env.ORM, owner, "me-daemon")
@@ -114,7 +114,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.SetModelEndpointProbe(ctx, env.ORM, other, "me-direct", `{"stolen":true}`); err != nil {
 		t.Fatalf("SetModelEndpointProbe(another user) = %v, want nil", err)
 	}
-	probed, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	probed, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil || probed.ProbeJSON != `{"latency_ms":12}` || !probed.UpdatedAt.Equal(twin.UpdatedAt) || probed.Name != "c-direct" {
 		t.Fatalf("Repo.GetModelEndpoint after SetModelEndpointProbe = %+v, %v; want only probe_json changed", probed, err)
 	}
@@ -128,7 +128,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.RemoveModelEndpoint(ctx, env.ORM, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
 		t.Fatalf("RemoveModelEndpoint(again) err = %v, want ErrModelEndpointNotFound", err)
 	}
-	if _, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
+	if _, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
 		t.Fatalf("Repo.GetModelEndpoint after RemoveModelEndpoint err = %v", err)
 	}
 }
