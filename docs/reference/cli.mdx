@@ -270,6 +270,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge env verify`](#reliant-forge-env-verify) | Prove, without deploying anything, that what forge would ship is what is running |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge fix build-images-vuln-scan`](#reliant-forge-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -296,6 +297,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`reliant forge lint fix`](#reliant-forge-lint-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge lint fix build-images-vuln-scan`](#reliant-forge-lint-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`reliant forge lint fix composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge lint fix config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge lint fix connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -489,6 +491,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge test`](#reliant-forge-test) | Record the project's own test lanes (never runs a test suite of its own) |
 | [`reliant forge test begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`reliant forge test capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
+| [`reliant forge test collect`](#reliant-forge-test-collect) | Pull coverage from an env's running instrumented servers into a test run |
 | [`reliant forge test coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
 | [`reliant forge test flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
 | [`reliant forge test flakes confirm`](#reliant-forge-test-flakes-confirm) | Rerun a red run's failing tests once to tell flakes from breaks (always exits 0) |
@@ -521,7 +524,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge vuln exempt`](#reliant-forge-vuln-exempt) | Accept one advisory for an env's vuln_gate, declared in the env's KCL |
 | [`reliant forge vuln list`](#reliant-forge-vuln-list) | List the vulnerabilities in the release an env runs, judged by its vuln_gate |
 | [`reliant forge vuln patch`](#reliant-forge-vuln-patch) | Bump vulnerable dependencies, base images and the Go toolchain to their fix, and verify the result |
-| [`reliant forge vuln sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact |
+| [`reliant forge vuln sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact, or generate one for a file |
 | [`reliant forge vuln scan`](#reliant-forge-vuln-scan) | Scan a directory, an image, a release's SBOMs, or what an env runs, for vulnerabilities |
 | [`reliant forge vuln show`](#reliant-forge-vuln-show) | Show one advisory, or every finding in one package, in the release an env runs |
 | [`reliant forge why`](#reliant-forge-why) | Why forge: the reasons to use it, each with the checked benefits that back it |
@@ -2366,9 +2369,9 @@ every change. A slow test belongs in the full tier, and says so:
   if testing.Short() `{ t.Skip("builds the forge binary") }`
 
 Under -short a marked test skips, so every test that RAN in a -short run claims
-to be fast. One over budget is a slow test nobody marked. `forge lint
---slow-tests` flags slow work it can recognize in source; this catches the rest,
-whatever made the test slow.
+to be fast. One over budget is a slow test nobody marked.
+`forge lint --slow-tests` flags slow work it can recognize in source; this
+catches the rest, whatever made the test slow.
 
 FEED IT A -short RUN. forge cannot see the flags a stream was made with. A test
 whose own body checks testing.Short or calls testkit.Slow is reported as MARKED:
@@ -2402,10 +2405,10 @@ Validate that every environment renders manifests kubectl will accept
 Renders each environment's deploy/kcl/`<env>`/main.k through the embedded KCL
 runtime and asserts the result is DEPLOYABLE, not merely that it evaluates.
 
-An env's applied stream is `output.manifests`, EXPANDED exactly as `forge env
-deploy` expands it: every Cluster-bound forge.dev Workload record is rendered
-through pkg/deploy.RenderWorkloads (Full profile), per (cluster, namespace)
-set. A record that does not render fails here. Every expanded object must
+An env's applied stream is `output.manifests`, EXPANDED exactly as
+`forge env deploy` expands it: every Cluster-bound forge.dev Workload record
+is rendered through pkg/deploy.RenderWorkloads (Full profile), per (cluster,
+namespace) set. A record that does not render fails here. Every expanded object must
 carry apiVersion + kind, and no top-level key but `output` may hide k8s
 objects no deploy would ever apply.
 
@@ -8161,6 +8164,7 @@ reliant forge env down [environment] [flags]
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Stop every forge stack running on this machine, across all projects (the only way to reach a stack whose project directory is gone) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--collect` | `bool` | - | First pull the env's coverage (as forge test collect does) into the active test run, or a new one; FORGE_TEST_RUN set does this too. Best effort: never fails the teardown |
 
 ---
 
@@ -8788,6 +8792,7 @@ reliant forge env preview delete [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--branch` | `string` | - | The branch the preview is for (instead of --pr) |
+| `--collect` | `bool` | - | First pull the preview's coverage (as forge test collect does) into the active test run, or a new one; FORGE_TEST_RUN set does this too. Best effort: never fails the deletion |
 | `--from` | `string` | `preview` | The committed template env the preview copies (deploy/kcl/`<from>`/) |
 | `--name` | `string` | - | The instance to delete, by name (instead of --pr / --branch) |
 | `--name-template` | `string` | - | How the instance is named: `{env}` is --from, `{id}` is pr-`<n>` or the branch (default "`{env}-``{id}`") |
@@ -10600,6 +10605,7 @@ reliant forge fix [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`build-images-vuln-scan`](#reliant-forge-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -10615,6 +10621,37 @@ reliant forge fix [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge fix build-images-vuln-scan
+
+Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan
+
+Re-render .github/workflows/build-images.yml as forge writes it for a project
+pinned to v1.10.0 or later: no anchore/sbom-action steps (every release cut
+records an SBOM per artifact itself), and the Trivy step replaced by a cached
+grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
+
+It rewrites the file only while it is still forge's: byte for byte what an
+older forge scaffolded for this project. A file you edited is left alone, and
+the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
+later, since CI runs the forge it pins; `forge project upgrade --to v1.11.0`
+moves the pin and then runs this. Re-running it changes nothing.
+
+The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
+migration skill: `forge skill load migrations/v1.11.0/sbom-vulnerabilities`.
+
+```
+reliant forge fix build-images-vuln-scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -11994,6 +12031,7 @@ reliant forge lint [paths...] [flags]
 |------|------|---------|-------------|
 | `--allow-skip` | `stringArray` | `[]` | Accept that a gating lane may NOT run here, by name and with a reason: LANE[,LANE...]=REASON (repeatable), e.g. --allow-skip 'frontend-typecheck=frontends typecheck in the web job'. A gating lane that could not run (a tool missing, a frontend with no node_modules) fails forge lint otherwise; an accepted one is listed as SKIPPED (allowed) in the verdict. forge.yaml lint.allow_skip is the project-level form. Accepts only could-not-run: a lane that ran and found problems still fails |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--caller-paths` | `bool` | - | Fail on Go code that builds a filesystem path from the source file runtime.Caller reports — _, file, _, _ := runtime.Caller(0), then filepath.Dir(file) to find testdata or the repository root. Under -trimpath, forge's default build mode, that file is module-relative, not on disk, so the code passes untrimmed and fails trimmed. A use checked with filepath.IsAbs, or only displayed (filepath.Base, fmt, log, errors), passes. Runs in every forge lint; the fix is to resolve paths against the package directory (filepath.Abs("testdata/x"), or walk up to the go.mod) |
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set `<set>` does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
@@ -12054,6 +12092,7 @@ reliant forge lint fix [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`build-images-vuln-scan`](#reliant-forge-lint-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
@@ -12069,6 +12108,37 @@ reliant forge lint fix [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge lint fix build-images-vuln-scan
+
+Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan
+
+Re-render .github/workflows/build-images.yml as forge writes it for a project
+pinned to v1.10.0 or later: no anchore/sbom-action steps (every release cut
+records an SBOM per artifact itself), and the Trivy step replaced by a cached
+grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
+
+It rewrites the file only while it is still forge's: byte for byte what an
+older forge scaffolded for this project. A file you edited is left alone, and
+the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
+later, since CI runs the forge it pins; `forge project upgrade --to v1.11.0`
+moves the pin and then runs this. Re-running it changes nothing.
+
+The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
+migration skill: `forge skill load migrations/v1.11.0/sbom-vulnerabilities`.
+
+```
+reliant forge lint fix build-images-vuln-scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -17476,8 +17546,9 @@ One binary, one profile: a binary that runs as several workloads (a modular
 monolith serving as server, worker and cron) gets the CPU of all of them,
 merged. The workloads come from the rendered env; `pgo.services` overrides them.
 
-Config is read from --env's KCL (default prod): `pgo = forge.PGO {from_env, since,
-min_weight, services, enabled\}` on a GoBuild, or DockerBuild.pgo keyed by binary.
+Config is read from --env's KCL (default prod):
+`pgo = forge.PGO {from_env, since, min_weight, services, enabled}` on a GoBuild,
+or DockerBuild.pgo keyed by binary.
 A ShellBuild's binaries are pulled only when its `pgo` names them (forge.ShellPGO,
 keyed by package relative to its cwd), which also says where the profile goes
 (`out`, e.g. a sibling checkout's ../reliant/cmd/reliant/default.pgo) and whose
@@ -18690,8 +18761,10 @@ Print one of forge's published JSON Schemas (draft 2020-12).
         pkg/testreport types forge and the control plane write them with.
 
   test-coverage-view, test-runs
-        forge.test.coverage-view/v1, forge.test.runs/v1: what `forge test
-        coverage --json` and `forge test runs --json` print.
+        forge.test.coverage-view/v1, forge.test.runs/v1: what
+        `forge test coverage --json` and `forge test runs --json` print.
+  test-collect  forge.test.collect/v1: what `forge test collect <env> --json`
+        pulled from each workload of an env.
 
   test-run-result
         forge.test.run-result/v1: what `forge test run --json` prints.
@@ -21909,6 +21982,7 @@ reliant forge test [flags]
 |---------|-------------|
 | [`begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
+| [`collect`](#reliant-forge-test-collect) | Pull coverage from an env's running instrumented servers into a test run |
 | [`coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
 | [`flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
 | [`ingest`](#reliant-forge-test-ingest) | Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run |
@@ -21994,6 +22068,61 @@ reliant forge test capture --run <dir> --lane <name> [--results <file>] -- <comm
 | `--render` | `string` | `auto` | How a go test -json stream is printed: auto (verbose when the command passes -v), text, verbose or raw |
 | `--results` | `string` | - | Report file the command writes (JUnit XML, Vitest JSON), copied into the lane after it exits |
 | `--run` | `string` | - | Run directory to record into (default: $FORGE_TEST_RUN, else a new run) |
+
+---
+
+#### reliant forge test collect
+
+Pull coverage from an env's running instrumented servers into a test run
+
+Pulls the Go coverage of the env's running instrumented workloads (the -cover
+builds forge makes for local, ephemeral and preview envs) into a run, as the
+lane's go-covdata input:
+
+  host     GET `http://127.0.0.1:<pprof port>/debug/coverage`, plus what earlier
+           processes flushed to .forge/tests/covdata/`<env>`/`<workload>`/
+  compose  docker cp of the container's GOCOVERDIR (compose binds pprof on
+           0.0.0.0, so the pull endpoint is withheld): what its process
+           flushed at exit
+  cluster  a port-forward to each running pod's debug port (6060), then the
+           same GET
+
+The coverage goes in `<run>`/`<lane>`/covdata/`<workload>`/, grouped by build: the
+newest build is the workload's coverage, and an older one (an air rebuild, a
+pod of the last rollout) is kept under stale/`<hash>`/, labelled "stale build"
+and never merged. Without --run, FORGE_TEST_RUN is the run, else a new one is
+begun; a collect after `forge test capture --lane e2e` joins that lane.
+
+--reset starts the counts from zero instead, without changing the running
+processes (the endpoint is read-only): each live process's counters are
+pulled and recorded as its baseline, which every later collect subtracts, and
+the counter files already flushed (by any process, including one that exited
+before the reset) are recorded and left out of every later collect. A process
+started after the reset, or restarted, is counted whole, and a file flushed
+after the reset is always collected. Run it before the lane, collect after it.
+
+A workload that is not a forge Go build reports
+"coverage: unavailable (not a forge Go build)"; one the env does not
+instrument, "not instrumented". Collection is best effort per workload.
+
+Exit codes: 0 when anything was collected, or there was nothing to collect; 2
+when an instrumented workload could not be reached and nothing was collected;
+1 for a bad argument. --json prints forge.test.collect/v1.
+
+```
+reliant forge test collect <env> [--workload <w>] [--reset] [--run <dir>] [--lane e2e] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print forge.test.collect/v1 |
+| `--lane` | `string` | `e2e` | Lane to record the coverage under |
+| `--reset` | `bool` | - | Start the counts from zero instead of collecting: record the live counters as a baseline later collects subtract, and leave the counter files flushed before it out of every later collect |
+| `--run` | `string` | - | Run directory to record into (default: $FORGE_TEST_RUN, else a new run) |
+| `--workload` | `stringArray` | `[]` | Collect only this workload (repeatable; default: every workload of the env) |
 
 ---
 
@@ -22880,7 +23009,7 @@ reliant forge vuln [flags]
 | [`exempt`](#reliant-forge-vuln-exempt) | Accept one advisory for an env's vuln_gate, declared in the env's KCL |
 | [`list`](#reliant-forge-vuln-list) | List the vulnerabilities in the release an env runs, judged by its vuln_gate |
 | [`patch`](#reliant-forge-vuln-patch) | Bump vulnerable dependencies, base images and the Go toolchain to their fix, and verify the result |
-| [`sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact |
+| [`sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact, or generate one for a file |
 | [`scan`](#reliant-forge-vuln-scan) | Scan a directory, an image, a release's SBOMs, or what an env runs, for vulnerabilities |
 | [`show`](#reliant-forge-vuln-show) | Show one advisory, or every finding in one package, in the release an env runs |
 
@@ -23152,7 +23281,7 @@ reliant forge vuln patch <env | dir> [<advisory-id>...] [flags]
 
 #### reliant forge vuln sbom
 
-Print the SBOM a release recorded for one artifact
+Print the SBOM a release recorded for one artifact, or generate one for a file
 
 Print the SBOM (CycloneDX JSON, as forge stored it at the cut) of one artifact of
 the release an env runs, or of --release. The bytes come from this machine's
@@ -23165,8 +23294,16 @@ digest and kept in this machine's ledger for the next read.
 --artifact names the artifact; it may be left out when only one artifact has an
 SBOM. --format spdx converts to SPDX JSON with syft (installed on first use).
 
+--file `<path>` takes no env: it generates the SBOM of one file, a binary (Go
+buildinfo lists every linked module) or a lockfile, with forge's pinned syft
+and the same invocation a release cut uses for a host binary, and prints it.
+Nothing is recorded. The document names the artifact --artifact (default: the
+file's name), never the path on this machine, and carries --release as its
+version. Use it for binaries your own pipeline publishes; forge's own releases
+attach one per archive this way. A file syft cannot describe exits 2.
+
 ```
-reliant forge vuln sbom <env> [flags]
+reliant forge vuln sbom <env> | --file <path> [flags]
 ```
 
 **Flags:**
@@ -23174,9 +23311,10 @@ reliant forge vuln sbom <env> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--artifact` | `string` | - | the artifact whose SBOM to print |
+| `--artifact` | `string` | - | the artifact whose SBOM to print (with --file: the name the SBOM records) |
+| `--file` | `string` | - | generate the SBOM of this binary or lockfile with forge's pinned syft, instead of reading a release |
 | `--format` | `string` | `cyclonedx` | cyclonedx (as stored) or spdx (converted with syft) |
-| `--release` | `string` | - | read this release instead of the one the env runs |
+| `--release` | `string` | - | read this release instead of the one the env runs (with --file: the version the SBOM records) |
 
 ---
 
