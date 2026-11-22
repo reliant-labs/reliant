@@ -82,7 +82,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, input, &output))
 
 	for _, callID := range []string{finished, running, background, neverStarted, response} {
 		assert.Zero(t, executor.GetExecutionCount(callID), "an interrupted turn runs nothing: %s", callID)
@@ -168,7 +168,7 @@ func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
 
 	var output ExecuteToolsOutput
 	store := unreadableToolCallStore{ExecuteToolsStore: f.h.Repo()}
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(store, executor).WithToolCallResults(testToolCallResults(store)).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, ToolExecutor: executor}).WithToolCallResults(testToolCallResults(store)).Execute, input, &output))
 
 	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
 	require.Len(t, output.ToolResults, 1)

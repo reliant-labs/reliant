@@ -38,7 +38,7 @@ import (
 func queueHumanMessage(t *testing.T, repo *db.Repo, chatID, thread, body string) string {
 	t.Helper()
 	id := uuid.New().String()
-	require.NoError(t, repo.EnqueueAgentMessage(context.Background(), &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(context.Background(), repo.ORM(), &db.AgentMessage{
 		ID:           id,
 		ChatID:       chatID,
 		FromThreadID: chatID,
@@ -89,7 +89,7 @@ func TestCallLLMDrain_DeliversQueuedMessageBeforeHistoryRead(t *testing.T) {
 	require.Empty(t, threadBodies(t, f.h.Repo(), f.chatID, f.chatID),
 		"a queued message must not be in history before delivery")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 	runInActivity(t, f.h, func(actCtx context.Context) error {
 		activityInstance.drainAgentMailbox(actCtx, f.chatID, f.chatID)
 		return nil
@@ -100,7 +100,7 @@ func TestCallLLMDrain_DeliversQueuedMessageBeforeHistoryRead(t *testing.T) {
 		"CallLLM must deliver the mailbox into history before it reads history")
 
 	// The row is marked delivered, so the next turn does not re-deliver it.
-	queued, err := f.h.Repo().ListQueuedAgentMessagesForThread(ctx, f.chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a delivered message must not stay queued")
 }
@@ -124,7 +124,7 @@ func TestCallLLMDrain_DeliversForWorkflowsWithNoLoopNode(t *testing.T) {
 	// gsd.yaml and one-ring.yaml would run it.
 	queueHumanMessage(t, f.h.Repo(), f.chatID, f.chatID, "stranded no more")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 	runInActivity(t, f.h, func(actCtx context.Context) error {
 		activityInstance.drainAgentMailbox(actCtx, f.chatID, f.chatID)
 		return nil
@@ -133,7 +133,7 @@ func TestCallLLMDrain_DeliversForWorkflowsWithNoLoopNode(t *testing.T) {
 	assert.Contains(t, threadBodies(t, f.h.Repo(), f.chatID, f.chatID), "stranded no more",
 		"a loop-less workflow must still receive queued messages")
 
-	queued, err := f.h.Repo().ListQueuedAgentMessagesForThread(ctx, f.chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Empty(t, queued)
 }
@@ -153,7 +153,7 @@ func TestCallLLMDrain_PreservesQueueOrder(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 	}
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 	runInActivity(t, f.h, func(actCtx context.Context) error {
 		activityInstance.drainAgentMailbox(actCtx, f.chatID, f.chatID)
 		return nil
@@ -188,7 +188,7 @@ func TestCallLLMDrain_ReportsMessagesQueuedDuringTheTurn(t *testing.T) {
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	// Nothing queued: the loop is free to exit on its own terms.
 	var beforeAny bool
@@ -240,7 +240,7 @@ func TestCallLLMDrain_PendingInboxIsScopedToThread(t *testing.T) {
 	const otherThread = "0"
 	queueHumanMessage(t, f.h.Repo(), f.chatID, otherThread, "for the other thread")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 
 	var thisThread, thatThread bool
 	runInActivity(t, f.h, func(actCtx context.Context) error {
@@ -264,7 +264,7 @@ func TestCallLLMDrain_EmptyMailboxIsANoOp(t *testing.T) {
 
 	before := threadBodies(t, f.h.Repo(), f.chatID, f.chatID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil})
 	runInActivity(t, f.h, func(actCtx context.Context) error {
 		activityInstance.drainAgentMailbox(actCtx, f.chatID, f.chatID)
 		return nil

@@ -47,7 +47,7 @@ func (s *Service) ListQueuedAgentMessages(
 		return nil, svcerr.NotFound("thread")
 	}
 
-	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
+	queued, err := s.deps.AgentMessages.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list queued messages"))
 	}

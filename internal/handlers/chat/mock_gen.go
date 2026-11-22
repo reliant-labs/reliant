@@ -224,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=75d7c4caabcfa0b42afde4a283c9692b58cf1cd7d9f2149f697541a72fdabc4c
+// forge:hash=486910ed5b96927754753d99d7343c235dc4af5459d0d3ec5a79630def40d979
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -265,7 +265,6 @@ type MockRepository struct {
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
 	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
-	ListQueuedAgentMessagesForThreadFunc                     func(context.Context, string) ([]*db.AgentMessage, error)
 	CreatePlanFunc                                           func(context.Context, *db.Plan) error
 	CreateTaskFunc                                           func(context.Context, *db.Task) error
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
@@ -648,15 +647,6 @@ func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([
 		return m.ListMessagesByIDsFunc(ctx, ids)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
-}
-
-// ListQueuedAgentMessagesForThread records the call and delegates to ListQueuedAgentMessagesForThreadFunc when set.
-func (m *MockRepository) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error) {
-	m.Recorder.Record("ListQueuedAgentMessagesForThread", ctx, toThreadID)
-	if m.ListQueuedAgentMessagesForThreadFunc != nil {
-		return m.ListQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListQueuedAgentMessagesForThread")
 }
 
 // CreatePlan records the call and delegates to CreatePlanFunc when set.
@@ -1652,7 +1642,7 @@ func (m *MockMailbox) EnqueueAgentMessageOnce(ctx context.Context, msg *db.Agent
 var _ Mailbox = (*MockMailbox)(nil)
 
 // forge:section MockAgentMessages
-// forge:hash=009c05def56a810d1ed600c1e2e7118ee4844e31dc8179d7bff516757df4be13
+// forge:hash=6aa2a85d5097bd3600fa6fe02fef04d19650a29ecb87747b560e567e2c92e82f
 
 // MockAgentMessages is a test mock for the AgentMessages interface.
 //
@@ -1666,6 +1656,7 @@ type MockAgentMessages struct {
 	CancelQueuedAgentMessageFunc          func(context.Context, string, string) (bool, error)
 	DeleteUndeliveredAgentMessageFunc     func(context.Context, string, string) (bool, error)
 	CountQueuedAgentMessagesForThreadFunc func(context.Context, string) (int64, error)
+	ListQueuedAgentMessagesForThreadFunc  func(context.Context, string) ([]*db.AgentMessage, error)
 }
 
 // GetAgentMessage records the call and delegates to GetAgentMessageFunc when set.
@@ -1702,6 +1693,15 @@ func (m *MockAgentMessages) CountQueuedAgentMessagesForThread(ctx context.Contex
 		return m.CountQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
 	}
 	return 0, contractkit.MockNotSet("MockAgentMessages", "CountQueuedAgentMessagesForThread")
+}
+
+// ListQueuedAgentMessagesForThread records the call and delegates to ListQueuedAgentMessagesForThreadFunc when set.
+func (m *MockAgentMessages) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error) {
+	m.Recorder.Record("ListQueuedAgentMessagesForThread", ctx, toThreadID)
+	if m.ListQueuedAgentMessagesForThreadFunc != nil {
+		return m.ListQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
+	}
+	return nil, contractkit.MockNotSet("MockAgentMessages", "ListQueuedAgentMessagesForThread")
 }
 
 // Compile-time check.

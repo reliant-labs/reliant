@@ -10,13 +10,14 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"go.temporal.io/sdk/temporal"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/temporal"
 )
 
 // PreflightRequirementsInput is the run's declared `requires:` and who the run

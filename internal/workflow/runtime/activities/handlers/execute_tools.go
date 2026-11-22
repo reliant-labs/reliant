@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -29,8 +32,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // ============================================================================
@@ -274,6 +275,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	preemption   MailboxPreempter
 	toolExecutor toolexec.ToolExecutor
 	// results reads the durable result of a finished tool call. Set by
 	// WithToolCallResults.
@@ -334,10 +336,11 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
-func NewExecuteToolsActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+func NewExecuteToolsActivity(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
-		repo:         repo,
-		toolExecutor: toolExecutor,
+		repo:         deps.Store,
+		preemption:   deps.Preemption,
+		toolExecutor: deps.ToolExecutor,
 	}
 }
 
@@ -459,7 +462,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Mail for the thread ends the batch's waits early; see
 	// execute_tools_preemption.go.
-	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread, a.preemptionPoll))
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.preemption, rtx.Thread, a.preemptionPoll))
 
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together

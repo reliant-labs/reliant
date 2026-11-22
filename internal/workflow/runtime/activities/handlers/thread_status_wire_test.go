@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The UI treats a thread as active only when its record says "running" or
@@ -36,7 +37,7 @@ func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestThread(ctx, chatID, threadID)
 
-	activityInstance := NewThreadStatusActivity(h.Repo())
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 		ChatID:      chatID,
@@ -77,7 +78,7 @@ func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
 			h.CreateTestChat(ctx, chatID, projectID, userID)
 			h.CreateTestThread(ctx, chatID, threadID)
 
-			activityInstance := NewThreadStatusActivity(h.Repo())
+			activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 			var out ThreadStatusOutput
 			require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 				ChatID:     chatID,
@@ -126,7 +127,7 @@ func TestThreadStatus_UpdateCarriesPersistedMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewThreadStatusActivity(h.Repo())
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	// Identity fields deliberately left empty: this is what the inline executor
 	// sends for many spawned sub-agent lifecycle updates.
@@ -173,7 +174,7 @@ func TestThreadStatus_ExplicitOriginWins(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewThreadStatusActivity(h.Repo())
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 		ChatID:     chatID,

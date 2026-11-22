@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -58,7 +59,7 @@ func TestDurableStatus_BackgroundedToolRecordsWhereItRuns(t *testing.T) {
 // activity, so the activity logger and context it relies on are real.
 func executeSingleToolAsRetry(t *testing.T, f *durableStatusFixture, executor *mockToolExecutor, toolCallID, toolName, toolInput string) message.ToolResult {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	runRetry := func(ctx context.Context) (message.ToolResult, error) {
 		return activityInstance.executeSingleTool(ctx, nil, f.chatID, f.chatID, toolName, toolInput, toolCallID,
