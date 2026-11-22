@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/idlereclaim"
 )
 
 // A sub-agent gets a scratch subdirectory of its own, named by its agent id,
@@ -54,4 +55,14 @@ func TestScratchDirGuidance_IsTheSameForEveryAgent(t *testing.T) {
 	guidance := scratchDirGuidance(chat)
 	assert.Contains(t, guidance, "~/.reliant/scratch/chat-123/ ")
 	assert.False(t, strings.Contains(guidance, "agent_id"), "no per-agent text in the shared block")
+}
+
+// The guidance says that idle scratch is cleaned up, and how to keep a
+// directory: the daemon's idle reclaim keeps one with this marker at its top.
+func TestScratchDirGuidance_NamesTheLifecycleAndTheKeepMarker(t *testing.T) {
+	t.Parallel()
+	guidance := scratchDirGuidance(&db.Chat{ID: "chat-123"})
+	assert.Contains(t, guidance, "after 2 days unused")
+	assert.Contains(t, guidance, "after 7 days unused")
+	assert.Contains(t, guidance, "`"+idlereclaim.KeepFile+"`")
 }

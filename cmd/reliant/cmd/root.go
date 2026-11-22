@@ -29,6 +29,7 @@ import (
 	forgecli "github.com/reliant-labs/forge/cli"
 
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/idlereclaim"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
@@ -126,6 +127,7 @@ Reliant server components.`,
 	root.AddCommand(previewCmd)
 	root.AddCommand(chatCmd)
 	root.AddCommand(worktreeCmd)
+	root.AddCommand(newStorageCmd())
 
 	// Commands whose files register themselves (registerCommand): `db`.
 	for _, f := range registeredCommands {
@@ -190,6 +192,19 @@ func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.Reap
 	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetGocacheInterval(), sr.GetPolicyPath(), managed)
 	for _, w := range warnings {
 		logging.Warn("Storage reaper config: " + w)
+	}
+	return out
+}
+
+// idleReclaimConfig is the root config's idle reclaim
+// (internal/idlereclaim): scratch directories and idle worktrees'
+// node_modules. A value it cannot use is named in a warning and replaced by
+// its default; it never stops the daemon.
+func idleReclaimConfig(cfg *config.ReliantConfig) idlereclaim.Config {
+	ir := cfg.GetIdleReclaim()
+	out, warnings := idlereclaim.ParseConfig(ir.GetMode(), ir.GetScratchStripIdle(), ir.GetScratchRemoveIdle(), ir.GetWorktreeNodeModulesIdle())
+	for _, w := range warnings {
+		logging.Warn("Idle reclaim config: " + w)
 	}
 	return out
 }

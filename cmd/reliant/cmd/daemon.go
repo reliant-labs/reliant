@@ -1093,6 +1093,7 @@ keeps running.
 					DataDirClaim:    claim,
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
+					IdleReclaim:     idleReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						ServerMode:    true,
 						ListenPort:    listenPort,
@@ -1150,6 +1151,7 @@ keeps running.
 					DataDirClaim:    claim,
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
+					IdleReclaim:     idleReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						AuthToken: c.PAT,
 						GRPCURL:   daemonGRPCURL,
