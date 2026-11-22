@@ -45,6 +45,7 @@
         "InputOptions",
         "IntegrationSettings",
         "LLMUsageRetention",
+        "Llmusage",
         "MCP",
         "Message",
         "ModelEndpoint",
@@ -62,6 +63,7 @@
         "PayloadStore",
         "Plan",
         "Preset",
+        "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
         "Project",
@@ -501,6 +503,7 @@
         "OrgResolver",
         "PauseService",
         "PayloadStore",
+        "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
@@ -48666,6 +48669,21 @@
             }
           ],
           "reliant.v1.JoinArgs": [],
+          "reliant.v1.LLMGatewayStep": [
+            {
+              "name": "cli",
+              "kind": "string"
+            },
+            {
+              "name": "budget_usd",
+              "kind": "double"
+            },
+            {
+              "name": "models",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListWorkflowsRequest": [
             {
               "name": "project_id",
@@ -49244,6 +49262,11 @@
               "name": "writable_checkouts",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "llm_gateway",
+              "kind": "message",
+              "type_name": "reliant.v1.LLMGatewayStep"
             }
           ],
           "reliant.v1.SaveMessageConfig": [
@@ -50449,6 +50472,7 @@
           "reliant.v1.InvalidWorkflow": "reliant/v1/workflow.proto",
           "reliant.v1.InvokeToolArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.JoinArgs": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.LLMGatewayStep": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ListWorkflowsRequest": "reliant/v1/workflow.proto",
           "reliant.v1.ListWorkflowsResponse": "reliant/v1/workflow.proto",
           "reliant.v1.LoopArgs": "reliant/v1/workflow_v2.proto",
@@ -54304,6 +54328,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Llmusage",
+      "name": "Llmusage",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/llmusage.Service",
+      "source": {
+        "path": "internal/llmusage/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.MockService",
+          "source": {
+            "path": "internal/llmusage/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.forgeMiddlewareService",
+          "source": {
+            "path": "internal/llmusage/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.service",
+          "source": {
+            "path": "internal/llmusage/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "MCP",
       "name": "MCP",
       "kind": "component",
@@ -54542,6 +54603,43 @@
       },
       "methods": [],
       "implementation_candidates": []
+    },
+    {
+      "id": "Privacy",
+      "name": "Privacy",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/privacy.Service",
+      "source": {
+        "path": "internal/privacy/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.MockService",
+          "source": {
+            "path": "internal/privacy/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.forgeMiddlewareService",
+          "source": {
+            "path": "internal/privacy/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.service",
+          "source": {
+            "path": "internal/privacy/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
     },
     {
       "id": "ProcessRuntime",
@@ -56058,6 +56156,43 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "LLMUsageRetention",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.Service",
+      "methods": [],
+      "candidates": [
+        "Llmusage"
+      ],
+      "providers": [
+        "Llmusage"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.Ledger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "MCP",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.Repository",
@@ -56396,6 +56531,30 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Privacy",
+      "field": "Settings",
+      "interface": "github.com/reliant-labs/reliant/internal/privacy.Settings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProcessRuntime",
+      "field": "Privacy",
+      "interface": "github.com/reliant-labs/reliant/internal/privacy.Service",
+      "methods": [],
+      "candidates": [
+        "Privacy"
+      ],
+      "providers": [
+        "Privacy"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Project",
       "field": "Apps",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
@@ -56408,6 +56567,15 @@
       "consumer": "Project",
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Detachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Detachments",
       "methods": [],
       "candidates": [],
       "providers": [],
@@ -56785,6 +56953,19 @@
     },
     {
       "consumer": "Settings",
+      "field": "Privacy",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Privacy",
+      "methods": [],
+      "candidates": [
+        "Privacy"
+      ],
+      "providers": [
+        "Privacy"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Repository",
       "methods": [],
@@ -57148,6 +57329,17 @@
       "consumer": "ToolsDaemon",
       "field": "Attachments",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Attachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Checkouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.MachineCheckouts",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -57575,6 +57767,17 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Rows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Rows",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Settler",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Settler",
       "methods": [],
@@ -57787,6 +57990,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.ControlPlane",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Detachments",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

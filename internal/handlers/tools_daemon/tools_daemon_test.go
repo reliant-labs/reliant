@@ -26,23 +26,28 @@ import (
 // newTestService builds the gateway service over repo as the daemon-gateway
 // does, with no publishers; a test that needs one sets it in svc.deps. A nil
 // repo exercises the in-memory routing alone.
-//
-// A real *db.Repo also gets the lease and inventory stores over its database,
-// as the composition root wires them; a fake repository gets neither, so the
-// writes they would observe go through newTestServiceWithLeases.
-func newTestService(repo Repository) *Service {
+func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
+	var co MachineCheckouts = &MockMachineCheckouts{}
 	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo}
-	if real, ok := repo.(*db.Repo); ok {
-		deps.Attachments, deps.LocalModels = realLeases(real)
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		// A real repository also gets the stores over its database, as the
+		// composition root wires them; a fake gets none, so the writes it
+		// would observe go through newTestServiceWithLeases.
+		co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
+		deps.Attachments, deps.LocalModels = realLeases(r)
 	}
+	if len(checkouts) > 0 {
+		co = checkouts[0]
+	}
+	deps.Checkouts = co
 	return newService(deps)
 }
 
 // newTestServiceWithLeases is newTestService with the lease and inventory
-// roles wired as well (a nil role leaves its writes off, as in production
+// roles wired explicitly (a nil role leaves its writes off, as in production
 // without a database).
 func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalModels) *Service {
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Attachments: leases, LocalModels: models})
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}})
 }
 
 // realLeases is the generated stores over a real database: what the composition

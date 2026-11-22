@@ -3,10 +3,10 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,10 +15,12 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planning"
@@ -1550,35 +1552,24 @@ func (r *Repo) GetSettingValue(ctx context.Context, userID, key string) (string,
 	return setting.Value, true
 }
 
-// TryAdvisoryLock takes a session-level advisory lock on a dedicated
-// connection, so exactly one replica at a time holds it. The lock dies with the
-// connection, so a crashed holder never strands it.
+// TryAdvisoryLock takes dblock's session-level lock on key from the session
+// pool (SessionPool).
 //
-// Session-level locks need a connection that stays the same backend for the
-// whole session. That holds on direct Postgres and with session-pooled
-// pgbouncer; it does NOT hold behind transaction-pooling pgbouncer, where the
-// lock can be taken on one backend and released (or silently re-entered by
-// another replica) on another. So the connection comes from sessionPool: the
-// DatabaseConfig.DirectURL pool when the main pool is transaction-pooled.
+// Only worktreesweep still reaches it through the repository, as its Store's
+// leader election; every other job takes its lock from a dblock.Locker. It goes
+// when the sweeper takes a Locker of its own.
 func (r *Repo) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	conn, err := r.sessionPool().Conn(ctx)
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: r.sessionPool()})
 	if err != nil {
 		return nil, false, err
 	}
-	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
-		_ = conn.Close()
-		return nil, false, err
-	}
-	if !got {
-		_ = conn.Close()
-		return func() {}, false, nil
-	}
-	return func() {
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, key)
-		_ = conn.Close()
-	}, true, nil
+	return locker.TryLock(ctx, dblock.Key(key))
 }
+
+// SessionPool is the pool a caller that needs a Postgres session to itself
+// takes its connection from: DatabaseConfig.DirectURL's pool when the main pool
+// is transaction-pooled, the main pool otherwise.
+func (r *Repo) SessionPool() *sql.DB { return r.sessionPool() }
 
 // SetDaemonStorageState stores the daemon's last-reported disk state, replacing
 // the previous value.
@@ -1807,17 +1798,6 @@ func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
-// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
-// key, or (nil, nil) when there is none.
-func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
-	// An empty key means the caller opted out of idempotency, not that it is
-	// asking about the rows that happen to have no key.
-	if projectID == "" || key == "" {
-		return nil, nil
-	}
-	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
-}
-
 // GetLiveWorktreeByName returns the project's unarchived worktree called
 // name, or (nil, nil). At most one exists.
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
@@ -1921,13 +1901,6 @@ func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
@@ -2099,28 +2072,8 @@ func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 
 // ==================== Settings Helper Methods ====================
 
-func (r *Repo) getBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return false, err
-	}
-	val, err := strconv.ParseBool(setting.Value)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse bool value: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repo) SetString(ctx context.Context, userID string, projectID *string, key, value string) error {
 	return r.upsertSetting(ctx, userID, projectID, key, value, "string")
-}
-
-func (r *Repo) setBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatBool(value), "bool")
 }
 
 func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *string, key, value, valueType string) error {

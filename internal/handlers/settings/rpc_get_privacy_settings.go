@@ -19,7 +19,7 @@ import (
 func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[reliantv1.GetPrivacySettingsRequest]) (*connect.Response[reliantv1.GetPrivacySettingsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
+	analyticsEnabled, crashReportingEnabled, err := s.deps.Privacy.GetPrivacySettings(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get privacy settings"))
 	}

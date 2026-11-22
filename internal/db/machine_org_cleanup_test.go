@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,12 +64,12 @@ func TestDetachProjectDaemonOfOtherOrg_DecidesOnTheProjectsCurrentOrg(t *testing
 
 	// Moved into the machine's org since the reconcile listed it.
 	exec(`UPDATE projects SET org_id = 'globex' WHERE id = $1`, f.project)
-	gone, err := f.repo.DetachProjectDaemonOfOtherOrg(f.ctx, f.project, f.machine, f.user, "globex")
+	gone, err := store.DetachProjectDaemonOfOtherOrg(f.ctx, f.repo.ORM(), f.project, f.machine, f.user, "globex")
 	require.NoError(t, err)
 	assert.False(t, gone)
 	// No org yet: its owner's default org's, never deleted over.
 	exec(`UPDATE projects SET org_id = NULL WHERE id = $1`, f.project)
-	gone, err = f.repo.DetachProjectDaemonOfOtherOrg(f.ctx, f.project, f.machine, f.user, "globex")
+	gone, err = store.DetachProjectDaemonOfOtherOrg(f.ctx, f.repo.ORM(), f.project, f.machine, f.user, "globex")
 	require.NoError(t, err)
 	assert.False(t, gone)
 	checkouts, audits := f.recorded(t)
@@ -78,7 +79,7 @@ func TestDetachProjectDaemonOfOtherOrg_DecidesOnTheProjectsCurrentOrg(t *testing
 	// Still another org's: removed and recorded, once.
 	exec(`UPDATE projects SET org_id = 'acme' WHERE id = $1`, f.project)
 	for range 2 {
-		_, err = f.repo.DetachProjectDaemonOfOtherOrg(f.ctx, f.project, f.machine, f.user, "globex")
+		_, err = store.DetachProjectDaemonOfOtherOrg(f.ctx, f.repo.ORM(), f.project, f.machine, f.user, "globex")
 		require.NoError(t, err)
 	}
 	checkouts, audits = f.recorded(t)
@@ -119,7 +120,7 @@ func TestDetachProjectDaemonOfOtherOrg_WaitsForAConcurrentMoveIntoTheMachinesOrg
 	}
 	done := make(chan result, 1)
 	go func() {
-		gone, err := f.repo.DetachProjectDaemonOfOtherOrg(f.ctx, f.project, f.machine, f.user, "globex")
+		gone, err := store.DetachProjectDaemonOfOtherOrg(f.ctx, f.repo.ORM(), f.project, f.machine, f.user, "globex")
 		done <- result{gone, err}
 	}()
 
@@ -363,14 +364,14 @@ func TestMachineObservedCheckoutWrites_WaitForAMoveOutOfTheMachinesOrg(t *testin
 // user's and cleared the detachment).
 func TestRecordFailedProjectDaemonRestoreInScope_LeavesADetachedPairAlone(t *testing.T) {
 	f, _ := newCleanupFixture(t)
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project, f.machine, f.path, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project, f.machine, f.path, nil))
 
 	recorded, err := f.repo.RecordFailedProjectDaemonRestoreInScope(f.ctx, f.project, f.machine, f.path, nil, "restore failed", nil)
 	require.NoError(t, err)
 	assert.False(t, recorded)
 	checkouts, _ := f.recorded(t)
 	assert.Zero(t, checkouts)
-	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.machine)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.machine)
 	require.NoError(t, err)
 	assert.Len(t, detached, 1, "the detachment stands")
 }
@@ -433,19 +434,19 @@ func TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack(t *testing.T) 
 	require.NotEmpty(t, catalogBefore)
 
 	// The machine is globex's; the project is acme's.
-	gone, err := p.repo.DetachProjectDaemonOfOtherOrg(ctx, p.projectID, machine, "test-user", "globex")
+	gone, err := store.DetachProjectDaemonOfOtherOrg(ctx, p.repo.ORM(), p.projectID, machine, "test-user", "globex")
 	require.NoError(t, err)
 	require.True(t, gone)
 
 	assert.Equal(t, []string{"deploy.yaml"}, paths(), "the other org's machine's workflows are still in the project's config")
-	catalogs, err := p.repo.projectMachineCatalogs(ctx, p.projectID)
+	catalogs, err := store.ProjectMachineCatalogs(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	require.Len(t, catalogs, 1)
 	assert.Equal(t, other, catalogs[0].DaemonID)
 	_, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, machine)
 	require.NoError(t, err)
 	assert.False(t, synced, "the machine's synced config of the project is still there")
-	detached, err := p.repo.ListProjectDaemonDetachmentsForDaemon(ctx, machine)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), machine)
 	require.NoError(t, err)
 	assert.Empty(t, detached, "the cleanup is the platform's, not a user's detach")
 
@@ -506,7 +507,7 @@ func TestSyncProjectConfigSnapshot_ResolvedBeforeTheCleanupPersistsNothingAfterI
 	}
 
 	// The cleanup: the machine is globex's, the project acme's.
-	gone, err := p.repo.DetachProjectDaemonOfOtherOrg(ctx, p.projectID, machine, "test-user", "globex")
+	gone, err := store.DetachProjectDaemonOfOtherOrg(ctx, p.repo.ORM(), p.projectID, machine, "test-user", "globex")
 	require.NoError(t, err)
 	require.True(t, gone)
 

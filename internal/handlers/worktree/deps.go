@@ -30,16 +30,27 @@ type Recoveries interface {
 	CompleteWorktreeRecoveryCheckout(ctx context.Context, owner, id, repo, phase, detail string) error
 }
 
+// Rows is the worktree row's two writes-or-lookups the handlers own: a create's
+// prior row by its client-generated key, and the permanent delete.
+// store.WorktreeExtStore satisfies it.
+type Rows interface {
+	// GetWorktreeByIdempotencyKey is a prior create's worktree for this key in
+	// the project, nil when there is none (and for an empty key: the caller
+	// opted out of idempotency).
+	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*core.Worktree, error)
+	// RemoveWorktree hard-deletes the row, archived or not; a missing one is
+	// not an error.
+	RemoveWorktree(ctx context.Context, id string) error
+}
+
 // Repository is everything the worktree handlers read and write.
 type Repository interface {
 	// Worktree rows: reads, idempotent creates, archive/unarchive, the
 	// cleanup metadata the sweep reads, and the permanent delete.
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*db.Worktree, error)
 	UnarchiveWorktree(ctx context.Context, id string) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *db.CleanupMetadata) error
 	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
-	DeleteWorktree(ctx context.Context, id string) error
 
 	// The project a worktree belongs to, checked against the caller.
 	GetProject(ctx context.Context, id string) (*db.Project, error)

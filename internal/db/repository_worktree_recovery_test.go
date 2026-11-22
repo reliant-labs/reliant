@@ -44,7 +44,7 @@ func TestRecoveryCatalogRetentionAndOwnership(t *testing.T) {
 	require.NoError(t, store.InsertWorktreeRecovery(ctx, repo.ORM(), r), "retry is idempotent")
 	_, err := store.GetWorktreeRecovery(ctx, repo.ORM(), "other-owner", r.ID)
 	require.ErrorIs(t, err, core.ErrRecoveryNotFound)
-	require.NoError(t, repo.DeleteWorktree(ctx, r.SourceWorktreeID))
+	require.NoError(t, store.RemoveWorktree(ctx, repo.ORM(), r.SourceWorktreeID))
 	_, err = repo.ORM().Bun().NewRaw(`DELETE FROM projects WHERE id=?`, r.ProjectID).Exec(ctx)
 	require.NoError(t, err)
 	got, err := store.GetWorktreeRecovery(ctx, repo.ORM(), r.OwnerUserID, r.ID)

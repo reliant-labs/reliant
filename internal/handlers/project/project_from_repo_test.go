@@ -370,7 +370,10 @@ func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *conn
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger:      slog.New(slog.DiscardHandler),
 		Config:      &typedconfig.Config{},
-		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo,
+		Repo:        repo,
+		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
+		LocalModels: store.NewDaemonExtStore(repo.ORM()),
+		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)

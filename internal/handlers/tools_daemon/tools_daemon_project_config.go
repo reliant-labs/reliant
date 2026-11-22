@@ -478,7 +478,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	if strings.TrimSpace(conn.daemonID) == "" {
 		err = resolve(ctx)
 	} else {
-		err = s.deps.Repo.WithMachineCheckoutsLocked(ctx, conn.daemonID, resolve)
+		err = s.deps.Checkouts.WithMachineCheckoutsLocked(ctx, conn.daemonID, resolve)
 	}
 	var lost *lostProjectCreateError
 	if errors.As(err, &lost) {
@@ -667,7 +667,7 @@ func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machin
 	if strings.TrimSpace(daemonID) == "" {
 		return out, nil
 	}
-	rows, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	rows, err := s.deps.Checkouts.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
 	if err != nil {
 		return out, err
 	}

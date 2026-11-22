@@ -46,6 +46,9 @@ type Deps struct {
 	// deps.go). Without it inventories are not stored.
 	// forge:optional-dep
 	LocalModels LocalModels
+	// Checkouts is the machine's checkout lock and detachments
+	// (store.ProjectDaemonDetachmentExtStore).
+	Checkouts MachineCheckouts
 	// UserUpdateHub forwards daemon heartbeats, list changes and local-model
 	// inventories to the owner's web clients as ephemeral user updates.
 	// Without it they are not published.
@@ -114,6 +117,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("tools_daemon: Deps.Repo is required")
+	}
+	if d.Checkouts == nil {
+		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")
 	}
 	return nil
 }

@@ -120,7 +120,9 @@ type ApprovalCreateStore interface {
 	runevents.Store
 }
 
-// ApprovalResolveStore is what ApprovalResolveActivity writes.
+// ApprovalResolveStore is what ApprovalResolveActivity writes, and what
+// CleanupActivity closes a run's approvals through. approvalclose.Closer
+// implements it.
 type ApprovalResolveStore interface {
 	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 }
@@ -131,7 +133,6 @@ type ApprovalResolveStore interface {
 type CallLLMStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
@@ -168,7 +169,6 @@ type CleanupStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
@@ -184,7 +184,6 @@ type CleanupStore interface {
 type CompactStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -266,6 +265,10 @@ type EnqueueAgentMessageStore interface {
 // ExecuteRunStepStore is what ExecuteRunStepActivity reads and writes.
 type ExecuteRunStepStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
+	// GetDaemon reads the command machine's registration: a run node with
+	// llm_gateway runs only on one that registered
+	// daemon.CapabilityRunStepEnv.
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	RunExecutorContextStore
 }
 
@@ -325,7 +328,6 @@ type RunFundingStore interface {
 type GenerateTitleStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error

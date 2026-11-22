@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -101,7 +100,7 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		if !force && prevRow != nil && !record.PushedAt.After(prevRow.PushedAt) {
 			return nil
 		}
-		prev, history, err := machineCatalogFromRow(prevRow)
+		prev, history, err := store.MachineCatalogFromRow(prevRow)
 		if err != nil {
 			return err
 		}
@@ -142,7 +141,7 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		}
 		stored = true
 
-		catalogs, err := r.projectMachineCatalogs(txCtx, record.ProjectID)
+		catalogs, err := store.ProjectMachineCatalogs(txCtx, r.ORM(), record.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -154,7 +153,7 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		if err != nil {
 			return err
 		}
-		union, err := r.projectFilesUnion(txCtx, record.ProjectID)
+		union, err := store.ProjectFilesUnion(txCtx, r.ORM(), record.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -185,45 +184,6 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 	return stored, nil
 }
 
-// projectFilesUnion is the union of every machine's skills, repo memories and
-// scenarios of a project (config.UnionSkills).
-func (r *Repo) projectFilesUnion(ctx context.Context, projectID string) (store.ProjectConfigUnion, error) {
-	rows, err := store.ListProjectMachineFiles(ctx, r.ORM(), projectID)
-	if err != nil {
-		return store.ProjectConfigUnion{}, err
-	}
-	machines := make([]config.MachineFiles, 0, len(rows))
-	for _, row := range rows {
-		m := config.MachineFiles{DaemonID: row.DaemonID, PushedAt: row.PushedAt}
-		if m.Skills, err = config.ParseStoredSkills(row.SkillsJSON); err != nil {
-			return store.ProjectConfigUnion{}, err
-		}
-		if m.RepoMemories, err = config.ParseRepoMemories(row.RepoMemoriesJSON); err != nil {
-			return store.ProjectConfigUnion{}, err
-		}
-		if m.Scenarios, err = config.ParseStoredScenarios(row.ScenariosJSON); err != nil {
-			return store.ProjectConfigUnion{}, err
-		}
-		machines = append(machines, m)
-	}
-	var union store.ProjectConfigUnion
-	if union.SkillsJSON, err = config.EncodeCatalogJSON(config.UnionSkills(machines)); err != nil {
-		return union, err
-	}
-	if union.ScenariosJSON, err = config.EncodeCatalogJSON(config.UnionScenarios(machines)); err != nil {
-		return union, err
-	}
-	if memories := config.UnionRepoMemories(machines); len(memories) > 0 {
-		encoded, err := json.Marshal(memories)
-		if err != nil {
-			return union, err
-		}
-		s := string(encoded)
-		union.RepoMemoriesJSON = &s
-	}
-	return union, nil
-}
-
 // GetProjectMachineConfigRecord reads one machine's own snapshot of a project
 // as a config record: what a run on that machine reads its skills, memories,
 // MCP servers and config from. synced is false when the machine has never
@@ -252,22 +212,6 @@ func (r *Repo) GetProjectMachineConfigRecord(ctx context.Context, projectID, dae
 		RuntimeType:          row.RuntimeType,
 		PushedAt:             row.PushedAt,
 	}, true, nil
-}
-
-func (r *Repo) projectMachineCatalogs(ctx context.Context, projectID string) ([]config.MachineCatalog, error) {
-	rows, err := store.ListProjectMachineCatalogs(ctx, r.ORM(), projectID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]config.MachineCatalog, 0, len(rows))
-	for _, row := range rows {
-		c, _, err := machineCatalogFromRow(row)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, nil
 }
 
 // GetProjectMachineCatalogPushedAt is when daemonID last pushed its catalog
@@ -310,22 +254,6 @@ func requireMachineCatalogKey(projectID, daemonID string) error {
 		return fmt.Errorf("project ID and daemon ID are required")
 	}
 	return nil
-}
-
-func machineCatalogFromRow(row *store.ProjectMachineCatalog) (config.MachineCatalog, []config.RemovedCatalogFile, error) {
-	if row == nil {
-		return config.MachineCatalog{}, nil, nil
-	}
-	c := config.MachineCatalog{DaemonID: row.DaemonID, PushedAt: row.PushedAt}
-	var err error
-	if c.Workflows, err = config.ParseStoredWorkflows(row.WorkflowsJSON); err != nil {
-		return c, nil, err
-	}
-	if c.Presets, err = config.ParseStoredPresets(row.PresetsJSON); err != nil {
-		return c, nil, err
-	}
-	removed, err := config.ParseRemovedCatalogFiles(row.RemovedJSON)
-	return c, removed, err
 }
 
 // machineWorkflowFiles is every machine's workflow files of a project:

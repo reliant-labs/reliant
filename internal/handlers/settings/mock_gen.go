@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=5f2f097212863ed67071bdf5015fe6c0d7a734aa424a910d0e5e5be3181ae15c
+// forge:hash=6dea0a9ef1798d328c6c6044deaac2638e50646411cef39abb8914e46050307a
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -34,8 +34,6 @@ type MockRepository struct {
 	CreateSettingFunc                   func(context.Context, *db.Setting) error
 	UpdateSettingFunc                   func(context.Context, *db.Setting) error
 	DeleteSettingFunc                   func(context.Context, string) error
-	GetPrivacySettingsFunc              func(context.Context, string) (bool, bool, error)
-	SetPrivacySettingsFunc              func(context.Context, string, bool, bool) error
 	ListVisibilityOverridesFunc         func(context.Context, string, int32) (map[string]bool, error)
 	SetVisibilityOverrideFunc           func(context.Context, string, int32, string, bool) error
 	ListHiddenItemDefaultsFunc          func(context.Context, int32) ([]string, error)
@@ -91,24 +89,6 @@ func (m *MockRepository) DeleteSetting(ctx context.Context, id string) error {
 		return m.DeleteSettingFunc(ctx, id)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteSetting")
-}
-
-// GetPrivacySettings records the call and delegates to GetPrivacySettingsFunc when set.
-func (m *MockRepository) GetPrivacySettings(ctx context.Context, userID string) (bool, bool, error) {
-	m.Recorder.Record("GetPrivacySettings", ctx, userID)
-	if m.GetPrivacySettingsFunc != nil {
-		return m.GetPrivacySettingsFunc(ctx, userID)
-	}
-	return false, false, contractkit.MockNotSet("MockRepository", "GetPrivacySettings")
-}
-
-// SetPrivacySettings records the call and delegates to SetPrivacySettingsFunc when set.
-func (m *MockRepository) SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled bool, crashReportingEnabled bool) error {
-	m.Recorder.Record("SetPrivacySettings", ctx, userID, analyticsEnabled, crashReportingEnabled)
-	if m.SetPrivacySettingsFunc != nil {
-		return m.SetPrivacySettingsFunc(ctx, userID, analyticsEnabled, crashReportingEnabled)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetPrivacySettings")
 }
 
 // ListVisibilityOverrides records the call and delegates to ListVisibilityOverridesFunc when set.
@@ -203,6 +183,42 @@ func (m *MockRepository) ListProviderAccountsWithSecrets(ctx context.Context, us
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockPrivacy
+// forge:hash=4a182af88f5c93149da51f41645be70bb50e2733e393233589d6e97dcb05de97
+
+// MockPrivacy is a test mock for the Privacy interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPrivacy.<Method>Func not set" error.
+type MockPrivacy struct {
+	contractkit.Recorder
+	GetPrivacySettingsFunc func(context.Context, string) (bool, bool, error)
+	SetPrivacySettingsFunc func(context.Context, string, bool, bool) error
+}
+
+// GetPrivacySettings records the call and delegates to GetPrivacySettingsFunc when set.
+func (m *MockPrivacy) GetPrivacySettings(ctx context.Context, userID string) (bool, bool, error) {
+	m.Recorder.Record("GetPrivacySettings", ctx, userID)
+	if m.GetPrivacySettingsFunc != nil {
+		return m.GetPrivacySettingsFunc(ctx, userID)
+	}
+	return false, false, contractkit.MockNotSet("MockPrivacy", "GetPrivacySettings")
+}
+
+// SetPrivacySettings records the call and delegates to SetPrivacySettingsFunc when set.
+func (m *MockPrivacy) SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled bool, crashReportingEnabled bool) error {
+	m.Recorder.Record("SetPrivacySettings", ctx, userID, analyticsEnabled, crashReportingEnabled)
+	if m.SetPrivacySettingsFunc != nil {
+		return m.SetPrivacySettingsFunc(ctx, userID, analyticsEnabled, crashReportingEnabled)
+	}
+	return contractkit.MockNotSet("MockPrivacy", "SetPrivacySettings")
+}
+
+// Compile-time check.
+var _ Privacy = (*MockPrivacy)(nil)
 
 // forge:section MockChatWaker
 // forge:hash=7d9e9d108e99a08029386032b15ff15ed5d9349ea5786948f16232a8fdac5747
