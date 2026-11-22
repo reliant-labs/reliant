@@ -44,7 +44,7 @@ func (s *Service) CleanupStorage(
 		return nil, svcerr.NotFound("machine")
 	}
 
-	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
+	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Storage, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
 	if errors.Is(err, worktreesweep.ErrOffline) {
 		return nil, svcerr.FailedPrecondition("that machine is offline; reconnect it and try again")
 	}

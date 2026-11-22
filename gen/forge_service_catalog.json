@@ -56201,6 +56201,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Storage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Storage",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Sweeper",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Sweeper",
       "methods": [],

@@ -1207,6 +1207,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:    worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
 		Sweeper:    g.WorktreeSweep(),
 		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;

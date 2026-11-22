@@ -128,7 +128,6 @@ var userScopedReads = map[string]string{
 	"ListDaemonStorageState":            readOrgless,
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
-	"ListHeldWorktreesForUser":          readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
 	"CountTriggerCapacityHeldByMember": readBackground,
@@ -137,7 +136,6 @@ var userScopedReads = map[string]string{
 	"ListChatsPausedForMachine":        readBackground,
 	"ListChatsQueuedForMachine":        readBackground,
 	"ListChatsWaitingForMachine":       readBackground,
-	"ListLiveWorktreePathsForUser":     readBackground,
 }
 
 var (
