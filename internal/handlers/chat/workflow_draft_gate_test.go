@@ -50,7 +50,7 @@ nodes:
 	}))
 
 	t.Run("StartChat", func(t *testing.T) {
-		chatService := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+		chatService := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 		_, err := chatService.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 			ProjectId: projectID,
 			Workflow:  "gate-draft",

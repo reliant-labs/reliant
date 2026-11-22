@@ -378,8 +378,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 
 	for name, deps := range map[string]Deps{
-		"nil Syncer and Fires":             {Repo: env.repo},
-		"TemporalBackend without a client": {Repo: env.repo, Syncer: syncer, Fires: fires},
+		"nil Syncer and Fires":             {Repo: env.repo, Projects: projectaccesstest.For(env.repo)},
+		"TemporalBackend without a client": {Repo: env.repo, Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires},
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Stored while Temporal was available; served without it.

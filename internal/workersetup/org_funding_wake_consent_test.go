@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgfunding"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -122,7 +123,7 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 
 	var suite temporaltest.WorkflowTestSuite
 	w.env = suite.NewTestActivityEnvironment()
-	w.activity = handlers.NewCallLLMActivity(repo, nil, nil, emptyConfig{}, nil, nil).WithAccountRouting(routing)
+	w.activity = handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
 	w.env.RegisterActivity(w.activity.Execute)
 	w.input = types.ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: w.chatID, Thread: w.chatID},

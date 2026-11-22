@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -130,7 +130,7 @@ func lookupStoppedSpawn(ctx workflow.Context, chatID, thread string) *SpawnHando
 		},
 	})
 	var out struct {
-		Agent *db.StoppedSpawnAgent `json:"agent,omitempty"`
+		Agent *core.StoppedSpawnAgent `json:"agent,omitempty"`
 	}
 	err := workflow.ExecuteActivity(lookupCtx, LookupStoppedSubAgentActivityName, map[string]interface{}{
 		"chat_id": chatID,

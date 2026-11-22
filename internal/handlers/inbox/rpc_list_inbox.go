@@ -646,7 +646,7 @@ func (s *Service) storageView(ctx context.Context, userID string) ([]*worktreesw
 			return c.machines, nil
 		}
 	}
-	machines, err := worktreesweep.StorageView(ctx, s.deps.Repo, userID)
+	machines, err := worktreesweep.StorageView(ctx, s.deps.Storage, userID)
 	if err != nil {
 		return nil, err
 	}

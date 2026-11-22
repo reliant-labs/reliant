@@ -255,6 +255,9 @@ type HTTPRoutesDeps struct {
 	Tokens       tokenauthority.Authority
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
+	// OAuthScopes are the scopes the connector endpoints advertise
+	// (MCP_OAUTH_SCOPES); empty advertises "openid".
+	OAuthScopes  []string
 	ControlPlane *configv1.ControlPlaneConfig
 	// Membership checks the user control-plane names on an internal
 	// ensure-for-app call; nil on a deployment with no orgs.
@@ -281,6 +284,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:              d.Tokens,
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
+		OAuthScopes:         d.OAuthScopes,
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
@@ -426,6 +430,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1059,7 +1064,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	o := database.ORM()
 	worktrees := store.NewWorktreeExtStore(o)
 	chats := store.NewChatExtStore(o)
-	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+	return worktreesweep.New(worktreesweep.NewStores(database, worktrees), d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
 		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).

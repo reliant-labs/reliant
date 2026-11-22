@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/threads"
 
+	"github.com/stretchr/testify/require"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetRunNodeOutput(t *testing.T) {

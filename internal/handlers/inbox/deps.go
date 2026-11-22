@@ -77,11 +77,14 @@ type Notices interface {
 	ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error)
 }
 
-// Repository is the slice of *db.Repo the inbox handlers use. It
-// includes worktreesweep.StorageStore because the storage view and the
-// clean-up read through the same store.
-type Repository interface {
+// Storage is what the storage view, the forget and the clean-up read: the
+// sweep's shared reads and the worktree rows (worktreesweep.Stores).
+type Storage interface {
 	worktreesweep.StorageStore
+}
+
+// Repository is the slice of *db.Repo the inbox handlers use.
+type Repository interface {
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.
 	launch.WorkflowResolver

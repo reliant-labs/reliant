@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -112,7 +112,7 @@ type subAgentResumeEnv struct {
 	// sub-agents that stopped on a failure as the database records them, by
 	// thread. An agent that stopped in an EARLIER execution of the chat is
 	// in here and not in this execution's memory.
-	durableStopped map[string]*db.StoppedSpawnAgent
+	durableStopped map[string]*core.StoppedSpawnAgent
 	// onRootFinishing runs while the root writes its own "completed" status:
 	// the run has left its graph and is ending.
 	onRootFinishing func(agentThread string)
@@ -146,7 +146,7 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 		turns:                map[string]int{},
 		readByTurn:           map[string][][]string{},
 		modelByTurn:          map[string][]string{},
-		durableStopped:       map[string]*db.StoppedSpawnAgent{},
+		durableStopped:       map[string]*core.StoppedSpawnAgent{},
 	}
 
 	// The test environment keeps the last registration for a name, so these
@@ -220,11 +220,11 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 			defer e.mu.Unlock()
 			e.lookups = append(e.lookups, thread)
 			if all, _ := input["all"].(bool); all {
-				var agents []*db.StoppedSpawnAgent
+				var agents []*core.StoppedSpawnAgent
 				for _, agent := range e.durableStopped {
 					agents = append(agents, agent)
 				}
-				slices.SortFunc(agents, func(a, b *db.StoppedSpawnAgent) int { return strings.Compare(a.ChildThreadID, b.ChildThreadID) })
+				slices.SortFunc(agents, func(a, b *core.StoppedSpawnAgent) int { return strings.Compare(a.ChildThreadID, b.ChildThreadID) })
 				return map[string]interface{}{"agents": agents}, nil
 			}
 			if agent := e.durableStopped[thread]; agent != nil {
@@ -586,9 +586,9 @@ func (e *subAgentResumeEnv) lookedUp() []string {
 // stoppedBefore is the durable record of an agent that stopped on a failure
 // in an EARLIER execution of chatID: issued by its root, resumed resumes times
 // already.
-func stoppedBefore(chatID, agentThread, toolCallID string, resumes int) *db.StoppedSpawnAgent {
+func stoppedBefore(chatID, agentThread, toolCallID string, resumes int) *core.StoppedSpawnAgent {
 	root := spawnE2EWorkflowInput(chatID).ExecContext
-	return &db.StoppedSpawnAgent{
+	return &core.StoppedSpawnAgent{
 		ToolCallID:        toolCallID,
 		ParentThreadID:    root.Thread,
 		ToolInput:         `{"preset":"general","prompt":"do the risky part"}`,

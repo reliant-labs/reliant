@@ -44,8 +44,8 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
@@ -102,8 +102,8 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 			service := &Service{
 				deps: Deps{
 					Repo:      repo,
-					Questions: store.NewQuestionExtStore(repo.ORM()),
-					Temporal:  temporal,
+					Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()),
+					Temporal: temporal,
 				},
 				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 			}

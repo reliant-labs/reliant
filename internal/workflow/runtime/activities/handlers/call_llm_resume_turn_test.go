@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,7 +130,7 @@ func TestCallLLM_ResumeTurnContinuesACutOffTurn(t *testing.T) {
 			resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			})
-			activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, resolver, nil)
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 			input := withResumeTurn(callLLMInput(chat.ID, chat.ID, "mock-model"))
 
 			var output CallLLMOutput
@@ -152,10 +154,10 @@ func TestCallLLM_ResumeTurnContinuesACutOffTurn(t *testing.T) {
 			// A retry of the same activity finds its own row: one continue
 			// message per resumed turn, however often it runs.
 			driver2 := &historyRecordingDriver{reply: "again"}
-			retry := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, drivers.DriverResolver(
+			retry := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: drivers.DriverResolver(
 				func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 					return driver2, nil
-				}), nil)
+				}), MCPBinder: nil})
 			_ = h.ExecuteActivity(retry.Execute, input, &output)
 			assert.Len(t, hiddenContinueRows(t, h, chat.ID), 1, "a retry must not add a second continue message")
 		})
@@ -179,10 +181,10 @@ func TestCallLLM_ResumeTurnLeavesOtherTurnsAlone(t *testing.T) {
 		h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 		saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "All done.")
 
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, drivers.DriverResolver(
+		activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: drivers.DriverResolver(
 			func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}), nil)
+			}), MCPBinder: nil})
 		var output CallLLMOutput
 		require.NoError(t, h.ExecuteActivity(activityInstance.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &output))
 		assert.Empty(t, driver.calls(), "an ordinary turn on an assistant tail still yields")
@@ -200,10 +202,10 @@ func TestCallLLM_ResumeTurnLeavesOtherTurnsAlone(t *testing.T) {
 		saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "I'll run the migration and then")
 		h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{}, drivers.DriverResolver(
+		activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: drivers.DriverResolver(
 			func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}), nil)
+			}), MCPBinder: nil})
 		var output CallLLMOutput
 		require.NoError(t, h.ExecuteActivity(activityInstance.Execute, withResumeTurn(callLLMInput(chat.ID, chat.ID, "mock-model")), &output))
 		require.Len(t, driver.calls(), 1)

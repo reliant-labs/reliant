@@ -67,7 +67,7 @@ nodes:
 		Version:    1,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
@@ -124,7 +124,7 @@ nodes:
 		Version:    1,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	validationErrors := service.launcher().ValidateChatWorkflowInputs(ctx, "test-user", &db.Chat{ProjectID: ""}, "required-param-workflow", map[string]interface{}{})
 
 	require.NotEmpty(t, validationErrors)
@@ -181,7 +181,7 @@ nodes:
 		Version:    1,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	err := service.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "valid-spawn-tree", "")
 	require.NoError(t, err)
 }
@@ -240,7 +240,7 @@ nodes:
 		Version:    1,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	err := service.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "agent", "")
 	require.NoError(t, err)
 }

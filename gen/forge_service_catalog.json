@@ -55853,6 +55853,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Spawns",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Temporal",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Temporal",
       "methods": [],
@@ -56250,6 +56261,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Storage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Storage",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -56747,8 +56769,26 @@
     },
     {
       "consumer": "Project",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.DaemonInstalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveLedger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Lookups",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectLookups",
       "methods": [],
       "candidates": [],
       "providers": [],
@@ -57371,6 +57411,17 @@
     },
     {
       "consumer": "Streaming",
+      "field": "SpawnCalls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
       "field": "UserLog",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.UserLog",
       "methods": [],
@@ -57647,8 +57698,30 @@
     },
     {
       "consumer": "ToolsDaemon",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectDaemons",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.LocalModels",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectLookups",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -58355,7 +58428,23 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Project.Installs",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Ledger",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Lookups",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

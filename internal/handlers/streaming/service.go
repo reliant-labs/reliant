@@ -34,6 +34,9 @@ type Deps struct {
 	UserLog  UserLog
 	OrgFeed  OrgFeed
 	Siblings Siblings
+	// SpawnCalls maps child threads to their spawn tool calls for the
+	// reconnect snapshot.
+	SpawnCalls SpawnCalls
 	// Deltas carries a chat's ephemeral streaming deltas (LLM output as it
 	// is generated) to a subscriber of that chat. The API server always has
 	// one; without it a chat subscription still gets its snapshot and its
@@ -93,6 +96,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("streaming: Deps.Repo is required")
+	}
+	if d.SpawnCalls == nil {
+		return fmt.Errorf("streaming: Deps.SpawnCalls is required")
 	}
 	if d.Heads == nil || d.UserLog == nil || d.OrgFeed == nil || d.Siblings == nil {
 		return fmt.Errorf("streaming: Deps.Heads, UserLog, OrgFeed and Siblings are required")

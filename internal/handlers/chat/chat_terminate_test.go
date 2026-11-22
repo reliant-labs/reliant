@@ -139,8 +139,8 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
 		// TerminateChat delegates execution state and reconciliation to the
 		// run-lifecycle service. No pause controller: terminate never signals or
