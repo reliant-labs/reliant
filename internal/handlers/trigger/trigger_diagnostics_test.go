@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,7 +20,7 @@ func TestTriggerProjectsMachineAndHistoricalLaunchNodeFailure(t *testing.T) {
 		require.Equal(t, "launched-chat", id, "never use the chat's later root workflow")
 		return []*db.StepExecution{{StepID: "gate", ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("build error api_key=secret")}}, nil
 	}}
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo)}}
 	chatID := "launched-chat"
 	out := svc.renderFirings(context.Background(), &core.Trigger{ID: "trigger", Kind: core.TriggerKindSchedule, Config: json.RawMessage(`{"interval":"1h"}`), DaemonID: "d", DaemonName: "buildbox", MachineState: "suspended"}, nil, []*core.TriggerEventWithRun{
 		{Event: &core.TriggerEvent{Outcome: core.TriggerEventLaunched, RunStatus: core.TriggerRunFailed, ChatID: &chatID}, Run: &core.TriggerEventRun{DisplayState: core.RunDisplayCompleted}},

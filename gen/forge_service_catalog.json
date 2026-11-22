@@ -56677,6 +56677,19 @@
     },
     {
       "consumer": "Project",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Repository",
       "methods": [],
@@ -57635,6 +57648,19 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

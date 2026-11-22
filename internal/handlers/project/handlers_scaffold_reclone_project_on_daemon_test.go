@@ -2,6 +2,7 @@ package project_test
 
 import (
 	"context"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -47,11 +48,11 @@ func TestRecloneProjectOnDaemon_Generated(t *testing.T) {
 
 	// A project with no remote has nothing to clone from.
 	local := onDaemon(t)
-	local.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) {
+	projectaccesstest.Bind(local, func(context.Context, string, string) (*db.Project, error) {
 		p := ownedProject()
 		p.RemoteURL = nil
 		return p, nil
-	}
+	})
 	noRemote := newService(t, local, nil)
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RecloneProjectOnDaemonRequest, pb.RecloneProjectOnDaemonResponse]{
 		{

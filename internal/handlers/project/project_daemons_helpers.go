@@ -404,7 +404,7 @@ func (s *Service) resolveProjectDaemonRow(ctx context.Context, projectID, daemon
 	}
 	// A project owned by someone else is the store's NotFound, the same as a
 	// missing one, so the answer never reveals that it exists.
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

@@ -31,7 +31,7 @@ func (s *Service) ListProjectDaemonsForDaemon(
 	out := make([]*reliantv1.ProjectDaemon, 0, len(rows))
 	names := s.newMachineNames()
 	for _, pd := range rows {
-		if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
+		if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
 			continue
 		}
 		out = append(out, names.proto(ctx, pd))
