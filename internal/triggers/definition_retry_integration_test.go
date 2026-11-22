@@ -47,7 +47,7 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 			key := "retry-pin-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule
 			fire := func() (*FireOutput, error) {
-				return NewFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
+				return NewFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
 			}
 			if inbound {
 				kind = core.TriggerEventKindWebhook
@@ -55,7 +55,7 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, created)
 				fire = func() (*FireOutput, error) {
-					return NewEventFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
+					return NewEventFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
 				}
 			}
 			_, err := fire()

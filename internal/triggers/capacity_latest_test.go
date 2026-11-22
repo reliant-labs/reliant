@@ -23,7 +23,7 @@ func latestCapacityFixture(t *testing.T, key string) (*fireFixture, *describedSt
 	resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{
 		MaxRunning: 1, Waiting: reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST, Key: key,
 	}}}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
 	return f, starter
 }
 

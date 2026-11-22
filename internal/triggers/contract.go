@@ -5,11 +5,13 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The interfaces below are declared HERE, at the consumer, and deliberately
@@ -37,6 +39,8 @@ type Repo interface {
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	// SettlePendingTriggerEvent settles a still-pending queued event.
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (settled bool, err error)
 
 	// GetDaemon reports a missing row as svcerr.NotFound.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -106,4 +110,55 @@ type PollRepo interface {
 	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
 	// GetConnection returns the user's connection; a foreign id is an error.
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+}
+
+// FireRepo is what the scheduled firer needs: the trigger repository and the
+// capacity store. Both are required, so a firer cannot be built over a store
+// that lacks capacity.
+type FireRepo interface {
+	Repo
+	CapacityStore
+}
+
+// EventFireRepo is what the inbound firer and the redriver need: the event
+// repository and the capacity store, both required.
+type EventFireRepo interface {
+	EventRepo
+	CapacityStore
+}
+
+// CapacityStore is every read and write workflow capacity makes: admission,
+// slot binding and release, start-fence recovery, expiry and queue settlement.
+// It is part of FireRepo and EventFireRepo, which Firer, EventFirer and
+// Redriver require: a store missing any of it does not compile, instead of a
+// capped trigger quietly skipping admission. Stores satisfies it.
+type CapacityStore interface {
+	EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error
+	CanLaunchTriggerCapacity(ctx context.Context, eventID string, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (bool, error)
+	NextAdmissibleTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (*core.TriggerEvent, error)
+	BindTriggerCapacityExecution(ctx context.Context, eventID, workflowID, firstRunID string) error
+	PrepareTriggerCapacityExecution(ctx context.Context, eventID, workflowID string) error
+	ListTriggerCapacityExecutions(ctx context.Context, scope store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error)
+	ListTriggerCapacityExecutionBatch(ctx context.Context, limit int) ([]store.TriggerCapacityExecution, error)
+	ReleaseTriggerCapacityExecution(ctx context.Context, e store.TriggerCapacityExecution) error
+	ReleaseClosedTriggerCapacityExecution(ctx context.Context, e store.TriggerCapacityExecution) error
+	FenceUnboundTriggerCapacityStart(ctx context.Context, e store.TriggerCapacityExecution) (bool, error)
+	ReleaseUnboundTriggerCapacity(ctx context.Context, e store.TriggerCapacityExecution, reason string) (bool, error)
+	TriggerCapacityStartFenced(ctx context.Context, e store.TriggerCapacityExecution) (bool, error)
+	// ExpirePendingTriggerCapacityEvents settles as failed the waiting events
+	// recorded before recordedBefore, independently of the queue heads.
+	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error)
+}
+
+// CapacityDescriber is the Temporal read that reconciles occupied slots: the
+// description of a workflow's execution. client.Client satisfies it.
+type CapacityDescriber interface {
+	DescribeWorkflowExecution(ctx context.Context, workflowID, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
+}
+
+// RedriveStarter is what the redriver starts fires with and reconciles
+// capacity through. client.Client satisfies both.
+type RedriveStarter interface {
+	WorkflowStarter
+	CapacityDescriber
 }

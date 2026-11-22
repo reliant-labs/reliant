@@ -111,7 +111,7 @@ func (p *provenanceProject) workflows() LaunchWorkflows { return LaunchWorkflows
 
 func (p *provenanceProject) fire(t *testing.T, launcher *fakeLauncher) (*FireOutput, error) {
 	t.Helper()
-	return NewFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{
+	return NewFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{
 		TriggerID: p.schedule.ID, FireWorkflowID: "fire-" + uuid.NewString(), ScheduledAt: time.Now().UTC().Truncate(time.Second),
 	})
 }
@@ -246,7 +246,7 @@ func TestInboundEventAgainstABrokenDefinitionIsRefused(t *testing.T) {
 	require.True(t, created)
 	p.push(t, 4000, broken)
 	launcher := &fakeLauncher{}
-	_, err = NewEventFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{
+	_, err = NewEventFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{
 		TriggerID: p.webhook.ID, Kind: core.TriggerEventKindWebhook, DedupeKey: pending.DedupeKey,
 	})
 	require.Error(t, err)
@@ -282,7 +282,7 @@ func TestResumedFireRelaunchesOnTheRecordedSnapshot(t *testing.T) {
 	p := newProvenanceProject(t)
 	first := &fakeLauncher{}
 	req := FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: "fire-" + uuid.NewString(), ScheduledAt: time.Now().UTC().Truncate(time.Second)}
-	_, err := NewFirer(p.repo, first).WithWorkflows(p.workflows()).Fire(p.ctx, req)
+	_, err := NewFirer(NewStores(p.repo), first).WithWorkflows(p.workflows()).Fire(p.ctx, req)
 	require.NoError(t, err)
 	recorded := first.snapshot()[0].Event
 	require.NotEmpty(t, recorded.Definition.CatalogPin)
@@ -298,7 +298,7 @@ func TestResumedFireRelaunchesOnTheRecordedSnapshot(t *testing.T) {
 
 	p.push(t, 2000, "name: release\nentry: [a\n")
 	retry := &fakeLauncher{}
-	_, err = NewFirer(p.repo, retry).WithWorkflows(p.workflows()).Fire(p.ctx, req)
+	_, err = NewFirer(NewStores(p.repo), retry).WithWorkflows(p.workflows()).Fire(p.ctx, req)
 	require.NoError(t, err, "the resumed fire reads its recorded snapshot, not the broken push")
 	calls := retry.snapshot()
 	require.Len(t, calls, 1)

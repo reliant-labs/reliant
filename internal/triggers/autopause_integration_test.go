@@ -58,7 +58,7 @@ func newOrgFireFixture(t *testing.T, projectOrg, triggerOrg *string) *fireFixtur
 
 	starter := &flakyStarter{}
 	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	firer := NewFirer(repo, launcher).WithAutoPause(NewAutoPause(repo, nil))
+	firer := NewFirer(NewStores(repo), launcher).WithAutoPause(NewAutoPause(repo, nil))
 	return &fireFixture{repo: repo, starter: starter, firer: firer, trigger: trigger}
 }
 
