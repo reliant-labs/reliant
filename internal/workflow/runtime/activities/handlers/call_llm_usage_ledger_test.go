@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
@@ -106,7 +107,7 @@ func runCallLLMWithRetries(t *testing.T, h *IdempotencyTestHelper, driver llm.Dr
 	callLLM := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{},
 		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 			return driver, nil
-		}, nil)
+		}, nil).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -227,7 +228,7 @@ func TestCallLLM_UsageLedgerRecordsFailureAsClassOnly(t *testing.T) {
 	callLLM := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{},
 		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 			return driver, nil
-		}, nil)
+		}, nil).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	var out CallLLMOutput
 	err := h.ExecuteActivity(callLLM.Execute, buildPlainCallLLMInput(chat.ID), &out)
 	require.Error(t, err)

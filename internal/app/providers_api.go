@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -281,7 +282,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
-		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
+		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(store.NewLlmOrgUsageDailyExtStore(d.DB.ORM()), cp.InternalServiceSecret),
 		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
 }
@@ -1403,20 +1404,20 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 const llmUsageRetentionInterval = time.Hour
 
 // LLMUsageRetention deletes per-call LLM usage rows older than
-// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// llmusage.Retention. The daily rollup is kept. Every replica runs it;
 // the delete is idempotent and skips rows another replica is deleting.
-type LLMUsageRetention struct{ repo *db.Repo }
+type LLMUsageRetention struct{ ledger llmusage.Service }
 
-// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+// LLMUsageRetentionDeps is the ledger that is pruned.
 type LLMUsageRetentionDeps struct {
-	DB *db.Repo
+	Ledger llmusage.Service
 }
 
 // NewLLMUsageRetention is the retention loop.
 //
 //forge:root-only api
 func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
-	return &LLMUsageRetention{repo: d.DB}, nil
+	return &LLMUsageRetention{ledger: d.Ledger}, nil
 }
 
 // Run prunes until ctx ends.
@@ -1424,12 +1425,12 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 	ticker := time.NewTicker(llmUsageRetentionInterval)
 	defer ticker.Stop()
 	for {
-		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+		if n, err := l.ledger.PruneLLMCallUsage(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
 		}
-		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
 		}
 		select {

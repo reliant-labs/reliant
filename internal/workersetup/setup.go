@@ -9,6 +9,7 @@ package workersetup
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -280,6 +282,13 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.SecretResolver = cfg.SecretResolver
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
+	if cfg.Database != nil {
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
+		}
+		activityDeps.LLMUsage = usage
+	}
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 
 	// Register all activities

@@ -26,7 +26,10 @@ import (
 // This is a SIMPLE struct that just holds shared dependencies
 // Unlike V1, it has NO methods - activities are separate structs
 type Activities struct {
-	Repo           *db.Repo
+	Repo *db.Repo
+	// LLMUsage records every model request in the usage ledger. Optional: nil
+	// records nothing.
+	LLMUsage       handlers.LLMUsageRecorder
 	StreamingHub   streaming.StreamingHub
 	Threads        *threads.Service
 	ToolsFactory   *tools.ToolsFactory

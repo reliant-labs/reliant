@@ -131,7 +131,6 @@ type ApprovalResolveStore interface {
 type CallLLMStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
@@ -184,7 +183,6 @@ type CleanupStore interface {
 type CompactStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -325,7 +323,6 @@ type RunFundingStore interface {
 type GenerateTitleStore interface {
 	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
 	AttendanceStore
-	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
