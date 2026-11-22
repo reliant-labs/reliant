@@ -18,15 +18,15 @@ import (
 func New(tb testing.TB, repo *db.Repo) *accountpurge.Purger {
 	tb.Helper()
 	v := db.NewTestVault(tb, repo)
-	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: v})
+	tokens, err := automationtokens.NewInstrumented(automationtokens.Deps{DB: repo.ORM(), Sealer: v})
 	if err != nil {
 		tb.Fatalf("automationtokens.New: %v", err)
 	}
-	accounts, err := provideraccounts.New(provideraccounts.Deps{DB: repo.ORM(), Sealer: v})
+	accounts, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: repo.ORM(), Sealer: v})
 	if err != nil {
 		tb.Fatalf("provideraccounts.New: %v", err)
 	}
-	connections, err := connectionvault.New(connectionvault.Deps{DB: repo.ORM()})
+	connections, err := connectionvault.NewInstrumented(connectionvault.Deps{DB: repo.ORM()})
 	if err != nil {
 		tb.Fatalf("connectionvault.New: %v", err)
 	}
