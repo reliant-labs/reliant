@@ -516,6 +516,7 @@
         "TokenAuthority",
         "TriggerDeliveryRelay",
         "TriggerPollers",
+        "Triggerowner",
         "UserUpdateHub",
         "Vault",
         "WorkerCatalogSearch",
@@ -57498,6 +57499,19 @@
       ],
       "providers": [
         "WriteLedger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "Owners",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
       ],
       "resolution": "composition_expression"
     },

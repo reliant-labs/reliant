@@ -543,6 +543,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Integrations: g.IntegrationSettings(),
 		DB:           g.Database(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Owners:       g.Triggerowner(),
 	})
 }
 

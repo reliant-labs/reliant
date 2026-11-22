@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggertools"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -97,6 +98,16 @@ type env struct {
 	chatID    string
 }
 
+// realOwners is the real triggerowner service over the test database, the one
+// the trigger service re-owns an orphaned trigger through.
+func realOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
+	t.Helper()
+	stores := triggerowner.NewStores(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	require.NoError(t, err)
+	return svc
+}
+
 func setup(t *testing.T, publicURL string) *env {
 	t.Helper()
 	repo := db.NewTestRepo(t)
@@ -117,7 +128,7 @@ func setup(t *testing.T, publicURL string) *env {
 
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
-		Syncer: e.backend, Fires: e.backend,
+		Owners: realOwners(t, repo), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)

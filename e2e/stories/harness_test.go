@@ -52,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -284,6 +285,16 @@ var noMCPServers = toolexec.MCPContextBinderFunc(func(tc *rctx.ToolContext) *rct
 
 // newHarness stands up a story-scoped environment. Everything registered here
 // is torn down via t.Cleanup.
+// triggerOwners is the real triggerowner service over the story database, the
+// one the trigger service re-owns an orphaned trigger through.
+func triggerOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
+	t.Helper()
+	stores := triggerowner.NewStores(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	require.NoError(t, err, "trigger owner service")
+	return svc
+}
+
 func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Harness {
 	t.Helper()
 	taskQueueSuffix := shortID()
@@ -430,6 +441,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger: slog.Default(),
 		Config: &typedconfig.Config{},
 		Repo:   s.Repo,
+		Owners: triggerOwners(t, s.Repo),
 		Syncer: triggerSyncer,
 		Fires:  triggerFires,
 	})
