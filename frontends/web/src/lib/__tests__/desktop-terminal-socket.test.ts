@@ -63,6 +63,46 @@ describe("DesktopTerminalSocket", () => {
     expect(ws.readyState).toBe(WebSocket.CLOSED);
   });
 
+  it("replays the events that arrived before the relay's open() reply", async () => {
+    const { bridge, emit } = fakeBridge();
+    let reply!: (r: { success: boolean; id?: string }) => void;
+    bridge.open.mockImplementation(() => new Promise((r) => (reply = r)));
+    const ws = new DesktopTerminalSocket(bridge, "");
+    const seen: string[] = [];
+    ws.onopen = () => seen.push("open");
+    ws.onmessage = (e) => seen.push(`msg:${e.data}`);
+    ws.onclose = (e) => seen.push(`close:${e.code}`);
+    // Main opened the upstream socket and relayed its first frames before
+    // the invoke reply reached the renderer.
+    emit({ id: "t1", type: "open" });
+    emit({ id: "other", type: "message", data: "not ours" });
+    emit({ id: "t1", type: "message", data: '{"type":"init"}' });
+    expect(seen).toEqual([]);
+    reply({ success: true, id: "t1" });
+    await flush();
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(seen).toEqual(["open", 'msg:{"type":"init"}']);
+    emit({ id: "t1", type: "message", data: "later" });
+    expect(seen).toEqual(["open", 'msg:{"type":"init"}', "msg:later"]);
+  });
+
+  it("an early close is replayed too, and releases the subscription", async () => {
+    const { bridge, emit, subscribed } = fakeBridge();
+    let reply!: (r: { success: boolean; id?: string }) => void;
+    bridge.open.mockImplementation(() => new Promise((r) => (reply = r)));
+    const ws = new DesktopTerminalSocket(bridge, "");
+    const seen: string[] = [];
+    ws.onclose = (e) => seen.push(`close:${e.code}:${e.reason}`);
+    emit({ id: "t1", type: "open" });
+    emit({ id: "t1", type: "close", code: 1011, reason: "upstream gone", wasClean: false });
+    reply({ success: true, id: "t1" });
+    await flush();
+    expect(seen).toEqual(["close:1011:upstream gone"]);
+    expect(ws.readyState).toBe(WebSocket.CLOSED);
+    expect(subscribed()).toBe(false);
+    expect(bridge.close).not.toHaveBeenCalled();
+  });
+
   it("a close before the relay answered closes it once it does", async () => {
     const { bridge } = fakeBridge();
     const ws = new DesktopTerminalSocket(bridge, "");

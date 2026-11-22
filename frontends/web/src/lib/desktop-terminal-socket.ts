@@ -38,6 +38,11 @@ const OPEN = 1;
 const CLOSING = 2;
 const CLOSED = 3;
 
+// The most events held while the relay's open() reply is pending. A real
+// socket sends a handful (open, init) before that reply lands; the cap only
+// bounds what other sockets' events could cost in the meantime.
+const PENDING_EVENTS_MAX = 1024;
+
 function terminalBridge(): TerminalBridge | undefined {
   if (typeof window === "undefined") return undefined;
   return window.electronAPI?.forgeAuth?.terminal as TerminalBridge | undefined;
@@ -62,31 +67,57 @@ export class DesktopTerminalSocket {
   private id: string | null = null;
   private unsubscribe: (() => void) | null = null;
   private closeRequested: { code?: number; reason?: string } | null = null;
+  // Events that arrived before open() told this socket its id. The main
+  // process opens the upstream socket BEFORE it replies, and sends events on
+  // another IPC channel, so open/init/close can beat the reply; they are kept
+  // here and replayed, in order, once the id is known.
+  private pending: TerminalEvent[] | null = [];
 
   private readonly bridge: TerminalBridge;
 
   constructor(bridge: TerminalBridge, query: string) {
     this.bridge = bridge;
-    // Subscribe before opening, so an event that arrives with the answer
-    // cannot be missed; events for other sockets are ignored by id.
-    this.unsubscribe = bridge.onEvent((event) => this.handle(event));
+    // Subscribe before opening, so an event that arrives with (or before)
+    // the answer cannot be missed; events for other sockets are ignored by id.
+    this.unsubscribe = bridge.onEvent((event) => this.receive(event));
     bridge.open(query).then(
       (result) => {
         if (!result.success || !result.id) {
+          this.pending = null;
           this.finish(1006, result.error || "the desktop app could not open the terminal", true);
           return;
         }
         this.id = result.id;
-        if (this.closeRequested) void bridge.close(result.id, this.closeRequested.code, this.closeRequested.reason);
+        const early = this.pending ?? [];
+        this.pending = null;
+        for (const event of early) this.handle(event);
+        if (this.closeRequested && this.readyState !== CLOSED) {
+          void bridge.close(result.id, this.closeRequested.code, this.closeRequested.reason);
+        }
       },
-      () => this.finish(1006, "the desktop app could not open the terminal", true),
+      () => {
+        this.pending = null;
+        this.finish(1006, "the desktop app could not open the terminal", true);
+      },
     );
+  }
+
+  private receive(event: TerminalEvent) {
+    if (this.pending) {
+      // Not yet known whose it is: hold it (oldest dropped past the cap).
+      if (this.pending.length >= PENDING_EVENTS_MAX) this.pending.shift();
+      this.pending.push(event);
+      return;
+    }
+    this.handle(event);
   }
 
   private handle(event: TerminalEvent) {
     if (this.id === null || event.id !== this.id || this.readyState === CLOSED) return;
     switch (event.type) {
       case "open":
+        // A close() asked for before the id was known keeps it CLOSING.
+        if (this.readyState !== CONNECTING) break;
         this.readyState = OPEN;
         this.onopen?.(new Event("open"));
         break;
