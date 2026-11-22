@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -310,6 +311,7 @@ func NewStoredConfigProvider(d StoredConfigProviderDeps) (*reliantconfig.StoredC
 // RunLifecycleDeps is what runs are recorded in and driven through.
 type RunLifecycleDeps struct {
 	DB       *db.Repo
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 }
@@ -317,7 +319,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -354,6 +356,7 @@ type WorkerChatDeps struct {
 	Logger   *slog.Logger
 	Config   *config.Config
 	DB       *db.Repo
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
@@ -371,6 +374,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Backoff:       d.Backoff,
 		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
 		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 		Messages:      store.NewMessageExtStore(d.DB.ORM()),
@@ -510,6 +514,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // reaches.
 type WorkerToolsFactoryDeps struct {
 	DB            *db.Repo
+	Backoff       providerbackoff.Service
 	Network       *configv1.NetworkConfig
 	Temporal      *TemporalClient
 	AgentRuns     *agentruns.Runs
@@ -562,6 +567,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// spawn_status reads which sub-agents are parked on a usage limit.
+		ProviderBackoff: d.Backoff,
 		// spawn_stop executes here too, and the stop is NOT best-effort: with
 		// no stopper the tool reports that it cannot stop anything rather than
 		// claiming a cancellation that never left the process.
@@ -1017,6 +1024,7 @@ func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, e
 type AccountUsagePollerDeps struct {
 	DB       *db.Repo
 	Accounts provideraccounts.Service
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 }
 
@@ -1029,7 +1037,6 @@ type AccountUsagePollerDeps struct {
 //
 //forge:root-only worker
 func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, error) {
-	repo := d.DB
 	return &accountlimits.Poller{
 		Store: d.Accounts,
 		Fetcher: &accountlimits.Fetcher{
@@ -1038,7 +1045,7 @@ func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, err
 			// A poll that lifts a bench wakes the user's blocked chats, so their
 			// threads re-route onto the account now rather than at a reset.
 			OnCapacity: func(ctx context.Context, userID, _ string) {
-				capacitywake.WakeUser(ctx, repo, d.Temporal.Client, userID, "a usage poll found a limited account serving again")
+				capacitywake.WakeUser(ctx, d.Backoff, d.Temporal.Client, userID, "a usage poll found a limited account serving again")
 			},
 		},
 	}, nil

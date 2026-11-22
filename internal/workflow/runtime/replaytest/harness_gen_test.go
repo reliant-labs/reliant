@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -361,6 +362,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Backoff:       providerbackofftest.New(t, s.Repo),
 		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
 		Messages:      store.NewMessageExtStore(s.Repo.ORM()),

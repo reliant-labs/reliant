@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -39,14 +40,14 @@ func TestWakeOrg_FansOutToTheOrgsBlockedChats(t *testing.T) {
 	_ = inOrg("frank-wake-org", "org-acme", db.Completed()) // ended
 
 	temporal := &usageLimitTemporalClient{}
-	failed, err := capacitywake.WakeOrg(context.Background(), repo, temporal, "org-acme", "the organization's policy changed")
+	failed, err := capacitywake.WakeOrg(context.Background(), providerbackofftest.New(t, repo), temporal, "org-acme", "the organization's policy changed")
 	require.NoError(t, err)
 	assert.Empty(t, failed)
 	assert.ElementsMatch(t, []string{
 		alicePaused + ":" + v2.CapacityWakeSignalName,
 		bobPaused + ":" + v2.CapacityWakeSignalName,
 	}, temporal.signals)
-	failed, err = capacitywake.WakeOrg(context.Background(), repo, temporal, "", "x")
+	failed, err = capacitywake.WakeOrg(context.Background(), providerbackofftest.New(t, repo), temporal, "", "x")
 	assert.NoError(t, err)
 	assert.Empty(t, failed, "no org wakes nothing")
 	assert.Len(t, temporal.signals, 2, "no org wakes nothing")
