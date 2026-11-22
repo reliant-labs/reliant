@@ -225,6 +225,89 @@ service DeployService {
     };
   }
 
+  // --- Deleting an app ------------------------------------------------
+  //
+  // docs/design/unified-shell-and-projects.md §11.3 "Delete an app" (D17,
+  // D18, D19, D21). Deleting a hosted app is scheduled, not immediate: the
+  // app is stopped at once (compute billing ends), every deploy, promotion and
+  // new environment for it is refused with reason app_deletion_scheduled, and
+  // after a 7-day grace window a worker purges it: domains and certificates,
+  // every environment with its data, retained databases, registry images,
+  // secrets, release history and the app record, which frees the name.
+  // Activity and spend history are kept.
+  //
+  // OWNER OR ADMIN, signed in as a person (machine credentials are refused),
+  // WITH A LIVE STEP-UP FOR THE APP (BeginAppStepUp / CompleteAppStepUp),
+  // whatever its environments' protection, and in addition a live step-up on
+  // every PROTECTED environment of the app (SecretStoreService.BeginStepUp),
+  // the gate that guards turning protection off. A missing or expired one is
+  // refused with reason step_up_required. Cancel needs the same authority, so
+  // a member cannot revive what an admin chose to delete.
+
+  // BeginAppStepUp starts a step-up re-authentication for ONE app: the server
+  // emails a one-time code to the caller's verified account address. Nothing
+  // changes until CompleteAppStepUp. Required before ScheduleAppDeletion and
+  // CancelAppDeletion. Owner or admin, signed in as a person.
+  rpc BeginAppStepUp(BeginAppStepUpRequest) returns (BeginAppStepUpResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "issues a one-time code to the caller's own address; nothing changes until it is completed"}
+    };
+  }
+  // CompleteAppStepUp redeems the code. On success the caller may schedule or
+  // cancel the app's deletion until `valid_until`; the grant belongs to the
+  // caller, to this app, and to nothing else.
+  rpc CompleteAppStepUp(CompleteAppStepUpRequest) returns (CompleteAppStepUpResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "redeems the caller's own one-time code for a short-lived grant; no app state changes"}
+    };
+  }
+
+  // ScheduleAppDeletion schedules the app's deletion and stops it. Idempotent:
+  // scheduling a scheduled app keeps its date and stops anything started since.
+  rpc ScheduleAppDeletion(ScheduleAppDeletionRequest) returns (ScheduleAppDeletionResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "app_deletion_scheduled"
+        target: {
+          kind: "app"
+          id: "project"
+          label: "project"
+        }
+        detail: ["project"]
+      }
+    };
+  }
+  // CancelAppDeletion clears a scheduled deletion, and nothing else: the
+  // app's environments stay stopped until someone starts them
+  // (SetEnvironmentRunState), because restarting them automatically would
+  // surprise whoever stopped one on purpose. Refused once the purge has
+  // begun. Cancelling an app with nothing scheduled changes nothing.
+  rpc CancelAppDeletion(CancelAppDeletionRequest) returns (CancelAppDeletionResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "app_deletion_cancelled"
+        target: {
+          kind: "app"
+          id: "project"
+          label: "project"
+        }
+        detail: ["project"]
+      }
+    };
+  }
+  // GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
+  // (machine: deploy:read).
+  rpc GetAppDeletion(GetAppDeletionRequest) returns (GetAppDeletionResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // EnsureEnvironment makes an environment with this NAME exist in the
   // caller's org and returns it: created when absent, returned unchanged when
   // present. It is what `forge env deploy` calls for an env that declares
@@ -1097,6 +1180,24 @@ message GetDeployCapabilitiesResponse {
   //   transaction (refusals vuln_gate_blocked, vuln_gate_unscanned), so forge
   //   does not evaluate it itself for this environment.
   repeated string vulnerability_features = 7;
+
+  // The test-record semantics this server implements (TestsService), named
+  // only once the behaviour behind each is live, never merely because the
+  // rpc exists:
+  //   "test-results": RecordTestRun stores an uploaded run and ingests its
+  //   results, and the TestsService run and test reads answer from them.
+  //   "test-coverage": uploaded coverage is merged into commit reports, and
+  //   GetCoverage / GetFileCoverage answer from them.
+  //   "flake-scores": flake events are detected and flake states scored
+  //   (ListFlakyTests, GetTest).
+  //   "release-test-evidence": a release is bound to its commit's report at
+  //   the cut and as later lanes arrive (GetReleaseTests), so forge reads a
+  //   release's tests from here rather than from its machine ledger.
+  //   "refuses-cover-variant": Promote refuses a release's coverage-
+  //   instrumented ("cover") digest on a persistent environment, so forge's
+  //   own refusal is not the only one.
+  // A forge that sees none of them keeps its local test record.
+  repeated string test_features = 8;
 }
 
 message ResolveHostedProjectRequest {
@@ -1370,6 +1471,95 @@ message SetRetainedDatabaseRetentionRequest {
 
 message SetRetainedDatabaseRetentionResponse {
   RetainedDatabase retained_database = 1;
+}
+
+// AppDeletion is a hosted app's scheduled deletion.
+message AppDeletion {
+  // The app (hosted project) name.
+  string project = 1;
+  google.protobuf.Timestamp scheduled_at = 2;
+  // When the purge may begin: scheduled_at plus the 7-day grace window.
+  google.protobuf.Timestamp purge_after = 3;
+  // The user id of the person who scheduled it.
+  string scheduled_by = 4;
+  // Set once the purge has begun; a cancel is refused after it.
+  google.protobuf.Timestamp purge_started_at = 5;
+  // The purge is waiting on a secret destroy that the converger's kill switch
+  // (deploy_pipeline.destroy_deleted_environment_secrets) holds: "secret
+  // destroy paused". The purge resumes when the switch is on again; it never
+  // bypasses it.
+  bool secret_destroy_paused = 6;
+}
+
+message ScheduleAppDeletionRequest {
+  // The app (hosted project) name, as in forge.yaml.
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 2;
+}
+
+message ScheduleAppDeletionResponse {
+  AppDeletion deletion = 1;
+  // The deployments this call stopped (already-stopped ones are not listed).
+  repeated string stopped_deployment_ids = 2;
+}
+
+message CancelAppDeletionRequest {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 2;
+}
+
+// CancelAppDeletionResponse is empty: a cancel only clears the schedule.
+message CancelAppDeletionResponse {
+  // A draft of this rpc started the stopped deployments again; a cancel
+  // never does (docs/design/unified-shell-and-projects.md §11.3).
+  reserved 1, 2;
+  reserved "resumed_deployment_ids", "resume_refused_reason";
+}
+
+message BeginAppStepUpRequest {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 2;
+}
+
+message BeginAppStepUpResponse {
+  // sent_to is the destination with its local part masked (j***@example.com),
+  // enough for the user to know which inbox to open and no more.
+  string sent_to = 1;
+  // expires_at is when the code stops being redeemable.
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message CompleteAppStepUpRequest {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+  // code is the one-time code from the email. Inbound only.
+  string code = 2 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 3;
+}
+
+message CompleteAppStepUpResponse {
+  // valid_until is when the grant ends.
+  google.protobuf.Timestamp valid_until = 1;
+}
+
+message GetAppDeletionRequest {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
+}
+
+message GetAppDeletionResponse {
+  // Unset when no deletion is scheduled.
+  AppDeletion deletion = 1;
 }
 
 message GetManagedDatabaseRequest {
@@ -1729,6 +1919,17 @@ message PromoteReleaseRequest {
   // re-promote of the bound release the floor is still set if none is active
   // at it. Empty: no floor (declared floors are raised regardless).
   string raise_floor_reason = 17;
+
+  // Promote even though the environment's vulnerability gate refuses
+  // (`forge env deploy <env> <v> --override-vuln-gate "<why>"`): a blocking
+  // advisory or an artifact nobody could scan (delivery_policy.vuln_gate,
+  // reasons vuln_gate_blocked / vuln_gate_unscanned), or an artifact with no
+  // SBOM (delivery_policy.provenance_sbom, reason sbom_missing). The reason
+  // is recorded on the promotion's vuln_gate / provenance_sbom gate with who
+  // overrode it and which findings. It relaxes exactly those refusals, for
+  // this one promotion; the durable answer is an exemption in the env's KCL.
+  // Empty: no override. A value that is only whitespace is refused.
+  string vuln_gate_override_reason = 18;
 }
 
 message PromoteReleaseResponse {
@@ -2919,6 +3120,11 @@ message MintLocalTelemetryTokenRequest {
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it.
   optional string org_id = 5;
+  // Request session replay for THIS local session's browser token only.
+  // Unset or false is off, independently of the environment's replay opt-in.
+  // Does not change environment policy or bypass browser/organization disables.
+  // Renewals must resend the choice. Capture requires the response acknowledgement.
+  optional bool session_replay = 6;
 }
 
 // LocalTelemetryRetention is a dev instance's retention, in whole days per
@@ -2970,6 +3176,10 @@ message MintLocalTelemetryTokenResponse {
   LocalTelemetryInstance instance = 7;
   // The effective retention, after clamping. Every signal field is set.
   LocalTelemetryRetention retention = 8;
+  // True only when browser_token grants session replay for this session and
+  // its lifetime. False or absent (including older servers) means do not capture.
+  // No destination fallback; ordinary browser telemetry is unaffected.
+  optional bool session_replay = 9;
 }
 
 // === Ledger import ===

@@ -142,7 +142,7 @@ func TestEventFireRefusedBeforeLaunchConcludesItsCheckFailed(t *testing.T) {
 			// recorded GitHub.
 			var rows []*core.WorkflowCheckRun
 			store := &workflowcheck.MockStore{
-				CreateWorkflowCheckRunFunc: func(_ context.Context, row *core.WorkflowCheckRun) (bool, error) {
+				InsertWorkflowCheckRunFunc: func(_ context.Context, row *core.WorkflowCheckRun) (bool, error) {
 					rows = append(rows, row)
 					return true, nil
 				},

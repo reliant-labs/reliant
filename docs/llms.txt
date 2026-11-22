@@ -4,6 +4,7 @@
 
 ## Start here
 
+- [Search these docs from your agent (docs MCP server)](https://docs.reliantlabs.io/getting-started/search-docs-from-your-agent.md): These docs are a public, read-only MCP server at https://docs.reliantlabs.io/mcp. Claude Code: `claude mcp add --transport http reliant-docs https://docs.reliantlabs.io/mcp`. Codex: `codex mcp add reliant-docs --url https://docs.reliantlabs.io/mcp`. Cursor: `{"mcpServers":{"reliant-docs":{"url":"https://docs.reliantlabs.io/mcp"}}}`.
 - [Why Reliant: one platform from code to production](https://docs.reliantlabs.io/getting-started/why-reliant.md): Why Reliant owns the whole path from code to production: the seams it knows, what they let agents do that a stitched stack can't, and how to start anywhere.
 - [Reliant quick start: run your first AI agent workflow](https://docs.reliantlabs.io/getting-started/quick-start.md): Sign in to Reliant, set up a machine and a model, chat with the default agent, run a built-in multi-agent workflow and write your own in YAML.
 - [Forge quick start: build and deploy a Go + React app](https://docs.reliantlabs.io/forge/quick-start.md): Build a Go and React app with Reliant and Forge, run it locally and deploy it to a URL on Reliant hosting. No account needed with forge env deploy --claimable.

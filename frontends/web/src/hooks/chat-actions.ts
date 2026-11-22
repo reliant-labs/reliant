@@ -158,6 +158,7 @@ export async function startChat(request: StartChatRequest & { builder_test?: boo
     selectedPresets: request.selectedPresets || {},
     builderTest: request.builder_test || undefined,
     clientMessageId: request.client_message_id,
+    appName: request.app_name || undefined,
   });
   return chatOf(response);
 }

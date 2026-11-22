@@ -256,7 +256,7 @@ describe("a store this console cannot read", () => {
     // was inline copy, mostly telling people to go and run a CLI command.
     render(<ManagedSecretsView {...props()} />);
     const link = screen.getByTestId("secrets-docs-link");
-    expect(link).toHaveAttribute("href", "https://docs.reliantlabs.io/features/secrets");
+    expect(link).toHaveAttribute("href", "https://docs.reliantlabs.io/hosting/secrets");
     // Opens out of the app, and rel is set so the new tab cannot reach back
     // through window.opener.
     expect(link).toHaveAttribute("target", "_blank");

@@ -2,9 +2,11 @@
 package netports
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -169,5 +171,26 @@ func TestIsLoopbackListening_WholeRange(t *testing.T) {
 	}
 	if _, ok := isLoopbackListening(filepath.Join(t.TempDir(), "nope4"), nope6, 5174); ok {
 		t.Error("ok = true with no proc tables")
+	}
+}
+
+// ParseListeners returns every LISTEN socket, on any address, with its inode;
+// other states and malformed rows are skipped.
+func TestParseListeners(t *testing.T) {
+	table := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n" +
+		"   0: 0100007F:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1 0 100 0 0 10 0\n" +
+		"   1: 0A00000A:1435 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 222 1 0 100 0 0 10 0\n" +
+		"   2: 0100007F:9C40 0100007F:0BB8 01 00000000:00000000 00:00000000 00000000  1000        0 333 1 0 100 0 0 10 0\n" +
+		"   3: garbage\n" +
+		"   4: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 0 1 0 100 0 0 10 0\n"
+	got := ParseListeners(strings.NewReader(table))
+	if len(got) != 2 {
+		t.Fatalf("listeners = %+v, want 2", got)
+	}
+	if got[0].Port != 3000 || got[0].Inode != 111 || !got[0].IP.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Errorf("listener 0 = %+v, want 127.0.0.1:3000 inode 111", got[0])
+	}
+	if got[1].Port != 5173 || got[1].Inode != 222 || !got[1].IP.Equal(net.IPv4(10, 0, 0, 10)) {
+		t.Errorf("listener 1 = %+v, want 10.0.0.10:5173 inode 222", got[1])
 	}
 }

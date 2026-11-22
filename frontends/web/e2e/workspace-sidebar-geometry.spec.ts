@@ -8,7 +8,8 @@ test('New workspace matches every selector, including after the controls wrap', 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await mockAppsBackend(page);
   await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  // New chat is a link in the one shell's nav (U6), to the new-chat view.
+  await page.getByRole('link', { name: 'New chat', exact: true }).click();
   const controls = page.locator('[data-onboarding="workspace-buttons"]');
   await expect(controls.getByRole('button', { name: 'New workspace', exact: true })).toBeVisible();
   await expect(controls.getByTestId('new-chat-project-chip')).toBeVisible();

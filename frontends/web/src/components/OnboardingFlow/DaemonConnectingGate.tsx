@@ -287,8 +287,8 @@ export function DaemonConnectingGate({
             Skip and continue
           </button>
           <p className="text-xs text-muted-foreground">
-            Skipping opens Reliant without a machine. You can retry or check on
-            it later in Settings → Machines.
+            Skipping opens Reliant without an agent sandbox. You can retry or check on
+            it later in Settings → Agent sandboxes.
           </p>
         </div>
       </div>

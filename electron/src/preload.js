@@ -387,7 +387,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Keyboard shortcuts — push effective bindings so the native menu's
   // accelerators track the user's remaps instead of silently overriding them.
-  updateShortcutBindings: (bindings) => ipcRenderer.invoke('shortcuts:update', bindings),
+  // `aliases` (shortcut id → desktop alias chords) is optional: a renderer
+  // that predates aliases sends bindings alone.
+  updateShortcutBindings: (bindings, aliases) =>
+    ipcRenderer.invoke('shortcuts:update', bindings, aliases),
 
   // The find bar (find-bar.js): shown over this window and focused. The
   // findInPage shortcut decides when; `request` carries the app's theme.

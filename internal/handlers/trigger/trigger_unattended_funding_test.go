@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +15,7 @@ import (
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
@@ -21,7 +23,8 @@ import (
 // The stamp a trigger write decides (org-provider-accounts §11.3, I4): a new
 // trigger in a team org is org_only, in a solo org any, any when the count is
 // unknown (an old control plane); the owner can always tighten; loosening is
-// refused in a team org; an update that does not name it keeps it.
+// refused in a team org, and elsewhere needs a person; an update that does
+// not name it keeps it.
 func TestUnattendedFundingFor(t *testing.T) {
 	const (
 		unspecified = reliantv1.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED
@@ -40,6 +43,11 @@ func TestUnattendedFundingFor(t *testing.T) {
 		existing *core.Trigger
 		want     core.UnattendedFunding
 		refused  bool
+		// person signs the write in to the app; otherwise it is an access
+		// token, what an agent shell or a script holds.
+		person bool
+		// needsPerson is a widening refused only because no person made it.
+		needsPerson bool
 	}{
 		{name: "a new trigger in a two-member org is org_only", orgID: &org, members: 2, known: true, chosen: unspecified, want: core.UnattendedFundingOrgOnly},
 		{name: "a new trigger in a solo org is any", orgID: &org, members: 1, known: true, chosen: unspecified, want: core.UnattendedFundingAny},
@@ -55,9 +63,15 @@ func TestUnattendedFundingFor(t *testing.T) {
 			existing: stamped(core.UnattendedFundingOrgOnly), refused: true},
 		{name: "loosening with an unknown count is refused", orgID: &org, chosen: anySource,
 			existing: stamped(core.UnattendedFundingOrgOnly), refused: true},
-		{name: "loosening in a solo org is allowed", orgID: &org, members: 1, known: true, chosen: anySource,
-			existing: stamped(core.UnattendedFundingOrgOnly), want: core.UnattendedFundingAny},
+		{name: "loosening in a solo org by a person is allowed", orgID: &org, members: 1, known: true, chosen: anySource,
+			existing: stamped(core.UnattendedFundingOrgOnly), person: true, want: core.UnattendedFundingAny},
+		{name: "loosening in a solo org by an agent needs a person", orgID: &org, members: 1, known: true, chosen: anySource,
+			existing: stamped(core.UnattendedFundingOrgOnly), needsPerson: true},
 		{name: "a new trigger asking for any in a team org is refused", orgID: &org, members: 3, known: true, chosen: anySource, refused: true},
+		{name: "a new trigger asking for any in a solo org is its default, no person needed", orgID: &org, members: 1, known: true,
+			chosen: anySource, want: core.UnattendedFundingAny},
+		{name: "an agent can always tighten", orgID: &org, members: 1, known: true, chosen: orgOnly,
+			existing: stamped(core.UnattendedFundingAny), want: core.UnattendedFundingOrgOnly},
 		{name: "naming any on a trigger already any is no loosening", orgID: &org, members: 3, known: true, chosen: anySource,
 			existing: stamped(""), want: core.UnattendedFundingAny},
 		{name: "a count that cannot be read is retried, never stamped any", orgID: &org, countErr: errors.New("down"), chosen: unspecified},
@@ -70,11 +84,20 @@ func TestUnattendedFundingFor(t *testing.T) {
 					return tc.members, tc.known, tc.countErr
 				},
 			}}}
-			got, err := s.unattendedFundingFor(context.Background(), "owner", tc.orgID, tc.chosen, tc.existing)
+			ctx := auth.WithCredential(context.Background(), auth.CredentialAccessToken)
+			if tc.person {
+				ctx = auth.WithCredential(context.Background(), auth.CredentialSession)
+			}
+			got, err := s.unattendedFundingFor(ctx, "owner", tc.orgID, tc.chosen, tc.existing)
 			switch {
 			case tc.refused:
 				require.Error(t, err)
 				assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			case tc.needsPerson:
+				require.Error(t, err)
+				assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+				assert.Equal(t, auth.ReasonPersonRequired, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+				assert.Empty(t, got)
 			case tc.countErr != nil:
 				require.Error(t, err)
 				assert.Empty(t, got)
@@ -98,6 +121,7 @@ func (p policyDoc) ResolveOrgPolicy(context.Context, string) (accesstokenclient.
 // the automations section names PERSONAL, both the platform switch
 // (PointProviders) and the section's mode enforce, and the providers section,
 // if it names sources, names PERSONAL too. Audit, either way, keeps the stamp.
+// Even then only a person may loosen, at create or update.
 func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
 	org := "org-acme"
 	personal := controlplanev1.ProviderSource_PROVIDER_SOURCE_PERSONAL
@@ -114,9 +138,13 @@ func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
 		orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, e)
 		t.Cleanup(func() { orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, prev) })
 	}
-	loosen := func(doc *controlplanev1.OrgPolicy) (core.UnattendedFunding, error) {
-		ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDoc{doc}))
+	person := auth.WithCredential(context.Background(), auth.CredentialSession)
+	loosenAs := func(as context.Context, doc *controlplanev1.OrgPolicy, existing *core.Trigger) (core.UnattendedFunding, error) {
+		ctx := orgpolicy.WithResolver(as, orgpolicy.New(policyDoc{doc}))
 		return s.unattendedFundingFor(ctx, "owner", &org, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY, existing)
+	}
+	loosen := func(doc *controlplanev1.OrgPolicy) (core.UnattendedFunding, error) {
+		return loosenAs(person, doc, existing)
 	}
 	automations := func(mode controlplanev1.OrgPolicyMode, sources ...controlplanev1.ProviderSource) *controlplanev1.OrgPolicy {
 		return &controlplanev1.OrgPolicy{Automations: &controlplanev1.AutomationsPolicy{Mode: mode, AllowedSources: sources}}
@@ -127,7 +155,29 @@ func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
 		got, err := loosen(automations(enforce, orgKeys, personal))
 		require.NoError(t, err)
 		assert.Equal(t, core.UnattendedFundingAny, got)
+		got, err = loosenAs(person, automations(enforce, orgKeys, personal), nil)
+		require.NoError(t, err, "a person creating one that asks for any")
+		assert.Equal(t, core.UnattendedFundingAny, got)
 	})
+
+	for name, cred := range map[string]auth.Credential{
+		"an access token (the CLI login, an agent shell)": auth.CredentialAccessToken,
+		"an OAuth client":             auth.CredentialOAuthClient,
+		"an unclassified worker call": auth.CredentialUnknown,
+	} {
+		t.Run("both enforce, "+name+": needs a person", func(t *testing.T) {
+			setPlatform(t, orgpolicy.EnforcementEnforce)
+			agent := auth.WithCredential(context.Background(), cred)
+			for what, existing := range map[string]*core.Trigger{"update": existing, "create": nil} {
+				got, err := loosenAs(agent, automations(enforce, orgKeys, personal), existing)
+				require.Error(t, err, what)
+				assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), what)
+				assert.Equal(t, auth.ReasonPersonRequired, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), what)
+				assert.Contains(t, err.Error(), "needs a person signed in to the Reliant app", what)
+				assert.Empty(t, got, what)
+			}
+		})
+	}
 
 	for name, tc := range map[string]struct {
 		platform orgpolicy.Enforcement

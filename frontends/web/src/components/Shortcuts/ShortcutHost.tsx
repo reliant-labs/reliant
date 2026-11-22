@@ -57,6 +57,7 @@ import { surfaceForPath } from "../../lib/surface";
 import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
+import { revealShellNav, toggleShellNav } from "../Layout/shell/shellFrame";
 import { homePath, projectChatsPath, settingsPath, workflowsPath } from "@/lib/paths";
 import { orgFreeRouteId } from "@/lib/paths/org";
 import { chatShellRouteOf } from "@/lib/chatRoute";
@@ -310,6 +311,9 @@ function createHostCore(
       else void live.current.navigate({ to: settingsPath() });
     },
     onOpenWorkflows: () => void live.current.navigate({ to: workflowsPath() }),
+    // The nav is the shell's, on every page of it, not the workspace's.
+    onToggleSidebar: toggleShellNav,
+    onFocusLeftSidebar: revealShellNav,
     onOpenProject: addProject,
     onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds

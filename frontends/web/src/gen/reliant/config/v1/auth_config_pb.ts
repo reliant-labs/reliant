@@ -12,11 +12,12 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/auth_config.proto.
  */
 export const file_reliant_config_v1_auth_config: GenFile = /*@__PURE__*/
-  fileDesc("CiNyZWxpYW50L2NvbmZpZy92MS9hdXRoX2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEiywEKCkF1dGhDb25maWcSpQEKC2RhZW1vbl90eXBlGAEgASgJQo8Bgs4YigEKE1JFTElBTlRfREFFTU9OX1RZUEUqXURhZW1vbiB0eXBlIHRoZSBwbGF0Zm9ybSBkZWNsYXJlczogbWFuYWdlZCAoYW4gb3BlcmF0b3ItY3JlYXRlZCB3b3Jrc3BhY2UgcG9kKSBvciBzZWxmX2hvc3RlZEoHbWFuYWdlZEoLc2VsZl9ob3N0ZWQ6FcrBGBEKB3JlbGlhbnQaBgoEYXV0aEJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
+  fileDesc("CiNyZWxpYW50L2NvbmZpZy92MS9hdXRoX2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEi1QEKCkF1dGhDb25maWcSpQEKC2RhZW1vbl90eXBlGAEgASgJQo8Bgs4YigEKE1JFTElBTlRfREFFTU9OX1RZUEUqXURhZW1vbiB0eXBlIHRoZSBwbGF0Zm9ybSBkZWNsYXJlczogbWFuYWdlZCAoYW4gb3BlcmF0b3ItY3JlYXRlZCB3b3Jrc3BhY2UgcG9kKSBvciBzZWxmX2hvc3RlZEoHbWFuYWdlZEoLc2VsZl9ob3N0ZWQ6H8rBGBsKB3JlbGlhbnQaBgoEYXV0aBoICgZ1cGRhdGVCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
 
 /**
  * AuthConfig is what `reliant auth` commands read about the machine they sign
- * in on, beside CLIConfig. The rules every config here follows are in
+ * in on, beside CLIConfig, and what `reliant update` reads to refuse replacing
+ * a binary the platform installed. The rules every config here follows are in
  * config.proto's header.
  *
  * It is its own subtree config, rather than a CLIConfig field, because

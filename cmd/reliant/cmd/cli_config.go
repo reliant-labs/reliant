@@ -42,8 +42,8 @@ func configureCLIMachine(cmd *cobra.Command, _ []string) error {
 // RELIANT_DAEMON_TYPE=managed, which the workspace operator sets on the pods
 // it creates): its daemon sign-in is a Secret the platform mounts read-only,
 // which no login of this machine's owns, and no browser on it can reach a
-// loopback listener. cmd is a `reliant auth` command, the subtree AuthConfig
-// binds.
+// loopback listener. cmd is a `reliant auth` or `reliant update` command, the
+// subtrees AuthConfig binds.
 func isManagedMachine(cmd *cobra.Command) (bool, error) {
 	cfg, err := config.LoadAuthConfig(cmd)
 	if err != nil {

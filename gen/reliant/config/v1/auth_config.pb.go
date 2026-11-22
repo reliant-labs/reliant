@@ -23,7 +23,8 @@ const (
 )
 
 // AuthConfig is what `reliant auth` commands read about the machine they sign
-// in on, beside CLIConfig. The rules every config here follows are in
+// in on, beside CLIConfig, and what `reliant update` reads to refuse replacing
+// a binary the platform installed. The rules every config here follows are in
 // config.proto's header.
 //
 // It is its own subtree config, rather than a CLIConfig field, because
@@ -85,14 +86,15 @@ var File_reliant_config_v1_auth_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_auth_config_proto_rawDesc = "" +
 	"\n" +
-	"#reliant/config/v1/auth_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xd7\x01\n" +
+	"#reliant/config/v1/auth_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe1\x01\n" +
 	"\n" +
 	"AuthConfig\x12\xb1\x01\n" +
 	"\vdaemon_type\x18\x01 \x01(\tB\x8f\x01\x82\xce\x18\x8a\x01\n" +
 	"\x13RELIANT_DAEMON_TYPE*]Daemon type the platform declares: managed (an operator-created workspace pod) or self_hostedJ\amanagedJ\vself_hostedR\n" +
-	"daemonType:\x15\xca\xc1\x18\x11\n" +
+	"daemonType:\x1f\xca\xc1\x18\x1b\n" +
 	"\areliant\x1a\x06\n" +
-	"\x04authB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x04auth\x1a\b\n" +
+	"\x06updateB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_auth_config_proto_rawDescOnce sync.Once

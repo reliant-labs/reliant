@@ -7,7 +7,8 @@ import "forge/v1/forge.proto";
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
 
 // AuthConfig is what `reliant auth` commands read about the machine they sign
-// in on, beside CLIConfig. The rules every config here follows are in
+// in on, beside CLIConfig, and what `reliant update` reads to refuse replacing
+// a binary the platform installed. The rules every config here follows are in
 // config.proto's header.
 //
 // It is its own subtree config, rather than a CLIConfig field, because
@@ -19,7 +20,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message AuthConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    subtrees: [{path: ["auth"]}]
+    subtrees: [
+      {path: ["auth"]},
+      {path: ["update"]}
+    ]
   };
 
   // What the platform says this machine is: the same variable as

@@ -22,7 +22,7 @@ import (
 // RELIANT_DAEMON_TYPE is declared by exactly two configs whose processes never
 // meet: DaemonConfig (`daemon start`, the declaration since before v1, which a
 // deployment's KCL sets as daemon_config.daemon_type) and AuthConfig (`reliant
-// auth`). Declaring it on a config `daemon start` also loads (CLIConfig, the
+// auth`, `reliant update`). Declaring it on a config `daemon start` also loads (CLIConfig, the
 // root config) would leave `daemon start` two declarations, which forge
 // refuses, and moving it off DaemonConfig would silently drop the variable
 // from every KCL config that sets daemon_config.daemon_type.
@@ -43,19 +43,21 @@ func TestDaemonTypeHasOneDeclarationPerProcess(t *testing.T) {
 		return true
 	})
 	require.ElementsMatch(t, []string{"AuthConfig", "DaemonConfig"}, keysOf(declaredBy),
-		"RELIANT_DAEMON_TYPE is declared by DaemonConfig (daemon start) and AuthConfig (reliant auth) alone")
+		"RELIANT_DAEMON_TYPE is declared by DaemonConfig (daemon start) and AuthConfig (reliant auth, reliant update) alone")
 	require.Equal(t, []string{"daemon", "start"}, declaredBy["DaemonConfig"].GetCommand())
-	subtrees := declaredBy["AuthConfig"].GetSubtrees()
-	require.Len(t, subtrees, 1)
-	require.Equal(t, []string{"auth"}, subtrees[0].GetPath(),
+	var paths [][]string
+	for _, st := range declaredBy["AuthConfig"].GetSubtrees() {
+		paths = append(paths, st.GetPath())
+	}
+	require.Equal(t, [][]string{{"auth"}, {"update"}}, paths,
 		"AuthConfig's scope must not reach `daemon start`, which DaemonConfig's declaration serves")
 }
 
 // RELIANT_DAEMON_TYPE keeps working exactly as before for the `reliant auth`
-// commands, now through AuthConfig: managed is a cloud machine, anything else
+// commands and `reliant update`, now through AuthConfig: managed is a cloud machine, anything else
 // allowed is not, and a value outside the allowed set is refused.
 func TestAuthCommandsReadRELIANTDaemonType(t *testing.T) {
-	for _, path := range [][]string{{"auth", "login"}, {"auth", "logout"}, {"auth", "token", "create"}} {
+	for _, path := range [][]string{{"auth", "login"}, {"auth", "logout"}, {"auth", "token", "create"}, {"update"}} {
 		cmd, _, err := NewRootCmd().Find(path)
 		require.NoError(t, err)
 
@@ -114,7 +116,9 @@ func keysOf[V any](m map[string]V) []string {
 // daemon_config.daemon_type alone still puts RELIANT_DAEMON_TYPE in a `daemon
 // start` process's env, as it did before AuthConfig existed, and
 // auth_config.daemon_type alone puts it in a `reliant auth` process's env.
-// Each reaches only its own process.
+// Each reaches only its own process. A ReliantProcess written before
+// AuthConfig existed (no auth_config) still renders a `reliant auth` or
+// `reliant update` process, AuthConfig projecting as its defaults.
 func TestDaemonTypeProjectsThroughKCL(t *testing.T) {
 	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
@@ -128,6 +132,12 @@ func TestDaemonTypeProjectsThroughKCL(t *testing.T) {
 		"daemon_start_auth_field":   "",
 		"auth_login_auth_field":     "managed",
 		"auth_login_daemon_field":   "",
+		"update_auth_field":         "managed",
+		// No auth_config: AuthConfig's default, and DaemonConfig's field
+		// still reaches only `daemon start`.
+		"auth_login_without_auth_config":   "",
+		"update_without_auth_config":       "",
+		"daemon_start_without_auth_config": "managed",
 	} {
 		env, ok := cases[name]
 		require.True(t, ok, "fixture case %s", name)

@@ -41,10 +41,11 @@ import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
 import { InboxApprovalBatch, InboxItem, subjectName } from "./InboxItem";
 import { inboxPath } from "@/lib/paths";
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 
 export function InboxPage() {
   return (
-    <AreaShell areaPath={inboxPath()} areaLabel="Inbox" areaNoun="inbox">
+    <AreaShell areaPath={inboxPath()} areaLabel="Inbox" areaNoun="inbox" learn="agents/chats">
       <InboxView />
     </AreaShell>
   );
@@ -202,6 +203,8 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
             {elsewhere} waiting in other projects
           </Button>
         )}
+        {/* Nothing waiting is a calm state, and still a place to start (U6d). */}
+        <ProjectEmptyCtaRow learn="agents/chats" className="mt-4" testId="inbox-empty-cta" />
       </Card>
     );
   } else {

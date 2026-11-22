@@ -17,7 +17,7 @@ func (s *Service) KeepMarkedWorktree(
 	if err != nil {
 		return nil, err
 	}
-	if err := markDecisionError(s.deps.Sweeper.KeepMarked(ctx, s.deps.Repo, userID, req.Msg.WorktreeId, req.Msg.MarkId)); err != nil {
+	if err := markDecisionError(s.deps.Sweeper.KeepMarked(ctx, s.deps.Marks, userID, req.Msg.WorktreeId, req.Msg.MarkId)); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.KeepMarkedWorktreeResponse{}), nil

@@ -269,6 +269,13 @@ type ExecuteRunStepStore interface {
 	RunExecutorContextStore
 }
 
+// WorktreeReviver brings a chat's archived worktree back
+// (reviveWorktree, execute_tools_workspace.go). store.WorktreeExtStore
+// satisfies it; ReviveArchivedWorktree rechecks eligibility under the row lock.
+type WorktreeReviver interface {
+	ReviveArchivedWorktree(ctx context.Context, id string) (string, error)
+}
+
 // ExecuteToolsStore is what ExecuteToolsActivity (and InvokeToolActivity,
 // which wraps it) reads and writes. It forwards the store to the tool
 // bindings, the worktree resolution and the tool-call status writer.
@@ -277,8 +284,6 @@ type ExecuteToolsStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	// ReviveArchivedWorktree is reviveWorktree's (execute_tools_workspace.go).
-	ReviveArchivedWorktree(ctx context.Context, id string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetContextUsage(ctx context.Context, chatID string, thread string) (*db.ContextUsage, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
