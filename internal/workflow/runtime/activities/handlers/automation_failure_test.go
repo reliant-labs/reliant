@@ -9,10 +9,11 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/ptr"
 
+	"github.com/stretchr/testify/require"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAutomationFailureFallbackAndDetail(t *testing.T) {

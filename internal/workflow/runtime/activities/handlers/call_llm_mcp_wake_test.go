@@ -4,6 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -12,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
-	"github.com/stretchr/testify/require"
 )
 
 // daemonCommandRecorder stands in for the daemon-backed MCP runtime: every
@@ -69,11 +72,7 @@ func runCallLLMWithFilter(t *testing.T, preloaded []string, rtxSelector *activit
 		return mockDriver, nil
 	}
 	binder := &recordingBinder{}
-	activity := NewCallLLMActivity(
-		h.Repo(), nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		&recordingProjectResolver{}, driverResolver, binder,
-	)
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: driverResolver, MCPBinder: binder})
 
 	input := ActivityInput{
 		Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID, DaemonSelector: rtxSelector},

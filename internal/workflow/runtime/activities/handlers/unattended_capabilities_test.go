@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,9 +26,7 @@ import (
 func (f *noMachineFixture) turnAs(t *testing.T, cfg *reliantv1.ToolsConfig, rtx RuntimeContext) *reliantv1.CallLLMOutput {
 	t.Helper()
 	rtx.ChatID, rtx.Thread = f.chat.ID, f.chat.ID
-	callLLM := NewCallLLMActivity(f.h.Repo(), nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}),
-		&staticConfigProvider{}, f.callLLM.driverResolver, f.callLLM.mcpBinder)
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
 	var output CallLLMOutput
 	require.NoError(t, f.h.ExecuteActivity(callLLM.Execute, ActivityInput{
 		Runtime: rtx,

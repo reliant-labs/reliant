@@ -1089,7 +1089,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=3c3a35f0f51b67e6bb1918499bb0496457936a6aca555352656c7d3d2fc30673
+// forge:hash=cf2529cb83202af3b979776556448eb132437f39d4f2cf725618eed0da5b319d
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1110,8 +1110,6 @@ type MockCallLLMStore struct {
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	EmitToolCallUpdateFunc                                   func(context.Context, string, db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThreadFunc                     func(context.Context, string) ([]*db.AgentMessage, error)
-	ListSpawnChildrenFunc                                    func(context.Context, string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
 	RecordProviderBackoffFunc                                func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
 	ClearProviderBackoffFunc                                 func(context.Context, string, time.Time) error
 	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
@@ -1271,24 +1269,6 @@ func (m *MockCallLLMStore) ListQueuedAgentMessagesForThread(ctx context.Context,
 		return m.ListQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
 	}
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListQueuedAgentMessagesForThread")
-}
-
-// ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockCallLLMStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
-	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
-	if m.ListSpawnChildrenFunc != nil {
-		return m.ListSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListSpawnChildren")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockCallLLMStore) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListInheritedSpawnChildren")
 }
 
 // RecordProviderBackoff records the call and delegates to RecordProviderBackoffFunc when set.

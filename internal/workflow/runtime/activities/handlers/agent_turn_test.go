@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +58,7 @@ func TestCallLLM_OpensTheAgentTurnAndRecordsItsTraceParent(t *testing.T) {
 	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
-	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	input.Runtime.Telemetry = &activitytypes.RunTelemetry{WorkflowName: "agent", RunID: "run-1", Preset: "researcher"}

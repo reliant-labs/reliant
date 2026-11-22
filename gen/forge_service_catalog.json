@@ -55786,6 +55786,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Spawns",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Temporal",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Temporal",
       "methods": [],
@@ -57245,6 +57256,17 @@
       "consumer": "Streaming",
       "field": "Siblings",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Siblings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "SpawnCalls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
       "methods": [],
       "candidates": [],
       "providers": [

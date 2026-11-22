@@ -406,6 +406,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:    store.NewToolCallExtStore(s.Repo.ORM()),
 		Temporal:  s.Temporal,
 		Pause:     pause,
 	})

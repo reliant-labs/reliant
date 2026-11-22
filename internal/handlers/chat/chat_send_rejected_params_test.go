@@ -104,8 +104,8 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			service := &Service{
 				deps: Deps{
 					Repo:      repo,
-					Questions: store.NewQuestionExtStore(repo.ORM()),
-					Temporal:  temporal,
+					Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()),
+					Temporal: temporal,
 				},
 				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
 			}

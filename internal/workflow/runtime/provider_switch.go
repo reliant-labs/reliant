@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -260,7 +260,7 @@ func (t *ChildWorkflowTracker) lookupAndResumeStopped(ctx workflow.Context, chat
 		participated = skip[0]
 	}
 	var out struct {
-		Agents []*db.StoppedSpawnAgent `json:"agents"`
+		Agents []*core.StoppedSpawnAgent `json:"agents"`
 	}
 	if err := workflow.ExecuteActivity(markerContext(ctx), LookupStoppedSubAgentActivityName,
 		map[string]interface{}{"chat_id": chatID, "all": true}).Get(ctx, &out); err != nil {
@@ -302,9 +302,9 @@ func repeatedFailureReport(ctx workflow.Context, config *spawnChildWorkflowConfi
 	return workflow.GetVersion(ctx, providerSwitchChangeID+"/repeat-failure-report", workflow.DefaultVersion, 1) != workflow.DefaultVersion
 }
 
-// failureReportDigest is db.FailureReportDigest: the identity a failure
+// failureReportDigest is core.FailureReportDigest: the identity a failure
 // report's body is remembered by, in workflow state and in durable rows alike.
-func failureReportDigest(body string) string { return db.FailureReportDigest(body) }
+func failureReportDigest(body string) string { return core.FailureReportDigest(body) }
 
 func isProviderSwitchHold(err error) bool {
 	var app *temporal.ApplicationError

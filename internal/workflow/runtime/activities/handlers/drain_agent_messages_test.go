@@ -10,13 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity {

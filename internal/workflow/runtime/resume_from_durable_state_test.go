@@ -39,7 +39,7 @@ func TestFreshRestart_EachThreadKeepsItsOwnGrants(t *testing.T) {
 	recordLoad(t, repo, chatID, parent, "tc-load-parent", []string{"sourcegraph"})
 	recordLoad(t, repo, chatID, child, "tc-load-child", []string{"fetch"})
 
-	resume := ResumeInputFromDurableState(ctx, repo, chatID, root)
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, root)
 	require.Equal(t, "agent_loop", resume.NodeID)
 	require.Len(t, resume.Spawns, 1, "the sub-agent that never reported back is relaunched")
 	require.Equal(t, child, resume.Spawns[0].ChildThread)
@@ -175,7 +175,7 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	}))
 	push("v2", now.Add(time.Minute))
 
-	resume := ResumeInputFromDurableState(ctx, repo, chatID, workflowID)
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, workflowID)
 	assert.Equal(t, pin, resume.CatalogPin, "the restart carries the interrupted run's pin")
 	assert.Equal(t, pin, rootCatalogPin(WorkflowInput{Resume: resume}), "and its root load reads it")
 	catalog, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
@@ -191,7 +191,7 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: workflowID, ChatID: chatID, NodeID: "agent_loop", CatalogPin: "0000gone",
 	}))
-	assert.Empty(t, ResumeInputFromDurableState(ctx, repo, chatID, workflowID).CatalogPin,
+	assert.Empty(t, ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, workflowID).CatalogPin,
 		"a pin no longer stored is dropped: the restart pins the current catalog")
 }
 

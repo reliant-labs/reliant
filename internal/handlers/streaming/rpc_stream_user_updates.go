@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -752,7 +753,7 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*re
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.spawn_tool_calls", func(ctx context.Context) error {
 			var err error
-			spawnCallBy, err = s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
+			spawnCallBy, err = s.deps.SpawnCalls.SpawnToolCallIDsByChildThread(ctx, chatID)
 			if err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
 					"error", err, "chatID", shortID(chatID))

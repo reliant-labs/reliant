@@ -108,7 +108,7 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -137,7 +137,7 @@ func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	clientMessageID := uuid.NewString()
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:          fx.chatID,
@@ -175,7 +175,7 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	tc := &signaltest.Recorder{}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -209,7 +209,7 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: tc}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -251,7 +251,7 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 	before := countAgentMessageRows(t, rawDB, ctx, fx.childThreadID)
 	require.Equal(t, 0, before)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
@@ -291,7 +291,7 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 			ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 			require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.childThreadID, tc.status))
 
-			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 			resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 				ChatId:   fx.chatID,
 				ThreadId: fx.childThreadID,
@@ -336,7 +336,7 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 
 	// Pre-fix, queueing here is refused -- correctly, since nothing is running.
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	idleResp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "between turns",
 	}))
@@ -381,7 +381,7 @@ func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	// A second, unrelated chat with its own thread.
 	_, otherFx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -408,7 +408,7 @@ func TestSendAgentMessage_RejectsTerminalThread(t *testing.T) {
 	_, err := repo.UpdateThreadStatus(ctx, fx.childThreadID, db.ThreadStatusCompleted, nil)
 	require.NoError(t, err)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
@@ -431,7 +431,7 @@ func TestSendAgentMessage_WrongOwner(t *testing.T) {
 
 	_, fx := setupSendAgentMessageFixture(t, repo, "user-a")
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctxB, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -451,7 +451,7 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "first",
@@ -495,7 +495,7 @@ func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	_, otherFx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: otherFx.childThreadID,
@@ -514,7 +514,7 @@ func TestListQueuedAgentMessages_WrongOwner(t *testing.T) {
 
 	_, fx := setupSendAgentMessageFixture(t, repo, "user-a")
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.ListQueuedAgentMessages(ctxB, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID,
@@ -532,7 +532,7 @@ func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "cancel me",
@@ -561,7 +561,7 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "already delivered",
@@ -601,7 +601,7 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "user-a")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "protect me",
@@ -646,7 +646,7 @@ func TestSendAgentMessage_MissingFields(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
 
 	cases := []*reliantv1.SendAgentMessageRequest{
 		{ChatId: "", ThreadId: fx.childThreadID, Message: "x"},

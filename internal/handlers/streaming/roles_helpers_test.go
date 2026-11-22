@@ -22,6 +22,9 @@ func withRoles(d Deps) Deps {
 	if d.Siblings == nil {
 		d.Siblings = roleOf[Siblings](d.Repo, func(r *db.Repo) Siblings { return store.NewMessageExtStore(r.ORM()) })
 	}
+	if d.SpawnCalls == nil {
+		d.SpawnCalls = roleOf[SpawnCalls](d.Repo, func(r *db.Repo) SpawnCalls { return store.NewToolCallExtStore(r.ORM()) })
+	}
 	return d
 }
 

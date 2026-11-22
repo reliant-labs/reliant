@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // liveBackgroundSpawnLister is the one repository read the coarse fresh
 // restart needs to find the spawns its dead predecessor left in flight.
 type liveBackgroundSpawnLister interface {
-	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*db.LiveBackgroundSpawn, error)
+	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error)
 }
 
 // ResumableSpawnsFromDurableState derives the background spawns a coarse
@@ -61,7 +61,7 @@ func ResumableSpawnsFromDurableState(ctx context.Context, repo liveBackgroundSpa
 // stoppedSpawnReader is the one repository read resuming a stopped sub-agent
 // from durable state needs.
 type stoppedSpawnReader interface {
-	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error)
 }
 
 // StoppedSpawnFromDurableState returns the relaunch record of the sub-agent on
@@ -93,7 +93,7 @@ func StoppedSpawnFromDurableState(ctx context.Context, repo stoppedSpawnReader, 
 //
 // Pure: the workflow converts a LookupStoppedSubAgent result with it, so it
 // must give the same answer on replay.
-func stoppedSpawnHandoff(agent *db.StoppedSpawnAgent) SpawnHandoff {
+func stoppedSpawnHandoff(agent *core.StoppedSpawnAgent) SpawnHandoff {
 	h := SpawnHandoff{
 		ToolCallID:       agent.ToolCallID,
 		ParentThread:     agent.ParentThreadID,

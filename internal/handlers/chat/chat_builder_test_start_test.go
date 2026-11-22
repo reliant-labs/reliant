@@ -51,8 +51,8 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 		service: &Service{
 			deps: Deps{
 				Repo:      repo,
-				Questions: store.NewQuestionExtStore(repo.ORM()),
-				Temporal:  temporal,
+				Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()),
+				Temporal: temporal,
 			}, threads: threads.NewService(repo), runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
 	}

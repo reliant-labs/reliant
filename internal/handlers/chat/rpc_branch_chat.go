@@ -404,7 +404,7 @@ func (s *Service) createBranchNoteMessage(
 	targetWorktree *db.Worktree,
 	workspaceContext *reliantv1.WorkspaceBranchContext,
 ) error {
-	inherited, err := s.deps.Repo.ListInheritedSpawnChildren(ctx, branchWorkflowID)
+	inherited, err := s.deps.Spawns.ListInheritedSpawnChildren(ctx, branchWorkflowID)
 	if err != nil {
 		return fmt.Errorf("failed to list inherited sub-agents: %w", err)
 	}
