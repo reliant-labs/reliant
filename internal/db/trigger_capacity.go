@@ -10,6 +10,10 @@ import (
 func (r *Repo) EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error {
 	return store.EnqueueTriggerCapacity(ctx, r.ORM(), ev, scope)
 }
+
+func (r *Repo) EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	return store.EnqueueTriggerCapacitySuperseding(ctx, r.ORM(), ev, scope)
+}
 func (r *Repo) NextAdmissibleTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (*core.TriggerEvent, error) {
 	return store.NextAdmissibleTriggerCapacityEvent(ctx, r.ORM(), scope, limits)
 }

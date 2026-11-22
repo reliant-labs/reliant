@@ -26,8 +26,8 @@ type capacityBoundary struct {
 	young bool
 }
 
-func (b *capacityBoundary) EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error {
-	return nil
+func (b *capacityBoundary) EnqueueTriggerCapacitySuperseding(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	return nil, nil
 }
 func (b *capacityBoundary) CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error) {
 	return b.released, nil

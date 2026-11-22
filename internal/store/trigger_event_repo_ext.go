@@ -298,8 +298,9 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 
 // ExpirePendingTriggerCapacityEvents settles as failed, with detail, the
 // events still waiting for workflow capacity that were recorded before
-// recordedBefore: at most limit of them, oldest first. It returns how many it
-// settled.
+// recordedBefore: at most limit of them, oldest first. It returns the events
+// it settled, as they are now, so each can be accounted for (the redriver
+// opens a trigger.fire span per event).
 //
 // It sweeps every waiting event, not the scope heads
 // ListStalePendingTriggerEvents returns: a head is chosen by priority, so a
@@ -307,19 +308,29 @@ ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 // and would otherwise never expire. A waiting event holds no slot, so settling
 // one frees nothing. Conditional on pending, like SettlePendingTriggerEvent,
 // so it never overwrites a launch that won a race.
-func ExpirePendingTriggerCapacityEvents(ctx context.Context, db orm.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+func ExpirePendingTriggerCapacityEvents(ctx context.Context, db orm.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error) {
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit
 	}
-	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome = ?0, outcome_detail = ?1
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome = ?0, outcome_detail = ?1
 WHERE id IN (
  SELECT id FROM trigger_events WHERE capacity_order IS NOT NULL AND outcome = 'pending' AND created_at < ?2
  ORDER BY created_at, id LIMIT ?3
-) AND outcome = 'pending'`, core.TriggerEventFailed, detail, recordedBefore.UTC(), limit).Exec(ctx)
+) AND outcome = 'pending'
+RETURNING `+columnsOf[TriggerEvent]("trigger_events"), core.TriggerEventFailed, detail, recordedBefore.UTC(), limit).Scan(ctx, &rows)
 	if err != nil {
-		return 0, fmt.Errorf("failed to expire waiting trigger events: %w", err)
+		return nil, fmt.Errorf("failed to expire waiting trigger events: %w", err)
 	}
-	return res.RowsAffected()
+	out := make([]*core.TriggerEvent, 0, len(rows))
+	for _, row := range rows {
+		ev, err := triggerEventToCore(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, nil
 }
 
 // ClaimPendingTriggerEvent adopts an inbound event the receiver recorded: the
