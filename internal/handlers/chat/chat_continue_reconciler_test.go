@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -72,7 +73,7 @@ func newTerminatedRunFixture(t *testing.T) (continueFixture, *reconciliation.Rec
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	f.temporal.status = enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 
-	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig()})
+	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, Questions: store.NewQuestionExtStore(f.repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo}), Orphans: store.NewAgentMessageExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig()})
 	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
 	return f, rec
 }

@@ -196,7 +196,7 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
 		"SendMessage must not duplicate call_llm's mailbox delivery")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "queued messages must remain for the run's first call_llm drain")
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -238,7 +238,7 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "a running agent's mailbox must be left for its own drain boundary")
 	assert.Equal(t, "queued for the live agent", remaining[0].Body)
@@ -277,7 +277,7 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 
 	assert.NotContains(t, transcriptBodies(t, ctx, repo, fx.chatID), "one more thing",
 		"a message written into history now would be ordered before the in-flight reply")
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "one more thing", queued[0].Body)
@@ -309,7 +309,7 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a refused send must not queue anything")
 }
@@ -333,7 +333,7 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &db.AgentMessage{
 		ID:           uuid.NewString(),
 		ChatID:       fx.chatID,
 		FromThreadID: fx.rootThreadID,
@@ -351,7 +351,7 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID))
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "both mailbox kinds must stay queued for call_llm")
 	assert.Equal(t, core.AgentMessageKindMessage, remaining[0].Kind)
@@ -393,7 +393,7 @@ func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued while paused", "resume now"),
 		"neither the queued message nor the new one is written into history by SendMessage")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued while paused", remaining[0].Body)

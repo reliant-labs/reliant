@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"

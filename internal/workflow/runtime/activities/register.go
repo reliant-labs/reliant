@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -173,10 +174,23 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 		spawnTree = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
 	var stoppedAgents handlers.StoppedSubAgentReader
+	// The mailbox: its queue (drain, late-arrival peek), its enqueue with the
+	// announcement, and the writes that resolve or preempt on it. Each is the
+	// one generated store or the one Mailbox, nil when there is no database.
+	var mailboxStore *agentMessageStores
 	if deps.Repo != nil {
 		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
+		ams := store.NewAgentMessageExtStore(deps.Repo.ORM())
+		mailboxStore = &agentMessageStores{
+			queue:    ams,
+			resolver: ams,
+			preempt:  ams,
+			enqueue:  agentmailbox.New(agentmailbox.Deps{Store: ams, Announcer: deps.Repo}),
+		}
+	} else {
+		mailboxStore = &agentMessageStores{}
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, Mailbox: mailboxStore.queue, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -193,8 +207,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, ToolExecutor: deps.ToolExecutor, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, ToolExecutor: deps.ToolExecutor, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================
@@ -250,7 +264,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
@@ -275,8 +289,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
 	v2.RegisterObservabilityActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(deps.Repo, deps.Threads))
-	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: deps.Repo, Mailbox: mailboxStore.queue, Threads: deps.Threads}))
+	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(handlers.EnqueueAgentMessageDeps{Mailbox: mailboxStore.enqueue}))
 	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(stoppedAgents))
 
 }
@@ -290,4 +304,15 @@ func initPreflightConfig() {
 // newPreflightConfig builds the production PreflightConfig.
 func newPreflightConfig() *v2.PreflightConfig {
 	return tools.PreflightConfig()
+}
+
+// agentMessageStores is the mailbox's roles over one database: the generated
+// store for the queue, the resolver and the preemption write, and the Mailbox
+// for enqueues that must be announced. All nil when there is no database, as
+// every other optional role in RegisterAll.
+type agentMessageStores struct {
+	queue    handlers.MailboxQueue
+	resolver handlers.MailboxResolver
+	preempt  handlers.MailboxPreempter
+	enqueue  handlers.EnqueueAgentMessageStore
 }

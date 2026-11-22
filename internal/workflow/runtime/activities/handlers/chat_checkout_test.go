@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -63,7 +64,7 @@ func (f *chatCheckoutFixture) run(t *testing.T, executor *daemonLikeExecutor) *r
 	t.Helper()
 	executor.requests, executor.ensures, executor.selectors = nil, nil, nil
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.creationDir,
 		ToolCalls: []message.ToolCall{bashCall("pwd")},
 	}, &output)
@@ -120,7 +121,7 @@ func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testi
 
 	executor := &daemonLikeExecutor{}
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: wt.Path,
 		ToolCalls: []message.ToolCall{bashCall("pwd")},
 	}, &output))
@@ -159,7 +160,7 @@ func TestExecuteTools_ASelectorNamingAnotherMachineThanTheBranchOwnerIsRefused(t
 
 	executor := &daemonLikeExecutor{}
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: wt.Path,
 		ToolCalls:      []message.ToolCall{bashCall("pwd")},
 		DaemonSelector: &types.DaemonSelector{ID: "other-box"},
@@ -273,7 +274,7 @@ func TestThreadBoundToTheMainRowRunsInTheMachinesOwnCheckout(t *testing.T) {
 	// The child inherited its parent's path: a branch workspace.
 	inherited := "/home/u/.reliant/worktrees/p/feature"
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(f.repo, executor)
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 	rtx := &types.RuntimeContext{ChatID: f.chatID, Thread: spawned.ThreadID, ProjectPath: inherited}
 	got := a.ensureBatchWorkspace(ctx, rtx, []message.ToolCall{bashCall("pwd")}, func(message.ToolCall) bool { return false })
 	require.Equal(t, 1, executor.ensureCount())
@@ -284,7 +285,7 @@ func TestThreadBoundToTheMainRowRunsInTheMachinesOwnCheckout(t *testing.T) {
 	assert.Empty(t, got.note, "no 'workspace missing' notice for a checkout that is there")
 
 	exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-	act := NewExecuteToolsActivity(f.repo, exec)
+	act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 	fn := func(ctx context.Context) (message.ToolResult, error) {
 		return act.executeSingleTool(ctx, nil, f.chatID, spawned.ThreadID, "shell", `{"command":"pwd"}`,
 			"tc-"+uuid.NewString(), "act", "run", 1, inherited, nil), nil

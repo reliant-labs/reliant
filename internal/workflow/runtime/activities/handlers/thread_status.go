@@ -55,12 +55,13 @@ type ThreadStatusOutput struct {
 // ThreadStatusActivity records thread lifecycle on the threads table and
 // mirrors it to chat_updates for the UI.
 type ThreadStatusActivity struct {
-	repo ThreadStatusStore
+	repo    ThreadStatusStore
+	mailbox MailboxResolver
 }
 
 // NewThreadStatusActivity creates a new ThreadStatusActivity.
-func NewThreadStatusActivity(repo ThreadStatusStore) *ThreadStatusActivity {
-	return &ThreadStatusActivity{repo: repo}
+func NewThreadStatusActivity(deps ThreadStatusDeps) *ThreadStatusActivity {
+	return &ThreadStatusActivity{repo: deps.Store, mailbox: deps.Mailbox}
 }
 
 // Name returns the activity name for registration.
@@ -183,7 +184,7 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 // bookkeeping, and the reconciler's own sweep is the durable backstop that
 // picks up anything missed.
 func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID string) {
-	resolved, err := a.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
+	resolved, err := a.mailbox.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 	if err != nil {
 		logging.WarnContext(ctx, "[ThreadStatus] Failed to resolve mailbox for terminated thread",
 			"threadID", threadID,

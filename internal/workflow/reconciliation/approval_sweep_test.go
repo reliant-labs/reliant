@@ -67,7 +67,7 @@ func TestResolveStaleApprovals_ClosesWithReason(t *testing.T) {
 		{ID: "a2", ChatID: "c1", Why: "its chat was archived"},
 	}
 	repo.approvalAlreadyClosed = map[string]bool{"a2": true}
-	r := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r := New(Deps{Store: repo, Questions: repo, Mailbox: repo, Orphans: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 
 	closed, err := r.resolveStaleApprovals(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestAnnounceApprovalResolutions_RunsToCompletionOnce(t *testing.T) {
 	for i := 0; i < staleApprovalBatch+3; i++ {
 		repo.unannounced = append(repo.unannounced, &db.Approval{ID: fmt.Sprintf("a%d", i), ChatID: "c1"})
 	}
-	r := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r := New(Deps{Store: repo, Questions: repo, Mailbox: repo, Orphans: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 
 	require.NoError(t, r.announceApprovalResolutions(context.Background(), &passStats{}))
 	assert.Len(t, repo.announcedApprovals, staleApprovalBatch+3)

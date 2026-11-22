@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/activity"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // CreateWorkflowWithThreadInput contains the input for creating a workflow and thread atomically

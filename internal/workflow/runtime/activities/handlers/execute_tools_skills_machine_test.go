@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -61,7 +62,7 @@ func TestSkillToolReadsTheSkillsOfTheMachineTheCallRunsOn(t *testing.T) {
 
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
 	router := toolexec.NewNATSDaemonRouter(nil, toolexec.WithDatabase(repo))
-	activity := NewExecuteToolsActivity(repo, serverToolExecutor(repo)).WithConfigProvider(provider).WithDaemonRouter(router)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, ToolExecutor: serverToolExecutor(repo), Preemption: store.NewAgentMessageExtStore(repo.ORM())}).WithConfigProvider(provider).WithDaemonRouter(router)
 	load := func(thread string, selector *activitytypes.DaemonSelector) string {
 		t.Helper()
 		callID := "call-" + uuid.NewString()

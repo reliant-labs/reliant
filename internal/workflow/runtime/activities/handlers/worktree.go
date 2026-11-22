@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -19,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
-	"go.temporal.io/sdk/temporal"
 )
 
 // ============================================================================

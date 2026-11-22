@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -154,7 +155,7 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	repo := h.Repo()
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
 	executor := &shellOutputExecutor{echo: "Preparing worktree (new branch 'x')\n"}
-	activity := NewExecuteToolsActivity(h.Repo(), executor).WithConfigProvider(provider)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).WithConfigProvider(provider)
 
 	run := func(command string) *message.ToolResult {
 		t.Helper()

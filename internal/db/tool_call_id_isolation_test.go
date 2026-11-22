@@ -160,7 +160,7 @@ func TestToolCallIDIsolation_StrandedSpawnSweepSeesOnlyItsOwnChatsReport(t *test
 	childB := "wf-iso-child-b"
 	insertTestWorkflowWithParent(t, repo, childB, "chat-iso-b", nil, Completed())
 	childThread(t, repo, childB, "chat-iso-b")
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
 
 	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
 	require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestToolCallIDIsolation_LiveSpawnIsNotHiddenByAnotherChatsReport(t *testing
 	childB := "wf-iso-live-child-b"
 	insertTestWorkflowWithParent(t, repo, childB, "chat-iso-b", nil, Completed())
 	childThread(t, repo, childB, "chat-iso-b")
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
 
 	live, err := store.NewToolCallExtStore(repo.ORM()).ListLiveBackgroundSpawns(ctx, rootA)
 	require.NoError(t, err)
@@ -217,15 +217,15 @@ func TestToolCallIDIsolation_PlaceholderLandsDespiteAnotherChatsReport(t *testin
 	childThread(t, repo, "child-a", "chat-iso-a")
 	childThread(t, repo, "child-b", "chat-iso-b")
 
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, spawnReport("chat-iso-b", "child-b", "chat-iso-b", "chat B's result")))
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), spawnReport("chat-iso-b", "child-b", "chat-iso-b", "chat B's result")))
 
 	placeholder := spawnReport("chat-iso-a", "child-a", "chat-iso-a", "Sub-agent finished while its result was lost in transit; check spawn_status.")
 	placeholder.Synthesized = true
-	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, placeholder)
+	inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), placeholder)
 	require.NoError(t, err)
 	require.True(t, inserted, "chat A's placeholder must be written; chat B's report holds nothing of A's")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, "chat-iso-a")
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), "chat-iso-a")
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, placeholder.Body, queued[0].Body)
@@ -244,12 +244,12 @@ func TestToolCallIDIsolation_PlaceholderForADifferentSpawnInTheSameChatFailsLoud
 	childThread(t, repo, "child-a-1", "chat-iso-a")
 	childThread(t, repo, "child-a-2", "chat-iso-a")
 
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, spawnReport("chat-iso-a", "child-a-1", "chat-iso-a", "first spawn's result")))
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), spawnReport("chat-iso-a", "child-a-1", "chat-iso-a", "first spawn's result")))
 
 	placeholder := spawnReport("chat-iso-a", "child-a-2", "chat-iso-a", "Sub-agent finished while its result was lost in transit; check spawn_status.")
 	placeholder.ID = "am-placeholder-2"
 	placeholder.Synthesized = true
-	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, placeholder)
+	inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), placeholder)
 	require.ErrorIs(t, err, core.ErrSpawnReportSlotTaken)
 	require.False(t, inserted)
 
@@ -257,7 +257,7 @@ func TestToolCallIDIsolation_PlaceholderForADifferentSpawnInTheSameChatFailsLoud
 	sameSpawn := spawnReport("chat-iso-a", "child-a-1", "chat-iso-a", "Sub-agent finished while its result was lost in transit; check spawn_status.")
 	sameSpawn.ID = "am-placeholder-1"
 	sameSpawn.Synthesized = true
-	inserted, err = repo.EnqueueAgentMessageIfAbsent(ctx, sameSpawn)
+	inserted, err = store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), sameSpawn)
 	require.NoError(t, err)
 	require.False(t, inserted)
 }

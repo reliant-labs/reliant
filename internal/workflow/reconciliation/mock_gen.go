@@ -45,8 +45,70 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 // Compile-time check.
 var _ Questions = (*MockQuestions)(nil)
 
+// forge:section MockMailbox
+// forge:hash=5002a30246386cc316d7f8b158723d86e2cc03f2083e7c1deff2e641e5fac6e7
+
+// MockMailbox is a test mock for the Mailbox interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMailbox.<Method>Func not set" error.
+type MockMailbox struct {
+	contractkit.Recorder
+	EnqueueAgentMessageIfAbsentFunc func(context.Context, *db.AgentMessage) (bool, error)
+}
+
+// EnqueueAgentMessageIfAbsent records the call and delegates to EnqueueAgentMessageIfAbsentFunc when set.
+func (m *MockMailbox) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error) {
+	m.Recorder.Record("EnqueueAgentMessageIfAbsent", ctx, msg)
+	if m.EnqueueAgentMessageIfAbsentFunc != nil {
+		return m.EnqueueAgentMessageIfAbsentFunc(ctx, msg)
+	}
+	return false, contractkit.MockNotSet("MockMailbox", "EnqueueAgentMessageIfAbsent")
+}
+
+// Compile-time check.
+var _ Mailbox = (*MockMailbox)(nil)
+
+// forge:section MockOrphans
+// forge:hash=a8e3db922c08a3b241132b9d427461123f8663290a2cf1c084e68b907f6febea
+
+// MockOrphans is a test mock for the Orphans interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrphans.<Method>Func not set" error.
+type MockOrphans struct {
+	contractkit.Recorder
+	ListThreadsWithOrphanedAgentMessagesFunc        func(context.Context) ([]string, error)
+	MarkQueuedAgentMessagesUndeliveredForThreadFunc func(context.Context, string) (int64, error)
+}
+
+// ListThreadsWithOrphanedAgentMessages records the call and delegates to ListThreadsWithOrphanedAgentMessagesFunc when set.
+func (m *MockOrphans) ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error) {
+	m.Recorder.Record("ListThreadsWithOrphanedAgentMessages", ctx)
+	if m.ListThreadsWithOrphanedAgentMessagesFunc != nil {
+		return m.ListThreadsWithOrphanedAgentMessagesFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockOrphans", "ListThreadsWithOrphanedAgentMessages")
+}
+
+// MarkQueuedAgentMessagesUndeliveredForThread records the call and delegates to MarkQueuedAgentMessagesUndeliveredForThreadFunc when set.
+func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error) {
+	m.Recorder.Record("MarkQueuedAgentMessagesUndeliveredForThread", ctx, toThreadID)
+	if m.MarkQueuedAgentMessagesUndeliveredForThreadFunc != nil {
+		return m.MarkQueuedAgentMessagesUndeliveredForThreadFunc(ctx, toThreadID)
+	}
+	return 0, contractkit.MockNotSet("MockOrphans", "MarkQueuedAgentMessagesUndeliveredForThread")
+}
+
+// Compile-time check.
+var _ Orphans = (*MockOrphans)(nil)
+
 // forge:section MockReconcilerStore
-// forge:hash=ffc09a8b057721272a3565af69098c6aac1df56de218ed0bfbb64cea3330d89b
+// forge:hash=d5e041cc85973f3f506a8f3e4d6f99b59e51ce7e6dbc170fe6343834b14f2fed
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -56,57 +118,54 @@ var _ Questions = (*MockQuestions)(nil)
 // "MockReconcilerStore.<Method>Func not set" error.
 type MockReconcilerStore struct {
 	contractkit.Recorder
-	GetWorkflowFunc                                 func(context.Context, string) (*db.Workflow, error)
-	ListWorkflowsByStatusFunc                       func(context.Context, db.WorkflowStatus) ([]*db.Workflow, error)
-	ListWorkflowsByChatFunc                         func(context.Context, string) ([]*db.Workflow, error)
-	CompareAndSwapWorkflowStatusFunc                func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
-	GetWorkflowCheckpointFunc                       func(context.Context, string) (*db.WorkflowCheckpoint, error)
-	DeleteWorkflowCheckpointFunc                    func(context.Context, string) error
-	CascadeTerminalStatusToDescendantsFunc          func(context.Context, string, db.WorkflowStopReason) error
-	CascadeTerminalStatusToThreadSubtreeFunc        func(context.Context, string, db.WorkflowStopReason) error
-	RunTxFunc                                       func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	ListStrandedWorkflowStartsFunc                  func(context.Context, time.Time, int) ([]*db.Workflow, error)
-	MarkWorkflowStartFailedFunc                     func(context.Context, string) (bool, error)
-	ReapOrphanedWorkflowDescendantsFunc             func(context.Context) ([]db.ReapedWorkflow, error)
-	ReapOrphanedThreadsFunc                         func(context.Context) ([]db.ReapedThread, error)
-	GetThreadFunc                                   func(context.Context, string) (*db.Thread, error)
-	ListPendingApprovalsByChatFunc                  func(context.Context, string) ([]*db.Approval, error)
-	ListStaleApprovalsFunc                          func(context.Context, int) ([]db.StaleApproval, error)
-	ResolvePendingApprovalFunc                      func(context.Context, string, int32, string, string) (bool, error)
-	ListUnannouncedApprovalResolutionsFunc          func(context.Context, int) ([]*db.Approval, error)
-	AnnounceApprovalResolutionFunc                  func(context.Context, *db.Approval) error
-	ListStrandedSpawnToolCallsFunc                  func(context.Context) ([]*db.ToolCall, error)
-	ListStrandedBackgroundSpawnToolCallsFunc        func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
-	ListBackgroundedProcessToolCallsFunc            func(context.Context) ([]*db.BackgroundedProcessCall, error)
-	UpsertToolCallResultFunc                        func(context.Context, string, *db.ToolCallResult) error
-	EmitToolCallUpdateFunc                          func(context.Context, string, db.ToolCallUpdate) error
-	GetDaemonFunc                                   func(context.Context, string) (*db.Daemon, error)
-	ChatsHeldOnUsageLimitFunc                       func(context.Context, []string, time.Time) ([]string, error)
-	EnqueueAgentMessageIfAbsentFunc                 func(context.Context, *db.AgentMessage) (bool, error)
-	ListThreadsWithOrphanedAgentMessagesFunc        func(context.Context) ([]string, error)
-	MarkQueuedAgentMessagesUndeliveredForThreadFunc func(context.Context, string) (int64, error)
-	GetChatFunc                                     func(context.Context, string) (*db.Chat, error)
-	UpdateChatFunc                                  func(context.Context, *db.Chat) error
-	GetPinnedProjectCatalogFunc                     func(context.Context, string) (*db.PinnedCatalog, bool, error)
-	GetProjectFunc                                  func(context.Context, string) (*db.Project, error)
-	GetProjectMachinePresetsJSONFunc                func(context.Context, string, string) (*string, bool, error)
-	GetProjectMachineWorkflowsJSONFunc              func(context.Context, string, string) (*string, bool, error)
-	GetProjectPresetsJSONFunc                       func(context.Context, string) (*string, error)
-	GetProjectWorkflowsJSONFunc                     func(context.Context, string) (*string, error)
-	GetUsableWorkflowBySlugFunc                     func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc                      func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorktreeFunc                                 func(context.Context, string) (*db.Worktree, error)
-	PinProjectCatalogFunc                           func(context.Context, db.CatalogPinScope) (string, error)
-	SaveMessageToThreadFunc                         func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
-	CreateChatUpdateFunc                            func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	HasEnabledTriggerOfKindFunc                     func(context.Context, string, core.TriggerKind) (bool, error)
-	CreateRunEventFunc                              func(context.Context, *core.RunEvent) (bool, error)
-	LockChatForRunEventFunc                         func(context.Context, string) error
-	CountOtherPendingBlockersFunc                   func(context.Context, string, string) (int, error)
-	GetToolCallFunc                                 func(context.Context, string) (*core.ToolCall, error)
-	GetContentBlockByToolCallIDFunc                 func(context.Context, string) (*db.MessageContentBlock, error)
-	GetMessageFunc                                  func(context.Context, string) (*db.Message, error)
-	UpsertToolCallFunc                              func(context.Context, *core.ToolCall) error
+	GetWorkflowFunc                          func(context.Context, string) (*db.Workflow, error)
+	ListWorkflowsByStatusFunc                func(context.Context, db.WorkflowStatus) ([]*db.Workflow, error)
+	ListWorkflowsByChatFunc                  func(context.Context, string) ([]*db.Workflow, error)
+	CompareAndSwapWorkflowStatusFunc         func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
+	GetWorkflowCheckpointFunc                func(context.Context, string) (*db.WorkflowCheckpoint, error)
+	DeleteWorkflowCheckpointFunc             func(context.Context, string) error
+	CascadeTerminalStatusToDescendantsFunc   func(context.Context, string, db.WorkflowStopReason) error
+	CascadeTerminalStatusToThreadSubtreeFunc func(context.Context, string, db.WorkflowStopReason) error
+	RunTxFunc                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	ListStrandedWorkflowStartsFunc           func(context.Context, time.Time, int) ([]*db.Workflow, error)
+	MarkWorkflowStartFailedFunc              func(context.Context, string) (bool, error)
+	ReapOrphanedWorkflowDescendantsFunc      func(context.Context) ([]db.ReapedWorkflow, error)
+	ReapOrphanedThreadsFunc                  func(context.Context) ([]db.ReapedThread, error)
+	GetThreadFunc                            func(context.Context, string) (*db.Thread, error)
+	ListPendingApprovalsByChatFunc           func(context.Context, string) ([]*db.Approval, error)
+	ListStaleApprovalsFunc                   func(context.Context, int) ([]db.StaleApproval, error)
+	ResolvePendingApprovalFunc               func(context.Context, string, int32, string, string) (bool, error)
+	ListUnannouncedApprovalResolutionsFunc   func(context.Context, int) ([]*db.Approval, error)
+	AnnounceApprovalResolutionFunc           func(context.Context, *db.Approval) error
+	ListStrandedSpawnToolCallsFunc           func(context.Context) ([]*db.ToolCall, error)
+	ListStrandedBackgroundSpawnToolCallsFunc func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
+	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
+	UpsertToolCallResultFunc                 func(context.Context, string, *db.ToolCallResult) error
+	EmitToolCallUpdateFunc                   func(context.Context, string, db.ToolCallUpdate) error
+	GetDaemonFunc                            func(context.Context, string) (*db.Daemon, error)
+	ChatsHeldOnUsageLimitFunc                func(context.Context, []string, time.Time) ([]string, error)
+	GetChatFunc                              func(context.Context, string) (*db.Chat, error)
+	UpdateChatFunc                           func(context.Context, *db.Chat) error
+	GetPinnedProjectCatalogFunc              func(context.Context, string) (*db.PinnedCatalog, bool, error)
+	GetProjectFunc                           func(context.Context, string) (*db.Project, error)
+	GetProjectMachinePresetsJSONFunc         func(context.Context, string, string) (*string, bool, error)
+	GetProjectMachineWorkflowsJSONFunc       func(context.Context, string, string) (*string, bool, error)
+	GetProjectPresetsJSONFunc                func(context.Context, string) (*string, error)
+	GetProjectWorkflowsJSONFunc              func(context.Context, string) (*string, error)
+	GetUsableWorkflowBySlugFunc              func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc               func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorktreeFunc                          func(context.Context, string) (*db.Worktree, error)
+	PinProjectCatalogFunc                    func(context.Context, db.CatalogPinScope) (string, error)
+	SaveMessageToThreadFunc                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+	CreateChatUpdateFunc                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	HasEnabledTriggerOfKindFunc              func(context.Context, string, core.TriggerKind) (bool, error)
+	CreateRunEventFunc                       func(context.Context, *core.RunEvent) (bool, error)
+	LockChatForRunEventFunc                  func(context.Context, string) error
+	CountOtherPendingBlockersFunc            func(context.Context, string, string) (int, error)
+	GetToolCallFunc                          func(context.Context, string) (*core.ToolCall, error)
+	GetContentBlockByToolCallIDFunc          func(context.Context, string) (*db.MessageContentBlock, error)
+	GetMessageFunc                           func(context.Context, string) (*db.Message, error)
+	UpsertToolCallFunc                       func(context.Context, *core.ToolCall) error
 }
 
 // GetWorkflow records the call and delegates to GetWorkflowFunc when set.
@@ -341,33 +400,6 @@ func (m *MockReconcilerStore) ChatsHeldOnUsageLimit(ctx context.Context, chatIDs
 		return m.ChatsHeldOnUsageLimitFunc(ctx, chatIDs, since)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "ChatsHeldOnUsageLimit")
-}
-
-// EnqueueAgentMessageIfAbsent records the call and delegates to EnqueueAgentMessageIfAbsentFunc when set.
-func (m *MockReconcilerStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error) {
-	m.Recorder.Record("EnqueueAgentMessageIfAbsent", ctx, msg)
-	if m.EnqueueAgentMessageIfAbsentFunc != nil {
-		return m.EnqueueAgentMessageIfAbsentFunc(ctx, msg)
-	}
-	return false, contractkit.MockNotSet("MockReconcilerStore", "EnqueueAgentMessageIfAbsent")
-}
-
-// ListThreadsWithOrphanedAgentMessages records the call and delegates to ListThreadsWithOrphanedAgentMessagesFunc when set.
-func (m *MockReconcilerStore) ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error) {
-	m.Recorder.Record("ListThreadsWithOrphanedAgentMessages", ctx)
-	if m.ListThreadsWithOrphanedAgentMessagesFunc != nil {
-		return m.ListThreadsWithOrphanedAgentMessagesFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListThreadsWithOrphanedAgentMessages")
-}
-
-// MarkQueuedAgentMessagesUndeliveredForThread records the call and delegates to MarkQueuedAgentMessagesUndeliveredForThreadFunc when set.
-func (m *MockReconcilerStore) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error) {
-	m.Recorder.Record("MarkQueuedAgentMessagesUndeliveredForThread", ctx, toThreadID)
-	if m.MarkQueuedAgentMessagesUndeliveredForThreadFunc != nil {
-		return m.MarkQueuedAgentMessagesUndeliveredForThreadFunc(ctx, toThreadID)
-	}
-	return 0, contractkit.MockNotSet("MockReconcilerStore", "MarkQueuedAgentMessagesUndeliveredForThread")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.

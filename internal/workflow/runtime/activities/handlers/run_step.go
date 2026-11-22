@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -24,8 +27,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 )
 
 // ============================================================================

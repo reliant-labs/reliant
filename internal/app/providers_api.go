@@ -23,6 +23,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -424,6 +425,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1254,6 +1256,8 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
 		Temporal:  d.Temporal.Client,
 		Config:    cfg,
 	})

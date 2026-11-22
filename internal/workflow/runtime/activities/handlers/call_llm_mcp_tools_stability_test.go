@@ -151,7 +151,7 @@ func TestCallLLM_ToolsArrayIsStableAcrossAnUnreachableDaemon(t *testing.T) {
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	})
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: resolver, MCPBinder: scriptedDaemonBinder{state: daemon}})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: resolver, MCPBinder: scriptedDaemonBinder{state: daemon}})
 
 	input := mcpToolsCallLLMInput(chat.ID, []string{"view", "mcp__github__*", "mcp__chrome__*"})
 	runTurn := func() {

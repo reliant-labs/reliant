@@ -50,12 +50,13 @@ type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 // keeps history always consistent at the point this activity runs.
 type DrainAgentMessagesActivity struct {
 	repo    DrainAgentMessagesStore
+	mailbox MailboxQueue
 	threads MessageSaver
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc MessageSaver) *DrainAgentMessagesActivity {
-	return &DrainAgentMessagesActivity{repo: repo, threads: threadsSvc}
+func NewDrainAgentMessagesActivity(deps DrainAgentMessagesDeps) *DrainAgentMessagesActivity {
+	return &DrainAgentMessagesActivity{repo: deps.Store, mailbox: deps.Mailbox, threads: deps.Threads}
 }
 
 func (a *DrainAgentMessagesActivity) Name() string        { return "DrainAgentMessages" }
@@ -72,7 +73,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		return DrainAgentMessagesOutput{}, fmt.Errorf("thread is required")
 	}
 
-	queued, err := a.repo.ListQueuedAgentMessagesForThread(ctx, input.Thread)
+	queued, err := a.mailbox.ListQueuedAgentMessagesForThread(ctx, input.Thread)
 	if err != nil {
 		return DrainAgentMessagesOutput{}, fmt.Errorf("failed to list queued agent messages: %w", err)
 	}
@@ -135,7 +136,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		//
 		// delivered_message_id is backfilled once the envelope exists; the claim
 		// only needs to establish ownership.
-		claimed, err := a.repo.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), "")
+		claimed, err := a.mailbox.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), "")
 		if err != nil {
 			return fmt.Errorf("failed to claim agent messages for delivery: %w", err)
 		}
@@ -268,7 +269,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// only backfills that pointer. It deliberately does not re-check the
 		// claim: these ids are ours, and re-running the guarded update would
 		// match nothing now that their status is 2.
-		if err := a.repo.SetAgentMessagesDeliveredMessageID(txCtx, ids, envelopeMessageID); err != nil {
+		if err := a.mailbox.SetAgentMessagesDeliveredMessageID(txCtx, ids, envelopeMessageID); err != nil {
 			return fmt.Errorf("failed to record delivery message id: %w", err)
 		}
 
