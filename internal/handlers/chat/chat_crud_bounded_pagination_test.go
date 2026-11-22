@@ -68,7 +68,7 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 	const pageSize = 10
 	ctx, chatID := createChatWithMessages(t, repo, totalMessages)
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 
 	recent := int32(pageSize)
 	var beforeSeq *int64
@@ -168,7 +168,7 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	addMsg(spawnThreadID, spawnCWID, 5)
 	node2 := addMsg(nodeThreadID, nodeCWID, 6)
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	recent := int32(10)
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
@@ -265,7 +265,7 @@ func TestListMessages_Bounded_SiblingOlderThanMainThread(t *testing.T) {
 	defer cleanup()
 	ctx, chatID, add := siblingChat(t, repo)
 	want := []string{add(false, 1), add(false, 2), add(true, 3), add(true, 4), add(true, 5)}
-	got := scrollBack(t, &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}, ctx, chatID, 3)
+	got := scrollBack(t, &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}, ctx, chatID, 3)
 	require.Equal(t, want, got)
 }
 
@@ -280,7 +280,7 @@ func TestListMessages_Bounded_EmptyMainThreadPagesSiblings(t *testing.T) {
 	for seq := int64(1); seq <= 7; seq++ {
 		want = append(want, add(false, seq))
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	recent := int32(3)
 	first, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &recent}))
 	require.NoError(t, err)

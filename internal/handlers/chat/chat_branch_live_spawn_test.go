@@ -160,7 +160,7 @@ func TestBranchChat_LiveSpawn_DoesNotRepairSourceThread(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -203,7 +203,7 @@ func TestBranchChat_LiveSpawn_BranchDoesNotShowSpawnAsRunning(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -242,7 +242,7 @@ func TestBranchChat_LiveSpawn_SourceStillShowsSpawnRunning(t *testing.T) {
 	projectID := newBranchTestProject(t, repo, ctx)
 	f := setupLiveSpawnChat(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 
 	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
@@ -352,7 +352,7 @@ func TestBranchChat_DeadToolCall_StillRepaired(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threadsSvc}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threadsSvc}
 
 	_, err = service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    chatID,

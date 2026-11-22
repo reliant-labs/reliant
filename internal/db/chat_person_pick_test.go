@@ -22,10 +22,10 @@ func TestChatPersonPickDriver(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	chatID := seedChatForRun(t, repo, ctx, "alice")
-	person := WithPersonPick(ctx, PersonPick{UserID: "alice", OrgID: "org-acme"})
+	person := chatselection.WithPersonPick(ctx, chatselection.PersonPick{UserID: "alice", OrgID: "org-acme"})
 	write := func(ctx context.Context, model any, provider, mode string) *chatselection.Selection {
 		t.Helper()
-		sel, err := repo.MutateChatSelection(ctx, chatID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+		sel, err := store.NewChatSelectionExtStore(repo.ORM()).MutateChatSelection(ctx, chatID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 			next := &chatselection.Selection{ChatID: chatID, UserID: "alice", WorkflowName: "builtin://agent",
 				Params: map[string]any{"model": model, "mode": mode}, ChatProvider: provider}
 			if cur != nil && cur.ChatProvider == provider && sameParams(cur.Params, next.Params) {
@@ -82,7 +82,7 @@ func TestChatPersonPickDriver(t *testing.T) {
 
 	// A branch copies the selection, never the pick.
 	branch := seedChatForRun(t, repo, ctx, "alice")
-	require.NoError(t, repo.CopyChatSelection(ctx, chatID, branch, "alice"))
+	require.NoError(t, store.NewChatSelectionExtStore(repo.ORM()).CopyChatSelection(ctx, chatID, branch, "alice"))
 	d, err := store.ChatPersonPickDriver(ctx, repo.ORM(), branch, "org-acme")
 	require.NoError(t, err)
 	assert.Empty(t, d, "a branch starts with no pick")
@@ -102,10 +102,10 @@ func TestChatPersonPickDriver_SupersedingWriteBetweenReads(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	chatID := seedChatForRun(t, repo, ctx, "alice")
-	person := WithPersonPick(ctx, PersonPick{UserID: "alice", OrgID: "org-acme"})
+	person := chatselection.WithPersonPick(ctx, chatselection.PersonPick{UserID: "alice", OrgID: "org-acme"})
 	set := func(ctx context.Context, model string) {
 		t.Helper()
-		_, err := repo.MutateChatSelection(ctx, chatID, func(*chatselection.Selection) (*chatselection.Selection, error) {
+		_, err := store.NewChatSelectionExtStore(repo.ORM()).MutateChatSelection(ctx, chatID, func(*chatselection.Selection) (*chatselection.Selection, error) {
 			return &chatselection.Selection{ChatID: chatID, UserID: "alice", WorkflowName: "builtin://agent",
 				Params: map[string]any{"model": map[string]any{"id": model}}}, nil
 		})
@@ -114,7 +114,7 @@ func TestChatPersonPickDriver_SupersedingWriteBetweenReads(t *testing.T) {
 	set(person, "gpt-5.6-sol@codex")
 
 	// The reader saw the person's selection ...
-	seen, err := repo.GetChatSelection(ctx, chatID)
+	seen, err := store.NewChatSelectionExtStore(repo.ORM()).GetChatSelection(ctx, chatID)
 	require.NoError(t, err)
 	key, _ := chatselection.RootModelPick(seen.Params)
 	require.Equal(t, "gpt-5.6-sol@codex", key)

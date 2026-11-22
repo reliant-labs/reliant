@@ -118,7 +118,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()),
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()),
 		},
 		threads: threads.NewService(failingRepo),
 	}
@@ -176,7 +176,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()),
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()),
 		},
 		threads: threads.NewService(failingRepo),
 	}

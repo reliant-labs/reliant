@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,7 +99,7 @@ func newFixture(t *testing.T) *fixture {
 	f.addUserProject(f.userID, f.projectID)
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: f.daemonID, UserID: f.userID}))
 
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), f.starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	f.dispatcher = NewDispatcher(repo, launcher, nil)
 	return f
 }

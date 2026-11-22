@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -40,7 +42,7 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 			starter := &pinRecordingStarter{}
 			starter.setDown(true)
-			launcher := launch.NewLauncher(p.repo, threads.NewService(p.repo), starter, noopRunRecorder{}, "test-q")
+			launcher := launch.New(launch.Deps{Store: p.repo, Selections: store.NewChatSelectionExtStore(p.repo.ORM()), Threads: threads.NewService(p.repo), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
 			key := "retry-pin-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule
 			fire := func() (*FireOutput, error) {

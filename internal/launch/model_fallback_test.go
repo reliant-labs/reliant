@@ -45,7 +45,7 @@ func claudeOnlyAccounts() *drivers.MockAPIKeyStore {
 // reading providers.
 func TestValidateWorkflowInputs_UnservableModelIsNotAValidationError(t *testing.T) {
 	drivers.InitializeAPIKeyProvider(claudeOnlyAccounts())
-	launcher := NewLauncher(nil, nil, nil, nil, "")
+	launcher := New(Deps{Store: nil, Selections: nil, Threads: nil, Temporal: nil, Runs: nil, TaskQueue: ""})
 	ctx := context.Background()
 
 	errs := launcher.ValidateChatWorkflowInputs(ctx, "user-1", &db.Chat{ProjectID: "project-1"}, "builtin://agent", map[string]interface{}{

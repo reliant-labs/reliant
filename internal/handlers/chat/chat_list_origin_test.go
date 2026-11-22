@@ -26,7 +26,7 @@ func TestChatListSurfacesKeyOnOrigin(t *testing.T) {
 
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "origin-user")
 	projectID := "origin-project"
 	now := time.Now().UTC()

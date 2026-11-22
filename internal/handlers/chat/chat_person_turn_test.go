@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -48,7 +49,7 @@ func TestRecordPersonTurn(t *testing.T) {
 				recorded = append(recorded, chatID+"/"+userID)
 				return nil
 			}
-			require.NoError(t, (&Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}).recordPersonTurn(tc.ctx, tc.sender, tc.chat))
+			require.NoError(t, (&Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}).recordPersonTurn(tc.ctx, tc.sender, tc.chat))
 			if tc.want {
 				assert.Equal(t, []string{"c1/" + tc.sender}, recorded)
 			} else {
@@ -59,7 +60,7 @@ func TestRecordPersonTurn(t *testing.T) {
 
 	t.Run("a failed write fails the transaction that saves the message", func(t *testing.T) {
 		repo := &MockRepository{RecordChatPersonTurnFunc: func(context.Context, string, string) error { return errors.New("db down") }}
-		assert.Error(t, (&Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}).recordPersonTurn(person, "alice", triggered))
+		assert.Error(t, (&Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}).recordPersonTurn(person, "alice", triggered))
 	})
 }
 
@@ -105,7 +106,7 @@ func TestSendMessage_PersonTurn(t *testing.T) {
 			temporal := &inputCapturingTemporalClient{
 				absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
 			}
-			service := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
+			service := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
 
 			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
 			require.NoError(t, err)

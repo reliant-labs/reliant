@@ -54,7 +54,7 @@ func (s *Service) chatProvider(ctx context.Context, chatID string) string {
 // change; a client's next versioned write reads the new version from it.
 func (s *Service) storeChatProvider(ctx context.Context, userID string, chat *db.Chat, workflowName, driver string) (*chatselection.Selection, error) {
 	before, _ := s.selections().Get(ctx, chat.ID)
-	sel, err := s.deps.Repo.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+	sel, err := s.deps.Selections.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 		return chatselection.WithChatProvider(cur, chat.ID, userID, workflowName, driver), nil
 	})
 	if err != nil {
