@@ -492,12 +492,378 @@ func (x *ListSharedProjectsResponse) GetProjects() []*Project {
 	return nil
 }
 
+// SharedWorkflowDraft is a saved workflow as sharing answers it: what a
+// teammate needs to read and fork it, and nothing of the owner's beyond it
+// (no source path on the owner's machine, no origin, no OCC version).
+type SharedWorkflowDraft struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The saved workflow's id (WorkflowListItem.draft_id for its owner).
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The runtime reference name, unique per owner, not per org.
+	Slug string `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	// Display name.
+	Name        string  `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description *string `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// The owner: the member who saved and shared it.
+	UserId string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// The organization it belongs to and is shared with.
+	OrgId string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// DRAFT (work in progress, may be invalid) or COMPLETE (runnable).
+	Status WorkflowDraftStatus `protobuf:"varint,7,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	// ORG while shared; PRIVATE after it was made private (in a
+	// SetWorkflowDraftSharing answer to its owner).
+	Visibility v1.ResourceVisibility `protobuf:"varint,8,opt,name=visibility,proto3,enum=reliant.v1.ResourceVisibility" json:"visibility,omitempty"`
+	// True when the caller reads it as a VIEWER (a member of its org, not its
+	// owner): read-only, to read and fork.
+	ViewerAccess bool `protobuf:"varint,9,opt,name=viewer_access,json=viewerAccess,proto3" json:"viewer_access,omitempty"`
+	// When it was shared (RFC 3339); unset while private.
+	SharedAt *string `protobuf:"bytes,10,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
+	// When its definition last changed (RFC 3339).
+	UpdatedAt string `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// The stored YAML definition, as its owner saved it. A teammate forks it by
+	// saving a copy of their own (WorkflowService.ImportWorkflow).
+	Definition    string `protobuf:"bytes,12,opt,name=definition,proto3" json:"definition,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SharedWorkflowDraft) Reset() {
+	*x = SharedWorkflowDraft{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SharedWorkflowDraft) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SharedWorkflowDraft) ProtoMessage() {}
+
+func (x *SharedWorkflowDraft) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SharedWorkflowDraft.ProtoReflect.Descriptor instead.
+func (*SharedWorkflowDraft) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SharedWorkflowDraft) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *SharedWorkflowDraft) GetVisibility() v1.ResourceVisibility {
+	if x != nil {
+		return x.Visibility
+	}
+	return v1.ResourceVisibility(0)
+}
+
+func (x *SharedWorkflowDraft) GetViewerAccess() bool {
+	if x != nil {
+		return x.ViewerAccess
+	}
+	return false
+}
+
+func (x *SharedWorkflowDraft) GetSharedAt() string {
+	if x != nil && x.SharedAt != nil {
+		return *x.SharedAt
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *SharedWorkflowDraft) GetDefinition() string {
+	if x != nil {
+		return x.Definition
+	}
+	return ""
+}
+
+type SetWorkflowDraftSharingRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The saved workflow's id (WorkflowListItem.draft_id).
+	WorkflowId string `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// ORG or PRIVATE.
+	Visibility    v1.ResourceVisibility `protobuf:"varint,2,opt,name=visibility,proto3,enum=reliant.v1.ResourceVisibility" json:"visibility,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetWorkflowDraftSharingRequest) Reset() {
+	*x = SetWorkflowDraftSharingRequest{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetWorkflowDraftSharingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetWorkflowDraftSharingRequest) ProtoMessage() {}
+
+func (x *SetWorkflowDraftSharingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetWorkflowDraftSharingRequest.ProtoReflect.Descriptor instead.
+func (*SetWorkflowDraftSharingRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SetWorkflowDraftSharingRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *SetWorkflowDraftSharingRequest) GetVisibility() v1.ResourceVisibility {
+	if x != nil {
+		return x.Visibility
+	}
+	return v1.ResourceVisibility(0)
+}
+
+type SetWorkflowDraftSharingResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The saved workflow as the caller now reads it: unset when they read it no
+	// longer (an admin who made it private).
+	Workflow *SharedWorkflowDraft `protobuf:"bytes,1,opt,name=workflow,proto3" json:"workflow,omitempty"`
+	// False when it already had the visibility asked for.
+	Changed       bool `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetWorkflowDraftSharingResponse) Reset() {
+	*x = SetWorkflowDraftSharingResponse{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetWorkflowDraftSharingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetWorkflowDraftSharingResponse) ProtoMessage() {}
+
+func (x *SetWorkflowDraftSharingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetWorkflowDraftSharingResponse.ProtoReflect.Descriptor instead.
+func (*SetWorkflowDraftSharingResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SetWorkflowDraftSharingResponse) GetWorkflow() *SharedWorkflowDraft {
+	if x != nil {
+		return x.Workflow
+	}
+	return nil
+}
+
+func (x *SetWorkflowDraftSharingResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+type ListSharedWorkflowDraftsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization whose shared workflows to list: one the caller is a
+	// live member of (PERMISSION_DENIED otherwise). Unset: the caller's default
+	// organization.
+	OrgId *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// At most this many (default and cap 100).
+	Limit         int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSharedWorkflowDraftsRequest) Reset() {
+	*x = ListSharedWorkflowDraftsRequest{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSharedWorkflowDraftsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSharedWorkflowDraftsRequest) ProtoMessage() {}
+
+func (x *ListSharedWorkflowDraftsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSharedWorkflowDraftsRequest.ProtoReflect.Descriptor instead.
+func (*ListSharedWorkflowDraftsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListSharedWorkflowDraftsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *ListSharedWorkflowDraftsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListSharedWorkflowDraftsRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListSharedWorkflowDraftsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Workflows     []*SharedWorkflowDraft `protobuf:"bytes,1,rep,name=workflows,proto3" json:"workflows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSharedWorkflowDraftsResponse) Reset() {
+	*x = ListSharedWorkflowDraftsResponse{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSharedWorkflowDraftsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSharedWorkflowDraftsResponse) ProtoMessage() {}
+
+func (x *ListSharedWorkflowDraftsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSharedWorkflowDraftsResponse.ProtoReflect.Descriptor instead.
+func (*ListSharedWorkflowDraftsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListSharedWorkflowDraftsResponse) GetWorkflows() []*SharedWorkflowDraft {
+	if x != nil {
+		return x.Workflows
+	}
+	return nil
+}
+
 var File_reliant_v1_sharing_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/sharing.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/project.proto\"\x88\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/project.proto\x1a\x19reliant/v1/workflow.proto\"\x88\x01\n" +
 	"\x18SetChatVisibilityRequest\x12 \n" +
 	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\x12J\n" +
 	"\n" +
@@ -537,7 +903,46 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x06offset\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offsetB\t\n" +
 	"\a_org_id\"M\n" +
 	"\x1aListSharedProjectsResponse\x12/\n" +
-	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects2\x9a\x05\n" +
+	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects\"\xc1\x03\n" +
+	"\x13SharedWorkflowDraft\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x04 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x17\n" +
+	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x15\n" +
+	"\x06org_id\x18\x06 \x01(\tR\x05orgId\x127\n" +
+	"\x06status\x18\a \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12>\n" +
+	"\n" +
+	"visibility\x18\b \x01(\x0e2\x1e.reliant.v1.ResourceVisibilityR\n" +
+	"visibility\x12#\n" +
+	"\rviewer_access\x18\t \x01(\bR\fviewerAccess\x12 \n" +
+	"\tshared_at\x18\n" +
+	" \x01(\tH\x01R\bsharedAt\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\tR\tupdatedAt\x12\x1e\n" +
+	"\n" +
+	"definition\x18\f \x01(\tR\n" +
+	"definitionB\x0e\n" +
+	"\f_descriptionB\f\n" +
+	"\n" +
+	"_shared_at\"\x96\x01\n" +
+	"\x1eSetWorkflowDraftSharingRequest\x12(\n" +
+	"\vworkflow_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"workflowId\x12J\n" +
+	"\n" +
+	"visibility\x18\x02 \x01(\x0e2\x1e.reliant.v1.ResourceVisibilityB\n" +
+	"\xbaH\a\x82\x01\x04\x18\x01\x18\x02R\n" +
+	"visibility\"x\n" +
+	"\x1fSetWorkflowDraftSharingResponse\x12;\n" +
+	"\bworkflow\x18\x01 \x01(\v2\x1f.reliant.v1.SharedWorkflowDraftR\bworkflow\x12\x18\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\"\x8a\x01\n" +
+	"\x1fListSharedWorkflowDraftsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x1f\n" +
+	"\x05limit\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\x05limit\x12\x1f\n" +
+	"\x06offset\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offsetB\t\n" +
+	"\a_org_id\"a\n" +
+	" ListSharedWorkflowDraftsResponse\x12=\n" +
+	"\tworkflows\x18\x01 \x03(\v2\x1f.reliant.v1.SharedWorkflowDraftR\tworkflows2\xa2\b\n" +
 	"\x0eSharingService\x12\xaa\x01\n" +
 	"\x11SetChatVisibility\x12$.reliant.v1.SetChatVisibilityRequest\x1a%.reliant.v1.SetChatVisibilityResponse\"H\xa2\xbb\x18D:B\n" +
 	"\x0eset_visibility\x12$\n" +
@@ -549,7 +954,12 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"project_id\x1a\x15response.project.name*\n" +
 	"visibility\x12\x88\x01\n" +
 	"\x0fListSharedChats\x12\".reliant.v1.ListSharedChatsRequest\x1a#.reliant.v1.ListSharedChatsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others shared\x12\x91\x01\n" +
-	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others sharedB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others shared\x12\xdf\x01\n" +
+	"\x17SetWorkflowDraftSharing\x12*.reliant.v1.SetWorkflowDraftSharingRequest\x1a+.reliant.v1.SetWorkflowDraftSharingResponse\"k\xa2\xbb\x18g:e\n" +
+	"\x0eset_visibility\x12:\n" +
+	"\bworkflow\x12\x16response.workflow.slug\x1a\x16response.workflow.name*\vworkflow_id*\n" +
+	"visibility\x12\xa3\x01\n" +
+	"\x18ListSharedWorkflowDrafts\x12+.reliant.v1.ListSharedWorkflowDraftsRequest\x1a,.reliant.v1.ListSharedWorkflowDraftsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others sharedB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_sharing_proto_rawDescOnce sync.Once
@@ -563,40 +973,55 @@ func file_reliant_v1_sharing_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_sharing_proto_rawDescData
 }
 
-var file_reliant_v1_sharing_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_reliant_v1_sharing_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_reliant_v1_sharing_proto_goTypes = []any{
-	(*SetChatVisibilityRequest)(nil),     // 0: reliant.v1.SetChatVisibilityRequest
-	(*SetChatVisibilityResponse)(nil),    // 1: reliant.v1.SetChatVisibilityResponse
-	(*SetProjectVisibilityRequest)(nil),  // 2: reliant.v1.SetProjectVisibilityRequest
-	(*SetProjectVisibilityResponse)(nil), // 3: reliant.v1.SetProjectVisibilityResponse
-	(*ListSharedChatsRequest)(nil),       // 4: reliant.v1.ListSharedChatsRequest
-	(*ListSharedChatsResponse)(nil),      // 5: reliant.v1.ListSharedChatsResponse
-	(*ListSharedProjectsRequest)(nil),    // 6: reliant.v1.ListSharedProjectsRequest
-	(*ListSharedProjectsResponse)(nil),   // 7: reliant.v1.ListSharedProjectsResponse
-	(v1.ResourceVisibility)(0),           // 8: reliant.v1.ResourceVisibility
-	(*v1.Chat)(nil),                      // 9: reliant.v1.Chat
-	(*Project)(nil),                      // 10: reliant.v1.Project
+	(*SetChatVisibilityRequest)(nil),         // 0: reliant.v1.SetChatVisibilityRequest
+	(*SetChatVisibilityResponse)(nil),        // 1: reliant.v1.SetChatVisibilityResponse
+	(*SetProjectVisibilityRequest)(nil),      // 2: reliant.v1.SetProjectVisibilityRequest
+	(*SetProjectVisibilityResponse)(nil),     // 3: reliant.v1.SetProjectVisibilityResponse
+	(*ListSharedChatsRequest)(nil),           // 4: reliant.v1.ListSharedChatsRequest
+	(*ListSharedChatsResponse)(nil),          // 5: reliant.v1.ListSharedChatsResponse
+	(*ListSharedProjectsRequest)(nil),        // 6: reliant.v1.ListSharedProjectsRequest
+	(*ListSharedProjectsResponse)(nil),       // 7: reliant.v1.ListSharedProjectsResponse
+	(*SharedWorkflowDraft)(nil),              // 8: reliant.v1.SharedWorkflowDraft
+	(*SetWorkflowDraftSharingRequest)(nil),   // 9: reliant.v1.SetWorkflowDraftSharingRequest
+	(*SetWorkflowDraftSharingResponse)(nil),  // 10: reliant.v1.SetWorkflowDraftSharingResponse
+	(*ListSharedWorkflowDraftsRequest)(nil),  // 11: reliant.v1.ListSharedWorkflowDraftsRequest
+	(*ListSharedWorkflowDraftsResponse)(nil), // 12: reliant.v1.ListSharedWorkflowDraftsResponse
+	(v1.ResourceVisibility)(0),               // 13: reliant.v1.ResourceVisibility
+	(*v1.Chat)(nil),                          // 14: reliant.v1.Chat
+	(*Project)(nil),                          // 15: reliant.v1.Project
+	(WorkflowDraftStatus)(0),                 // 16: reliant.v1.WorkflowDraftStatus
 }
 var file_reliant_v1_sharing_proto_depIdxs = []int32{
-	8,  // 0: reliant.v1.SetChatVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
-	9,  // 1: reliant.v1.SetChatVisibilityResponse.chat:type_name -> reliant.v1.Chat
-	8,  // 2: reliant.v1.SetProjectVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
-	10, // 3: reliant.v1.SetProjectVisibilityResponse.project:type_name -> reliant.v1.Project
-	9,  // 4: reliant.v1.ListSharedChatsResponse.chats:type_name -> reliant.v1.Chat
-	10, // 5: reliant.v1.ListSharedProjectsResponse.projects:type_name -> reliant.v1.Project
-	0,  // 6: reliant.v1.SharingService.SetChatVisibility:input_type -> reliant.v1.SetChatVisibilityRequest
-	2,  // 7: reliant.v1.SharingService.SetProjectVisibility:input_type -> reliant.v1.SetProjectVisibilityRequest
-	4,  // 8: reliant.v1.SharingService.ListSharedChats:input_type -> reliant.v1.ListSharedChatsRequest
-	6,  // 9: reliant.v1.SharingService.ListSharedProjects:input_type -> reliant.v1.ListSharedProjectsRequest
-	1,  // 10: reliant.v1.SharingService.SetChatVisibility:output_type -> reliant.v1.SetChatVisibilityResponse
-	3,  // 11: reliant.v1.SharingService.SetProjectVisibility:output_type -> reliant.v1.SetProjectVisibilityResponse
-	5,  // 12: reliant.v1.SharingService.ListSharedChats:output_type -> reliant.v1.ListSharedChatsResponse
-	7,  // 13: reliant.v1.SharingService.ListSharedProjects:output_type -> reliant.v1.ListSharedProjectsResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	13, // 0: reliant.v1.SetChatVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
+	14, // 1: reliant.v1.SetChatVisibilityResponse.chat:type_name -> reliant.v1.Chat
+	13, // 2: reliant.v1.SetProjectVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
+	15, // 3: reliant.v1.SetProjectVisibilityResponse.project:type_name -> reliant.v1.Project
+	14, // 4: reliant.v1.ListSharedChatsResponse.chats:type_name -> reliant.v1.Chat
+	15, // 5: reliant.v1.ListSharedProjectsResponse.projects:type_name -> reliant.v1.Project
+	16, // 6: reliant.v1.SharedWorkflowDraft.status:type_name -> reliant.v1.WorkflowDraftStatus
+	13, // 7: reliant.v1.SharedWorkflowDraft.visibility:type_name -> reliant.v1.ResourceVisibility
+	13, // 8: reliant.v1.SetWorkflowDraftSharingRequest.visibility:type_name -> reliant.v1.ResourceVisibility
+	8,  // 9: reliant.v1.SetWorkflowDraftSharingResponse.workflow:type_name -> reliant.v1.SharedWorkflowDraft
+	8,  // 10: reliant.v1.ListSharedWorkflowDraftsResponse.workflows:type_name -> reliant.v1.SharedWorkflowDraft
+	0,  // 11: reliant.v1.SharingService.SetChatVisibility:input_type -> reliant.v1.SetChatVisibilityRequest
+	2,  // 12: reliant.v1.SharingService.SetProjectVisibility:input_type -> reliant.v1.SetProjectVisibilityRequest
+	4,  // 13: reliant.v1.SharingService.ListSharedChats:input_type -> reliant.v1.ListSharedChatsRequest
+	6,  // 14: reliant.v1.SharingService.ListSharedProjects:input_type -> reliant.v1.ListSharedProjectsRequest
+	9,  // 15: reliant.v1.SharingService.SetWorkflowDraftSharing:input_type -> reliant.v1.SetWorkflowDraftSharingRequest
+	11, // 16: reliant.v1.SharingService.ListSharedWorkflowDrafts:input_type -> reliant.v1.ListSharedWorkflowDraftsRequest
+	1,  // 17: reliant.v1.SharingService.SetChatVisibility:output_type -> reliant.v1.SetChatVisibilityResponse
+	3,  // 18: reliant.v1.SharingService.SetProjectVisibility:output_type -> reliant.v1.SetProjectVisibilityResponse
+	5,  // 19: reliant.v1.SharingService.ListSharedChats:output_type -> reliant.v1.ListSharedChatsResponse
+	7,  // 20: reliant.v1.SharingService.ListSharedProjects:output_type -> reliant.v1.ListSharedProjectsResponse
+	10, // 21: reliant.v1.SharingService.SetWorkflowDraftSharing:output_type -> reliant.v1.SetWorkflowDraftSharingResponse
+	12, // 22: reliant.v1.SharingService.ListSharedWorkflowDrafts:output_type -> reliant.v1.ListSharedWorkflowDraftsResponse
+	17, // [17:23] is the sub-list for method output_type
+	11, // [11:17] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_sharing_proto_init() }
@@ -605,15 +1030,18 @@ func file_reliant_v1_sharing_proto_init() {
 		return
 	}
 	file_reliant_v1_project_proto_init()
+	file_reliant_v1_workflow_proto_init()
 	file_reliant_v1_sharing_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_sharing_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_sharing_proto_msgTypes[8].OneofWrappers = []any{}
+	file_reliant_v1_sharing_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_sharing_proto_rawDesc), len(file_reliant_v1_sharing_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

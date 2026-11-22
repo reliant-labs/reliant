@@ -201,6 +201,76 @@ func TestListSharedProjects(t *testing.T) {
 	}
 }
 
+// The same predicate over saved workflows (org-sharing.md §8.5): only
+// visibility='org' rows of the org, never the viewer's own, a private one, a
+// hidden one or another org's; most recently shared first; paged.
+func TestListSharedWorkflowDrafts(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	add := func(id, owner string, org *string, hidden bool) {
+		t.Helper()
+		d := &core.WorkflowDraft{
+			ID: id, UserID: owner, OrgID: org, Name: id, Slug: id, Definition: "name: " + id,
+			Status: core.WorkflowDraftStatusComplete, IsHidden: hidden, CreatedAt: base, UpdatedAt: base,
+		}
+		if err := store.InsertWorkflowDraft(ctx, env.ORM, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("bob-shared-old", "bob", strp("acme"), false)
+	add("bob-shared-new", "bob", strp("acme"), false)
+	add("carol-shared", "carol", strp("acme"), false)
+	add("alice-shared", "alice", strp("acme"), false)
+	add("bob-private", "bob", strp("acme"), false)
+	add("bob-hidden", "bob", strp("acme"), true)
+	add("bob-globex", "bob", strp("globex"), false)
+	for i, s := range []struct{ id, owner, org string }{
+		{"bob-shared-old", "bob", "acme"},
+		{"carol-shared", "carol", "acme"},
+		{"bob-shared-new", "bob", "acme"},
+		{"alice-shared", "alice", "acme"},
+		{"bob-hidden", "bob", "acme"},
+		{"bob-globex", "bob", "globex"},
+	} {
+		changed, err := env.Repo.ApplyShareChange(ctx, core.ShareChange{
+			Kind: core.ShareKindWorkflow, ResourceID: s.id, OrgID: s.org, OwnerUserID: s.owner, ActorUserID: s.owner,
+			Action: core.ShareActionShare, At: base.Add(time.Duration(i) * time.Minute),
+		})
+		if err != nil || !changed {
+			t.Fatalf("share %s: changed=%v err=%v", s.id, changed, err)
+		}
+	}
+
+	list := func(f core.SharedWorkflowDraftFilters) []string {
+		t.Helper()
+		got, err := env.Repo.ListSharedWorkflowDrafts(ctx, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, d := range got {
+			ids = append(ids, d.ID)
+			if d.Visibility != core.VisibilityOrg || d.SharedAt == nil {
+				t.Fatalf("%s: visibility %q shared_at %v", d.ID, d.Visibility, d.SharedAt)
+			}
+		}
+		return ids
+	}
+	if got, want := list(core.SharedWorkflowDraftFilters{OrgID: "acme", ViewerUserID: "alice"}), []string{"bob-shared-new", "carol-shared", "bob-shared-old"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("shared workflows = %v, want %v", got, want)
+	}
+	if got, want := list(core.SharedWorkflowDraftFilters{OrgID: "acme", ViewerUserID: "alice", Limit: 1, Offset: 1}), []string{"carol-shared"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("page = %v, want %v", got, want)
+	}
+	if got := list(core.SharedWorkflowDraftFilters{OrgID: "acme"}); len(got) != 0 {
+		t.Fatalf("no viewer: %v", got)
+	}
+	if got := list(core.SharedWorkflowDraftFilters{ViewerUserID: "alice"}); len(got) != 0 {
+		t.Fatalf("no org: %v", got)
+	}
+}
+
 // ApplyShareChange changes visibility and writes exactly one share_events row
 // per real change; a no-op, a stale owner or org, and a missing row write
 // neither. It moves nothing else on the row: changing who may read a chat is

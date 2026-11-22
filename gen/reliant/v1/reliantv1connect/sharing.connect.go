@@ -47,6 +47,12 @@ const (
 	// SharingServiceListSharedProjectsProcedure is the fully-qualified name of the SharingService's
 	// ListSharedProjects RPC.
 	SharingServiceListSharedProjectsProcedure = "/reliant.v1.SharingService/ListSharedProjects"
+	// SharingServiceSetWorkflowDraftSharingProcedure is the fully-qualified name of the
+	// SharingService's SetWorkflowDraftSharing RPC.
+	SharingServiceSetWorkflowDraftSharingProcedure = "/reliant.v1.SharingService/SetWorkflowDraftSharing"
+	// SharingServiceListSharedWorkflowDraftsProcedure is the fully-qualified name of the
+	// SharingService's ListSharedWorkflowDrafts RPC.
+	SharingServiceListSharedWorkflowDraftsProcedure = "/reliant.v1.SharingService/ListSharedWorkflowDrafts"
 )
 
 // SharingServiceClient is a client for the reliant.v1.SharingService service.
@@ -76,6 +82,27 @@ type SharingServiceClient interface {
 	// organization the caller is a live member of, most recently active first,
 	// each with viewer_access set and without path.
 	ListSharedProjects(context.Context, *connect.Request[v1.ListSharedProjectsRequest]) (*connect.Response[v1.ListSharedProjectsResponse], error)
+	// SetWorkflowDraftSharing shares a saved workflow (a workflow draft, in
+	// the caller's workflow library) with its organization (ORG) or makes it
+	// private again (PRIVATE), so a live member can publish one for the team to
+	// read and fork (control-plane docs/design/org-sharing.md §8.5). The rules
+	// are SetChatVisibility's: only the owner shares, as a person, and only a
+	// saved workflow that belongs to an org; an admin or owner of its org may
+	// make a member's shared one private, never share it; anyone who cannot
+	// read it is NOT_FOUND.
+	//
+	// Sharing a saved workflow shares its definition, read-only. It never lets
+	// a viewer run it as its owner, change it, or see the owner's runs of it.
+	// Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
+	// its owner's own pickers and shares nothing.
+	SetWorkflowDraftSharing(context.Context, *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error)
+	// ListSharedWorkflowDrafts lists the saved workflows other members shared
+	// with an organization the caller is a live member of, most recently
+	// shared first: the team's shared workflow library. Never the caller's own
+	// (those are in WorkflowService.ListWorkflows), and never one its owner
+	// hid. Each carries its definition, to read and fork.
+	// forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
+	ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error)
 }
 
 // NewSharingServiceClient constructs a client for the reliant.v1.SharingService service. By
@@ -113,15 +140,29 @@ func NewSharingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sharingServiceMethods.ByName("ListSharedProjects")),
 			connect.WithClientOptions(opts...),
 		),
+		setWorkflowDraftSharing: connect.NewClient[v1.SetWorkflowDraftSharingRequest, v1.SetWorkflowDraftSharingResponse](
+			httpClient,
+			baseURL+SharingServiceSetWorkflowDraftSharingProcedure,
+			connect.WithSchema(sharingServiceMethods.ByName("SetWorkflowDraftSharing")),
+			connect.WithClientOptions(opts...),
+		),
+		listSharedWorkflowDrafts: connect.NewClient[v1.ListSharedWorkflowDraftsRequest, v1.ListSharedWorkflowDraftsResponse](
+			httpClient,
+			baseURL+SharingServiceListSharedWorkflowDraftsProcedure,
+			connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // sharingServiceClient implements SharingServiceClient.
 type sharingServiceClient struct {
-	setChatVisibility    *connect.Client[v1.SetChatVisibilityRequest, v1.SetChatVisibilityResponse]
-	setProjectVisibility *connect.Client[v1.SetProjectVisibilityRequest, v1.SetProjectVisibilityResponse]
-	listSharedChats      *connect.Client[v1.ListSharedChatsRequest, v1.ListSharedChatsResponse]
-	listSharedProjects   *connect.Client[v1.ListSharedProjectsRequest, v1.ListSharedProjectsResponse]
+	setChatVisibility        *connect.Client[v1.SetChatVisibilityRequest, v1.SetChatVisibilityResponse]
+	setProjectVisibility     *connect.Client[v1.SetProjectVisibilityRequest, v1.SetProjectVisibilityResponse]
+	listSharedChats          *connect.Client[v1.ListSharedChatsRequest, v1.ListSharedChatsResponse]
+	listSharedProjects       *connect.Client[v1.ListSharedProjectsRequest, v1.ListSharedProjectsResponse]
+	setWorkflowDraftSharing  *connect.Client[v1.SetWorkflowDraftSharingRequest, v1.SetWorkflowDraftSharingResponse]
+	listSharedWorkflowDrafts *connect.Client[v1.ListSharedWorkflowDraftsRequest, v1.ListSharedWorkflowDraftsResponse]
 }
 
 // SetChatVisibility calls reliant.v1.SharingService.SetChatVisibility.
@@ -142,6 +183,16 @@ func (c *sharingServiceClient) ListSharedChats(ctx context.Context, req *connect
 // ListSharedProjects calls reliant.v1.SharingService.ListSharedProjects.
 func (c *sharingServiceClient) ListSharedProjects(ctx context.Context, req *connect.Request[v1.ListSharedProjectsRequest]) (*connect.Response[v1.ListSharedProjectsResponse], error) {
 	return c.listSharedProjects.CallUnary(ctx, req)
+}
+
+// SetWorkflowDraftSharing calls reliant.v1.SharingService.SetWorkflowDraftSharing.
+func (c *sharingServiceClient) SetWorkflowDraftSharing(ctx context.Context, req *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error) {
+	return c.setWorkflowDraftSharing.CallUnary(ctx, req)
+}
+
+// ListSharedWorkflowDrafts calls reliant.v1.SharingService.ListSharedWorkflowDrafts.
+func (c *sharingServiceClient) ListSharedWorkflowDrafts(ctx context.Context, req *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error) {
+	return c.listSharedWorkflowDrafts.CallUnary(ctx, req)
 }
 
 // SharingServiceHandler is an implementation of the reliant.v1.SharingService service.
@@ -171,6 +222,27 @@ type SharingServiceHandler interface {
 	// organization the caller is a live member of, most recently active first,
 	// each with viewer_access set and without path.
 	ListSharedProjects(context.Context, *connect.Request[v1.ListSharedProjectsRequest]) (*connect.Response[v1.ListSharedProjectsResponse], error)
+	// SetWorkflowDraftSharing shares a saved workflow (a workflow draft, in
+	// the caller's workflow library) with its organization (ORG) or makes it
+	// private again (PRIVATE), so a live member can publish one for the team to
+	// read and fork (control-plane docs/design/org-sharing.md §8.5). The rules
+	// are SetChatVisibility's: only the owner shares, as a person, and only a
+	// saved workflow that belongs to an org; an admin or owner of its org may
+	// make a member's shared one private, never share it; anyone who cannot
+	// read it is NOT_FOUND.
+	//
+	// Sharing a saved workflow shares its definition, read-only. It never lets
+	// a viewer run it as its owner, change it, or see the owner's runs of it.
+	// Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
+	// its owner's own pickers and shares nothing.
+	SetWorkflowDraftSharing(context.Context, *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error)
+	// ListSharedWorkflowDrafts lists the saved workflows other members shared
+	// with an organization the caller is a live member of, most recently
+	// shared first: the team's shared workflow library. Never the caller's own
+	// (those are in WorkflowService.ListWorkflows), and never one its owner
+	// hid. Each carries its definition, to read and fork.
+	// forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
+	ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error)
 }
 
 // NewSharingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -204,6 +276,18 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sharingServiceMethods.ByName("ListSharedProjects")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sharingServiceSetWorkflowDraftSharingHandler := connect.NewUnaryHandler(
+		SharingServiceSetWorkflowDraftSharingProcedure,
+		svc.SetWorkflowDraftSharing,
+		connect.WithSchema(sharingServiceMethods.ByName("SetWorkflowDraftSharing")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sharingServiceListSharedWorkflowDraftsHandler := connect.NewUnaryHandler(
+		SharingServiceListSharedWorkflowDraftsProcedure,
+		svc.ListSharedWorkflowDrafts,
+		connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.SharingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SharingServiceSetChatVisibilityProcedure:
@@ -214,6 +298,10 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 			sharingServiceListSharedChatsHandler.ServeHTTP(w, r)
 		case SharingServiceListSharedProjectsProcedure:
 			sharingServiceListSharedProjectsHandler.ServeHTTP(w, r)
+		case SharingServiceSetWorkflowDraftSharingProcedure:
+			sharingServiceSetWorkflowDraftSharingHandler.ServeHTTP(w, r)
+		case SharingServiceListSharedWorkflowDraftsProcedure:
+			sharingServiceListSharedWorkflowDraftsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -237,4 +325,12 @@ func (UnimplementedSharingServiceHandler) ListSharedChats(context.Context, *conn
 
 func (UnimplementedSharingServiceHandler) ListSharedProjects(context.Context, *connect.Request[v1.ListSharedProjectsRequest]) (*connect.Response[v1.ListSharedProjectsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.ListSharedProjects is not implemented"))
+}
+
+func (UnimplementedSharingServiceHandler) SetWorkflowDraftSharing(context.Context, *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.SetWorkflowDraftSharing is not implemented"))
+}
+
+func (UnimplementedSharingServiceHandler) ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.ListSharedWorkflowDrafts is not implemented"))
 }

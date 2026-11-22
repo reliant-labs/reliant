@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -301,4 +302,198 @@ func TestListSharedChatsByApp(t *testing.T) {
 	assert.Empty(t, list(&blog), "another app's list holds none of it")
 	assert.Len(t, list(&empty), 1, "an empty app_name is unset")
 	assert.Len(t, list(nil), 1)
+}
+
+// seedDraft writes a saved workflow of userID in org (nil: none), private.
+func seedDraft(t *testing.T, f *viewertest.Fixture, id, userID string, org *string) {
+	t.Helper()
+	require.NoError(t, f.Repo.CreateWorkflowDraft(context.Background(), &db.WorkflowDraft{
+		ID: id, UserID: userID, OrgID: org, Name: "Deploy " + id, Slug: "deploy-" + id,
+		Definition: "name: deploy-" + id + "\nentry: run\n", Status: core.WorkflowDraftStatusComplete,
+		SourcePath: ptrTo("/home/owner/.reliant/workflows/deploy.yaml"),
+		CreatedAt:  viewertest.SeededAt, UpdatedAt: viewertest.SeededAt,
+	}))
+}
+
+func ptrTo(s string) *string { return &s }
+
+func setDraft(svc *Service, ctx context.Context, id string, v pb.ResourceVisibility) (*pb.SetWorkflowDraftSharingResponse, error) {
+	resp, err := svc.SetWorkflowDraftSharing(ctx, connect.NewRequest(&pb.SetWorkflowDraftSharingRequest{WorkflowId: id, Visibility: v}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// SetWorkflowDraftSharing follows SetChatVisibility's rules for a saved
+// workflow (org-sharing.md §8.5): only the owner shares, as a person, and
+// only one in an org; the owner clears with any credential; an org admin
+// clears a member's share but never sets one; anyone else is NOT_FOUND. Each
+// change writes one share event; a no-op writes none.
+func TestSetWorkflowDraftSharing(t *testing.T) {
+	svc, f := sharingFixture(t)
+	acme := viewertest.OrgID
+	wf := "wf-" + f.OwnerID
+	seedDraft(t, f, wf, f.OwnerID, &acme)
+
+	// Private: nobody but the owner sees it.
+	_, err := setDraft(svc, f.Viewer, wf, private)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+	_, err = setDraft(svc, f.Admin, wf, private)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+	_, err = setDraft(svc, f.Outsider, wf, org)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+	// An agent's credential cannot share it.
+	_, err = setDraft(svc, f.ContextAs(f.OwnerID, auth.CredentialAccessToken), wf, org)
+	requireRefusal(t, err, connect.CodePermissionDenied, auth.ReasonPersonRequired)
+	assert.Empty(t, events(t, f, core.ShareKindWorkflow, wf))
+
+	// The owner shares, as a person, and reads it as the owner.
+	got, err := setDraft(svc, f.Owner, wf, org)
+	require.NoError(t, err)
+	assert.True(t, got.Changed)
+	assert.Equal(t, org, got.Workflow.GetVisibility())
+	assert.False(t, got.Workflow.GetViewerAccess())
+	assert.Equal(t, "deploy-"+wf, got.Workflow.GetSlug())
+	assert.NotEmpty(t, got.Workflow.GetSharedAt())
+	ev := events(t, f, core.ShareKindWorkflow, wf)
+	require.Len(t, ev, 1)
+	assert.Equal(t, core.ShareActionShare, ev[0].Action)
+	assert.Equal(t, viewertest.OrgID, ev[0].OrgID)
+
+	// Again: nothing changes, nothing is recorded.
+	got, err = setDraft(svc, f.Owner, wf, org)
+	require.NoError(t, err)
+	assert.False(t, got.Changed)
+	assert.Len(t, events(t, f, core.ShareKindWorkflow, wf), 1)
+
+	// A viewer reads it and may neither share nor clear it; an admin may not
+	// share it, nor clear it through an agent's credential; an outsider gets
+	// nothing.
+	_, err = setDraft(svc, f.Viewer, wf, org)
+	requireRefusal(t, err, connect.CodePermissionDenied, ReasonOwnerOnly)
+	_, err = setDraft(svc, f.Viewer, wf, private)
+	requireRefusal(t, err, connect.CodePermissionDenied, ReasonOrgAdminRequired)
+	_, err = setDraft(svc, f.Admin, wf, org)
+	requireRefusal(t, err, connect.CodePermissionDenied, ReasonOwnerOnly)
+	_, err = setDraft(svc, f.ContextAs(f.AdminID, auth.CredentialAccessToken), wf, private)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+	_, err = setDraft(svc, f.Outsider, wf, private)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+	assert.Len(t, events(t, f, core.ShareKindWorkflow, wf), 1, "refusals record nothing")
+
+	// The admin clears it, recorded as an admin's, and reads it no longer.
+	got, err = setDraft(svc, f.Admin, wf, private)
+	require.NoError(t, err)
+	assert.True(t, got.Changed)
+	assert.Nil(t, got.Workflow, "the admin cannot read a private saved workflow")
+	ev = events(t, f, core.ShareKindWorkflow, wf)
+	require.Len(t, ev, 2)
+	assert.Equal(t, core.ShareActionAdminUnshare, ev[0].Action)
+	assert.Equal(t, f.AdminID, ev[0].ActorUserID)
+	assert.Equal(t, f.OwnerID, ev[0].OwnerUserID)
+
+	// The owner shares again and clears it with an agent's credential.
+	_, err = setDraft(svc, f.Owner, wf, org)
+	require.NoError(t, err)
+	got, err = setDraft(svc, f.ContextAs(f.OwnerID, auth.CredentialAccessToken), wf, private)
+	require.NoError(t, err)
+	assert.True(t, got.Changed)
+	assert.Equal(t, private, got.Workflow.GetVisibility())
+	assert.Empty(t, got.Workflow.GetSharedAt())
+	ev = events(t, f, core.ShareKindWorkflow, wf)
+	require.Len(t, ev, 4)
+	assert.Equal(t, core.ShareActionUnshare, ev[0].Action)
+
+	_, err = setDraft(svc, f.Owner, wf, pb.ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED)
+	requireRefusal(t, err, connect.CodeInvalidArgument, "")
+	_, err = setDraft(svc, f.Owner, "no-such-workflow", org)
+	requireRefusal(t, err, connect.CodeNotFound, "")
+
+	// Sharing it widens no other workflow read: a launch or a lookup by slug
+	// decides with CanReadWorkflow, which stays the owner's.
+	_, err = setDraft(svc, f.Owner, wf, org)
+	require.NoError(t, err)
+	shared, err := f.Repo.GetWorkflowDraft(context.Background(), wf)
+	require.NoError(t, err)
+	assert.Equal(t, core.VisibilityOrg, shared.Visibility)
+	assert.False(t, authz.CanReadWorkflow(authz.WithViewerReads(f.Viewer), f.ViewerID, shared))
+	assert.True(t, authz.CanReadWorkflow(f.Owner, f.OwnerID, shared))
+}
+
+// A saved workflow that belongs to no org has no one to be shared with.
+func TestSetWorkflowDraftSharingNeedsAnOrg(t *testing.T) {
+	svc, f := sharingFixture(t)
+	wf := "orgless-wf-" + f.OwnerID
+	seedDraft(t, f, wf, f.OwnerID, nil)
+	_, err := setDraft(svc, f.Owner, wf, org)
+	requireRefusal(t, err, connect.CodeFailedPrecondition, ReasonNoOrg)
+}
+
+// The shared library: a member of the org lists what others shared there,
+// most recently shared first, in the shared shape (no source path), never
+// their own, a private one, a hidden one or another org's; an outsider's org
+// lists none, and naming an org one is not in is refused; an agent's
+// credential lists nothing.
+func TestListSharedWorkflowDrafts(t *testing.T) {
+	svc, f := sharingFixture(t)
+	acme, globex := viewertest.OrgID, viewertest.OtherOrgID
+	first, second := "wf-first-"+f.OwnerID, "wf-second-"+f.OwnerID
+	privateWF, hidden := "wf-private-"+f.OwnerID, "wf-hidden-"+f.OwnerID
+	viewerOwn, other := "wf-viewer-"+f.ViewerID, "wf-globex-"+f.OutsiderID
+	for _, id := range []string{first, second, privateWF, hidden} {
+		seedDraft(t, f, id, f.OwnerID, &acme)
+	}
+	seedDraft(t, f, viewerOwn, f.ViewerID, &acme)
+	seedDraft(t, f, other, f.OutsiderID, &globex)
+	for _, s := range []struct {
+		ctx context.Context
+		id  string
+	}{{f.Owner, first}, {f.Owner, second}, {f.Owner, hidden}, {f.Viewer, viewerOwn}, {f.Outsider, other}} {
+		_, err := setDraft(svc, s.ctx, s.id, org)
+		require.NoError(t, err, s.id)
+	}
+	_, err := f.Repo.SetWorkflowDraftHidden(f.Owner, hidden, true)
+	require.NoError(t, err)
+	// first was shared earlier than second.
+	_, err = f.Repo.ORM().Bun().NewRaw(`UPDATE workflow_drafts SET shared_at = shared_at - interval '1 hour' WHERE id = ?`, first).Exec(context.Background())
+	require.NoError(t, err)
+
+	list := func(ctx context.Context, req *pb.ListSharedWorkflowDraftsRequest) ([]*pb.SharedWorkflowDraft, error) {
+		resp, err := svc.ListSharedWorkflowDrafts(ctx, connect.NewRequest(req))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg.Workflows, nil
+	}
+	got, err := list(f.Viewer, &pb.ListSharedWorkflowDraftsRequest{})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, []string{second, first}, []string{got[0].GetId(), got[1].GetId()}, "most recently shared first")
+	w := got[0]
+	assert.True(t, w.GetViewerAccess())
+	assert.Equal(t, org, w.GetVisibility())
+	assert.Equal(t, f.OwnerID, w.GetUserId())
+	assert.Equal(t, acme, w.GetOrgId())
+	assert.Equal(t, pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE, w.GetStatus())
+	assert.Equal(t, "name: deploy-"+second+"\nentry: run\n", w.GetDefinition(), "the team reads the definition to fork it")
+	assert.NotEmpty(t, w.GetSharedAt())
+
+	got, err = list(f.Viewer, &pb.ListSharedWorkflowDraftsRequest{OrgId: &acme, Limit: 1, Offset: 1})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, first, got[0].GetId())
+
+	got, err = list(f.Owner, &pb.ListSharedWorkflowDraftsRequest{})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the owner's own are in their own library; the viewer's shared one is listed")
+	assert.Equal(t, viewerOwn, got[0].GetId())
+
+	got, err = list(f.Outsider, &pb.ListSharedWorkflowDraftsRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, got, "the outsider's org shares only their own")
+	_, err = list(f.Outsider, &pb.ListSharedWorkflowDraftsRequest{OrgId: &acme})
+	requireRefusal(t, err, connect.CodePermissionDenied, "not_org_member")
+	_, err = list(f.ContextAs(f.ViewerID, auth.CredentialAccessToken), &pb.ListSharedWorkflowDraftsRequest{})
+	requireRefusal(t, err, connect.CodePermissionDenied, auth.ReasonPersonRequired)
 }

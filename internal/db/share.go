@@ -43,6 +43,13 @@ func (r *Repo) ListSharedProjects(ctx context.Context, f core.SharedProjectFilte
 	return store.ListSharedProjects(ctx, r.ORM(), f)
 }
 
+// ListSharedWorkflowDrafts lists the saved workflows shared with an org that
+// the viewer did not create (store.ListSharedWorkflowDrafts). The caller
+// passes them through authz.
+func (r *Repo) ListSharedWorkflowDrafts(ctx context.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error) {
+	return store.ListSharedWorkflowDrafts(ctx, r.ORM(), f)
+}
+
 // LatestOrgUpdateSequence is the newest sequence of an org's feed.
 func (r *Repo) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
 	return store.LatestOrgUpdateSequence(ctx, r.ORM(), orgID)

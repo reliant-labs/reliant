@@ -20,9 +20,11 @@ import (
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	GetProject(ctx context.Context, id string) (*core.Project, error)
+	GetWorkflowDraft(ctx context.Context, id string) (*core.WorkflowDraft, error)
 	ApplyShareChange(ctx context.Context, c core.ShareChange) (bool, error)
 	ListSharedChats(ctx context.Context, f core.SharedChatFilters) ([]*core.Chat, error)
 	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
+	ListSharedWorkflowDrafts(ctx context.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error)
 }
 
 // OrgResolver names the org a shared list is of: the one the request names,
