@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/runs"
+	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -290,7 +291,11 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 	// The Inbox says so too, as one item that stays the same item across
 	// polls (so a dismissal holds).
-	inboxService, err := inbox.New(inbox.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	inboxService, err := inbox.New(inbox.Deps{
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		Recoveries: extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:      extstore.NewWorktreeExtStore(repo.ORM()),
+	})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
 		resp, err := inboxService.ListInbox(context.WithValue(ctx, auth.UserIDContextKey, userID), connect.NewRequest(&reliantv1.ListInboxRequest{}))
