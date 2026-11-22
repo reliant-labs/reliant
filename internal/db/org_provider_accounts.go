@@ -19,26 +19,6 @@ import (
 // every method here scopes to the org it is given in SQL, so an id of another org's account,
 // grant or binding is not found.
 
-// ListOwnedAccountLimits returns limit state by account id for the owner's accounts that have
-// any. An org's limits are keyed by its owner key, shared by every member who uses the account.
-func (r *Repo) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
-	if !owner.Valid() {
-		return map[string]core.LimitState{}, nil
-	}
-	return store.ListUserAccountLimits(ctx, r.ORM(), owner.Key())
-}
-
-// ReorderOwnedProviderAccounts sets the order of the owner's accounts of provider. orderedIDs
-// must be exactly those accounts (core.ErrInvalidAccountOrder otherwise).
-func (r *Repo) ReorderOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner, provider string, orderedIDs []string) error {
-	return r.accounts.ReorderOwnedProviderAccounts(ctx, owner, provider, orderedIDs)
-}
-
-// DeleteOwnedProviderAccount removes one of the owner's accounts and destroys its ciphertext.
-func (r *Repo) DeleteOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string) error {
-	return r.accounts.DeleteOwnedProviderAccount(ctx, owner, accountID)
-}
-
 // RotateOrgAPIKey replaces the key of one of orgID's API-key accounts in place.
 func (r *Repo) RotateOrgAPIKey(ctx context.Context, orgID, accountID string, k core.OrgAPIKey) (core.ProviderAccount, error) {
 	return r.accounts.RotateOrgAPIKey(ctx, orgID, accountID, k)

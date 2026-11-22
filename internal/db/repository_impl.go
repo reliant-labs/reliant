@@ -899,11 +899,6 @@ func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
 	return store.GetApproval(ctx, r.ORM(), id)
 }
 
-// GetApprovalByEntityID retrieves an approval by its entity_id
-func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
-}
-
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
 	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
@@ -3304,10 +3299,6 @@ func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, node
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
-func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
-}
-
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
 	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
 }
@@ -4084,12 +4075,6 @@ func generateID() string {
 // before serving.
 func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.accounts.SetSealer(sealer)
-}
-
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
-// opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
 
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,

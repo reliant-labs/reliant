@@ -36,7 +36,7 @@ func TestWorkspaceSeatAttribution(t *testing.T) {
 	dana := mustUpsert(t, repo, claudeUpsert("dana", "dana", "ws-a", "t", "r"))
 	eve := mustUpsert(t, repo, claudeUpsert("eve", "eve", "ws-a", "t", "r"))
 	fayElsewhere := mustUpsert(t, repo, claudeUpsert("fay", "fay", "ws-b", "t", "r"))
-	key, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	key, _, err := TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: "gus", Provider: "claude", AuthKind: core.AuthKindAPIKey, IdentityKey: "apikey:gus",
 		Secrets: core.AccountSecrets{Secret: "sk-ant-gus-0001"},
 	})

@@ -43,7 +43,7 @@ func TestBuildAvailableDrivers_CodexUsesPersistedAccessToken(t *testing.T) {
 
 	seedCodex(t, repo, userID, validToken, "refresh-token")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["codex"]
@@ -68,7 +68,7 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsRefreshable(t *testing.T) {
 	seedCodex(t, repo, userID, expiredToken, "refresh-token")
 	db.SeedProviderAccount(t, repo, userID, "openai", "sk-openai-test")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, hasCodex := availableDrivers.Drivers["codex"]
@@ -95,7 +95,7 @@ func TestBuildAvailableDrivers_CodexExpiredWithoutRefreshTokenIsSkipped(t *testi
 
 	seedCodex(t, repo, userID, expiredToken, "")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	_, hasCodex := availableDrivers.Drivers["codex"]
@@ -113,7 +113,7 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 
 	db.SeedProviderAccount(t, repo, userID, "reliant", validRlat)
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["reliant"]
@@ -132,7 +132,7 @@ func TestBuildAvailableDrivers_ReliantNotConfiguredWithoutKey(t *testing.T) {
 
 	db.SeedProviderAccount(t, repo, userID, "anthropic", "sk-ant-test")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	_, hasReliant := availableDrivers.Drivers["reliant"]
@@ -152,17 +152,17 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 	userID := "test-user"
 	db.SeedProviderAccount(t, repo, userID, "reliant", "rlnt_abcdef0123456789")
 
-	available, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
+	available, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 	_, has := available.Drivers["reliant"]
 	assert.False(t, has, "legacy rlnt_ key must not register the reliant driver")
 
-	stale, err := HasStaleReliantKey(ctx, repo, userID)
+	stale, err := HasStaleReliantKey(ctx, db.TestAccounts(t, repo), userID)
 	require.NoError(t, err)
 	assert.True(t, stale)
 
 	db.SeedProviderAccount(t, repo, userID, "reliant", validRlat)
-	stale, err = HasStaleReliantKey(ctx, repo, userID)
+	stale, err = HasStaleReliantKey(ctx, db.TestAccounts(t, repo), userID)
 	require.NoError(t, err)
 	assert.False(t, stale, "a valid rlat_ key is not stale")
 }
@@ -170,7 +170,7 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 func TestHasStaleReliantKey_FalseWithoutKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	stale, err := HasStaleReliantKey(context.Background(), repo, "test-user")
+	stale, err := HasStaleReliantKey(context.Background(), db.TestAccounts(t, repo), "test-user")
 	require.NoError(t, err)
 	assert.False(t, stale)
 }
@@ -178,7 +178,7 @@ func TestHasStaleReliantKey_FalseWithoutKey(t *testing.T) {
 // seedCodex connects userID to Codex with the given tokens.
 func seedCodex(t *testing.T, repo *db.Repo, userID, access, refresh string) {
 	t.Helper()
-	_, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.CodexIdentityKey("test-account-id", "test-user"), ExternalAccountID: "test-account-id",
 		Secrets: core.AccountSecrets{Secret: access, Refresh: refresh},

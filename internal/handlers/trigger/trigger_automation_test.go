@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -44,7 +45,7 @@ func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
 	assert.Equal(t, "rlat_resume_"+env.daemonID, got)
 
 	// Never visible as a provider credential.
-	all, err := env.repo.ListProviderAccounts(env.ctx, env.userID)
+	all, err := db.TestAccounts(t, env.repo).ListProviderAccounts(env.ctx, env.userID)
 	require.NoError(t, err)
 	assert.Empty(t, all)
 }

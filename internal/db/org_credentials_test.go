@@ -105,6 +105,6 @@ func TestPurgeOrgCredentials_LeavesNoOpenableCiphertext(t *testing.T) {
 	plain, err = v.Open(ctx, vault.UserTenant("admin"), mineBlob, ProviderAccountAAD(mine.ID, accountColSecret))
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-mine-0003", string(plain), "the creator's own key still opens")
-	_, err = repo.GetOwnedProviderAccountWithSecrets(ctx, core.OrgAccountOwner("org-gone"), gone.ID)
+	_, err = TestAccounts(t, repo).GetOwnedProviderAccountWithSecrets(ctx, core.OrgAccountOwner("org-gone"), gone.ID)
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
 }

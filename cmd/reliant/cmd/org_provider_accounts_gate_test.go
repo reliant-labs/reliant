@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -28,8 +29,9 @@ import (
 // API key with it.
 func addOrgProviderAccountThrough(t *testing.T, api *configv1.ApiServerConfig) error {
 	t.Helper()
+	repo := db.NewTestRepo(t)
 	svc, err := app.NewOrgProviderAccount(api, org_provider_account.Deps{
-		Logger: slog.Default(), Config: &config.Config{}, Store: db.NewTestRepo(t),
+		Logger: slog.Default(), Config: &config.Config{}, Store: orgStore{db.TestAccounts(t, repo), repo},
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "" },
 	})
 	require.NoError(t, err)
@@ -166,4 +168,10 @@ func TestOrgProviderWorkspaceSeatsGateIsOffByDefault(t *testing.T) {
 	api, err = config.LoadApiServerConfig(cmd)
 	require.NoError(t, err)
 	require.True(t, api.GetOrgs().GetProviderWorkspaceSeatsEnabled())
+}
+
+// orgStore is the accounts joined with the org administration the facade still holds.
+type orgStore struct {
+	provideraccounts.Service
+	*db.Repo
 }

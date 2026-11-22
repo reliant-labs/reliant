@@ -36,7 +36,7 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	e := newEnv(t)
 	waker := &wakeRecorder{}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
-		Store: e.repo, Funding: store.NewChatPersonalFundingExtStore(e.repo.ORM()), ChatWaker: waker,
+		Store: e.repo, Accounts: e.accounts, Funding: store.NewChatPersonalFundingExtStore(e.repo.ORM()), ChatWaker: waker,
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
 	}))
 	const user = "u-funding"

@@ -224,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=f7df980084c306b08d0bbf1de827d49e76d7902cf0f6e6d6b72baba3d42bcf22
+// forge:hash=0001a426e1ab393a2330fb8046cb159ea4a6706b34b9011e31a52f21fa879202
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -357,7 +357,6 @@ type MockRepository struct {
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachineWorkflowsJSONFunc                       func(context.Context, string, string) (*string, bool, error)
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
-	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
 	GetTriggerEventByDedupeFunc                              func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
@@ -375,6 +374,7 @@ type MockRepository struct {
 	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
 	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
+	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	PinChatDaemonIfUnsetFunc                                 func(context.Context, string, string) (string, error)
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
 }
@@ -1486,15 +1486,6 @@ func (m *MockRepository) GetProjectPresetsJSON(ctx context.Context, projectID st
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectPresetsJSON")
 }
 
-// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
-func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
-	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
-	if m.GetProjectWithUserCheckFunc != nil {
-		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
-}
-
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
 func (m *MockRepository) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
@@ -1646,6 +1637,15 @@ func (m *MockRepository) WorkflowSourceDiagnostic(ctx context.Context, projectID
 		return m.WorkflowSourceDiagnosticFunc(ctx, projectID, daemonID, ref)
 	}
 	return "", contractkit.MockNotSet("MockRepository", "WorkflowSourceDiagnostic")
+}
+
+// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
+func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
+	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
+	if m.GetProjectWithUserCheckFunc != nil {
+		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
 }
 
 // PinChatDaemonIfUnset records the call and delegates to PinChatDaemonIfUnsetFunc when set.

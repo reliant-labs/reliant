@@ -69,21 +69,21 @@ func TestSettingsService_ValidateProviderAPIKey_SubscriptionProvidersReportTheir
 	assert.Equal(t, "Codex is not connected", missing.Message)
 
 	// An account waiting for sign-in => session expired.
-	acct, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	acct, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.CodexIdentityKey("A", "U"),
 		Secrets:     core.AccountSecrets{Secret: "codex-access", Refresh: "codex-refresh"},
 	})
 	require.NoError(t, err)
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, userID, acct.ID, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, userID, acct.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	expired := validate("codex")
 	assert.False(t, expired.Valid)
 	assert.Contains(t, expired.Message, "session expired")
 
 	// Signing in again clears it.
-	_, _, err = repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	_, _, err = db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.CodexIdentityKey("A", "U"),
 		Secrets:     core.AccountSecrets{Secret: "codex-access-2", Refresh: "codex-refresh-2"},
@@ -111,7 +111,7 @@ func TestSettingsService_GetProviderStatuses_ConfiguredMeansAnAccountCanServe(t 
 	assert.False(t, statusOf("codex").Configured)
 	assert.Zero(t, statusOf("codex").AccountCount)
 
-	first, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	first, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth, IdentityKey: core.CodexIdentityKey("A", "U1"),
 		Secrets: core.AccountSecrets{Secret: "a1", Refresh: "r1"},
 	})
@@ -120,22 +120,22 @@ func TestSettingsService_GetProviderStatuses_ConfiguredMeansAnAccountCanServe(t 
 	assert.EqualValues(t, 1, statusOf("codex").AccountCount)
 
 	// One account waiting for sign-in does not unconfigure the provider while another can serve.
-	_, _, err = repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	_, _, err = db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth, IdentityKey: core.CodexIdentityKey("A", "U2"),
 		Secrets: core.AccountSecrets{Secret: "a2", Refresh: "r2"},
 	})
 	require.NoError(t, err)
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, userID, first.ID, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, userID, first.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	assert.True(t, statusOf("codex").Configured)
 	assert.EqualValues(t, 2, statusOf("codex").AccountCount)
 
 	// Every account waiting for sign-in: not configured, but still counted so the UI can offer Reconnect.
-	accounts, err := repo.ListProviderAccounts(ctx, userID)
+	accounts, err := db.TestAccounts(t, repo).ListProviderAccounts(ctx, userID)
 	require.NoError(t, err)
 	for _, a := range accounts {
-		_, err = repo.PatchProviderAccount(ctx, userID, a.ID, core.AccountPatch{NeedsReauth: &reason})
+		_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, userID, a.ID, core.AccountPatch{NeedsReauth: &reason})
 		require.NoError(t, err)
 	}
 	assert.False(t, statusOf("codex").Configured)
