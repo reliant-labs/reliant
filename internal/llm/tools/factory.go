@@ -7,6 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/planning"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -42,6 +43,23 @@ type ToolsOptions struct {
 	// tool reports that it is unavailable here (the daemon runtime, catalog
 	// listings).
 	Repo *db.Repo
+	// SpawnQuestions reads the pending questions spawn_status reports agents
+	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
+	// spawn_status report it is unavailable here, like every database tool.
+	SpawnQuestions SpawnQuestions
+	// Scenarios, LaunchedRuns, WorktreeChats and WorkflowSlugs are the row
+	// stores behind the scenario, start_run, worktree and create_workflow
+	// tools (store.WorkflowScenarioExtStore, TriggerEventExtStore,
+	// ChatExtStore and WorkflowDraftExtStore). Optional: nil makes the tool
+	// that needs one report that it is unavailable here, like a nil Repo.
+	Scenarios     ScenarioStore
+	LaunchedRuns  LaunchedRunCounter
+	WorktreeChats WorktreeChatLister
+	WorkflowSlugs WorkflowSlugChecker
+	// Planning is the plan, task and dependency store behind the planning
+	// tools. Optional: nil makes them report that they are unavailable here,
+	// like a nil Repo.
+	Planning planning.Service
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
@@ -238,11 +256,43 @@ type toolStore interface {
 	writeScenarioStore
 }
 
+// toolPlanning is every planning role the factory hands its Planning to.
+type toolPlanning interface {
+	addDependencyPlanning
+	addTaskPlanning
+	createPlanPlanning
+	getPlanPlanning
+	listReadyTasksPlanning
+	listTasksPlanning
+	removeDependencyPlanning
+	updatePlanPlanning
+	updateTaskPlanning
+}
+
+// planning is Planning as the planning tools' roles: nil when the factory has
+// none, for the same reason store() is (a nil interface value is not nil
+// once converted).
+func (f *ToolsFactory) planning() toolPlanning {
+	if f.opts == nil || f.opts.Planning == nil {
+		return nil
+	}
+	return f.opts.Planning
+}
+
 // store is Repo as the tools' roles: a nil interface when the factory has no
 // database. A nil *db.Repo converted to an interface is NOT nil, so handing
 // opts.Repo through as is would defeat every tool's "requires a database
 // connection" check and turn an unavailable tool into a nil dereference.
 func (f *ToolsFactory) store() toolStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+// spawnStatusStore is store() as spawn_status's role: nil when there is no
+// database, so the tool reports itself unavailable rather than dereferencing it.
+func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
@@ -426,28 +476,28 @@ func (f *ToolsFactory) GenerateVideo() Tool {
 
 // Planning tools
 func (f *ToolsFactory) CreatePlan() Tool {
-	return NewCreatePlanTool(f.store())
+	return NewCreatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdatePlan() Tool {
-	return NewUpdatePlanTool(f.store())
+	return NewUpdatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) GetPlan() Tool {
-	return NewGetPlanTool(f.store())
+	return NewGetPlanTool(f.store(), f.planning())
 }
 
 // Task tools
 func (f *ToolsFactory) ListTasks() Tool {
-	return NewListTasksTool(f.store())
+	return NewListTasksTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) AddTask() Tool {
-	return NewAddTaskTool(f.store())
+	return NewAddTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdateTask() Tool {
-	return NewUpdateTaskTool(f.store())
+	return NewUpdateTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) CreateSubtask() Tool {
@@ -455,15 +505,15 @@ func (f *ToolsFactory) CreateSubtask() Tool {
 }
 
 func (f *ToolsFactory) AddDependency() Tool {
-	return NewAddDependencyTool(f.store())
+	return NewAddDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) RemoveDependency() Tool {
-	return NewRemoveDependencyTool(f.store())
+	return NewRemoveDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) ListReadyTasks() Tool {
-	return NewListReadyTasksTool(f.store())
+	return NewListReadyTasksTool(f.store(), f.planning())
 }
 
 // ListPendingQuestions lists the caller's and its sub-agents' unanswered
@@ -479,7 +529,7 @@ func (f *ToolsFactory) WithdrawQuestion() Tool {
 
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
-	return NewSpawnStatusTool(f.store())
+	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions})
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
@@ -491,7 +541,7 @@ func (f *ToolsFactory) SpawnStop() Tool {
 }
 
 func (f *ToolsFactory) StartRun() Tool {
-	return NewStartRunTool(f.store(), f.opts.RunStarter)
+	return NewStartRunTool(f.store(), f.opts.LaunchedRuns, f.opts.RunStarter)
 }
 
 func (f *ToolsFactory) ListRuns() Tool {
@@ -610,7 +660,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools
@@ -631,7 +681,7 @@ func (f *ToolsFactory) MoveCode() Tool {
 
 // Workflow editing tools
 func (f *ToolsFactory) CreateWorkflow() Tool {
-	return NewCreateWorkflowTool(f.store())
+	return NewCreateWorkflowTool(f.store(), f.opts.WorkflowSlugs)
 }
 
 func (f *ToolsFactory) EditWorkflow() Tool {
@@ -681,23 +731,23 @@ func (f *ToolsFactory) ListScenarios() Tool {
 }
 
 func (f *ToolsFactory) ViewScenario() Tool {
-	return NewViewScenarioTool(f.store())
+	return NewViewScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) EditScenario() Tool {
-	return NewEditScenarioTool(f.store())
+	return NewEditScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) WriteScenario() Tool {
-	return NewWriteScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewWriteScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 func (f *ToolsFactory) DeleteScenario() Tool {
-	return NewDeleteScenarioTool(f.store())
+	return NewDeleteScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) RunScenario() Tool {
-	return NewRunScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewRunScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 // RequestMachine returns request_machine, the no-machine run's way to offer

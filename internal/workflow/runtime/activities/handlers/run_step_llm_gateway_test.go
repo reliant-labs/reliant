@@ -298,7 +298,7 @@ func TestRunStepLLMGateway_RevokesOnFailure(t *testing.T) {
 	_, err = runGatewayStep(t, gatewayAct(repo, keys, &envMachine{err: errors.New("the machine went away")}), gatewayInput(chatID), 1)
 	require.Error(t, err)
 	_, revokes = keys.calls()
-	assert.Equal(t, []string{stepRequestID}, revokes)
+	assert.Empty(t, revokes, "a failed wait is not proof the command ended")
 }
 
 // stopMachine is a machine whose command ends with a transport failure, after
@@ -315,10 +315,8 @@ func (m *stopMachine) ExecuteCommand(context.Context, string, string, int, map[s
 	return CommandResult{ExitCode: -1}, &toolexec.TransportError{Code: toolexec.ErrorCodeDaemonRoundTrip, Detail: "no result came back"}
 }
 
-// Every post-mint way out that is not a released attempt revokes the key
-// before the activity returns: a command whose result never came back (it
-// may have run, so the key must not outlive the step), and a step stopped by
-// the server while it waited for its command.
+// Neither a failed transport nor a server cancel proves remote termination.
+// The bounded key stays live rather than breaking a command still running.
 func TestRunStepLLMGateway_RevokesOnTransportFailureAndStop(t *testing.T) {
 	t.Parallel()
 	repo, chatID := gatewayChat(t, true)
@@ -328,7 +326,7 @@ func TestRunStepLLMGateway_RevokesOnTransportFailureAndStop(t *testing.T) {
 	require.Error(t, err, "a transport failure fails the activity")
 	mints, revokes := keys.calls()
 	assert.Equal(t, 1, mints)
-	assert.Equal(t, []string{stepRequestID}, revokes, "transport failure")
+	assert.Empty(t, revokes, "transport failure does not confirm termination")
 
 	keys = &fakeStepKeys{}
 	machine := &stopMachine{}
@@ -344,12 +342,12 @@ func TestRunStepLLMGateway_RevokesOnTransportFailureAndStop(t *testing.T) {
 	require.Error(t, err, "a stopped step ends as the stop")
 	mints, revokes = keys.calls()
 	assert.Equal(t, 1, mints)
-	assert.Equal(t, []string{stepRequestID}, revokes, "stopped by the server")
+	assert.Empty(t, revokes, "a cancel push is not confirmation of termination")
 }
 
 // An attempt released while its command runs leaves the key to the retry,
-// which reattaches to the command and revokes by the request id; a retry
-// that finds nothing to reattach to revokes too. A retry never mints.
+// which reattaches and revokes on completion by request id; a retry that
+// cannot confirm completion leaves the key to expire. A retry never mints.
 func TestRunStepLLMGateway_TheRetryRevokes(t *testing.T) {
 	t.Parallel()
 	repo, chatID := gatewayChat(t, true)
@@ -382,7 +380,26 @@ func TestRunStepLLMGateway_TheRetryRevokes(t *testing.T) {
 	assert.True(t, strings.Contains(err.Error(), "refusing to re-execute") || strings.Contains(err.Error(), "retry"), err.Error())
 	mints, revokes = keys.calls()
 	assert.Zero(t, mints)
-	assert.Equal(t, []string{stepRequestID}, revokes)
+	assert.Empty(t, revokes, "no reattachment is not proof of termination")
+}
+
+// A returned timeout/interruption is a wait outcome, not proof that the
+// remote process is gone. Leave its key usable until a retry sees completion.
+func TestRunStepLLMGateway_PreservesKeyForUncertainResults(t *testing.T) {
+	t.Parallel()
+	repo, chatID := gatewayChat(t, true)
+	for _, result := range []CommandResult{
+		{ExitCode: -1, Stderr: "timed out"},
+		{ExitCode: 0, Interrupted: true},
+	} {
+		keys := &fakeStepKeys{}
+		out, err := runGatewayStep(t, gatewayAct(repo, keys, &envMachine{results: []CommandResult{result}}), gatewayInput(chatID), 1)
+		require.NoError(t, err)
+		_, revokes := keys.calls()
+		assert.Empty(t, revokes)
+		require.NotNil(t, out.LLMGateway)
+		assert.False(t, out.LLMGateway.SpendKnown)
+	}
 }
 
 // A node without llm_gateway is untouched: no key, no env, no block.

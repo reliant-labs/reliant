@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -20,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -97,12 +99,6 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 // or an empty string when it is unused.
 func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
-}
-
-// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
-// included, most recently active first, at most limit.
-func (r *Repo) ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]WorktreeChat, error) {
-	return store.ListChatsForWorktree(ctx, r.ORM(), userID, worktreeID, limit)
 }
 
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
@@ -2375,31 +2371,12 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 	return store.GetPlan(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-
-	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
-}
-
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
-}
-
-func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
-	if plan == nil {
-		return fmt.Errorf("plan cannot be nil")
-	}
-	if plan.ID == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-
-	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
 // ==================== Tasks ====================
@@ -2426,22 +2403,6 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 	return store.GetTask(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-
-	// Get all tasks and return the one at the position
-	tasks, err := r.ListTasksByPlan(ctx, planID)
-	if err != nil {
-		return nil, err
-	}
-	if position < 0 || position >= len(tasks) {
-		return nil, fmt.Errorf("position %d out of range", position)
-	}
-	return tasks[position], nil
-}
-
 func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
@@ -2450,80 +2411,111 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
-func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
+// ==================== Task Dependencies ====================
 
-	tasks, err := r.ListTasksByPlan(ctx, planID)
+// ==================== Planning (deprecated forwarders) ====================
+//
+// The plan, task and dependency calls of the agent planning tools live in
+// internal/planning. These stay as forwarding wrappers so code that calls them
+// through the Repo keeps compiling within v1.
+
+func (r *Repo) planning() (planning.Service, error) {
+	r.planningOnce.Do(func() {
+		r.planningSvc, r.planningErr = planning.NewInstrumented(planning.Deps{
+			Plans:        store.NewPlanExtStore(r.ORM()),
+			Tasks:        store.NewTaskExtStore(r.ORM()),
+			Dependencies: store.NewTaskDependencyExtStore(r.ORM()),
+		})
+	})
+	return r.planningSvc, r.planningErr
+}
+
+// GetPlanByThreadID returns the plan a thread works on.
+//
+// Deprecated: use planning.Service.GetPlanByThreadID.
+func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
+	svc, err := r.planning()
 	if err != nil {
 		return nil, err
 	}
-
-	stats := &TaskStats{
-		Total: len(tasks),
-	}
-
-	for _, task := range tasks {
-		switch TaskStatus(task.Status) {
-		case TaskStatusPending:
-			stats.Pending++
-		case TaskStatusInProgress:
-			stats.InProgress++
-		case TaskStatusCompleted:
-			stats.Completed++
-		case TaskStatusFailed:
-			stats.Failed++
-		case TaskStatusBlocked:
-			stats.Blocked++
-		case TaskStatusCancelled:
-			stats.Cancelled++
-		case TaskStatusSkipped:
-			stats.Skipped++
-		}
-	}
-
-	return stats, nil
+	return svc.GetPlanByThreadID(ctx, threadID)
 }
 
+// UpdatePlan rewrites a plan row.
+//
+// Deprecated: use planning.Service.UpdatePlan.
+func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.UpdatePlan(ctx, plan)
+}
+
+// GetTaskByPosition returns the plan's task at a 0-indexed position.
+//
+// Deprecated: use planning.Service.GetTaskByPosition.
+func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskByPosition(ctx, planID, position)
+}
+
+// GetTaskStatsByPlan counts the plan's tasks by status.
+//
+// Deprecated: use planning.Service.GetTaskStatsByPlan.
+func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskStatsByPlan(ctx, planID)
+}
+
+// UpdateTask rewrites a task row.
+//
+// Deprecated: use planning.Service.UpdateTask.
 func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
-	if task == nil {
-		return fmt.Errorf("task cannot be nil")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	if task.ID == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-
-	return store.ReplaceTask(ctx, r.ORM(), task)
+	return svc.UpdateTask(ctx, task)
 }
 
-// ==================== Task Dependencies ====================
-
+// CreateTaskDependency links two tasks.
+//
+// Deprecated: use planning.Service.CreateTaskDependency.
 func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
-	if dep == nil {
-		return fmt.Errorf("dependency cannot be nil")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	if dep.FromTaskID == "" || dep.ToTaskID == "" {
-		return fmt.Errorf("from_task_id and to_task_id are required")
-	}
-	if dep.FromTaskID == dep.ToTaskID {
-		return fmt.Errorf("a task cannot depend on itself")
-	}
-	return store.InsertTaskDependency(ctx, r.ORM(), dep)
+	return svc.CreateTaskDependency(ctx, dep)
 }
 
+// ListDependenciesByPlan lists every dependency among the plan's tasks.
+//
+// Deprecated: use planning.Service.ListDependenciesByPlan.
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
 	}
-	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
+	return svc.ListDependenciesByPlan(ctx, planID)
 }
 
+// DeleteTaskDependencyByPair removes the dependency of one type between two tasks.
+//
+// Deprecated: use planning.Service.DeleteTaskDependencyByPair.
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
-	if fromTaskID == "" || toTaskID == "" || depType == 0 {
-		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
+	return svc.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
 }
 
 // ==================== Background Processes ====================
@@ -3437,15 +3429,6 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
-}
-
-// CountLiveLaunchedRuns counts the user's chats launched by this kind of
-// event whose root run is still live (pending, active or paused).
-func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
-	if userID == "" {
-		return 0, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
@@ -4387,10 +4370,6 @@ func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug strin
 	})
 }
 
-func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
-	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
-}
-
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
@@ -4453,19 +4432,8 @@ func (r *Repo) GetWorkflowScenario(ctx context.Context, id string) (*WorkflowSce
 	return store.FindWorkflowScenario(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error) {
-	return store.FindWorkflowScenarioByName(ctx, r.ORM(), workflowDraftID, name)
-}
-
 func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error) {
 	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
-}
-
-func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
-	if scenario == nil {
-		return fmt.Errorf("scenario cannot be nil")
-	}
-	return store.ReplaceWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error {

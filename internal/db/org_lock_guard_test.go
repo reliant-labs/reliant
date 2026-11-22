@@ -145,6 +145,38 @@ func TestOrgSensitiveWritesTakeTheOrgLock(t *testing.T) {
 	})
 	var unlocked []string
 	used := map[string]bool{}
+	// A store function that wraps an org-sensitive write in its own
+	// transaction (store.CommitProjectOrgMove) is held to the same rule: it
+	// calls LockUserOrgs in the same body, as the Repo methods above do.
+	parse(filepath.Join("..", "store"), func(path string, _ []byte, file *ast.File, fset *token.FileSet) {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv != nil || orgSensitiveStoreWrites[fn.Name.Name] {
+				continue
+			}
+			var writes []string
+			locks := false
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					if id, ok := call.Fun.(*ast.Ident); ok {
+						switch {
+						case id.Name == "LockUserOrgs":
+							locks = true
+						case orgSensitiveStoreWrites[id.Name]:
+							writes = append(writes, id.Name)
+						}
+					}
+				}
+				return true
+			})
+			for _, w := range writes {
+				used[w] = true
+				if !locks {
+					unlocked = append(unlocked, fset.Position(fn.Pos()).String()+": store."+fn.Name.Name+" calls "+w)
+				}
+			}
+		}
+	})
 	for name, m := range methods {
 		for write := range m.calls {
 			used[write] = true

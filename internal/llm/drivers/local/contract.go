@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Directory lists a user's daemons that published local model inventories.
@@ -46,10 +47,10 @@ type Source interface {
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
-// EndpointSource is the slice of *db.Repo the endpoint listing reads,
-// beyond Source.
+// EndpointSource is the model_endpoints read the endpoint listing makes.
+// store.ModelEndpointExtStore satisfies it.
 type EndpointSource interface {
-	ListModelEndpoints(ctx context.Context, userID string) ([]*db.ModelEndpoint, error)
+	ListModelEndpoints(ctx context.Context, userID string) ([]*core.ModelEndpoint, error)
 }
 
 // CredentialSource yields an endpoint's stored credentials. Declared here, at

@@ -55671,6 +55671,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Repository",
       "methods": [],
@@ -56131,8 +56142,19 @@
     },
     {
       "consumer": "ModelEndpoint",
-      "field": "Repo",
+      "field": "Endpoints",
       "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ModelEndpoint",
+      "field": "Machines",
+      "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Machines",
       "methods": [],
       "candidates": [
         "Database"
@@ -56414,6 +56436,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveLedger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "MoveFacts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
@@ -56486,6 +56517,15 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Project",
+      "field": "Shared",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.SharedProjects",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "ProviderAccount",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.ChatWaker",
@@ -56496,6 +56536,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
+      "field": "Funding",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.PersonalFunding",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56548,6 +56599,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57239,6 +57301,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "OrgMoves",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgMoveResumer",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgResolver",
       "methods": [],
@@ -57720,7 +57793,23 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Project.Ledger",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Shared",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

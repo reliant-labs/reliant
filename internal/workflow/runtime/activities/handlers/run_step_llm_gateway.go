@@ -30,8 +30,8 @@ import (
 //     applies to that one command after every other environment rule and
 //     redacts from its output.
 //  4. The worker redacts it again from everything it keeps or writes, and
-//     revokes it when the step ends, on every path; a retry revokes by the
-//     request id whatever it finds.
+//     revokes it on confirmed completion/non-dispatch. Uncertain outcomes
+//     preserve it for reattachment, bounded by its minted TTL.
 //
 // Every refusal is a command verdict (exit -1, the reason on stderr): the
 // command never ran, and retrying cannot change the answer. Nothing here ever
@@ -112,6 +112,7 @@ func (a *ExecuteRunStepActivity) stepKeyScope(input ExecuteRunStepInput, request
 	return &stepKeyScope{
 		issuer: a.stepKeys, requestID: requestID, gateway: gw, input: input,
 		pending: retry && a.stepKeys != nil,
+		kept:    retry, // until this attempt confirms the earlier command ended
 		out: &RunStepLLMGatewayOutput{
 			Models:    append([]string{}, gw.Models...),
 			BudgetUSD: llmgatewaystep.Budget(gw.BudgetUSD),
@@ -276,7 +277,14 @@ func (s *stepKeyScope) keep() {
 	}
 }
 
-// finish revokes the key now, if one may be live, and returns the step's
+// commandEnded permits revocation after proof of termination/non-dispatch.
+func (s *stepKeyScope) commandEnded() {
+	if s != nil {
+		s.kept = false
+	}
+}
+
+// finish revokes the key now, if safe, and returns the step's
 // llm_gateway output block. Safe to call more than once.
 func (s *stepKeyScope) finish(ctx context.Context) *RunStepLLMGatewayOutput {
 	if s == nil {
@@ -296,7 +304,7 @@ func (s *stepKeyScope) release(ctx context.Context) {
 }
 
 func (s *stepKeyScope) revoke(ctx context.Context) {
-	if !s.pending || s.issuer == nil {
+	if s.kept || !s.pending || s.issuer == nil {
 		return
 	}
 	s.pending = false

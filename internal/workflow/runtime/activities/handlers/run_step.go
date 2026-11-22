@@ -227,9 +227,8 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			})
 	}
 
-	// A node with llm_gateway: the step key this attempt mints, or on a retry
-	// the one an earlier attempt may have minted, is revoked on every way out
-	// (run_step_llm_gateway.go).
+	// Revoke only when the command is known to have ended or never started.
+	// An uncertain outcome leaves the bounded key live for reattachment.
 	stepKey := a.stepKeyScope(input, requestID, retry)
 	defer stepKey.release(ctx)
 
@@ -354,6 +353,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	reattached := retry
 	execSpanCtx, execSpan := telemetry.StartRunExec(ctx, telemetry.RunExecStart{Command: input.Command, Attempt: attempt,
 		Credentials: credentials, InWorktree: worktreePath != ""})
+	// Once dispatch is possible, a returned wait is not proof of termination.
+	// Keep the key until a definitive verdict arrives (including on retries).
+	stepKey.keep()
 	if retry {
 		reattacher, ok := executor.(RunReattacher)
 		if !ok {
@@ -377,6 +379,16 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		result, reattached, err = reattachAfterTransportDrop(execSpanCtx, executor, input, requestID, timeout, result, err)
 	}
 	execSpan.End(runExecEnd(ctx, result, err, reattached))
+	// Interrupted/timeout results and failed waits may leave a remote process
+	// alive. Only a normal command verdict or proof of non-dispatch permits
+	// revocation. Otherwise reattachment (or the key's TTL) owns cleanup.
+	var unavailable *machineUnavailableError
+	var transportFailure *toolexec.TransportError
+	if (err == nil && !result.Interrupted && result.ExitCode != -1) ||
+		errors.As(err, &unavailable) ||
+		(errors.As(err, &transportFailure) && transportFailure.NotDispatched) {
+		stepKey.commandEnded()
+	}
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	// The machine redacted the key already; this is the worker's own guard,
 	// before anything is kept, logged or written.
@@ -457,8 +469,8 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 
 	duration := time.Since(startTime).Milliseconds()
 	combinedOutput := outputBuilder.String()
-	// The command is over: its key dies now, before the log-file write or
-	// anything else, and the step reports what it spent.
+	// A confirmed verdict revokes before the log-file write. An uncertain
+	// result leaves the key live and spend unknown until reattachment/expiry.
 	llmGateway := stepKey.finish(ctx)
 
 	// Write log file if configured (daemon-side via executor)

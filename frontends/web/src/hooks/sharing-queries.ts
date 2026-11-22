@@ -17,10 +17,12 @@ import { ResourceVisibility } from "@/gen/reliant/v1/common_pb";
 import { OrgUpdateType, type OrgUpdate } from "@/gen/reliant/v1/streaming_pb";
 import { chatKeys, patchChatCaches } from "@/hooks/chat-queries";
 import { leaveSharedChat } from "@/store/openChat";
+import { projectServiceKeys } from "@/hooks/project-service-hooks_gen";
 import {
   sharingServiceKeys,
   useListSharedChats,
   useSetChatVisibility,
+  useSetProjectVisibility,
 } from "@/hooks/sharing-service-hooks_gen";
 import { useMembers } from "@/components/Settings/cloud/members/useMembers";
 import { memberNamesBySubject } from "@/services/controlPlane/members";
@@ -138,5 +140,26 @@ export function useSetChatShared() {
     ...mutation,
     share: (chatId: string) => mutation.mutateAsync({ chatId, visibility: ResourceVisibility.ORG }),
     unshare: (chatId: string) => mutation.mutateAsync({ chatId, visibility: ResourceVisibility.PRIVATE }),
+  };
+}
+
+/**
+ * Share a project with its org, or make it private: the owner's toggle on the
+ * project's Settings tab, and an org admin's "make private". On success every
+ * shared list is re-read, and so is every project read (the catalog the
+ * project page reads included: projectServiceKeys.all), so the page shows the
+ * new state.
+ */
+export function useSetProjectShared() {
+  const mutation = useSetProjectVisibility({
+    invalidate: (client) => {
+      void client.invalidateQueries({ queryKey: sharingServiceKeys.all });
+      void client.invalidateQueries({ queryKey: projectServiceKeys.all });
+    },
+  });
+  return {
+    ...mutation,
+    share: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.ORG }),
+    unshare: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.PRIVATE }),
   };
 }

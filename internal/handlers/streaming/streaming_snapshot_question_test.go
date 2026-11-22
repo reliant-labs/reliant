@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // questionStatusesInSnapshot returns the status of every question update the
@@ -182,7 +183,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,
 	}))
 
-	runSvc := runs.NewService(repo, &questionResolveTemporalClient{}, nil)
+	runSvc := runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
 	require.NoError(t, runSvc.Terminate(ctx, chatID))
 
 	q, err := repo.GetQuestionByID(ctx, questionID)

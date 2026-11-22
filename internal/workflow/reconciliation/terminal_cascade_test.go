@@ -74,7 +74,7 @@ func TestReconciler_EveryTerminalRepairCascadesInTheSameCommit(t *testing.T) {
 			wf := runningWorkflow()
 			wf.Status = tc.dbStatus
 
-			result := NewReconciler(repo, tempClient, DefaultConfig()).ReconcileWorkflow(context.Background(), wf)
+			result := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()}).ReconcileWorkflow(context.Background(), wf)
 
 			require.NoError(t, result.Error)
 			require.Equal(t, tc.wantStatus, repo.updatedStatuses["wf-1"], "the root is repaired")
@@ -95,7 +95,7 @@ func TestReconciler_StuckTerminateCascadesInTheSameCommit(t *testing.T) {
 		resetErr:      assert.AnError,
 	}
 	tempClient.setPollersActive(true)
-	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -116,7 +116,7 @@ func TestReconciler_NonTerminalRepairDoesNotCascade(t *testing.T) {
 	wf := runningWorkflow()
 	wf.Status = db.Paused()
 
-	result := NewReconciler(repo, tempClient, DefaultConfig()).ReconcileWorkflow(context.Background(), wf)
+	result := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()}).ReconcileWorkflow(context.Background(), wf)
 
 	require.NoError(t, result.Error)
 	assert.Empty(t, repo.cascadedDescendants)
@@ -206,7 +206,7 @@ func TestReconciler_ReapAfterTerminateIsInfo(t *testing.T) {
 	before := anomalyCount(anomalyOrphanThreadReapedAfterTerminate)
 	faultsBefore := anomalyCount(anomalyOrphanThreadReaped)
 
-	reconciled, errs := NewReconciler(repo, tempClient, nil).ReconcileRunningWorkflows(context.Background())
+	reconciled, errs := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: nil}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 	assert.Equal(t, 1, reconciled, "the repair still counts as one")
 
@@ -244,7 +244,7 @@ func TestReconciler_ReapAfterNormalCompletionIsAnError(t *testing.T) {
 	}}
 	before := anomalyCount(anomalyOrphanThreadReaped)
 
-	_, errs := NewReconciler(repo, tempClient, nil).ReconcileRunningWorkflows(context.Background())
+	_, errs := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: nil}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
 	reaps := reapLogs(logs())
@@ -266,7 +266,7 @@ func TestReconciler_ReapOfUnknownRunIsAnError(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapedThreads = []db.ReapedThread{{ThreadID: "th-1", ChatID: "chat-1", WorkflowID: "gone", Status: db.ThreadStatusFailed}}
 
-	_, errs := NewReconciler(repo, &mockReconcilerTemporalClient{}, nil).ReconcileRunningWorkflows(context.Background())
+	_, errs := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: nil}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
 	reaps := reapLogs(logs())

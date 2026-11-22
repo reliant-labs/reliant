@@ -51,6 +51,13 @@ func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExe
 	}
 }
 
+// WithRunFunding gives the tool-execution path the run's funding reader; see
+// ExecuteToolsActivity.WithRunFunding.
+func (a *InvokeToolActivity) WithRunFunding(s RunFundingStore) *InvokeToolActivity {
+	a.executeTools.WithRunFunding(s)
+	return a
+}
+
 // WithWorktreeReviver gives the tool-execution path the archived-worktree
 // reviver; see ExecuteToolsActivity.WithWorktreeReviver.
 func (a *InvokeToolActivity) WithWorktreeReviver(r WorktreeReviver) *InvokeToolActivity {

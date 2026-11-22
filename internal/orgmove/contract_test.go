@@ -68,7 +68,7 @@ func (l *ledger) store() *orgmove.MockStore {
 			}
 			return nil, core.ErrProjectOrgMoveState
 		},
-		MoveProjectOrgFunc: func(_ context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
+		CommitProjectOrgMoveFunc: func(_ context.Context, c core.ProjectOrgMoveCommit, _ func(context.Context, *core.ProjectOrgMoveResult) error) (*core.ProjectOrgMoveResult, error) {
 			if l.commit != nil {
 				if res, err := l.commit(c); err != nil || res != nil {
 					return res, err
@@ -83,9 +83,6 @@ func (l *ledger) store() *orgmove.MockStore {
 			cp := *m
 			return &core.ProjectOrgMoveResult{Move: &cp}, nil
 		},
-		GetProjectFunc: func(context.Context, string) (*core.Project, error) {
-			return &core.Project{ID: "p-1", Name: "shop"}, nil
-		},
 		ListProjectTriggersPausedByFunc: func(_ context.Context, _ string, reason string) ([]*core.Trigger, error) {
 			var out []*core.Trigger
 			for _, t := range l.paused {
@@ -99,6 +96,16 @@ func (l *ledger) store() *orgmove.MockStore {
 			return append([]*core.Trigger(nil), l.resumed...), nil
 		},
 	}
+}
+
+func projects() *orgmove.MockProjects {
+	return &orgmove.MockProjects{GetProjectFunc: func(context.Context, string) (*core.Project, error) {
+		return &core.Project{ID: "p-1", Name: "shop"}, nil
+	}}
+}
+
+func announcer() *orgmove.MockAnnouncer {
+	return &orgmove.MockAnnouncer{AnnounceProjectMovedFunc: func(context.Context, string, string) error { return nil }}
 }
 
 func move() core.ProjectOrgMove {
@@ -202,7 +209,7 @@ func runSaga(t *testing.T, svc orgmove.Service) {
 
 func newService(t *testing.T, l *ledger, cp *orgmove.MockControlPlane, tr *orgmove.MockTriggers) orgmove.Service {
 	t.Helper()
-	svc, err := orgmove.New(orgmove.Deps{Store: l.store(), ControlPlane: cp, Triggers: tr})
+	svc, err := orgmove.New(orgmove.Deps{Store: l.store(), Projects: projects(), Announcer: announcer(), ControlPlane: cp, Triggers: tr})
 	require.NoError(t, err)
 	return svc
 }
@@ -411,7 +418,7 @@ func TestCommit_CarriesTheTargetOrgsMemberCount(t *testing.T) {
 		assert.Equal(t, "globex", orgID)
 		return 0, false, countErr
 	}}
-	svc, err := orgmove.New(orgmove.Deps{Store: l.store(), ControlPlane: controlPlane(&cpCalls{}, nil), Triggers: resumer(nil), Members: members})
+	svc, err := orgmove.New(orgmove.Deps{Store: l.store(), Projects: projects(), Announcer: announcer(), ControlPlane: controlPlane(&cpCalls{}, nil), Triggers: resumer(nil), Members: members})
 	require.NoError(t, err)
 
 	_, err = svc.Commit(context.Background(), "m-1")

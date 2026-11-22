@@ -20,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -107,10 +108,11 @@ func carryFixture(t *testing.T, dbStatus db.WorkflowStatus, temporalStatus enums
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:     repo,
-			Temporal: temporal,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Temporal:  temporal,
 		},
-		runs: runs.NewService(repo, temporal, workflow.NewPauseService(temporal, repo)),
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: workflow.NewPauseService(temporal, repo)}),
 	}
 	return ctx, fx, repo, temporal, service
 }
