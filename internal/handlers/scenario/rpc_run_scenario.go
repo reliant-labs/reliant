@@ -132,6 +132,11 @@ func (s *Service) RunScenario(
 				if err != nil {
 					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 				}
+				// The ID lookup is unscoped. Owning a retained scenario does
+				// not grant access to its workflow after org membership ends.
+				if !authz.CanReadWorkflow(ctx, userID, draft) {
+					return nil, svcerr.WithMessage(svcerr.ErrNotFound, "workflow not found")
+				}
 				workflowYAML = draft.Definition
 			} else {
 				return nil, svcerr.InvalidArgument("scenario has no associated workflow")
