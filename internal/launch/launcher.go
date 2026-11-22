@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -58,6 +59,7 @@ type RunRecorder interface {
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
 	repo       Store
+	projects   projectaccess.Service
 	selections chatselection.Store
 	temporal   TemporalStarter
 	runs       RunRecorder
@@ -112,6 +114,7 @@ type ChatPinner interface {
 func New(deps Deps) *Launcher {
 	return &Launcher{
 		repo:       deps.Store,
+		projects:   deps.Projects,
 		selections: deps.Selections,
 		temporal:   deps.Temporal,
 		runs:       deps.Runs,
@@ -291,7 +294,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	// Verify user owns the project and get project details
-	project, err := l.repo.GetProjectWithUserCheck(ctx, spec.ProjectID, userID)
+	project, err := l.projects.GetProjectWithUserCheck(ctx, spec.ProjectID, userID)
 	if err != nil {
 		return nil, projectLookupError(err)
 	}
@@ -741,7 +744,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	noMachine := chat.NoMachine && spec.DaemonID == ""
 
-	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
+	project, err := l.projects.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
 	if err != nil {
 		return nil, projectLookupError(err)
 	}

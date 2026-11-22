@@ -56,6 +56,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -333,6 +334,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
 		Store:      d.DB,
+		Projects:   projectaccess.NewFromORM(d.DB.ORM()),
 		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
 		Threads:    threads.NewService(d.DB),
 		Temporal:   d.Temporal.Client,

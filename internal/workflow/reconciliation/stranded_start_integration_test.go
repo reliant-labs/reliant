@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 
@@ -105,7 +106,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &switchableStarter{}
-	firer := triggers.NewFirer(repo, launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
+	firer := triggers.NewFirer(repo, launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
 	fireAt := func(day int) triggers.FireRequest {
 		scheduled := time.Date(2026, 1, day, 9, 0, 0, 0, time.UTC)
 		return triggers.FireRequest{
