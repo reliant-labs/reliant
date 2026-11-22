@@ -144,7 +144,7 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 			Temporal: temporal,
 		},
 		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
-		threads: threads.NewService(repo, threads.WithToolCanceler(&toolexectest.Recorder{})),
+		threads: threads.New(threads.Deps{Repo: repo, ToolCanceler: &toolexectest.Recorder{}}),
 	}
 
 	pauseDone := make(chan error, 1)

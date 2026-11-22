@@ -26,7 +26,7 @@ func (s *Service) ListDeletedProjects(
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.deps.Repo.ListDeletedProjects(ctx, userID, scope, req.Msg.GetIncludePurging())
+	rows, err := s.deps.Purges.ListDeletedProjects(ctx, userID, scope, req.Msg.GetIncludePurging())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list deleted projects"))
 	}

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -25,7 +27,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // ============================================================================
@@ -94,7 +95,7 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 func NewCompactActivity(repo CompactStore, resolver drivers.DriverResolver) *CompactActivity {
 	return &CompactActivity{
 		repo:           repo,
-		threads:        threads.NewService(repo),
+		threads:        threads.New(threads.Deps{Repo: repo}),
 		driverResolver: resolver,
 		skips:          compactionSkips,
 	}

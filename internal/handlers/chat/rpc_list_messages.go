@@ -63,7 +63,7 @@ func (s *Service) ListMessages(
 		mainThreadID = id
 	}
 
-	threadsSvc := threads.NewService(s.deps.Repo)
+	threadsSvc := threads.New(threads.Deps{Repo: s.deps.Repo})
 
 	var messages []*db.Message
 	var totalCount int

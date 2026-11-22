@@ -57144,6 +57144,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Repository",
       "methods": [],
@@ -57190,6 +57199,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "ProjectPurge",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "ProviderAccount",
@@ -59003,6 +59023,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Purges",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

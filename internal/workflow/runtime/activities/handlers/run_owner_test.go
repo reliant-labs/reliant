@@ -44,7 +44,7 @@ func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
 
 	parentID := uuid.NewString()
 	parentOwner := "parent-owner"
-	svc := threads.NewService(h.Repo())
+	svc := threads.New(threads.Deps{Repo: h.Repo()})
 	_, _, _, err := svc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: parentID, ChatID: chatID, WorkflowName: "builtin://agent",
@@ -85,7 +85,7 @@ func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewCreateWorkflowWithThreadActivity(threads.NewService(h.Repo()), h.Repo(), workflowRunsOf(h.Repo()))
+	activity := NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: h.Repo()}), h.Repo(), workflowRunsOf(h.Repo()))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 

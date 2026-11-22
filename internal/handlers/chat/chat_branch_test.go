@@ -88,7 +88,7 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatAID,
@@ -233,7 +233,7 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatID,
@@ -334,7 +334,7 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatID,
@@ -410,7 +410,7 @@ func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent", Thread: threadID,
@@ -485,7 +485,7 @@ func TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge(t *test
 		UpdatedAt: now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatID,

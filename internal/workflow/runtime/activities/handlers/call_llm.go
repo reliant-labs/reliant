@@ -672,7 +672,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 	activityID := rtx.MessageIdempotencyKey
 
-	if _, err := threads.NewService(a.repo).SaveMessage(writeCtx, threads.SaveMessageOpts{
+	if _, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(writeCtx, threads.SaveMessageOpts{
 		ChatID:            rtx.ChatID,
 		Thread:            thread,
 		Role:              int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
@@ -786,7 +786,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
 	}
-	saved, err := threads.NewService(a.repo).SaveMessage(ctx, threads.SaveMessageOpts{
+	saved, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       thread,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
@@ -1312,7 +1312,7 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 		return 0
 	}
 
-	drain := NewDrainAgentMessagesActivity(a.repo, threads.NewService(a.repo))
+	drain := NewDrainAgentMessagesActivity(a.repo, threads.New(threads.Deps{Repo: a.repo}))
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",

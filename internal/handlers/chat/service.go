@@ -180,12 +180,9 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		deps: deps,
-		runs: runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
-		threads: threads.NewService(deps.Repo,
-			threads.WithTemporalSignaler(deps.Temporal),
-			threads.WithToolCanceler(deps.Router),
-		),
+		deps:    deps,
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
 
@@ -199,7 +196,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.NewService(s.deps.Repo), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

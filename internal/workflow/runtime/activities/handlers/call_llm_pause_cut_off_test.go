@@ -198,7 +198,7 @@ func (f *cutOffFixture) assistantTexts(t *testing.T) map[string]string {
 // saveTurn persists a completed turn's reply the way its save_message does.
 func (f *cutOffFixture) saveTurn(t *testing.T, messageID, text string) {
 	t.Helper()
-	_, err := threads.NewService(f.h.Repo()).SaveMessage(context.Background(), threads.SaveMessageOpts{
+	_, err := threads.New(threads.Deps{Repo: f.h.Repo()}).SaveMessage(context.Background(), threads.SaveMessageOpts{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		Role:      int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),

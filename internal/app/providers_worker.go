@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -341,7 +342,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 		Store:      d.DB,
 		Projects:   projectaccess.NewFromORM(d.DB.ORM()),
 		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:    threads.NewService(d.DB),
+		Threads:    threads.New(threads.Deps{Repo: d.DB}),
 		Temporal:   d.Temporal.Client,
 		Runs:       d.Runs,
 		TaskQueue:  v2workflow.SharedTaskQueue,
@@ -1218,9 +1219,9 @@ const (
 	// most this long after its window ends.
 	projectPurgeInterval = 15 * time.Minute
 	// projectPurgeLease is how long a claim holds a project: the one
-	// db.ProjectPurgeLease names, which an immediate purge's detached batches
+	// projectpurge.Lease names, which an immediate purge's detached batches
 	// stay inside (internal/handlers/project).
-	projectPurgeLease = db.ProjectPurgeLease
+	projectPurgeLease = projectpurge.Lease
 	// projectPurgeBatch bounds the projects a pass purges, and the orphaned
 	// rows per table it sweeps.
 	projectPurgeBatch = 50
@@ -1229,19 +1230,19 @@ const (
 // ProjectPurge purges the projects whose scheduled deletion is due, every
 // projectPurgeInterval, until its context ends.
 type ProjectPurge struct {
-	repo *db.Repo
+	purges projectpurge.Service
 }
 
-// ProjectPurgeDeps is the repository.
+// ProjectPurgeDeps is the purge service.
 type ProjectPurgeDeps struct {
-	DB *db.Repo
+	Purges projectpurge.Service
 }
 
 // NewProjectPurge builds the purge loop.
 //
 //forge:root-only worker
 func NewProjectPurge(d ProjectPurgeDeps) (*ProjectPurge, error) {
-	return &ProjectPurge{repo: d.DB}, nil
+	return &ProjectPurge{purges: d.Purges}, nil
 }
 
 // Run runs a pass, then one every projectPurgeInterval, until ctx ends. A
@@ -1255,7 +1256,7 @@ func (p *ProjectPurge) Run(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		err := observe.RunRoot(ctx, "worker.project_purge", func(ctx context.Context) error {
-			res, err := p.repo.PurgeDueProjects(ctx, time.Now(), projectPurgeLease, projectPurgeBatch)
+			res, err := p.purges.PurgeDueProjects(ctx, time.Now(), projectPurgeLease, projectPurgeBatch)
 			if res.Purged > 0 || res.Failed > 0 || res.OrphansSwept > 0 {
 				logging.InfoContext(ctx, "project purge: pass done", "purged", res.Purged, "failed", res.Failed, "orphans_swept", res.OrphansSwept)
 			}

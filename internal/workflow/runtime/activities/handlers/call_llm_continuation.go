@@ -217,7 +217,7 @@ func (a *CallLLMActivity) continuationNudge(ctx context.Context, rtx RuntimeCont
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
 	}
-	saved, err := threads.NewService(a.repo).SaveMessage(ctx, threads.SaveMessageOpts{
+	saved, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       thread,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
