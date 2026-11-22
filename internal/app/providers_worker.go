@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -520,6 +521,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	if err != nil {
 		return nil, err
 	}
+	planner, err := newToolPlanning(d.Logger, d.Config, repo)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
@@ -527,6 +532,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
 		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
@@ -1211,4 +1217,16 @@ func (p *ProjectPurge) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// newToolPlanning is the plan, task and dependency store the planning tools
+// write through.
+func newToolPlanning(logger *slog.Logger, cfg *config.Config, repo *db.Repo) (planning.Service, error) {
+	return planning.NewInstrumented(planning.Deps{
+		Logger:       logger,
+		Config:       cfg,
+		Plans:        store.NewPlanExtStore(repo.ORM()),
+		Tasks:        store.NewTaskExtStore(repo.ORM()),
+		Dependencies: store.NewTaskDependencyExtStore(repo.ORM()),
+	})
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/planningtest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,14 +33,14 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	createTestChat(t, repo, chatID)
 	parentCtx := createTestContext(t, chatID)
 
-	_, err := (&CreatePlanTool{repo: repo}).Execute(parentCtx, CreatePlanParams{
+	_, err := (&CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(parentCtx, CreatePlanParams{
 		Title:       "Shared board",
 		Description: "Two tasks for two sub-agents",
 		Complexity:  "simple",
 		Tasks:       []TaskInput{{Title: "Task A"}, {Title: "Task B"}},
 	})
 	require.NoError(t, err)
-	plan, err := repo.GetPlanByThreadID(context.Background(), chatID)
+	plan, err := planningtest.New(t, repo).GetPlanByThreadID(context.Background(), chatID)
 	require.NoError(t, err)
 	tasks, err := repo.ListTasksByPlan(context.Background(), plan.ID)
 	require.NoError(t, err)
@@ -55,7 +56,7 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	sibling := createTestContextForThread(t, chatID, spawnChildThread(t, repo, chatID, chatID))
 	update := func(ctx *rctx.ToolContext, p UpdateTaskParams) string {
 		t.Helper()
-		resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, p)
+		resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, p)
 		require.NoError(t, err)
 		return resp.Content
 	}
@@ -94,12 +95,12 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	// A plan in another chat is outside every chain here.
 	otherChat := uuid.New().String()
 	createTestChat(t, repo, otherChat)
-	_, err = (&CreatePlanTool{repo: repo}).Execute(createTestContext(t, otherChat), CreatePlanParams{
+	_, err = (&CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(createTestContext(t, otherChat), CreatePlanParams{
 		Title: "Elsewhere", Description: "Another chat's plan", Complexity: "simple",
 		Tasks: []TaskInput{{Title: "Not yours"}},
 	})
 	require.NoError(t, err)
-	otherPlan, err := repo.GetPlanByThreadID(context.Background(), otherChat)
+	otherPlan, err := planningtest.New(t, repo).GetPlanByThreadID(context.Background(), otherChat)
 	require.NoError(t, err)
 	otherTasks, err := repo.ListTasksByPlan(context.Background(), otherPlan.ID)
 	require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestUpdateTask_ConcurrentClaimsHaveOneWinner(t *testing.T) {
 
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
-	_, err := (&CreatePlanTool{repo: repo}).Execute(createTestContext(t, chatID), CreatePlanParams{
+	_, err := (&CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(createTestContext(t, chatID), CreatePlanParams{
 		Title: "Race", Description: "One free task", Complexity: "simple", Tasks: []TaskInput{{Title: "Contested"}},
 	})
 	require.NoError(t, err)
@@ -144,7 +145,7 @@ func TestUpdateTask_ConcurrentClaimsHaveOneWinner(t *testing.T) {
 		ctx := createTestContextForThread(t, chatID, spawnChildThread(t, repo, chatID, chatID))
 		go func(i int) {
 			<-start
-			resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+			resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 				TaskID: "1", Status: "in_progress", Assignee: fmt.Sprintf("agent-%d", i),
 			})
 			if err != nil {
@@ -184,11 +185,11 @@ func TestScopeTaskForThread_ReadFailureIsAnError(t *testing.T) {
 	defer cleanup()
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
-	_, err := (&CreatePlanTool{repo: repo}).Execute(createTestContext(t, chatID), CreatePlanParams{
+	_, err := (&CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(createTestContext(t, chatID), CreatePlanParams{
 		Title: "P", Description: "d", Complexity: "simple", Tasks: []TaskInput{{Title: "T"}},
 	})
 	require.NoError(t, err)
-	plan, err := repo.GetPlanByThreadID(context.Background(), chatID)
+	plan, err := planningtest.New(t, repo).GetPlanByThreadID(context.Background(), chatID)
 	require.NoError(t, err)
 	tasks, err := repo.ListTasksByPlan(context.Background(), plan.ID)
 	require.NoError(t, err)
