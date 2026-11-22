@@ -204,7 +204,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
@@ -442,6 +442,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Repo:     s.Repo,
 		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
 		Syncer:   triggerSyncer,
 		Fires:    triggerFires,
 	})

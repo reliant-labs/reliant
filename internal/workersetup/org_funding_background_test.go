@@ -31,7 +31,7 @@ func (w *orgFundingWorld) backgroundRouting() *handlers.AccountRouting {
 	w.t.Helper()
 	recorder := accountlimits.NewRecorder(db.TestAccounts(w.t, w.repo), nil)
 	w.t.Cleanup(recorder.Close)
-	return accountRouting(db.TestAccounts(w.t, w.repo), w.repo, recorder)
+	return accountRouting(db.TestAccounts(w.t, w.repo), db.TestOrgAccounts(w.t, w.repo), w.repo, recorder)
 }
 
 // backgroundActivityEnv is an activity environment of its own: every

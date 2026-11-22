@@ -31,8 +31,9 @@ func rejectedOrgKey(id, org string) core.ProviderAccount {
 func orgKeyEnv(t *testing.T, lister *MockOrgLister, keys ...core.ProviderAccount) (*Service, *inflightRepo) {
 	t.Helper()
 	repo := newInflightRepo(0)
-	repo.HasRejectedOrgKeysFunc = func(context.Context) (bool, error) { return len(keys) > 0, nil }
-	repo.ListRejectedOrgKeysInFunc = func(_ context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
+	orgKeys := &MockOrgKeys{}
+	orgKeys.HasRejectedOrgKeysFunc = func(context.Context) (bool, error) { return len(keys) > 0, nil }
+	orgKeys.ListRejectedOrgKeysInFunc = func(_ context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
 		in := map[string]bool{}
 		for _, id := range orgIDs {
 			in[id] = true
@@ -45,7 +46,7 @@ func orgKeyEnv(t *testing.T, lister *MockOrgLister, keys ...core.ProviderAccount
 		}
 		return out, nil
 	}
-	deps := Deps{Repo: repo}
+	deps := Deps{Repo: repo, OrgKeys: orgKeys}
 	if lister != nil {
 		deps.MyOrgs = lister
 	}
