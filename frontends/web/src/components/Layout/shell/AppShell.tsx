@@ -30,7 +30,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { PanelLeft } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import Tooltip from "@/components/forge-ui/tooltip";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -186,7 +186,7 @@ function ShellNav() {
                 style={noDragRegionStyle}
                 className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <PanelLeft className="size-4" aria-hidden="true" />
+                <Menu className="size-4" aria-hidden="true" />
               </button>
             </Tooltip>
           )}

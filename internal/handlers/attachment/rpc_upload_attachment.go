@@ -16,7 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -72,7 +72,7 @@ func (s *Service) UploadAttachment(
 	relativePath := filepath.Join(userID, attachmentID+ext)
 
 	// Store attachment content + metadata in database
-	dbAttachment := &db.Attachment{
+	dbAttachment := &core.Attachment{
 		ID:             attachmentID,
 		UserID:         userID,
 		Filename:       filename,
@@ -84,7 +84,7 @@ func (s *Service) UploadAttachment(
 		Content:        content,
 	}
 
-	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
+	if err := s.deps.Attachments.InsertAttachment(ctx, dbAttachment); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save attachment"))
 	}
 

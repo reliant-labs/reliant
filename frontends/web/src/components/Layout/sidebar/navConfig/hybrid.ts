@@ -34,6 +34,7 @@ import {
   settingsSections,
   storage,
 } from "./items";
+import { testsGroup } from "./tests";
 import type { NavConfig } from "./types";
 
 export const hybridNav: NavConfig = {
@@ -45,6 +46,7 @@ export const hybridNav: NavConfig = {
     observabilityArea,
     analyticsGroup,
     deploymentsGroup,
+    testsGroup,
     data,
     storage,
     auth,

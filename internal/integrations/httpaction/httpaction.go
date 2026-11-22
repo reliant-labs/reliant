@@ -49,6 +49,16 @@ type Result struct {
 	// more pages still to read: the list is a prefix, so an item's absence
 	// from it proves nothing.
 	Truncated bool
+	// Pages is how many responses the call read: 1 for a single request,
+	// more for a paginated walk or a fan-out, 0 when it sent none of its own
+	// (a go: executor that makes its requests itself).
+	Pages int
+	// Host is the host the last response came from, and RateLimit what that
+	// response's headers said about the caller's rate limit (nil when they
+	// said nothing). For telemetry: neither carries a path, a credential or
+	// anything of the body.
+	Host      string
+	RateLimit *RateLimit
 }
 
 // Runner executes actions through a guarded HTTP client, and dispatches
@@ -87,7 +97,9 @@ func buildRunner(guard DialGuard) *Runner {
 
 // Run validates params against the action's schema, then performs the request.
 func (r *Runner) Run(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any) (*Result, error) {
-	return r.run(ctx, m, a, params, nil)
+	return traced(ctx, m, a, func(ctx context.Context) (*Result, error) {
+		return r.run(ctx, m, a, params, nil)
+	})
 }
 
 func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, cred Credential) (res *Result, err error) {
@@ -123,18 +135,18 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		return nil, err
 	}
 	if run.result != nil {
-		return run.result, nil
+		return stamp(run.result, run.pages, run.last), nil
 	}
 	if req.GetPagination() != nil {
 		res := success(run.last, map[string]any{"items": run.items})
 		res.Truncated = run.truncated
-		return res, nil
+		return stamp(res, run.pages, run.last), nil
 	}
 	selected, err := selectPage(run.last)
 	if err != nil {
 		return nil, err
 	}
-	return success(run.last, asObject(selected)), nil
+	return stamp(success(run.last, asObject(selected)), run.pages, run.last), nil
 }
 
 // callEnv is what every request of one action call shares.
@@ -156,6 +168,8 @@ type requestRun struct {
 	result *Result
 	// truncated: the walk hit max_pages with another page still to read.
 	truncated bool
+	// pages is how many responses were read.
+	pages int
 }
 
 // request performs req, following its pages. selectPage shapes each page of a
@@ -348,6 +362,7 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 	// signed or parses positionally.
 	var followed *url.URL
 	truncated := false
+	pages := 0
 	for i := 0; i < maxPages; i++ {
 		if pg != nil && pg.GetStyle() == "page" {
 			query.Set(pg.GetPageParam(), strconv.FormatInt(pageNum, 10))
@@ -362,20 +377,21 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 			return nil, err
 		}
 		last = pgResp
+		pages++
 		// A 3xx the caller asked to see (redirects: return) is the answer,
 		// not a failure: its status and Location are what they wanted.
 		returnedRedirect := opts.redirects == manifest.RedirectsReturn && pgResp.status >= 300 && pgResp.status < 400
 		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect && !acceptedError(req, pgResp) {
 			res, _ := errorResult(req, pgResp, vars["params"])
-			return &requestRun{result: res, last: pgResp}, nil
+			return &requestRun{result: res, last: pgResp, pages: pages}, nil
 		}
 		// A provider that reports failure in a 2xx body (Slack's ok:false)
 		// declares a guarded rule for it; any other 2xx is a success.
 		if rule := matchErrorRule(req, pgResp); rule != nil && !rule.GetAccept() {
-			return &requestRun{result: ruleResult(rule, pgResp, vars["params"]), last: pgResp}, nil
+			return &requestRun{result: ruleResult(rule, pgResp, vars["params"]), last: pgResp, pages: pages}, nil
 		}
 		if opts.responseFormat == manifest.ResponseFormatJSON && pgResp.jsonErr != nil && !returnedRedirect {
-			return &requestRun{result: notJSONResult(pgResp), last: pgResp}, nil
+			return &requestRun{result: notJSONResult(pgResp), last: pgResp, pages: pages}, nil
 		}
 		if pg == nil {
 			break
@@ -409,11 +425,13 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 			followed = next
 		}
 	}
-	return &requestRun{items: items, last: last, truncated: truncated}, nil
+	return &requestRun{items: items, last: last, truncated: truncated, pages: pages}, nil
 }
 
 type page struct {
-	status  int
+	status int
+	// host is the host the request went to, without its port.
+	host    string
 	headers http.Header
 	raw     []byte
 	parsed  any
@@ -504,7 +522,7 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 		return nil, err
 	}
 	raw := resp.Body
-	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
+	p := &page{status: resp.StatusCode, host: u.Hostname(), headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
 		if p.jsonErr = json.Unmarshal(raw, &parsed); p.jsonErr == nil {
@@ -819,6 +837,17 @@ func asObject(v any) map[string]any {
 		return obj
 	}
 	return map[string]any{"value": v}
+}
+
+// stamp records on res what the call's requests said about themselves: how
+// many responses were read, and the last one's host and rate-limit headers.
+func stamp(res *Result, pages int, last *page) *Result {
+	res.Pages = pages
+	if last != nil {
+		res.Host = last.host
+		res.RateLimit = rateLimitOf(last.headers, time.Now())
+	}
+	return res
 }
 
 func success(p *page, data map[string]any) *Result {

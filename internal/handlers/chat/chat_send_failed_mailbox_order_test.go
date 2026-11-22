@@ -8,10 +8,12 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A message sent to a failed run follows the same rule as one sent to a paused
@@ -27,8 +29,8 @@ func newFailedSendService(repo *db.Repo, temporalExists bool) (*Service, *wakeTe
 	}}
 	pause := &questionSignalPause{}
 	return &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, pause),
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal, pause
 }
 

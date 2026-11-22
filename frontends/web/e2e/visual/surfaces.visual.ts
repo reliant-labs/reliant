@@ -719,6 +719,15 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByTestId('billing-hosting-tab'),
   },
+  {
+    // Tests › Overview as production shows it until control-plane's TestsService is
+    // re-vendored (services/controlPlane/tests/testApi.ts): every read answers
+    // Unimplemented, so the page says so and the nav's Tests group has no badge.
+    name: 'shell-tests',
+    path: '/forge/p/shopfront/tests',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText("This control plane doesn't store test runs yet").first(),
+  },
 ]
 
 /**

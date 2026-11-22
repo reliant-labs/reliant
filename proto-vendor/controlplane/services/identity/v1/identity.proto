@@ -263,6 +263,23 @@ service IdentityService {
       idempotent: true
     };
   }
+
+  // CheckSocialSignIn starts one social sign-in per applied provider of the
+  // identity (an intent at the issuer, never completed: it expires there)
+  // and reports each authorize URL the issuer built, with the redirect_uri it
+  // carries beside the callback registered at the provider
+  // (<issuer>/idps/callback). A provider that is pending or whose managed
+  // secret is missing is reported, not started. `forge cloud identity status
+  // --check-social` reads it. Admission is GetIdentityStatus's: any member,
+  // or a machine credential with identity:read. Nothing returned is a secret:
+  // a client id is public and the URL is the one a browser is sent to.
+  rpc CheckSocialSignIn(CheckIdentitySocialSignInRequest) returns (CheckIdentitySocialSignInResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "starts sign-in intents the issuer expires without completing; no user, provider or setting changes, so there is nothing to record"}
+    };
+  }
 }
 
 message GetIdentityStatusRequest {
@@ -608,4 +625,26 @@ message ListIdentitiesRequest {
 message ListIdentitiesResponse {
   // Sorted by name.
   repeated IdentitySummary identities = 1;
+}
+
+message CheckIdentitySocialSignInRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  // The managed identity this request is for, by ManagedIdentity.name. Empty
+  // is the environment's only identity, or the one named "identity" when it
+  // declares several. A name it does not declare is NotFound.
+  string identity = 3 [(buf.validate.field).string = {
+    max_len: 40
+    pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+  }];
+}
+
+message CheckIdentitySocialSignInResponse {
+  // One per declared social provider, in declaration order.
+  repeated IdentitySocialCheck providers = 1;
+  // The redirect URI each provider's OAuth client must list
+  // (<issuer>/idps/callback); empty when no provider is declared.
+  string social_callback_url = 2;
+  // The ManagedIdentity.name this answer is for.
+  string identity = 3;
 }

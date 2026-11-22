@@ -39,7 +39,7 @@ func (noRecoveryCredentials) UserAccessToken(context.Context, string, string) (g
 // directories (worktreesweep); without one archiving leaves them.
 func newWorktreeService(t testing.TB, repo Repository, router Router, settler ...Settler) *Service {
 	t.Helper()
-	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Router: router, GitCredentials: noRecoveryCredentials{}}
+	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Recoveries: &MockRecoveries{}, Router: router, GitCredentials: noRecoveryCredentials{}}
 	if len(settler) > 0 {
 		deps.Settler = settler[0]
 	}

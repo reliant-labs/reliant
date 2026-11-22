@@ -9,26 +9,26 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	attachment "github.com/reliant-labs/reliant/internal/handlers/attachment"
 )
 
 // deleteForeignRepo holds one attachment, owned by another user; deleting
 // anything fails the test.
-type deleteForeignRepo struct{ attachment.Repository }
+type deleteForeignRepo struct{ attachment.AttachmentStore }
 
-func (deleteForeignRepo) GetAttachment(_ context.Context, id string) (*db.Attachment, error) {
+func (deleteForeignRepo) GetAttachment(_ context.Context, id string) (*core.Attachment, error) {
 	if id != "att-foreign" {
 		return nil, nil
 	}
-	return &db.Attachment{ID: id, UserID: "someone-else"}, nil
+	return &core.Attachment{ID: id, UserID: "someone-else"}, nil
 }
 
 func TestDeleteAttachment_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: deleteForeignRepo{}}))
+	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{Attachments: deleteForeignRepo{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteAttachmentRequest, pb.DeleteAttachmentResponse]{
 		{

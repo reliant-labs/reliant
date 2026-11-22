@@ -19,11 +19,18 @@
  * issue's title, culprit and frames and an alert's labels and annotations are
  * not (they are read off telemetry), so `obs issue` and `obs status` fetch them.
  *
+ * The Tests subjects follow the same rule with one bounded exception. A
+ * package's coverage carries figures and uncovered line NUMBERS, never code
+ * (no coverage record holds any). A flaky test carries its failure
+ * signatures' sample output, which the server scrubbed when it was recorded;
+ * see AskFailureSignature for why, and the bounds it goes in with.
+ *
  * An intent ("investigate" or "fix", the console's two actions) appends one
  * instruction saying what the chat is for.
  *
  * Every command quoted here was checked against `reliant forge obs <verb>
- * --help`. A change to a verb's syntax belongs in this file and its test.
+ * --help` (the Tests ones against `reliant forge test <verb> --help`). A
+ * change to a verb's syntax belongs in this file and its test.
  */
 
 import type { Panel } from "@/services/controlPlane/observability/types";
@@ -74,7 +81,85 @@ export type AskSubject =
   /** A browser session that hit errors. */
   | { kind: "session"; sessionId: string; env: AskEnv }
   /** Nothing is deployed here yet: get the app running. */
-  | { kind: "deploy"; env: AskEnv };
+  | { kind: "deploy"; env: AskEnv }
+  /** A test that flaked (Tests › Flaky tests): make it deterministic or delete it. */
+  | AskFlakyTestSubject
+  /** A package whose coverage should rise (Tests › Coverage): add tests that assert behaviour. */
+  | AskCoverageSubject;
+
+/**
+ * One failure signature of a flaky test, with its sample output.
+ *
+ * THE ONE QUOTED OUTPUT. Everywhere else this module writes references only.
+ * A flaky test's failure output is what the chat is about, and it is not app
+ * telemetry: it is the test's own output, captured by forge from the
+ * project's CI lanes and scrubbed of known secret shapes before the control
+ * plane stored it (TestsService; forge `test capture`). It still goes in
+ * bounded (MAX_FLAKY_SIGNATURES, MAX_SAMPLE_OUTPUT_CHARS) and fenced, so it
+ * reads as data, never as instructions.
+ */
+export interface AskFailureSignature {
+  signature: string;
+  count: number;
+  /** How the failures were classified ("confirmed", "host", …). */
+  verdict: string;
+  sampleOutput: string;
+}
+
+export interface AskFlakyTestSubject {
+  kind: "flaky-test";
+  /** Flakes are judged on the default branch's runs, across every environment. */
+  env: null;
+  /** The test's address (`go:<pkg>:TestName/sub`), as `forge test quarantine` names it. */
+  testId: string;
+  lang: string;
+  package: string;
+  name: string;
+  /** Repo-relative, when known. */
+  file?: string;
+  line?: number;
+  /** "suspected", "flaky", "quarantined", … */
+  state: string;
+  /** The flake rate, 0–1: a ranking shown with its n, never a verdict. */
+  flakeRate: number;
+  /** The rate's n: default-branch runs of the test's lane in which it ran. */
+  runs: number;
+  confirmedEvents30d: number;
+  signatures: AskFailureSignature[];
+  quarantine: { path: string; reason?: string; expiresMs: number | null; overdue: boolean } | null;
+  issueUrl?: string;
+  /** The project's default branch, which the flake gate measures from. */
+  defaultBranch?: string;
+}
+
+/** A file's uncovered lines, as numbers. Never source: the report has none, and the agent reads the code in its checkout. */
+export interface AskUncoveredFile {
+  path: string;
+  /** Inclusive [first, last] line ranges. */
+  lines: [number, number][];
+}
+
+export interface AskCoverageSubject {
+  kind: "coverage";
+  env: null;
+  /** Repo-relative package (or directory) path, as Tests › Coverage names it. */
+  package: string;
+  /** The report's commit. */
+  commit: string;
+  /** Combined percent, 0–100; null when the report has no figure for it. */
+  combined: number | null;
+  statements: number;
+  covered: number;
+  /** Per-lane percent, 0–100. */
+  lanes: Record<string, number>;
+  /** The files with uncovered lines, lowest-covered first. */
+  uncovered: AskUncoveredFile[];
+  /** Files with uncovered statements that the subject does not list. */
+  moreFiles: number;
+  /** The combined percent to reach. */
+  target: number;
+  defaultBranch?: string;
+}
 
 /**
  * What the chat is for. "investigate": find the cause and explain it, change
@@ -227,6 +312,129 @@ function deployPrompt(subject: Extract<AskSubject, { kind: "deploy" }>, ctx: Ask
   );
 }
 
+// ── Tests: a flaky test, a package's coverage ───────────────────────────────
+
+/** The most failure signatures a flaky-test prompt quotes, and the longest sample output of each. */
+export const MAX_FLAKY_SIGNATURES = 3;
+export const MAX_SAMPLE_OUTPUT_CHARS = 1500;
+
+/** The most uncovered line ranges listed for one file. */
+export const MAX_UNCOVERED_RANGES = 40;
+
+/** The base the flake gate measures from: the default branch when the console knows it. */
+const gateBase = (branch: string | undefined) => (branch && SAFE_ARG.test(branch) ? `origin/${branch}` : "origin/<default branch>");
+
+/** Output quoted as data: control characters (but newline and tab) dropped, truncated, in a fence it cannot close. */
+function fencedOutput(output: string): string {
+  const clean = Array.from(output, (ch) => {
+    const code = ch.charCodeAt(0);
+    return (code < 0x20 && ch !== "\n" && ch !== "\t") || code === 0x7f ? "" : ch;
+  })
+    .join("")
+    .trimEnd();
+  const body = clean.length > MAX_SAMPLE_OUTPUT_CHARS ? `${clean.slice(0, MAX_SAMPLE_OUTPUT_CHARS)}\n… (truncated)` : clean;
+  const longest = Math.max(2, ...Array.from(body.matchAll(/~+/g), (match) => match[0].length));
+  const fence = "~".repeat(longest + 1);
+  return `${fence}\n${body}\n${fence}`;
+}
+
+/** Go's `-run` pattern for one test: each level anchored, regexp-quoted, a subtest's spaces as `go test` reports them. */
+export function goRunPattern(name: string): string {
+  return name
+    .split("/")
+    .map((part) => `^${part.replace(/ /g, "_").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)
+    .join("/");
+}
+
+/** How the test is run 50 times under the race detector, for a Go test; null for another language. */
+function goStressCommand(subject: AskFlakyTestSubject): string | null {
+  if (subject.lang !== "go" || !subject.package || !subject.name) return null;
+  return ["go", "test", "-race", "-count=50", "-run", shellWord(goRunPattern(subject.name)), shellWord(subject.package)].join(" ");
+}
+
+const percent = (value: number) => `${value.toFixed(1)}%`;
+
+function flakyTestPrompt(subject: AskFlakyTestSubject, ctx: AskContext): string {
+  const id = shellWord(subject.testId);
+  const project = ctx.forgeProject ? ` (forge project ${oneLine(ctx.forgeProject, 80)})` : "";
+  const place = subject.file ? `, ${oneLine(subject.file, 200)}${subject.line ? `:${subject.line}` : ""}` : "";
+  const rate =
+    subject.runs > 0
+      ? `Flake rate ${percent(subject.flakeRate * 100)} over ${subject.runs} default-branch ${subject.runs === 1 ? "run" : "runs"} (a ranking, not a verdict)`
+      : "No flake rate yet (no completed default-branch run)";
+  const events = `${subject.confirmedEvents30d} confirmed flake ${subject.confirmedEvents30d === 1 ? "event" : "events"} in 30 days`;
+  const q = subject.quarantine;
+  const quarantine = q
+    ? `Quarantined by ${oneLine(q.path, 200)}${q.reason ? ` (reason: ${oneLine(q.reason, 200)})` : ""}${
+        q.expiresMs === null ? ", no expiry" : `, ${q.overdue ? "expired" : "expires"} ${new Date(q.expiresMs).toISOString().slice(0, 10)}${q.overdue ? " and overdue" : ""}`
+      }.`
+    : "Not quarantined.";
+  const issue = subject.issueUrl ? `\nIssue: ${oneLine(subject.issueUrl, 300)}` : "";
+
+  const shown = subject.signatures.slice(0, MAX_FLAKY_SIGNATURES);
+  const signatures = shown.length
+    ? `\n\nIts recent failure signatures, most frequent first (the output was scrubbed of known secret shapes when it was recorded, and is truncated):\n` +
+      shown
+        .map(
+          (s, i) =>
+            `\n${i + 1}. ${s.count} ${s.count === 1 ? "failure" : "failures"}, classified ${oneLine(s.verdict, 40)}, signature ${oneLine(s.signature, 64)}\n${fencedOutput(s.sampleOutput)}`
+        )
+        .join("\n") +
+      (subject.signatures.length > shown.length ? `\n\n${subject.signatures.length - shown.length} more on the test's page.` : "")
+    : "\n\nNo failure output was recorded for it.";
+
+  const stress = goStressCommand(subject);
+  const verify = stress
+    ? `\`${stress}\` must pass 50 runs of 50`
+    : "run it 50 times under the language's race or concurrency checks, and it must pass every time";
+  const gate = forgeCmd(ctx, "test", "flakes", "gate", "--base", gateBase(subject.defaultBranch));
+  const unquarantine = q
+    ? `Remove its quarantine entry in the same change: ${forgeCmd(ctx, "test", "quarantine", "remove", id)}.`
+    : `If it has a quarantine entry by then, remove it in the same change: ${forgeCmd(ctx, "test", "quarantine", "remove", id)}.`;
+
+  return (
+    `Flaky test ${id}${project}.\nPackage ${oneLine(subject.package, 200)}${place}.\n` +
+    `State: ${oneLine(subject.state, 40)}. ${rate}; ${events}.\n${quarantine}${issue}${signatures}\n\n` +
+    `Fix it: make the test deterministic, or delete it if it is not worth keeping. Never add a sleep, a retry or a looser assertion, and a data race is a bug to fix, not a flake. ` +
+    `Verify: ${verify}, then ${gate} passes. ${unquarantine} ` +
+    `Finish with the cause, the change, and the verification's results.`
+  );
+}
+
+/** Inclusive ranges as "12-14, 20": numbers only. */
+export function lineRanges(ranges: readonly [number, number][]): string {
+  return ranges.map(([first, last]) => (first === last ? `${first}` : `${first}-${last}`)).join(", ");
+}
+
+function coveragePrompt(subject: AskCoverageSubject, ctx: AskContext): string {
+  const pkg = oneLine(subject.package, 200);
+  const project = ctx.forgeProject ? ` (forge project ${oneLine(ctx.forgeProject, 80)})` : "";
+  const commit = subject.commit ? `, in the report of commit ${shellWord(subject.commit.slice(0, 12))}` : "";
+  const now =
+    subject.combined === null
+      ? "No combined figure yet."
+      : `Now ${percent(subject.combined)} combined (${subject.covered.toLocaleString("en-US")} of ${subject.statements.toLocaleString("en-US")} statements)`;
+  const lanes = Object.entries(subject.lanes);
+  const byLane = lanes.length ? `; by lane: ${lanes.map(([lane, value]) => `${oneLine(lane, 40)} ${percent(value)}`).join(", ")}.` : subject.combined === null ? "" : ".";
+  const files = subject.uncovered.map((file) => {
+    const shown = file.lines.slice(0, MAX_UNCOVERED_RANGES);
+    const more = file.lines.length > shown.length ? ` and ${file.lines.length - shown.length} more ranges` : "";
+    return `- ${oneLine(file.path, 200)}: ${lineRanges(shown)}${more}`;
+  });
+  const listCmd = forgeCmd(ctx, "test", "coverage", shellWord(subject.package), "--by", "file");
+  const more = subject.moreFiles > 0 ? `\n(and ${subject.moreFiles} more ${subject.moreFiles === 1 ? "file" : "files"}: ${listCmd} lists them)` : "";
+  const uncovered = files.length
+    ? `\n\nUncovered lines, by line number (the report holds no code: read it in the checkout):\n${files.join("\n")}${more}`
+    : `\n\n${listCmd} lists its files and their coverage.`;
+  return (
+    `Raise the test coverage of ${pkg}${project}${commit}.\n${now}${byLane}\nTarget: ${subject.target}% combined.${uncovered}\n\n` +
+    `Add tests that assert behaviour: every new test checks a result, an error or a state change the code makes. A test that only calls code, or asserts nothing, does not count. ` +
+    `Verify with \`task test -- ./${pkg.replace(/^\.?\/+/, "")}/...\`, then ${forgeCmd(ctx, "test", "coverage", shellWord(subject.package), "--json")} must reach the target, ` +
+    `then the flake gate passes on the new tests: ${forgeCmd(ctx, "test", "flakes", "gate", "--base", gateBase(subject.defaultBranch))}. ` +
+    `Finish with the coverage before and after, and each new test with what it asserts.`
+  );
+}
+
 /** The panel fields that define its query. Not its description or layout, which say nothing about the data. */
 const QUERY_FIELDS = ["id", "title", "kind", "signal", "series", "ratio", "formula", "where", "groupBy", "columns", "funnel", "hasError", "limit", "sql", "unit"] as const;
 
@@ -319,8 +527,18 @@ const FIX_EXTERNAL =
 
 const FIX_ALERT = " If the rule is what is wrong (a threshold or expression that doesn't match how the service really behaves), fix the rule where the project declares it, in its KCL, rather than the service.";
 
+/** For a subject whose prompt already says what to do (a flaky test, a package's coverage): where the work happens. */
+const OWN_BRANCH = "This chat has a workspace of its own on its own git branch, so the main checkout is untouched.";
+const OWN_BRANCH_EXTERNAL = "Do the work on a new branch.";
+const PLAN_ONLY = "Don't change any code yet: say what you would change, and why.";
+
 /** The instruction an intent adds, after the subject and how to read it. */
 function intentLine(subject: AskSubject, ctx: AskContext): string {
+  if (subject.kind === "flaky-test" || subject.kind === "coverage") {
+    if (ctx.intent === "investigate") return `\n\n${PLAN_ONLY}`;
+    if (ctx.intent === "fix") return `\n\n${ctx.host === "external" ? OWN_BRANCH_EXTERNAL : OWN_BRANCH}`;
+    return "";
+  }
   if (ctx.intent === "investigate") return `\n\n${INVESTIGATE}`;
   if (ctx.intent === "fix") return `\n\n${ctx.host === "external" ? FIX_EXTERNAL : FIX}${subject.kind === "alert" ? FIX_ALERT : ""}`;
   return "";
@@ -357,6 +575,10 @@ function subjectPrompt(subject: AskSubject, ctx: AskContext): string {
       return sessionPrompt(subject, ctx);
     case "deploy":
       return deployPrompt(subject, ctx);
+    case "flaky-test":
+      return flakyTestPrompt(subject, ctx);
+    case "coverage":
+      return coveragePrompt(subject, ctx);
   }
 }
 
@@ -426,6 +648,19 @@ export function askAgentCommands(subject: AskSubject, ctx: AskContext = {}): Ask
       const raw = RAW_VERB[subject.panel.signal];
       return raw ? [plain(ctx, ["obs", ...raw], env, "--since", since)] : [];
     }
+    case "flaky-test": {
+      const stress = goStressCommand(subject);
+      return [
+        ...(stress ? [{ verb: "go test", command: stress }] : []),
+        plain(ctx, ["test", "flakes", "gate"], "--base", gateBase(subject.defaultBranch)),
+        ...(subject.quarantine ? [plain(ctx, ["test", "quarantine", "remove"], shellWord(subject.testId))] : []),
+      ];
+    }
+    case "coverage":
+      return [
+        plain(ctx, ["test", "coverage"], shellWord(subject.package), "--by", "file"),
+        plain(ctx, ["test", "flakes", "gate"], "--base", gateBase(subject.defaultBranch)),
+      ];
     case "graph":
       return [];
   }
@@ -478,6 +713,10 @@ function workspaceSubject(subject: AskSubject): string {
     case "deploy":
     case "deploy-failed":
       return subject.env ?? "";
+    case "flaky-test":
+      return subject.name.split("/")[0] || subject.testId;
+    case "coverage":
+      return subject.package.split("/").pop() || subject.package;
   }
 }
 

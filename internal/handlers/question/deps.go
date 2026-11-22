@@ -12,15 +12,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
+// Questions lists a chat's or a user's questions. Each takes the chat or user
+// the handler already authorized, and fails closed on an empty one.
+// store.QuestionExtStore satisfies it.
+type Questions interface {
+	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+	ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error)
+	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
+}
+
 // Repository is the slice of *db.Repo the question handlers use.
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
-	ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error)
-	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
-	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error

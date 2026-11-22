@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 )
 
@@ -19,13 +19,13 @@ import (
 func TestCreatePlan_Generated(t *testing.T) {
 	t.Parallel()
 
-	var created *db.Plan
-	repo := newPlanRepo()
-	repo.CreatePlanFunc = func(_ context.Context, p *db.Plan) error {
+	var created *core.Plan
+	repo := newPlanMocks()
+	repo.Plans.InsertPlanFunc = func(_ context.Context, p *core.Plan) error {
 		created = p
 		return nil
 	}
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreatePlanRequest, pb.CreatePlanResponse]{
 		{

@@ -71,6 +71,9 @@ const (
 	// IdentityServiceGetExportURLProcedure is the fully-qualified name of the IdentityService's
 	// GetExportURL RPC.
 	IdentityServiceGetExportURLProcedure = "/controlplane.v1.IdentityService/GetExportURL"
+	// IdentityServiceCheckSocialSignInProcedure is the fully-qualified name of the IdentityService's
+	// CheckSocialSignIn RPC.
+	IdentityServiceCheckSocialSignInProcedure = "/controlplane.v1.IdentityService/CheckSocialSignIn"
 )
 
 // IdentityServiceClient is a client for the controlplane.v1.IdentityService service.
@@ -130,6 +133,16 @@ type IdentityServiceClient interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// CheckSocialSignIn starts one social sign-in per applied provider of the
+	// identity (an intent at the issuer, never completed: it expires there)
+	// and reports each authorize URL the issuer built, with the redirect_uri it
+	// carries beside the callback registered at the provider
+	// (<issuer>/idps/callback). A provider that is pending or whose managed
+	// secret is missing is reported, not started. `forge cloud identity status
+	// --check-social` reads it. Admission is GetIdentityStatus's: any member,
+	// or a machine credential with identity:read. Nothing returned is a secret:
+	// a client id is public and the URL is the one a browser is sent to.
+	CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the controlplane.v1.IdentityService service. By
@@ -223,6 +236,12 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 			connect.WithClientOptions(opts...),
 		),
+		checkSocialSignIn: connect.NewClient[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse](
+			httpClient,
+			baseURL+IdentityServiceCheckSocialSignInProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("CheckSocialSignIn")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -241,6 +260,7 @@ type identityServiceClient struct {
 	revokeSessions    *connect.Client[v1.RevokeIdentitySessionsRequest, v1.RevokeIdentitySessionsResponse]
 	requestExport     *connect.Client[v1.RequestIdentityExportRequest, v1.RequestIdentityExportResponse]
 	getExportURL      *connect.Client[v1.GetIdentityExportURLRequest, v1.GetIdentityExportURLResponse]
+	checkSocialSignIn *connect.Client[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse]
 }
 
 // GetIdentityStatus calls controlplane.v1.IdentityService.GetIdentityStatus.
@@ -308,6 +328,11 @@ func (c *identityServiceClient) GetExportURL(ctx context.Context, req *connect.R
 	return c.getExportURL.CallUnary(ctx, req)
 }
 
+// CheckSocialSignIn calls controlplane.v1.IdentityService.CheckSocialSignIn.
+func (c *identityServiceClient) CheckSocialSignIn(ctx context.Context, req *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {
+	return c.checkSocialSignIn.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the controlplane.v1.IdentityService service.
 type IdentityServiceHandler interface {
 	// GetIdentityStatus reports the environment's identity instance: state, issuer,
@@ -365,6 +390,16 @@ type IdentityServiceHandler interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// CheckSocialSignIn starts one social sign-in per applied provider of the
+	// identity (an intent at the issuer, never completed: it expires there)
+	// and reports each authorize URL the issuer built, with the redirect_uri it
+	// carries beside the callback registered at the provider
+	// (<issuer>/idps/callback). A provider that is pending or whose managed
+	// secret is missing is reported, not started. `forge cloud identity status
+	// --check-social` reads it. Admission is GetIdentityStatus's: any member,
+	// or a machine credential with identity:read. Nothing returned is a secret:
+	// a client id is public and the URL is the one a browser is sent to.
+	CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -454,6 +489,12 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceCheckSocialSignInHandler := connect.NewUnaryHandler(
+		IdentityServiceCheckSocialSignInProcedure,
+		svc.CheckSocialSignIn,
+		connect.WithSchema(identityServiceMethods.ByName("CheckSocialSignIn")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceGetIdentityStatusProcedure:
@@ -482,6 +523,8 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceRequestExportHandler.ServeHTTP(w, r)
 		case IdentityServiceGetExportURLProcedure:
 			identityServiceGetExportURLHandler.ServeHTTP(w, r)
+		case IdentityServiceCheckSocialSignInProcedure:
+			identityServiceCheckSocialSignInHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -541,4 +584,8 @@ func (UnimplementedIdentityServiceHandler) RequestExport(context.Context, *conne
 
 func (UnimplementedIdentityServiceHandler) GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetExportURL is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.CheckSocialSignIn is not implemented"))
 }

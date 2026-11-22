@@ -50,7 +50,7 @@ func (s *Service) ResolvePersonalFundingChoice(
 	if _, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID); err != nil {
 		return nil, notFoundOr(err, "chat")
 	}
-	q, err := s.deps.Store.AnswerPersonalFunding(ctx, chatID, userID, state, time.Now())
+	q, err := s.deps.Funding.AnswerChatPersonalFunding(ctx, chatID, userID, state, time.Now())
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

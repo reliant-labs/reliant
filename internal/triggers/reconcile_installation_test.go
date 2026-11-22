@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func installationIn(t *testing.T, raw json.RawMessage) string {
@@ -88,7 +89,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 		return tr
 	}
 	bound, unbound := mk("100"), mk("")
-	require.NoError(t, repo.ReplaceIntegrationAccess(ctx, user, "github", "11", now, []core.IntegrationAccessGrant{
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, repo.ORM(), user, "github", "11", now, []core.IntegrationAccessGrant{
 		{AccountKey: "100", ResourceKey: "1"}, {AccountKey: "200", ResourceKey: "9"},
 	}))
 

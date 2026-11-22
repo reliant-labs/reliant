@@ -9,9 +9,11 @@
  *   left         the health KPIs (one card of four figures) and what needs
  *                attention, each item with the release it followed and the
  *                way back.
- *   rail         what changed: recent releases; then the app's code (the
- *                `about` slot: the Code card, Console/AppCodeCard.tsx); then
- *                who uses the app (the
+ *   rail         what changed: recent releases, the tests (the project
+ *                shell's landing: Tests/surfaces/OverviewTests.tsx, which
+ *                also adds the Tests rows to "Needs attention"); then the
+ *                app's code (the `about` slot: the Code card,
+ *                Console/AppCodeCard.tsx); then who uses the app (the
  *                Users card: accounts, and active, new and returning users
  *                over 7 days, read from the generated Overview dashboard's
  *                Users panels; hidden until there are users to show), then
@@ -108,6 +110,7 @@ import { UsersCard } from "./UsersCard";
 import { VulnerabilitiesCard } from "../Security/VulnerabilitiesCard";
 import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
+import { OverviewTestsCard, TestsAttentionRows } from "../Tests/surfaces/OverviewTests";
 
 export interface OverviewSearch {
   q?: string;
@@ -425,6 +428,7 @@ export function OverviewHome({
                   envs={envs}
                   releaseHref={hrefs.release}
                   rollback={rollback}
+                  tests={<TestsAttentionRows project={project} />}
                 />
               </LandingCard>
             )}
@@ -437,6 +441,7 @@ export function OverviewHome({
             <LandingCard testId="overview-card-releases">
               <RecentReleases project={project} envs={envs} hrefs={hrefs} />
             </LandingCard>
+            <OverviewTestsCard project={project} frame={(card) => <LandingCard testId="overview-card-tests">{card}</LandingCard>} />
             {about && <LandingCard testId="overview-card-code">{about}</LandingCard>}
             {summary.analytics && (
               <LandingCard testId="overview-card-analytics">
@@ -863,6 +868,7 @@ function NeedsAttention({
   envs,
   releaseHref,
   rollback,
+  tests,
 }: {
   items: AttentionItem[];
   loading: boolean;
@@ -874,6 +880,8 @@ function NeedsAttention({
   envs: StripEnv[];
   releaseHref: OverviewHrefs["release"];
   rollback?: OverviewRollback;
+  /** The Tests rows (Tests/surfaces): the default branch's, whatever the scope. */
+  tests?: ReactNode;
 }) {
   return (
     <Section title="Needs attention" testId="overview-attention">
@@ -979,6 +987,7 @@ function NeedsAttention({
         </div>
         </>
       )}
+      {tests}
     </Section>
   );
 }

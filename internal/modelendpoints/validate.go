@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 )
 
@@ -85,18 +85,18 @@ type normalizedInput struct {
 func routeToDB(r reliantv1.ModelEndpointRoute) (string, error) {
 	switch r {
 	case reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT:
-		return db.ModelEndpointRouteDirect, nil
+		return core.ModelEndpointRouteDirect, nil
 	case reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON:
-		return db.ModelEndpointRouteViaDaemon, nil
+		return core.ModelEndpointRouteViaDaemon, nil
 	}
 	return "", invalid("Choose how Reliant should reach this server: from Reliant's cloud, or through one of your machines.")
 }
 
 func routeFromDB(r string) reliantv1.ModelEndpointRoute {
 	switch r {
-	case db.ModelEndpointRouteDirect:
+	case core.ModelEndpointRouteDirect:
 		return reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT
-	case db.ModelEndpointRouteViaDaemon:
+	case core.ModelEndpointRouteViaDaemon:
 		return reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON
 	}
 	return reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_UNSPECIFIED
@@ -126,11 +126,11 @@ func validateInput(in *reliantv1.ModelEndpointInput) (*normalizedInput, error) {
 	}
 	daemonID := strings.TrimSpace(in.GetDaemonId())
 	switch route {
-	case db.ModelEndpointRouteViaDaemon:
+	case core.ModelEndpointRouteViaDaemon:
 		if daemonID == "" {
 			return nil, invalid("Choose which of your machines should reach this server.")
 		}
-	case db.ModelEndpointRouteDirect:
+	case core.ModelEndpointRouteDirect:
 		if daemonID != "" {
 			return nil, invalid("A machine can only be chosen when the endpoint is reached through a machine.")
 		}

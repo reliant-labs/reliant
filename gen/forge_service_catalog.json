@@ -43493,7 +43493,8 @@
             "DAEMON_UPGRADE_STATE_UPDATING",
             "DAEMON_UPGRADE_STATE_DRAINED",
             "DAEMON_UPGRADE_STATE_AWAITING_OWNER",
-            "DAEMON_UPGRADE_STATE_FAILED"
+            "DAEMON_UPGRADE_STATE_FAILED",
+            "DAEMON_UPGRADE_STATE_STAGED"
           ],
           "reliant.v1.DiskGuardState": [
             "DISK_GUARD_STATE_UNSPECIFIED",
@@ -43532,7 +43533,8 @@
             2,
             3,
             4,
-            5
+            5,
+            6
           ],
           "reliant.v1.DiskGuardState": [
             0,
@@ -55481,12 +55483,10 @@
     },
     {
       "consumer": "Attachment",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.Repository",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.AttachmentStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -55645,6 +55645,17 @@
       ],
       "providers": [
         "PauseService"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -55965,6 +55976,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Marks",
+      "interface": "github.com/reliant-labs/reliant/internal/worktreesweep.MarkDecisionStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Members",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgMemberCounter",
       "methods": [],
@@ -55995,6 +56017,17 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Recoveries",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Recoveries",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56088,8 +56121,19 @@
     },
     {
       "consumer": "ModelEndpoint",
-      "field": "Repo",
+      "field": "Endpoints",
       "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ModelEndpoint",
+      "field": "Machines",
+      "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Machines",
       "methods": [],
       "candidates": [
         "Database"
@@ -56276,16 +56320,67 @@
     },
     {
       "consumer": "Plan",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.PlanStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatRefetcher",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TaskStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Preset",
@@ -56407,6 +56502,17 @@
     },
     {
       "consumer": "ProviderAccount",
+      "field": "Funding",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.PersonalFunding",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Store",
       "methods": [],
@@ -56454,6 +56560,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56676,6 +56793,17 @@
     },
     {
       "consumer": "Sharing",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.OrgResolver",
       "methods": [],
@@ -56689,16 +56817,34 @@
     },
     {
       "consumer": "Sharing",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Repository",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Projects",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Shares",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Shares",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.TxRunner",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Streaming",
@@ -56800,16 +56946,67 @@
     },
     {
       "consumer": "Task",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.PlanStore",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatRefetcher",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TaskStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "TemporalClient",
@@ -57289,6 +57486,17 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Recoveries",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Recoveries",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [],
@@ -57471,6 +57679,54 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Plan.Chats",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Plans",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Refetch",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tasks",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Threads",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tx",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Apps",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -57506,6 +57762,86 @@
       "component": "Settings.ControlPlane",
       "source": {
         "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Chats",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Projects",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Shares",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Tx",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Chats",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Plans",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Refetch",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tasks",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Threads",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tx",
+      "source": {
+        "path": "internal/handlers/task/service.go",
         "symbol": "New"
       }
     },

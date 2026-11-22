@@ -56,6 +56,10 @@ vi.mock("@/store/projectStore", () => ({
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../../Settings/BranchesSection", () => ({ WorkspacesBody: () => <div data-testid="workspaces-body" /> }));
 vi.mock("../../Settings/projects/ProjectMachines", () => ({ ProjectMachines: () => <div data-testid="project-machines" /> }));
+// The Sharing section has its own tests (Sharing/__tests__/ProjectSharingSection): here, that Settings holds it.
+vi.mock("../../Sharing/ProjectSharingSection", () => ({
+  ProjectSharingSection: ({ project }: { project: { id: string } }) => <div data-testid="project-sharing" data-project={project.id} />,
+}));
 // The shell's chats card and its deploy empty state have their own tests: here, where they show.
 vi.mock("../ProjectChats", () => ({ ProjectChats: ({ projectId }: { projectId: string }) => <div data-testid="project-landing-chats" data-project={projectId} /> }));
 vi.mock("../../Forge/Console/AppSectionEmptyState", () => ({
@@ -147,6 +151,7 @@ describe("a project's page", () => {
     rerender(<ProjectPageBody tab="settings" />);
     expect(screen.getByTestId("project-settings")).toBeInTheDocument();
     expect(screen.getByTestId("project-machines")).toBeInTheDocument();
+    expect(screen.getByTestId("project-sharing")).toHaveAttribute("data-project", "shop");
   });
 
   it("shows a shared project read-only: no checkouts, chats or tabs", () => {

@@ -2,9 +2,9 @@
  * Contract tests over the real shortcut definitions.
  *
  * These guard the invariants that are easy to break by editing
- * config/shortcuts.yaml: chords that must not collide, editing surfaces that
- * must keep their native behavior, and browser-reserved chords that must have a
- * web alternative.
+ * config/shortcuts.yaml: one binding on every surface, chords that must not
+ * collide, editing surfaces that must keep their native behavior, and no
+ * default on a chord the browser never delivers.
  */
 
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,9 @@ function buildRegistry({ isMac, isDesktop }: Platform): ShortcutRegistry {
         isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding,
         isMac,
       ),
+      aliases: isDesktop
+        ? (shortcut.desktopAliases ?? []).map((alias) => parseBinding(alias, isMac))
+        : [],
       context: shortcut.context,
       allowInInput: shortcut.allowInInput,
       passthrough: shortcut.passthrough,
@@ -35,12 +38,47 @@ function buildRegistry({ isMac, isDesktop }: Platform): ShortcutRegistry {
 }
 
 const MAC_DESKTOP: Platform = { isMac: true, isDesktop: true };
+const PC_DESKTOP: Platform = { isMac: false, isDesktop: true };
 const MAC_WEB: Platform = { isMac: true, isDesktop: false };
 const PC_WEB: Platform = { isMac: false, isDesktop: false };
+const EVERY_SURFACE = [MAC_DESKTOP, PC_DESKTOP, MAC_WEB, PC_WEB];
+
+/**
+ * Shortcuts allowed a `web_binding` — a different chord in a browser tab than
+ * in the desktop app — and why. Empty on purpose: a split binding is two
+ * shortcuts to learn. A hard chord moves to one that works everywhere (with
+ * the old chord as a desktop alias), and a hostile chord is simply overridden
+ * in the tab. Add an entry only for a chord neither rule can serve, and say
+ * why here.
+ */
+const WEB_BINDING_EXCEPTIONS: Record<string, string> = {};
+
+/** What a canonical binding fires when typed chord by chord, as the dispatcher sees it. */
+function typed(
+  registry: ShortcutRegistry,
+  binding: string,
+  contexts: string[] = ["global"],
+): string | undefined {
+  let pending = "";
+  for (const chord of binding.split(" ")) {
+    const result = registry.resolve(chord, contexts, pending);
+    if (result.kind === "sequence-prefix") {
+      pending = chord;
+      continue;
+    }
+    return result.shortcut?.id;
+  }
+  return undefined;
+}
+
+/** The contexts a shortcut in `context` is typed from, innermost first. */
+function contextsFor(context: string): string[] {
+  return context === "global" ? ["global"] : [context, "global"];
+}
 
 describe("shortcut definitions", () => {
   it("has no two shortcuts claiming the same chord in the same context", () => {
-    for (const platform of [MAC_DESKTOP, MAC_WEB, PC_WEB]) {
+    for (const platform of EVERY_SURFACE) {
       const conflicts = buildRegistry(platform).findConflicts();
       expect(
         conflicts.map((c) => `${c.binding}: ${c.shortcuts.map((s) => s.id)}`),
@@ -48,42 +86,93 @@ describe("shortcut definitions", () => {
     }
   });
 
-  it("gives every hard-reserved chord a web alternative", () => {
-    // A hard-reserved chord is never delivered to the page, so a web binding
-    // that used one would be dead on arrival.
-    for (const shortcut of Object.values(defaultShortcuts)) {
-      for (const platform of [MAC_WEB, PC_WEB]) {
-        const binding = parseBinding(
-          shortcut.defaultWebBinding,
-          platform.isMac,
-        );
-        const reservation = getReservation(binding, platform.isMac);
-        expect(
-          reservation?.level === "hard" ? `${shortcut.id}: ${binding}` : null,
-        ).toBeNull();
-      }
-    }
+  it("uses one binding in the desktop app and in a browser tab", () => {
+    const split = Object.values(defaultShortcuts)
+      .filter((shortcut) => !shortcut.desktopOnly)
+      .filter((shortcut) => shortcut.defaultWebBinding !== shortcut.defaultBinding)
+      .filter((shortcut) => !WEB_BINDING_EXCEPTIONS[shortcut.id])
+      .map((s) => `${s.id}: ${s.defaultBinding} / web ${s.defaultWebBinding}`);
+
+    expect(split).toEqual([]);
   });
 
-  it("never puts a browser-reserved chord under a held sequence key on the web", () => {
-    // Cmd+K then W is commonly typed with Cmd still held, and the browser sees
-    // that as Cmd+W before the page does: it closed Reliant's own tab. The
-    // second key of a web sequence must survive being typed either way.
+  it("never makes a chord the browser withholds a default, on any surface", () => {
+    // A hard chord never reaches the page, so a default on one is dead in a
+    // browser tab — and, since the binding is the same in the desktop app,
+    // splits the two. The held case: Cmd+K then W is commonly typed with Cmd
+    // still held, the browser sees that as Cmd+W before the page does, and it
+    // closed Reliant's own tab. Old chords live on as desktop aliases.
+    const offenders: string[] = [];
     for (const shortcut of Object.values(defaultShortcuts)) {
-      for (const platform of [MAC_WEB, PC_WEB]) {
-        const binding = parseBinding(
-          shortcut.defaultWebBinding,
-          platform.isMac,
-        );
-        const reservation = getReservation(binding, platform.isMac);
-        expect(
-          reservation?.level === "held" ? `${shortcut.id}: ${binding}` : null,
-        ).toBeNull();
+      for (const isMac of [true, false]) {
+        for (const authored of new Set([shortcut.defaultBinding, shortcut.defaultWebBinding])) {
+          if (!authored) continue;
+          const binding = parseBinding(authored, isMac);
+          const level = getReservation(binding, isMac)?.level;
+          if (level === "hard" || level === "held") {
+            offenders.push(`${shortcut.id}: ${binding} (${level})`);
+          }
+        }
       }
     }
+    expect(offenders).toEqual([]);
   });
 
-  describe("in a browser tab", () => {
+  describe("desktop aliases", () => {
+    const withAliases = Object.values(defaultShortcuts).filter(
+      (shortcut) => (shortcut.desktopAliases ?? []).length > 0,
+    );
+
+    it("exist", () => {
+      // The cases below would pass vacuously if the generator dropped them.
+      expect(withAliases.map((s) => s.id)).toContain("newChat");
+    });
+
+    it.each(withAliases.map((s) => [s.id, s] as const))(
+      "%s fires from each of its aliases in the desktop app",
+      (_id, shortcut) => {
+        for (const platform of [MAC_DESKTOP, PC_DESKTOP]) {
+          const registry = buildRegistry(platform);
+          for (const alias of shortcut.desktopAliases ?? []) {
+            const binding = parseBinding(alias, platform.isMac);
+            // An alias that yields to another shortcut's binding would be dead.
+            expect(typed(registry, binding, contextsFor(shortcut.context))).toBe(shortcut.id);
+          }
+        }
+      },
+    );
+
+    it.each(withAliases.map((s) => [s.id, s] as const))(
+      "%s keeps only chords a browser withholds as aliases",
+      (_id, shortcut) => {
+        // An alias exists to keep desktop muscle memory for a chord the
+        // binding had to leave. A chord that works in a browser should be the
+        // binding, on every surface, rather than a desktop-only extra.
+        for (const alias of shortcut.desktopAliases ?? []) {
+          const withheld = [true, false].some((isMac) => {
+            const level = getReservation(parseBinding(alias, isMac), isMac)?.level;
+            return level === "hard" || level === "held";
+          });
+          expect({ alias, withheld }).toEqual({ alias, withheld: true });
+          expect(alias).not.toBe(shortcut.defaultBinding);
+        }
+      },
+    );
+
+    it("do nothing in a browser tab", () => {
+      for (const platform of [MAC_WEB, PC_WEB]) {
+        const registry = buildRegistry(platform);
+        for (const shortcut of withAliases) {
+          for (const alias of shortcut.desktopAliases ?? []) {
+            const binding = parseBinding(alias, platform.isMac);
+            expect(typed(registry, binding, contextsFor(shortcut.context))).toBeUndefined();
+          }
+        }
+      }
+    });
+  });
+
+  describe("on every surface", () => {
     // The actions the app leans on must each have a binding that reaches the
     // page in a browser — and actually resolves to that action when typed.
     const ESSENTIAL = [
@@ -98,34 +187,43 @@ describe("shortcut definitions", () => {
       "reopenLastClosedFile",
       "toggleSettings",
       "focusChat",
-      // Cmd+Shift+[ / ] on desktop: Chrome's tab switching, never delivered.
+      // Once Cmd+Shift+[ / ]: Chrome's tab switching, never delivered.
       "nextFileTab",
       "prevFileTab",
+      "openProject",
+      "runPackageCommand",
     ];
 
-    /** Type a canonical binding chord by chord, the way the dispatcher sees it. */
-    function typed(registry: ShortcutRegistry, binding: string) {
-      let pending = "";
-      for (const chord of binding.split(" ")) {
-        const result = registry.resolve(chord, ["global"], pending);
-        if (result.kind === "sequence-prefix") {
-          pending = chord;
-          continue;
-        }
-        return result.shortcut?.id;
-      }
-      return undefined;
-    }
-
-    it.each(ESSENTIAL)("%s fires from its web binding", (id) => {
-      for (const platform of [MAC_WEB, PC_WEB]) {
+    it.each(ESSENTIAL)("%s fires from its binding", (id) => {
+      for (const platform of EVERY_SURFACE) {
         const shortcut = defaultShortcuts[id];
         const binding = parseBinding(
-          shortcut.defaultWebBinding,
+          platform.isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding,
           platform.isMac,
         );
 
-        expect(getReservation(binding, platform.isMac)?.level).not.toBe("hard");
+        if (!platform.isDesktop) {
+          expect(getReservation(binding, platform.isMac)?.level).not.toBe("hard");
+        }
+        expect(typed(buildRegistry(platform), binding)).toBe(id);
+      }
+    });
+  });
+
+  describe("chords a browser has a use for", () => {
+    // Hostile chords: the page may take them, and Reliant does, because in an
+    // app like this the app's meaning is the one the user wants. Each is the
+    // binding in a browser tab exactly as in the desktop app.
+    const OVERRIDDEN = [
+      { chord: "Cmd+P", id: "quickFileOpen" }, // print
+      { chord: "Cmd+O", id: "openProject" }, // open a local file
+      { chord: "Cmd+L", id: "focusChat" }, // the address bar
+    ];
+
+    it.each(OVERRIDDEN)("$chord is $id in a browser tab too", ({ chord, id }) => {
+      for (const platform of [MAC_WEB, PC_WEB]) {
+        const binding = parseBinding(chord, platform.isMac);
+        expect(getReservation(binding, platform.isMac)?.level).toBe("hostile");
         expect(typed(buildRegistry(platform), binding)).toBe(id);
       }
     });

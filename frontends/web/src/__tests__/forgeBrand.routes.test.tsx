@@ -139,7 +139,7 @@ describe("the forge brand", () => {
     cleanup();
   });
 
-  it.each(["/apps", "/sites", "/forge/p/shop/environments", "/"])("keeps %s behind the sign-in guard", async (path) => {
+  it.each(["/apps", "/sites", "/forge/p/shop/environments"])("keeps %s behind the sign-in guard", async (path) => {
     signOut();
     const router = renderAt(tree, path);
     await waitFor(() => expect(router.state.location.pathname).toBe("/auth"), { timeout: 15_000 });

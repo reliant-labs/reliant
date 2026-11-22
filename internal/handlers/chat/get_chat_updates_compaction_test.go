@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -33,7 +34,7 @@ func TestGetChatUpdates_BelowTheCompactionWatermarkIsRefused(t *testing.T) {
 	}
 	repo.GetLatestUpdateSequenceFunc = func(context.Context, string) (int64, error) { return 90, nil }
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 50, nil }
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	for _, since := range []int64{0, 3, 49} {
 		resp, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: since}))
@@ -58,7 +59,7 @@ func TestGetChatUpdates_AtTheCompactionWatermarkReplays(t *testing.T) {
 	}
 	repo.GetLatestUpdateSequenceFunc = func(context.Context, string) (int64, error) { return 90, nil }
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 50, nil }
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	resp, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 50}))
 	require.NoError(t, err)
@@ -79,7 +80,7 @@ func TestGetChatUpdates_WatermarkIsReadAfterTheUpdates(t *testing.T) {
 	}
 	repo.GetLatestUpdateSequenceFunc = func(context.Context, string) (int64, error) { return 90, nil }
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return compacted.Load(), nil }
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	_, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10}))
 	require.True(t, svcerr.IsOutOfRange(err), "%v", err)
@@ -94,7 +95,7 @@ func TestGetChatUpdates_UnreadableWatermarkFailsThePoll(t *testing.T) {
 	repo.GetUpdatesSinceFunc = func(context.Context, string, int64, int) ([]db.ChatUpdate, error) { return nil, nil }
 	repo.GetLatestUpdateSequenceFunc = func(context.Context, string) (int64, error) { return 90, nil }
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 0, errors.New("db down") }
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}}))
 
 	_, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10}))
 	require.Error(t, err)

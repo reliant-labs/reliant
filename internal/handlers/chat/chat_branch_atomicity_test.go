@@ -9,11 +9,12 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
 )
 
 // branchAtomicityRepo wraps the real repository behind the chat Repository
@@ -115,7 +116,8 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: true}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo,
+			Repo:      failingRepo,
+			Questions: &MockQuestions{},
 		},
 		threads: threads.NewService(failingRepo),
 	}
@@ -172,7 +174,8 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: false}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo,
+			Repo:      failingRepo,
+			Questions: &MockQuestions{},
 		},
 		threads: threads.NewService(failingRepo),
 	}

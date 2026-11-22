@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -97,12 +98,6 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 // or an empty string when it is unused.
 func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
-}
-
-// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
-// included, most recently active first, at most limit.
-func (r *Repo) ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]WorktreeChat, error) {
-	return store.ListChatsForWorktree(ctx, r.ORM(), userID, worktreeID, limit)
 }
 
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
@@ -2402,13 +2397,6 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
-func (r *Repo) DeletePlan(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-	return store.RemovePlan(ctx, r.ORM(), id)
-}
-
 // ==================== Tasks ====================
 
 func (r *Repo) CreateTask(ctx context.Context, task *Task) error {
@@ -2504,13 +2492,6 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 	return store.ReplaceTask(ctx, r.ORM(), task)
 }
 
-func (r *Repo) DeleteTask(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-	return store.RemoveTask(ctx, r.ORM(), id)
-}
-
 // ==================== Task Dependencies ====================
 
 func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
@@ -2570,10 +2551,6 @@ func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
 	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
-}
-
-func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================
@@ -3455,15 +3432,6 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
-}
-
-// CountLiveLaunchedRuns counts the user's chats launched by this kind of
-// event whose root run is still live (pending, active or paused).
-func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
-	if userID == "" {
-		return 0, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
@@ -4405,10 +4373,6 @@ func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug strin
 	})
 }
 
-func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
-	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
-}
-
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
@@ -4471,19 +4435,8 @@ func (r *Repo) GetWorkflowScenario(ctx context.Context, id string) (*WorkflowSce
 	return store.FindWorkflowScenario(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error) {
-	return store.FindWorkflowScenarioByName(ctx, r.ORM(), workflowDraftID, name)
-}
-
 func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error) {
 	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
-}
-
-func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
-	if scenario == nil {
-		return fmt.Errorf("scenario cannot be nil")
-	}
-	return store.ReplaceWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error {

@@ -76,3 +76,58 @@ shell and mark forge and other forge-built binaries as managed.
 
 A running daemon keeps the old image (the rename leaves its inode alone) until
 it restarts. Its next start's `Boot` sees the confirmed swap and does nothing.
+
+## The daemon: `daemon start --auto-update`
+
+Self-run auto-update is opt-in (owner decision D7):
+`DaemonConfig.auto_update`, which is `--auto-update`,
+`RELIANT_DAEMON_AUTO_UPDATE` or the config file's `auto_update`. A managed
+machine never builds an updater: its image is its version.
+
+| Piece | Where |
+| --- | --- |
+| Boot, the updater, the in-process retry after a failed swap | `cmd/reliant/cmd/daemon_selfupdate.go` |
+| `cliupdate.Daemon`: `Stage`, `Apply`, `ExecPending`, `Confirm`, `Disable` | `internal/cliupdate/daemon.go` |
+| When to install: staging loop, quiet moment, drain, states | `internal/toolexec/daemonruntime/upgrade_self.go` |
+
+Every `daemon start` on a person's machine first calls `cliupdate.Boot`, with or
+without the flag. After a swap that arms forge's revert watchdog; the daemon
+confirms the swap when the gateway accepts it (`recordStream(StreamConnected)`),
+within `cliupdate.DefaultConfirmWithin` (5 minutes). That is longer than forge's
+60s, because a revert marks the release failed on this machine. A binary that
+died twice without confirming is reverted at the next start.
+
+With auto-update on (`cliupdate.Daemon.AutoUpdate`: opted in, self-owned, not
+Windows), the runtime:
+
+1. **Stages** at start and every `DefaultStageEvery` (6h): download, verify,
+   probe. It reports `STAGED` (`DAEMON_UPGRADE_STATE_STAGED = 6`, additive).
+   Nothing newer is not news. A release that does not verify is `FAILED`, and
+   the daemon tries again in 30 minutes.
+2. **Waits for a quiet moment**: no tool call running, no background process
+   running, and no tool or terminal activity (`isActivity`: tool requests,
+   terminal input, resize and attach, `exec.*`, `terminal.*` and
+   `mcp.call_tool` commands, and each tool call's end) for 10 minutes. A start
+   counts as activity. Background processes do not survive the exec yet (R5), so
+   the wait never kills one.
+3. A **RestartRequested** only makes it sooner: at security or emergency
+   urgency, once its deadline has passed, the daemon installs without the idle
+   time and despite background processes. Any other urgency changes nothing.
+4. **Drains** (`UPDATING`, refusing new tool requests with the undelivered
+   class) for at most a minute. Work still running then declines the install
+   unless it was forced. Nothing is swapped, and the daemon goes back to
+   `STAGED`.
+5. **`DRAINED`**, then an upgrade exit stops the runtime. `daemon start`
+   (`runSelfUpdating`) stops background processes and calls `ExecPending`:
+   swap, then exec with the same argv, environment and pid. If the swap fails,
+   the old binary is still in place, so the runtime starts again on it with
+   auto-update off for that process (`Disable`). An unsupervised daemon is never
+   left down.
+
+Every self-update wait reads `upgradeDrain.now`, so the tests
+(`upgrade_self_test.go`) drive the idle time and deadlines on a fake clock.
+
+Without auto-update, a person's daemon behaves as it did before: on a
+RestartRequested it reports `AWAITING_OWNER` and keeps serving. When its
+install is self-owned, its log and console notice add "run `reliant update`, or
+start the daemon with --auto-update".

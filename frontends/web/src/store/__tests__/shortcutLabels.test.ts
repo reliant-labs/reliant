@@ -14,7 +14,7 @@ import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { parseBinding } from "../../lib/keyboard/chord";
-import { shortcutLabel, withShortcut } from "../shortcutsStore";
+import { effectiveAliases, shortcutLabel, withShortcut } from "../shortcutsStore";
 import { defaultShortcuts } from "../shortcutsData.generated";
 
 const MAC_WEB = { isMac: true, isDesktop: false };
@@ -25,16 +25,14 @@ const label = (id: string, platform: typeof MAC_WEB, currentBinding: string | nu
   shortcutLabel({ ...defaultShortcuts[id], currentBinding }, platform);
 
 describe("shortcutLabel", () => {
-  it("shows the browser's binding in a browser tab", () => {
-    expect(label("newChat", MAC_WEB)).toBe("⌘⌥N");
-    expect(label("closeTab", MAC_WEB)).toBe("⌘K then X");
-    expect(label("nextFileTab", MAC_WEB)).toBe("⌘K then ]");
+  it("shows the same binding in a browser tab and in the desktop app", () => {
+    for (const platform of [MAC_WEB, MAC_DESKTOP]) {
+      expect(label("newChat", platform)).toBe("⌘⌥N");
+      expect(label("closeTab", platform)).toBe("⌘K then X");
+      expect(label("nextFileTab", platform)).toBe("⌘K then ]");
+      expect(label("quickFileOpen", platform)).toBe("⌘P");
+    }
     expect(label("newChat", PC_WEB)).toBe("Ctrl+Alt+N");
-  });
-
-  it("shows the desktop binding in the desktop app", () => {
-    expect(label("newChat", MAC_DESKTOP)).toBe("⌘T");
-    expect(label("closeTab", MAC_DESKTOP)).toBe("⌘W");
   });
 
   it("follows a remap, unless the browser would never deliver it", () => {
@@ -47,6 +45,48 @@ describe("shortcutLabel", () => {
   it("leaves the text alone for an unbound shortcut", () => {
     expect(withShortcut("New chat", "")).toBe("New chat");
     expect(withShortcut("New chat", "⌘⌥N")).toBe("New chat (⌘⌥N)");
+  });
+});
+
+describe("effectiveAliases", () => {
+  const aliases = (id: string, platform: typeof MAC_WEB, currentBinding: string | null = null) =>
+    effectiveAliases({ ...defaultShortcuts[id], currentBinding }, platform);
+
+  it("keeps the old desktop chords in the desktop app", () => {
+    expect(aliases("newChat", MAC_DESKTOP)).toEqual(["Cmd+T"]);
+    expect(aliases("closeTab", MAC_DESKTOP)).toEqual(["Cmd+W"]);
+    expect(aliases("reopenLastClosedFile", MAC_DESKTOP)).toEqual(["Cmd+Shift+T"]);
+  });
+
+  it("has none in a browser tab, where the browser keeps those chords", () => {
+    expect(aliases("newChat", MAC_WEB)).toEqual([]);
+    expect(aliases("closeTab", PC_WEB)).toEqual([]);
+  });
+
+  it("is replaced, with the binding, by a remap", () => {
+    expect(aliases("newChat", MAC_DESKTOP, "Cmd+Shift+Y")).toEqual([]);
+  });
+});
+
+describe("a remap stored before bindings were unified", () => {
+  // Overrides are stored per user, as one string per shortcut id, never per
+  // surface — so there is no stored web_binding to go stale. What a user
+  // recorded is still theirs, whichever chord it was.
+  it("keeps a remap onto a chord that used to be the browser's default", () => {
+    // Recorded in a tab when Quick File Open was Cmd+K P there.
+    expect(label("quickFileOpen", MAC_WEB, "Cmd+K P")).toBe("⌘K then P");
+    expect(label("quickFileOpen", MAC_DESKTOP, "Cmd+K P")).toBe("⌘K then P");
+  });
+
+  it("keeps a remap onto an old desktop default in the desktop app", () => {
+    // Recorded as Cmd+T: it is the user's binding, not an alias, so it stays.
+    expect(label("newChat", MAC_DESKTOP, "Cmd+T")).toBe("⌘T");
+    expect(effectiveAliases({ ...defaultShortcuts.newChat, currentBinding: "Cmd+T" }, MAC_DESKTOP)).toEqual([]);
+  });
+
+  it("falls back to the unified default in a tab when the remap is a chord the browser keeps", () => {
+    expect(label("closeTab", MAC_WEB, "Cmd+W")).toBe("⌘K then X");
+    expect(label("reopenLastClosedFile", PC_WEB, "Cmd+Shift+T")).toBe("Ctrl+K then Z");
   });
 });
 
@@ -101,10 +141,10 @@ function glyphToAuthored(glyphs: string): string {
   return [...mods, key].join("+");
 }
 
-/** The first chord of every binding in the registry, on a Mac, both surfaces. */
+/** The first chord of every binding and alias in the registry, on a Mac, both surfaces. */
 const REGISTRY_CHORDS = new Set(
   Object.values(defaultShortcuts).flatMap((shortcut) =>
-    [shortcut.defaultBinding, shortcut.defaultWebBinding]
+    [shortcut.defaultBinding, shortcut.defaultWebBinding, ...(shortcut.desktopAliases ?? [])]
       .filter(Boolean)
       .map((binding) => parseBinding(binding, true).split(" ")[0]),
   ),

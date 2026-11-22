@@ -40,6 +40,7 @@ import {
 import type { ComponentType, ReactNode } from "react";
 
 import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { changesUIEnabled } from "@/lib/changesFeature";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
@@ -356,15 +357,28 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
     }));
 }
 
-const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [...ANALYTICS_TABS.map(analyticsTabRow), ...registeredRows(ctx, "product-analytics")];
+/**
+ * Experiments: the project's Forge Changes (Forge/Experiments). Listed behind
+ * the web config's CHANGES_UI, as the console's own navs list it
+ * (ConsoleShell experimentsListed), and always while one of its pages is open.
+ */
+const experimentsRow = consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]);
+const experimentsShown = (ctx: NavCtx): boolean => changesUIEnabled() || pageIs("experiments", "experiment")(ctx);
+
+const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [
+  ...ANALYTICS_TABS.map(analyticsTabRow),
+  ...(experimentsShown(ctx) ? [experimentsRow] : []),
+  ...registeredRows(ctx, "product-analytics"),
+];
 
 /** The routes that are Analytics: its page, Events & metrics, the built-in hub's dashboards, the registered pages. */
 export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
   analyticsTabOf(ctx) !== null ||
   (ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key)) ||
+  pageIs("experiments", "experiment")(ctx) ||
   !!registeredEntryOf(ctx, "product-analytics");
 
-/** Analytics ▾: the built-in dashboards' tabs, Events & metrics, then registered rows (Experiments). */
+/** Analytics ▾: the built-in dashboards' tabs, Events & metrics, Experiments (CHANGES_UI), then registered rows. */
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",

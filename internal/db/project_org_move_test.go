@@ -77,7 +77,7 @@ func (f *moveFixture) run(id, chatID string, status WorkflowStatus) {
 
 func (f *moveFixture) share(kind core.ShareKind, id string) {
 	f.t.Helper()
-	changed, err := f.repo.ApplyShareChange(context.Background(), core.ShareChange{
+	changed, err := applyShareChange(context.Background(), f.repo, core.ShareChange{
 		Kind: kind, ResourceID: id, OrgID: moveSrc, OwnerUserID: moveOwner, ActorUserID: moveOwner, Action: core.ShareActionShare,
 	})
 	require.NoError(f.t, err)

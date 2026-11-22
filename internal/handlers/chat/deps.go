@@ -32,6 +32,14 @@ type OrgResolver interface {
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
 }
 
+// Questions lists a chat's open questions: by thread for a send that answers
+// one, and chat-wide for the run lifecycle's terminate. store.QuestionExtStore
+// satisfies it.
+type Questions interface {
+	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
+	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+}
+
 // Repository is everything the chat handlers read and write.
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's projects and chats that have
@@ -87,7 +95,6 @@ type Repository interface {
 	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
-	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 
 	// The agent mailbox: messages queued for a thread until it can take them.
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error

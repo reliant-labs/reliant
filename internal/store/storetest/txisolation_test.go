@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -84,7 +85,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// An upsert plus a stale-row delete; the 40001 retry is harmless
 		// (no effect outside the database).
 		{"Repo.ReplaceIntegrationAccess", serializable, func(ctx context.Context) error {
-			return p.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "", now, nil)
+			return store.ReplaceIntegrationAccess(ctx, p.Repo.ORM(), storetest.SeedUserID, "github", "", now, nil)
 		}},
 
 		// READ COMMITTED: correctness from row/advisory locks or a single
@@ -240,7 +241,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		p.Reset()
 		rollback := errors.New("roll the caller back")
 		err := p.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
-			if err := p.Repo.IntegrationWrites().CreateIntegrationWrite(ctx, &core.IntegrationWrite{
+			if err := writeledger.NewLedger(store.NewIntegrationWriteExtStore(p.Repo.ORM())).CreateIntegrationWrite(ctx, &core.IntegrationWrite{
 				ID: "iw-iso", UserID: "iso-user", ChatID: "iso-chat", Integration: "github", Action: "issue.comment",
 				Actor: core.IntegrationActorOwner, Scope: "github:acme/app", Target: "github:acme/app",
 			}); err != nil {
