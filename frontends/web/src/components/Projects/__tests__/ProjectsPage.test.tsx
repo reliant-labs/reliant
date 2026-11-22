@@ -6,7 +6,8 @@
  * the code" for an app-only row, the hosted-apps banners, and the designed
  * loading, error and empty states. In the one shell (U6): the Home of several
  * projects (the summary, with `?browse=1` to this list), Build an app, and the
- * daemonless home's Set up chats card.
+ * daemonless home's Set up chats card, and what a finished claim's landing
+ * (`?claimed=…&pausedSite=…&kept=…`) says.
  */
 
 import type { ReactNode } from "react";
@@ -33,6 +34,7 @@ const state = vi.hoisted(() => ({
   setup: "ready" as string,
   several: null as "all" | "many" | null,
   startBuilding: vi.fn(),
+  goToBilling: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -64,6 +66,7 @@ vi.mock("@/store/addProjectDialogStore", () => ({ openAddProject: state.openAddP
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
 vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => state.startBuilding }));
+vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: (from: string) => () => state.goToBilling(from) }));
 // The summary of several projects (the project shell's Home) has its own tests.
 vi.mock("../../Forge/Console/ProjectsOverview", () => ({ ProjectsOverview: () => null }));
 vi.mock("../../Layout/sidebar/shellProject", () => ({ useShellSeveral: () => ({ mode: state.several, rows: [] }) }));
@@ -302,5 +305,69 @@ describe("ProjectsBody's Set up chats card", () => {
     state.setup = setup;
     render(<ProjectsBody />);
     expect(screen.queryByTestId("set-up-chats-card")).toBeNull();
+  });
+});
+
+describe("the landing of a finished claim (?claimed=)", () => {
+  // jsdom has no layout, so no scrollIntoView; the claimed row scrolls itself into view.
+  const scrollIntoView = vi.fn();
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  it("says the app is yours now, highlights its row, and drops the params but keeps the filter", async () => {
+    state.search = { show: "apps", claimed: "shop" };
+    render(<ProjectsBody />);
+    expect(await screen.findByTestId("apps-claimed")).toHaveTextContent("shop is yours now");
+    expect(screen.queryByTestId("apps-claimed-paused")).toBeNull();
+    // Listed already, so nothing about it taking a moment.
+    expect(screen.getByTestId("apps-claimed")).not.toHaveTextContent(/take a moment/);
+    const rows = screen.getAllByTestId("projects-row");
+    expect(rows.filter((row) => row.getAttribute("data-highlighted") === "true").map((row) => row.getAttribute("data-row-key"))).toEqual(["shop"]);
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(state.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: ".", replace: true }));
+    const call = state.navigate.mock.calls.find(([arg]) => typeof arg?.search === "function" && "claimed" in arg.search({}));
+    expect(call).toBeDefined();
+    const [{ search: next }] = call as [{ search: (prev: object) => object }];
+    expect(next({ show: "apps", claimed: "shop", pausedSite: "blog", kept: "claimed" })).toEqual({
+      show: "apps",
+      claimed: undefined,
+      pausedSite: undefined,
+      kept: undefined,
+    });
+  });
+
+  it("highlights an app with no code here by its own row", async () => {
+    state.search = { show: "apps", claimed: "ledger" };
+    render(<ProjectsBody />);
+    await screen.findByTestId("apps-claimed");
+    const highlighted = screen.getAllByTestId("projects-row").filter((row) => row.getAttribute("data-highlighted") === "true");
+    expect(highlighted.map((row) => row.getAttribute("data-row-key"))).toEqual(["app:ledger"]);
+  });
+
+  it("says an app not listed yet can take a moment, and highlights nothing", async () => {
+    state.search = { show: "apps", claimed: "fresh" };
+    render(<ProjectsBody />);
+    expect(await screen.findByTestId("apps-claimed")).toHaveTextContent(/fresh is yours now\. It can take a moment to appear/);
+    expect(screen.getAllByTestId("projects-row").some((row) => row.hasAttribute("data-highlighted"))).toBe(false);
+  });
+
+  it.each([
+    ["claimed", /you chose free hosting for the site you claimed/i],
+    ["existing", /you kept free hosting where it was/i],
+  ] as const)("names the paused free site and offers billing (kept %s)", async (kept, said) => {
+    state.search = { show: "apps", claimed: "shop", pausedSite: "blog", kept };
+    render(<ProjectsBody />);
+    const note = await screen.findByTestId("apps-claimed-paused");
+    expect(note).toHaveTextContent(said);
+    expect(note).toHaveTextContent(/blog is paused/i);
+    fireEvent.click(within(note).getByRole("button", { name: "Review billing" }));
+    expect(state.goToBilling).toHaveBeenCalledWith("upgrade");
+  });
+
+  it("shows nothing without a claim", () => {
+    render(<ProjectsBody />);
+    expect(screen.queryByTestId("apps-claimed")).toBeNull();
+    expect(screen.getAllByTestId("projects-row").some((row) => row.hasAttribute("data-highlighted"))).toBe(false);
   });
 });
