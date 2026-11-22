@@ -3,6 +3,7 @@ package tools
 
 import (
 	"fmt"
+	"mime"
 	"path/filepath"
 	"strings"
 
@@ -65,6 +66,9 @@ type SaveAttachmentOutput struct {
 	// usually relative, so echoing back what it sent would tell it nothing; the
 	// resolved path is what it needs to reference the file afterwards.
 	SavedTo string `json:"saved_to"`
+	// Warning is set when save_to's extension names a different type than the
+	// stored content (extensionMismatchWarning). The file is written anyway.
+	Warning string `json:"warning,omitempty"`
 }
 
 // saveAttachmentTool copies stored attachment bytes onto the user's filesystem.
@@ -167,9 +171,68 @@ func (t *saveAttachmentTool) Execute(tc *rctx.ToolContext, params SaveAttachment
 		MimeType:     att.MimeType,
 		Size:         len(att.Content),
 		SavedTo:      path,
+		Warning:      extensionMismatchWarning(path, att.MimeType, att.Filename),
 	}
-	return WithResponseMetadata(NewTextResponse(fmt.Sprintf(
-		"Saved %s (%s, %d bytes) to %s", att.Filename, att.MimeType, len(att.Content), path)), output), nil
+	text := fmt.Sprintf("Saved %s (%s, %d bytes) to %s", att.Filename, att.MimeType, len(att.Content), path)
+	if output.Warning != "" {
+		text += "\n\nWarning: " + output.Warning
+	}
+	return WithResponseMetadata(NewTextResponse(text), output), nil
+}
+
+// extensionMismatchWarning reports when the destination's extension names a
+// different type than the stored bytes are — a PNG written to logo.jpg.
+//
+// It warns rather than refuses: the bytes are written unchanged either way,
+// and a mismatched name is sometimes deliberate. But a model that asked for
+// .jpg believes it has a JPEG, and a browser, bundler or image pipeline that
+// trusts the extension will mis-serve or reject it, with nothing pointing
+// back at this save. Silence here is how that went unnoticed.
+//
+// An extension the MIME table does not know, or a stored type that is not a
+// concrete MIME type, says nothing either way, so neither warns. Nor does
+// stored text: a text attachment saved as .md, .go or .csv is still text, and
+// which text type the table maps an extension to is not a mistake worth a
+// warning.
+func extensionMismatchWarning(savedTo, storedMIME, filename string) string {
+	ext := strings.ToLower(filepath.Ext(savedTo))
+	stored := baseMIME(storedMIME)
+	if ext == "" || stored == "" || stored == "application/octet-stream" || strings.HasPrefix(stored, "text/") {
+		return ""
+	}
+	implied := baseMIME(mime.TypeByExtension(ext))
+	if implied == "" || implied == "application/octet-stream" || implied == stored {
+		return ""
+	}
+	warning := fmt.Sprintf("the file content is %s, but %s names a %s file. The bytes were written unchanged, not converted",
+		stored, filepath.Base(savedTo), implied)
+	if want := strings.ToLower(filepath.Ext(filename)); want != "" && baseMIME(mime.TypeByExtension(want)) == stored {
+		warning += fmt.Sprintf("; save to a %s path instead if anything reads the extension", want)
+	} else {
+		warning += "; use an extension that matches " + stored + " if anything reads the extension"
+	}
+	return warning + "."
+}
+
+// mimeAliases maps non-standard spellings uploads arrive with to the type the
+// MIME table uses, so image/jpg saved as .jpg is not reported as a mismatch.
+var mimeAliases = map[string]string{
+	"image/jpg":   "image/jpeg",
+	"image/pjpeg": "image/jpeg",
+	"image/x-png": "image/png",
+}
+
+// baseMIME is a MIME type without its parameters, lower-cased, with known
+// aliases folded to their standard spelling.
+func baseMIME(t string) string {
+	if i := strings.IndexByte(t, ';'); i >= 0 {
+		t = t[:i]
+	}
+	t = strings.ToLower(strings.TrimSpace(t))
+	if canonical, ok := mimeAliases[t]; ok {
+		return canonical
+	}
+	return t
 }
 
 // callerUserID reads the caller from the request context, falling back to the

@@ -254,6 +254,10 @@ var daemonIdentityEnvVars = map[string]bool{
 	// an agent starts would otherwise declare them for its own machine row
 	// and join the host's pools.
 	"RELIANT_DAEMON_LABELS": true,
+	// The owner's opt-in to this daemon replacing its own binary (D7): a
+	// daemon an agent starts must not replace the binary on the owner's
+	// say-so given to another daemon.
+	"RELIANT_DAEMON_AUTO_UPDATE": true,
 }
 
 // withoutDaemonConnectionEnv drops the daemon's own connection settings

@@ -928,6 +928,14 @@ a box started with
 joins the pool "pipeline" as soon as it connects, with no one labelling it.
 RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
+--auto-update (RELIANT_DAEMON_AUTO_UPDATE) has the daemon install new signed
+releases by itself: it stages each one in the background and installs it at a
+quiet moment (no tool call or background process running, and no activity for
+ten minutes), restarting in place. Only a reliant nothing else owns does: one
+unpacked from a release archive into a directory you can write. The desktop
+app's, Homebrew's or a system package's is left to them, and the log says so.
+Off by default; 'reliant update' updates by hand.
+
 --attach <dir> links a checkout to Reliant once the daemon is connected: the
 folder becomes a project on this machine. When it is a checkout of an existing
 project's git remote (say, an app you just deployed), that project is attached
@@ -1075,6 +1083,16 @@ keeps running.
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
 
+			// A person's daemon: confirm or revert a swap `reliant update` or
+			// an auto-update made, and update itself when its owner opted in
+			// (--auto-update). A cloud machine's image is its version.
+			selfUpdater := daemonSelfUpdater(ctx, host.Managed(), dcfg.GetAutoUpdate())
+			var selfUpdate daemonruntime.SelfUpdate
+			var selfExec selfUpdateExec
+			if selfUpdater != nil {
+				selfUpdate, selfExec = selfUpdater, selfUpdater
+			}
+
 			// NOTE: the localhost OAuth helper is NOT started here. It is
 			// opened ON DEMAND by the `auth.open_oauth_helper` daemon command
 			// (internal/toolexec/daemonruntime/cmd_oauth_helper.go) when the
@@ -1089,23 +1107,26 @@ keeps running.
 				logging.Info("Starting tools-daemon in server mode",
 					"listen_port", listenPort, "data_dir", dataDir)
 
-				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					DataDirClaim:    claim,
-					StorageReaper:   storageReaperConfig(base, host.Managed()),
-					WorktreeReclaim: worktreeReclaimConfig(base),
-					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						ServerMode:    true,
-						ListenPort:    listenPort,
-						DataDir:       dataDir,
-						Name:          daemonName,
-						MachineLabels: machineLabels,
-						Verbose:       verbose,
-					},
-					Host:               host,
-					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
-					Guards:             daemonGuards(dcfg),
-					OAuthHelperOrigins: webOrigins,
-				})
+				err = runSelfUpdating(func() error {
+					return daemonruntime.Start(ctx, daemonruntime.StartOptions{
+						DataDirClaim:    claim,
+						StorageReaper:   storageReaperConfig(base, host.Managed()),
+						WorktreeReclaim: worktreeReclaimConfig(base),
+						BootstrapConfig: bootstrap.DaemonBootstrapConfig{
+							ServerMode:    true,
+							ListenPort:    listenPort,
+							DataDir:       dataDir,
+							Name:          daemonName,
+							MachineLabels: machineLabels,
+							Verbose:       verbose,
+						},
+						Host:               host,
+						ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
+						Guards:             daemonGuards(dcfg),
+						OAuthHelperOrigins: webOrigins,
+						SelfUpdate:         selfUpdate,
+					})
+				}, selfExec, killBackgroundForSwap)
 				if errors.Is(err, daemonruntime.ErrUpgradeExit) {
 					// Drained and exited to be restarted for an update; the
 					// error carries its own exit code (75).
@@ -1146,35 +1167,38 @@ keeps running.
 			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
-				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					DataDirClaim:    claim,
-					StorageReaper:   storageReaperConfig(base, host.Managed()),
-					WorktreeReclaim: worktreeReclaimConfig(base),
-					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						AuthToken: c.PAT,
-						GRPCURL:   daemonGRPCURL,
-						TLSMode:   parsedTLSMode,
-						DataDir:   dataDir,
-						Name:      daemonName,
-						// Declared on every registration; the server merges
-						// them into the machine's durable labels.
-						MachineLabels: machineLabels,
-						ServerURL:     conn.ServerURL,
-						// Per-instance identity, read from this instance's own
-						// data directory. Keyed by origin it was shared by
-						// every worktree on the machine, and the gateway —
-						// which trusts the asserted id verbatim — evicted one
-						// daemon on every registration.
-						DaemonID:   bootstrap.ReadDaemonID(dataDir),
-						ServerMode: false,
-						ListenPort: listenPort,
-						Verbose:    verbose,
-					},
-					Host:               host,
-					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
-					Guards:             daemonGuards(dcfg),
-					OAuthHelperOrigins: webOrigins,
-				})
+				return runSelfUpdating(func() error {
+					return daemonruntime.Start(ctx, daemonruntime.StartOptions{
+						DataDirClaim:    claim,
+						StorageReaper:   storageReaperConfig(base, host.Managed()),
+						WorktreeReclaim: worktreeReclaimConfig(base),
+						BootstrapConfig: bootstrap.DaemonBootstrapConfig{
+							AuthToken: c.PAT,
+							GRPCURL:   daemonGRPCURL,
+							TLSMode:   parsedTLSMode,
+							DataDir:   dataDir,
+							Name:      daemonName,
+							// Declared on every registration; the server merges
+							// them into the machine's durable labels.
+							MachineLabels: machineLabels,
+							ServerURL:     conn.ServerURL,
+							// Per-instance identity, read from this instance's own
+							// data directory. Keyed by origin it was shared by
+							// every worktree on the machine, and the gateway —
+							// which trusts the asserted id verbatim — evicted one
+							// daemon on every registration.
+							DaemonID:   bootstrap.ReadDaemonID(dataDir),
+							ServerMode: false,
+							ListenPort: listenPort,
+							Verbose:    verbose,
+						},
+						Host:               host,
+						ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
+						Guards:             daemonGuards(dcfg),
+						OAuthHelperOrigins: webOrigins,
+						SelfUpdate:         selfUpdate,
+					})
+				}, selfExec, killBackgroundForSwap)
 			}
 
 			if attachDir != "" {

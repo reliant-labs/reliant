@@ -553,7 +553,7 @@ func (*RemoveClusterResponse) Descriptor() ([]byte, []int) {
 // ConnectClusterRequest declares a cluster by address.
 //
 // ADDRESSED BY NAME, NOT BY ID, and that is what makes it idempotent in the
-// way `forge cluster connect <name>` needs. A caller running from a checkout
+// way `forge cloud cluster connect <name>` needs. A caller running from a checkout
 // knows the name it declared; it does not know the uuid we minted, and
 // requiring one would mean every connect is preceded by a list.
 type ConnectClusterRequest struct {
@@ -577,7 +577,7 @@ type ConnectClusterRequest struct {
 	// the alternative is sending a standing credential to whatever answers that
 	// address.
 	CaPem string `protobuf:"bytes,4,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
-	// The scoped ServiceAccount token `forge cluster connect` minted in the
+	// The scoped ServiceAccount token `forge cloud cluster connect` minted in the
 	// target cluster. REQUIRED: a request without one is InvalidArgument.
 	//
 	// WRITE-ONLY. It is NEVER RETURNED by any RPC on this service — there is no
@@ -597,7 +597,7 @@ type ConnectClusterRequest struct {
 	// projected token an External Secrets Operator in the cluster logs in with.
 	// See ClusterIssuerRegistration.
 	//
-	// PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+	// PRESENCE IS THE SWITCH, because an older `forge cloud cluster connect` sends no
 	// issuer and re-running it must not silently withdraw one:
 	//   absent          the registration is left as it is;
 	//   present         it is replaced by this one;

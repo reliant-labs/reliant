@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	task "github.com/reliant-labs/reliant/internal/handlers/task"
 )
 
@@ -32,33 +32,33 @@ func TestTaskRPCs_RepositoryFailureCodes(t *testing.T) {
 	} {
 		t.Run("GetTask: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newTaskRepo()
-			repo.GetTaskFunc = func(context.Context, string) (*db.Task, error) { return nil, tc.err }
-			svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
+			repo := newTaskMocks()
+			repo.Tasks.GetTaskFunc = func(context.Context, string) (*core.Task, error) { return nil, tc.err }
+			svc := task.NewTestTask(t, task.WithTaskDeps(repo.Deps()))
 			_, err := svc.GetTask(task.AuthedContext(t), connect.NewRequest(&pb.GetTaskRequest{TaskId: ownTaskID}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListTasks, reading the plan: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newTaskRepo()
-			repo.GetPlanFunc = func(context.Context, string) (*db.Plan, error) { return nil, tc.err }
-			svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
+			repo := newTaskMocks()
+			repo.Plans.GetPlanFunc = func(context.Context, string) (*core.Plan, error) { return nil, tc.err }
+			svc := task.NewTestTask(t, task.WithTaskDeps(repo.Deps()))
 			planID := ownPlanID
 			_, err := svc.ListTasks(task.AuthedContext(t), connect.NewRequest(&pb.ListTasksRequest{PlanId: &planID}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("DeleteTask, writing: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			repo := newTaskRepo()
-			repo.DeleteTaskFunc = func(context.Context, string) error { return tc.err }
-			svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
+			repo := newTaskMocks()
+			repo.Tasks.RemoveTaskFunc = func(context.Context, string) error { return tc.err }
+			svc := task.NewTestTask(t, task.WithTaskDeps(repo.Deps()))
 			_, err := svc.DeleteTask(task.AuthedContext(t), connect.NewRequest(&pb.DeleteTaskRequest{TaskId: ownTaskID}))
 			requireClientReads(t, err, tc.want)
 		})
 	}
 
 	// A missing task is still NotFound: the store says so.
-	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: newTaskRepo()}))
+	svc := task.NewTestTask(t, task.WithTaskDeps(newTaskMocks().Deps()))
 	_, err := svc.GetTask(task.AuthedContext(t), connect.NewRequest(&pb.GetTaskRequest{TaskId: missingID}))
 	requireClientReads(t, err, connect.CodeNotFound)
 }
@@ -67,7 +67,7 @@ func TestTaskRPCs_RepositoryFailureCodes(t *testing.T) {
 func TestTaskRPCs_EmptyIDIsInvalidArgument(t *testing.T) {
 	t.Parallel()
 
-	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: newTaskRepo()}))
+	svc := task.NewTestTask(t, task.WithTaskDeps(newTaskMocks().Deps()))
 	ctx := task.AuthedContext(t)
 
 	_, err := svc.GetTask(ctx, connect.NewRequest(&pb.GetTaskRequest{}))

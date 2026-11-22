@@ -25,7 +25,7 @@ import (
 // and it can only release that hold on what this machine tells it. A reply is
 // not enough: the server stops waiting after its timeout while the delete goes
 // on, a retry can arrive before the first delivery, and the daemon can
-// restart in the middle. So a request that carries an op_id is run as a
+// restart in the middle. So every request carries an op_id and is run as a
 // durable operation:
 //
 //   - The op is journaled as running (fsynced, under the data dir) BEFORE
@@ -39,8 +39,6 @@ import (
 //     still in flight can never run after the server was told it did not.
 //   - An op journaled running by a daemon that is gone (a restart) is
 //     "interrupted": nothing is running it any more.
-//
-// A request without an op_id (an older server) runs exactly as before.
 
 // checkoutTeardownDirName is the journal's directory under the data dir.
 const checkoutTeardownDirName = "checkout-teardowns"

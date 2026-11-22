@@ -74,8 +74,7 @@ const ReliantProviderKeyName = "reliant-provider"
 // (the per-(person, org) key, org-provider-accounts P10). control-plane rotates
 // a person's tokens per (org, name), so one name serves every org; it differs
 // from ReliantProviderKeyName so that minting in the person's default org never
-// revokes the org-less key, which a chat of no org (and an older release) still
-// spends.
+// revokes the org-less key, which a chat of no org still spends.
 const ReliantOrgProviderKeyName = "reliant-provider-org"
 
 // LLMKey is a freshly minted LLM gateway key: an `rlat_` access token with

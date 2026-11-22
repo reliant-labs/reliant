@@ -950,7 +950,7 @@ func triggerStateLabel(t *reliantv1.Trigger) string {
 }
 
 // actingIdentityLabel says whose name a trigger's GitHub writes carry, in the
-// words --acting-as takes; "-" when the server sent none (an older server).
+// words --acting-as takes; "-" when it is unset.
 func actingIdentityLabel(a reliantv1.ActingIdentity) string {
 	switch a {
 	case reliantv1.ActingIdentity_ACTING_IDENTITY_APP:

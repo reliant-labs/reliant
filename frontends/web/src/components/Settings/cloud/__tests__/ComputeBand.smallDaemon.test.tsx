@@ -8,7 +8,7 @@ import { ComputeBand, type ComputeBandDimension } from "../overview/ComputeBand"
  * the §6.1 fields, the compute card leads with "N small-daemon-hours left",
  * then the burn line and "runs out ~…", stamped "as of HH:MM". Each part is
  * absent when it has nothing true to say, and the whole reading is absent
- * from an older server — never a fabricated or zero value.
+ * when the server sends none — never a fabricated or zero value.
  *
  * FAILS ON main: ComputeBand had no small-daemon reading at all.
  */
@@ -65,7 +65,7 @@ describe("ComputeBand — small-daemon-hours (J)", () => {
     expect(screen.queryByTestId("compute-sdh-burn")).not.toBeInTheDocument();
   });
 
-  it("renders no small-daemon reading from an older server", () => {
+  it("renders no small-daemon reading when the server sends none", () => {
     band({});
     expect(screen.queryByTestId("compute-sdh-headline")).not.toBeInTheDocument();
   });

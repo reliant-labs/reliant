@@ -24,7 +24,7 @@ func TestAttachmentTenantIsolation(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestAttachment(t, WithAttachmentDeps(Deps{Repo: repo}))
+	svc := NewTestAttachment(t, WithAttachmentDeps(RealDeps(repo)))
 
 	// An attachment of its own per case, so the delete cases do not change
 	// what a later case reads.

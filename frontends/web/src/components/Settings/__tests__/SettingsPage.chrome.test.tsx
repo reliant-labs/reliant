@@ -40,6 +40,7 @@ vi.mock("../SettingsContent", () => ({
 }));
 
 import { SettingsPage } from "../SettingsPage";
+import { ShellFrameContext } from "../../Layout/shell/shellFrame";
 
 let resize: ResizeObserverCallback;
 beforeEach(() => {
@@ -182,5 +183,25 @@ describe("settings navigation chrome", () => {
     view.rerender(<SettingsPage />);
     expect(sidebar.className).toContain("w-16");
     expect(sidebar.firstElementChild).toBe(header);
+  });
+
+  // Inside the one shell (U6): the shell's nav is the way out and holds the
+  // org switcher, so Settings keeps only its section list beside the section.
+  it("inside the one shell, drops its exit, org switcher and its own section column (the shell's nav drills into them)", async () => {
+    state.isElectron = true;
+    state.isMac = true;
+    render(
+      <ShellFrameContext.Provider value={{ inShell: true, navDocked: true }}>
+        <SettingsPage />
+      </ShellFrameContext.Provider>,
+    );
+    await screen.findByTestId("settings-content");
+    expect(screen.queryByRole("button", { name: "Close Settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to app" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch organization" })).toBeNull();
+    // No second column: the sections are the shell's Settings drill-in (U6c).
+    expect(screen.queryByRole("complementary", { name: "Settings" })).toBeNull();
+    expect(screen.getByTestId("settings-header")).toHaveTextContent("Settings");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });

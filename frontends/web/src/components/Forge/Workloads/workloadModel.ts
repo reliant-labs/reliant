@@ -616,8 +616,14 @@ export function workloadChange(row: Pick<WorkloadReleaseRow, "version" | "previo
   if (!comparison) return null;
   const objects = comparison.objects;
   if (objects.state !== "compared") return { kind: "not-compared", detail: objects.detail };
+  if (objects.workload && objects.workload !== workload) {
+    return { kind: "not-compared", detail: "The comparison names a different workload." };
+  }
   const deltas = objects.deltas.filter((d) => deltaOfWorkload(d, workload));
-  if (deltas.length === 0) return { kind: "unchanged", unchanged: objects.workload ? objects.unchanged : 0 };
+  if (deltas.length === 0) {
+    const scoped = objects.workload === workload && objects.deltas.length === 0;
+    return { kind: "unchanged", unchanged: scoped ? objects.unchanged : 0 };
+  }
   const image = deltas.flatMap((d) => d.images)[0] ?? null;
   return {
     kind: "changed",

@@ -46,6 +46,7 @@ Use `--non-interactive` when something else owns sign-in (this is how the deskto
 |------|---------|--------------|
 | `--name` | `<instance-id>@<hostname>` | The friendly name shown in the app |
 | `--label` | | A durable machine label `key=value` (repeatable, or comma-separated; or `RELIANT_DAEMON_LABELS`). Merged into the machine's labels on every connect, so `--label pool=<name>` joins that machine pool ([Run a machine](/cli/run-a-machine#join-a-machine-pool-when-it-starts)) |
+| `--auto-update` | off | Install new signed releases by itself at quiet moments, restarting in place (or `RELIANT_DAEMON_AUTO_UPDATE`). Only a `reliant` installed from a release archive into a directory you can write; see [Keep it up to date](/cli/run-a-machine#7-keep-it-up-to-date) |
 | `--token` | off | Read an access token from stdin instead of pairing |
 | `--non-interactive` | off | Never open a browser or run login; wait for credentials on disk |
 | `--account` | | Which account this daemon runs as, by user id, when several accounts share one computer. `reliant auth status` prints yours on its `Account:` line (a login made by an older release says `not recorded`; log in again to record it). See [Run several daemons on one computer](/guides/machines/run-several-daemons-one-computer) |

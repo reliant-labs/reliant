@@ -2,7 +2,7 @@
 /**
  * The browser-reserved table against what Chromium actually withholds.
  *
- * bindings.test.ts refuses a web default the table calls hard-reserved — so a
+ * bindings.test.ts refuses a default the table calls hard-reserved — so a
  * gap in the table is a shortcut that ships dead. That is how Cmd+Shift+[ / ]
  * (next/previous file tab) went out: Chrome on macOS binds them to "select
  * next/previous tab", a reserved command, and the page never sees them.
@@ -63,7 +63,9 @@ const MAC_DELIVERED = [
   "Cmd+L", // IDC_FOCUS_LOCATION
   "Cmd+F", // IDC_FIND
   "Cmd+,", // IDC_OPTIONS
-  "Cmd+Alt+N", // IDC_NEW_SPLIT_TAB — Reliant's new chat in a browser
+  "Cmd+Alt+N", // IDC_NEW_SPLIT_TAB — Reliant's new chat
+  "Cmd+P", // IDC_PRINT — quick file open
+  "Cmd+O", // IDC_OPEN_FILE — add project
   "Cmd+Alt+B", // IDC_SHOW_BOOKMARK_MANAGER — toggle chat sidebar
   "Cmd+Shift+B", // IDC_SHOW_BOOKMARK_BAR — focus right sidebar
   "Cmd+Shift+J", // IDC_SHOW_DOWNLOADS — new terminal

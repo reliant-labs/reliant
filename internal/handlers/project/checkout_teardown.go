@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -68,11 +67,9 @@ func (m teardownMachine) Send(ctx context.Context, commandType string, payload, 
 // to send, or done=true when a pending op it would have retried turns out to
 // have finished (nothing is to be sent). A pending op of the same kind is a
 // retry; one of another kind blocks this teardown. Either way the machine is
-// asked how the pending op ended BEFORE anything is sent: an older daemon
-// ignores op ids, so resending to it would start a second delete beside a
-// first that may still be running, and it is refused instead until the op's
-// grace has passed. A daemon that knows ids answers from its journal, and
-// resending to it only waits for the op it already has.
+// asked how the pending op ended BEFORE anything is sent. The daemon answers
+// from its journal, and resending to it only waits for the op it already has;
+// a daemon too old to know ids is refused until it is updated.
 func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.Project, pd *core.ProjectDaemon, daemonID, kind, machine string) (op *db.CheckoutTeardown, done bool, err error) {
 	before := "removing the project from that machine"
 	if kind == db.CheckoutTeardownReclone {
@@ -97,7 +94,7 @@ func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.
 		default:
 			return op, false, nil
 		}
-		settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, pending, time.Now())
+		settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, pending)
 		if qerr != nil {
 			return nil, false, s.unsettledRefusal(pending, project, machine, qerr)
 		}
@@ -122,13 +119,9 @@ func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.
 // whose outcome the machine could not (cause) or did not yet give.
 func (s *Service) unsettledRefusal(pending *db.CheckoutTeardown, project *db.Project, machine string, cause error) error {
 	what := fmt.Sprintf("a %s of %q on %s", pending.Kind, project.Name, machine)
-	var legacy *checkoutteardown.LegacyPendingError
 	switch {
-	case errors.As(cause, &legacy):
-		return svcerr.WithCause(svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
-			"%s was sent to a machine whose Reliant is too old to confirm it finished, so nothing more is sent to it "+
-				"until %s; try again then, or as soon as the machine is updated",
-			what, legacy.Until.UTC().Format("15:04 MST"))), svcerr.ClassUser), cause)
+	case errors.Is(cause, checkoutteardown.ErrMachineOutdated):
+		return outdatedRefusal(what, cause)
 	case cause != nil && daemonerr.Unreachable(cause):
 		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
 			"%s has not been confirmed finished and the machine is offline; bring it online and try again", what)), svcerr.ClassUser), cause)
@@ -140,9 +133,21 @@ func (s *Service) unsettledRefusal(pending *db.CheckoutTeardown, project *db.Pro
 		"%s has not finished yet; try again once it has", what)), svcerr.ClassUser)
 }
 
+// outdatedRefusal refuses a teardown on a machine whose Reliant predates
+// acknowledged teardowns: it cannot say how what ended, so nothing more is
+// sent until it is updated (its first status answer then settles the op).
+func outdatedRefusal(what string, cause error) error {
+	err := svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
+		"%s was sent to a machine whose Reliant is too old to confirm it finished; update Reliant on that machine, then try again",
+		what)), svcerr.ClassUser)
+	if cause == nil {
+		return err
+	}
+	return svcerr.WithCause(err, cause)
+}
+
 // teardownReply is the part of a git.remove / git.reclone reply the settle
-// reads: the old fields every daemon sends, and the acknowledgement a daemon
-// that knows op ids adds.
+// reads: the outcome and the op's acknowledgement.
 type teardownReply struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
@@ -163,8 +168,8 @@ func (s *Service) settleTeardown(ctx context.Context, userID string, op *db.Chec
 		// first delivery runs on. So the op's own status is asked, and only
 		// an answer naming the op settles it (fenced: it never ran and now
 		// never will). A daemon too old to know op ids answers that with
-		// "unknown command"; for it, as before, the reported failure is
-		// its synchronous outcome. Every other failure — unreachable, a
+		// "unknown command" and is refused until it is updated. Every
+		// other failure — unreachable, a
 		// timeout, a dropped connection, the caller going away, an
 		// unreadable reply, a status query that is refused too — says
 		// nothing about whether the machine is deleting, so the op stays
@@ -189,18 +194,12 @@ func (s *Service) settleTeardown(ctx context.Context, userID string, op *db.Chec
 			what)), svcerr.ClassUser), sendErr)
 	}
 
-	var settled *db.CheckoutTeardown
-	var err error
-	if reply.Acknowledged() {
-		settled, err = checkoutteardown.Settle(ctx, s.deps.Repo, op, reply.Ack)
-	} else {
-		// A daemon from before op ids: its reply is the outcome.
-		state := db.CheckoutTeardownDone
-		if !reply.Success {
-			state = db.CheckoutTeardownFailed
-		}
-		settled, err = s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, state, reply.Error)
+	if !reply.Acknowledged() {
+		// A daemon from before op ids: the op stays pending until it is
+		// updated and says how it ended.
+		return outdatedRefusal(what, nil)
 	}
+	settled, err := checkoutteardown.Settle(ctx, s.deps.Repo, op, reply.Ack)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
 	}
@@ -225,16 +224,10 @@ func (s *Service) settleTeardown(ctx context.Context, userID string, op *db.Chec
 // failure the daemon reported (text), from the op's status — see
 // settleTeardown.
 func (s *Service) settleReportedFailure(ctx context.Context, m teardownMachine, op *db.CheckoutTeardown, what, text string, sendErr error) error {
-	settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, op, time.Now())
-	var legacy *checkoutteardown.LegacyPendingError
+	settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, op)
 	switch {
-	case errors.As(qerr, &legacy):
-		// An older daemon: the failure it reported is how its synchronous
-		// attempt ended.
-		if _, err := s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownFailed, text); err != nil {
-			return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
-		}
-		return daemonerr.Error(teardownVerb(op.Kind), sendErr)
+	case errors.Is(qerr, checkoutteardown.ErrMachineOutdated):
+		return outdatedRefusal(what, sendErr)
 	case qerr != nil, settled.State == db.CheckoutTeardownPending:
 		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
 			"%s was refused by the machine (%s), but the machine has not said how the operation itself ended; "+

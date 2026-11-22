@@ -13,7 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { FIXTURE_PROJECT } from "../fixtures";
-import { VulnerabilitiesView } from "../VulnerabilitiesPage";
+import { VulnerabilitiesView, type VulnerabilitiesViewProps } from "../VulnerabilitiesPage";
 import type { VulnSearch } from "../vulnModel";
 
 export function renderWith(api: VulnerabilityApi, children: ReactNode) {
@@ -25,7 +25,10 @@ export function renderWith(api: VulnerabilityApi, children: ReactNode) {
   );
 }
 
-export function renderVulnerabilities(api: VulnerabilityApi, { environmentId, search: initial = {} }: { environmentId?: string; search?: VulnSearch } = {}) {
+export function renderVulnerabilities(
+  api: VulnerabilityApi,
+  { environmentId, search: initial = {}, patch }: { environmentId?: string; search?: VulnSearch; patch?: VulnerabilitiesViewProps["patch"] } = {}
+) {
   let current = initial;
   let set: (next: VulnSearch) => void = () => undefined;
   function Harness() {
@@ -39,6 +42,7 @@ export function renderVulnerabilities(api: VulnerabilityApi, { environmentId, se
         onSearch={setSearch}
         advisoryHref={(id) => `/forge/p/shop/security/vulnerabilities/${id}`}
         sbomsHref={(release) => `/forge/p/shop/security/sboms${release ? `?release=${release}` : ""}`}
+        patch={patch}
       />
     );
   }

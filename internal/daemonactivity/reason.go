@@ -149,10 +149,11 @@ var userActionCommands = map[string]bool{
 
 	"localmodels.set_endpoints": true,
 
-	"mcp.call_tool":      true,
-	"mcp.install_bundle": true,
-	"mcp.manage_server":  true,
-	"mcp.write_config":   true,
+	"mcp.call_tool":            true,
+	"mcp.install_bundle":       true,
+	"mcp.install_skill_bundle": true,
+	"mcp.manage_server":        true,
+	"mcp.write_config":         true,
 
 	"project.init_files":    true,
 	"project.init_git_repo": true,
