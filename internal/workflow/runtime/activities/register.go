@@ -246,16 +246,22 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// WORKFLOW MANAGEMENT ACTIVITIES
 	// ========================================================================
 
+	var runRecords handlers.RunRecords
+	var checkpoints handlers.WorkflowCheckpointStore
+	if deps.Repo != nil {
+		runRecords = handlers.NewRunRecords(deps.Repo.ORM())
+		checkpoints = store.NewWorkflowCheckpointExtStore(deps.Repo.ORM())
+	}
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo, approvals))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))

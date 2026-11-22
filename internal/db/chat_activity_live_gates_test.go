@@ -278,7 +278,7 @@ func TestInboxPending_DropsGatesOfFinishedAskingRuns(t *testing.T) {
 	c.setStatus("sa-done", Completed())
 	c.setStatus("sa-failed", Failed())
 
-	items, err := c.repo.ListInboxPending(context.Background(), "test-user")
+	items, err := store.ListInboxPending(context.Background(), c.repo.ORM(), "test-user")
 	if err != nil {
 		t.Fatalf("ListInboxPending: %v", err)
 	}

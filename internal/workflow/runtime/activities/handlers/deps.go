@@ -444,8 +444,54 @@ type ValidateThreadOwnershipStore interface {
 }
 
 // WorkflowCheckpointStore is what WorkflowCheckpointActivity writes.
+// store.WorkflowCheckpointExtStore satisfies it.
 type WorkflowCheckpointStore interface {
-	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *db.WorkflowCheckpoint) error
+	SaveWorkflowCheckpoint(ctx context.Context, cp *core.WorkflowCheckpoint) error
+}
+
+// WorkflowCheckpointDeps is what NewWorkflowCheckpointActivity takes.
+type WorkflowCheckpointDeps struct {
+	Checkpoints WorkflowCheckpointStore
+}
+
+// RunRecords is what WorkflowStatusActivity records about a run: how it ended
+// on its row and on the launch event of the chat, the node whose failure the
+// run handled, and the run id its chat is executing. The methods are those of
+// the generated ext stores (see NewRunRecords); each takes the transaction
+// the ctx carries.
+type RunRecords interface {
+	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowFailureDetail(ctx context.Context, id string, detail string) error
+	FirstHandledNodeFailure(ctx context.Context, workflowID string, runID string, since time.Time) (*store.HandledNodeFailure, error)
+	MarkDeclaredFailureNode(ctx context.Context, workflowID string, nodeID string) (bool, error)
+	SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error
+	SetLaunchEventRunOutcome(ctx context.Context, chatID string, outcome string) error
+	SetLaunchEventRunFailureDetail(ctx context.Context, chatID string, detail string) error
+	SetChatRunID(ctx context.Context, chatID string, workflowID string, runID string) (bool, error)
+}
+
+// WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
+type WorkflowStatusDeps struct {
+	Repo WorkflowStatusStore
+	Runs RunRecords
+}
+
+type runRecords struct {
+	store.WorkflowExtStore
+	store.StepExecutionExtStore
+	store.TriggerEventExtStore
+	store.ChatExtStore
+}
+
+// NewRunRecords is the RunRecords over the generated ext stores of db.
+func NewRunRecords(db orm.Context) RunRecords {
+	return runRecords{
+		WorkflowExtStore:      store.NewWorkflowExtStore(db),
+		StepExecutionExtStore: store.NewStepExecutionExtStore(db),
+		TriggerEventExtStore:  store.NewTriggerEventExtStore(db),
+		ChatExtStore:          store.NewChatExtStore(db),
+	}
 }
 
 // WorkflowStatusStore is what WorkflowStatusActivity reads and writes: the run
@@ -455,8 +501,6 @@ type WorkflowCheckpointStore interface {
 type WorkflowStatusStore interface {
 	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
-	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
@@ -465,11 +509,6 @@ type WorkflowStatusStore interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
-	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
-	SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error
-	FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*db.HandledNodeFailure, error)
-	SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error
-	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
@@ -480,11 +519,9 @@ type WorkflowStatusStore interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
-	SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error
 	threads.Repository
 	runevents.Store
 	ChatTransitioner

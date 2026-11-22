@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -62,7 +64,7 @@ func automation(id, ref, project string) *core.Trigger {
 
 func deleteFlow(t *testing.T, store *automationsStore, r *retirer, name string) (*connect.Response[pb.DeleteWorkflowResponse], error) {
 	t.Helper()
-	deps := workflow.Deps{Repo: store}
+	deps := workflow.Deps{Repo: store, Projects: projectaccesstest.For(store)}
 	if r != nil {
 		deps.Automations = r
 	}

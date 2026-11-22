@@ -13,7 +13,6 @@ import (
 // Repository is the slice of *db.Repo the mcp handlers use.
 type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)

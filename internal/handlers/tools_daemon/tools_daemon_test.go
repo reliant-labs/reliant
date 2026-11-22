@@ -13,13 +13,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
-	"github.com/stretchr/testify/require"
 )
 
 // newTestService builds the gateway service over repo as the daemon-gateway
@@ -27,15 +28,32 @@ import (
 // repo exercises the in-memory routing alone.
 func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
 	var co MachineCheckouts = &MockMachineCheckouts{}
-	switch {
-	case len(checkouts) > 0:
-		co = checkouts[0]
-	default:
-		if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
-			co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
-		}
+	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo}
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		// A real repository also gets the stores over its database, as the
+		// composition root wires them; a fake gets none, so the writes it
+		// would observe go through newTestServiceWithLeases.
+		co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
+		deps.Attachments, deps.LocalModels = realLeases(r)
 	}
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Checkouts: co})
+	if len(checkouts) > 0 {
+		co = checkouts[0]
+	}
+	deps.Checkouts = co
+	return newService(deps)
+}
+
+// newTestServiceWithLeases is newTestService with the lease and inventory
+// roles wired explicitly (a nil role leaves its writes off, as in production
+// without a database).
+func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalModels) *Service {
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}})
+}
+
+// realLeases is the generated stores over a real database: what the composition
+// root hands the gateway.
+func realLeases(repo interface{ ORM() *orm.Client }) (Attachments, LocalModels) {
+	return store.NewDaemonAttachmentExtStore(repo.ORM()), store.NewDaemonExtStore(repo.ORM())
 }
 
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {

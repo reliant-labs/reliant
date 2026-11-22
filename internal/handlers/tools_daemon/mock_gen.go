@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=edd5d268243e0b49c1c13de8a1d662d408fafd448b02a22e79f4bbfb6b959581
+// forge:hash=c9b422e0bed7ddaa1eaab1895019a7d4b13d61b0099d7ca7a5f53f24020e8a38
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -33,13 +33,7 @@ type MockRepository struct {
 	MergeDeclaredDaemonLabelsFunc               func(context.Context, string, string, bool, map[string]string, int) (bool, error)
 	GetDaemonStorageStateFunc                   func(context.Context, string) (string, error)
 	SetDaemonStorageStateFunc                   func(context.Context, string, string) error
-	SetDaemonLocalModelsFunc                    func(context.Context, string, string) error
 	UpsertDaemonAttachmentFunc                  func(context.Context, *db.DaemonAttachment) error
-	RenewDaemonAttachmentFunc                   func(context.Context, *db.DaemonAttachment) (bool, error)
-	ReleaseDaemonAttachmentFunc                 func(context.Context, string, time.Time) error
-	UpdateDaemonAttachmentPortsFunc             func(context.Context, string, []uint32) error
-	UpdateDaemonAttachmentMemoryFunc            func(context.Context, string, int64, int64, bool) error
-	UpdateDaemonAttachmentHealthFunc            func(context.Context, string, db.MachineHealth) error
 	GetProjectByPathAndUserInScopeFunc          func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
 	GetProjectWithUserCheckFunc                 func(context.Context, string, string) (*db.Project, error)
 	CreateProjectFunc                           func(context.Context, *db.Project) error
@@ -109,15 +103,6 @@ func (m *MockRepository) SetDaemonStorageState(ctx context.Context, daemonID str
 	return contractkit.MockNotSet("MockRepository", "SetDaemonStorageState")
 }
 
-// SetDaemonLocalModels records the call and delegates to SetDaemonLocalModelsFunc when set.
-func (m *MockRepository) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
-	m.Recorder.Record("SetDaemonLocalModels", ctx, daemonID, inventoryJSON)
-	if m.SetDaemonLocalModelsFunc != nil {
-		return m.SetDaemonLocalModelsFunc(ctx, daemonID, inventoryJSON)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetDaemonLocalModels")
-}
-
 // UpsertDaemonAttachment records the call and delegates to UpsertDaemonAttachmentFunc when set.
 func (m *MockRepository) UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error {
 	m.Recorder.Record("UpsertDaemonAttachment", ctx, att)
@@ -125,51 +110,6 @@ func (m *MockRepository) UpsertDaemonAttachment(ctx context.Context, att *db.Dae
 		return m.UpsertDaemonAttachmentFunc(ctx, att)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpsertDaemonAttachment")
-}
-
-// RenewDaemonAttachment records the call and delegates to RenewDaemonAttachmentFunc when set.
-func (m *MockRepository) RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (bool, error) {
-	m.Recorder.Record("RenewDaemonAttachment", ctx, att)
-	if m.RenewDaemonAttachmentFunc != nil {
-		return m.RenewDaemonAttachmentFunc(ctx, att)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "RenewDaemonAttachment")
-}
-
-// ReleaseDaemonAttachment records the call and delegates to ReleaseDaemonAttachmentFunc when set.
-func (m *MockRepository) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
-	m.Recorder.Record("ReleaseDaemonAttachment", ctx, daemonID, attachedAt)
-	if m.ReleaseDaemonAttachmentFunc != nil {
-		return m.ReleaseDaemonAttachmentFunc(ctx, daemonID, attachedAt)
-	}
-	return contractkit.MockNotSet("MockRepository", "ReleaseDaemonAttachment")
-}
-
-// UpdateDaemonAttachmentPorts records the call and delegates to UpdateDaemonAttachmentPortsFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
-	m.Recorder.Record("UpdateDaemonAttachmentPorts", ctx, daemonID, ports)
-	if m.UpdateDaemonAttachmentPortsFunc != nil {
-		return m.UpdateDaemonAttachmentPortsFunc(ctx, daemonID, ports)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentPorts")
-}
-
-// UpdateDaemonAttachmentMemory records the call and delegates to UpdateDaemonAttachmentMemoryFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes int64, limitBytes int64, pressure bool) error {
-	m.Recorder.Record("UpdateDaemonAttachmentMemory", ctx, daemonID, usedBytes, limitBytes, pressure)
-	if m.UpdateDaemonAttachmentMemoryFunc != nil {
-		return m.UpdateDaemonAttachmentMemoryFunc(ctx, daemonID, usedBytes, limitBytes, pressure)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentMemory")
-}
-
-// UpdateDaemonAttachmentHealth records the call and delegates to UpdateDaemonAttachmentHealthFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health db.MachineHealth) error {
-	m.Recorder.Record("UpdateDaemonAttachmentHealth", ctx, daemonID, health)
-	if m.UpdateDaemonAttachmentHealthFunc != nil {
-		return m.UpdateDaemonAttachmentHealthFunc(ctx, daemonID, health)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentHealth")
 }
 
 // GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
@@ -706,3 +646,95 @@ func (m *MockProjectReconcileRepo) SetRepoForgeApps(ctx context.Context, repoID 
 
 // Compile-time check.
 var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
+
+// forge:section MockAttachments
+// forge:hash=d8c7a3681cf19751cdd2cf89f7f14fb7d7bfec32e75b729d5186f3b8427942ed
+
+// MockAttachments is a test mock for the Attachments interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAttachments.<Method>Func not set" error.
+type MockAttachments struct {
+	contractkit.Recorder
+	RenewDaemonAttachmentFunc     func(context.Context, *core.DaemonAttachment) (bool, error)
+	ReleaseDaemonAttachmentFunc   func(context.Context, string, time.Time) error
+	SetDaemonAttachmentPortsFunc  func(context.Context, string, []uint32) error
+	SetDaemonAttachmentMemoryFunc func(context.Context, string, int64, int64, bool) error
+	SetDaemonAttachmentHealthFunc func(context.Context, string, core.MachineHealth) error
+}
+
+// RenewDaemonAttachment records the call and delegates to RenewDaemonAttachmentFunc when set.
+func (m *MockAttachments) RenewDaemonAttachment(ctx context.Context, att *core.DaemonAttachment) (bool, error) {
+	m.Recorder.Record("RenewDaemonAttachment", ctx, att)
+	if m.RenewDaemonAttachmentFunc != nil {
+		return m.RenewDaemonAttachmentFunc(ctx, att)
+	}
+	return false, contractkit.MockNotSet("MockAttachments", "RenewDaemonAttachment")
+}
+
+// ReleaseDaemonAttachment records the call and delegates to ReleaseDaemonAttachmentFunc when set.
+func (m *MockAttachments) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
+	m.Recorder.Record("ReleaseDaemonAttachment", ctx, daemonID, attachedAt)
+	if m.ReleaseDaemonAttachmentFunc != nil {
+		return m.ReleaseDaemonAttachmentFunc(ctx, daemonID, attachedAt)
+	}
+	return contractkit.MockNotSet("MockAttachments", "ReleaseDaemonAttachment")
+}
+
+// SetDaemonAttachmentPorts records the call and delegates to SetDaemonAttachmentPortsFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
+	m.Recorder.Record("SetDaemonAttachmentPorts", ctx, daemonID, ports)
+	if m.SetDaemonAttachmentPortsFunc != nil {
+		return m.SetDaemonAttachmentPortsFunc(ctx, daemonID, ports)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentPorts")
+}
+
+// SetDaemonAttachmentMemory records the call and delegates to SetDaemonAttachmentMemoryFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes int64, limitBytes int64, pressure bool) error {
+	m.Recorder.Record("SetDaemonAttachmentMemory", ctx, daemonID, usedBytes, limitBytes, pressure)
+	if m.SetDaemonAttachmentMemoryFunc != nil {
+		return m.SetDaemonAttachmentMemoryFunc(ctx, daemonID, usedBytes, limitBytes, pressure)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentMemory")
+}
+
+// SetDaemonAttachmentHealth records the call and delegates to SetDaemonAttachmentHealthFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentHealth(ctx context.Context, daemonID string, health core.MachineHealth) error {
+	m.Recorder.Record("SetDaemonAttachmentHealth", ctx, daemonID, health)
+	if m.SetDaemonAttachmentHealthFunc != nil {
+		return m.SetDaemonAttachmentHealthFunc(ctx, daemonID, health)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentHealth")
+}
+
+// Compile-time check.
+var _ Attachments = (*MockAttachments)(nil)
+
+// forge:section MockLocalModels
+// forge:hash=ea7b082aeb1a64b216939993a028e51fa329ff11d3a1f0854a434cab81f89742
+
+// MockLocalModels is a test mock for the LocalModels interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockLocalModels.<Method>Func not set" error.
+type MockLocalModels struct {
+	contractkit.Recorder
+	SetDaemonLocalModelsFunc func(context.Context, string, string) error
+}
+
+// SetDaemonLocalModels records the call and delegates to SetDaemonLocalModelsFunc when set.
+func (m *MockLocalModels) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
+	m.Recorder.Record("SetDaemonLocalModels", ctx, daemonID, inventoryJSON)
+	if m.SetDaemonLocalModelsFunc != nil {
+		return m.SetDaemonLocalModelsFunc(ctx, daemonID, inventoryJSON)
+	}
+	return contractkit.MockNotSet("MockLocalModels", "SetDaemonLocalModels")
+}
+
+// Compile-time check.
+var _ LocalModels = (*MockLocalModels)(nil)

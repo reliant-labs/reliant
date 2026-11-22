@@ -96,6 +96,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -194,6 +195,8 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
+		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
+		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
 		Checkouts:       store.NewProjectDaemonDetachmentExtStore(g.Database().ORM()),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
@@ -1184,10 +1187,11 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 // option (apiMountOptions).
 func (g *Graph) newForge() (*forge.Service, error) {
 	return forge.New(forge.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1197,6 +1201,9 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Repo:       g.Database(),
+		Items:      store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:    store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
 		Sweeper:    g.WorktreeSweep(),
@@ -1213,10 +1220,11 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1252,10 +1260,11 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1292,9 +1301,10 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 // newPreset constructs the preset handler (internal/handlers/preset).
 func (g *Graph) newPreset() (*preset.Service, error) {
 	return preset.New(preset.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1367,20 +1377,22 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 // newRepo constructs the repo handler (internal/handlers/repo).
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1412,6 +1424,10 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
@@ -1466,6 +1482,7 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 // workflow.
 func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 	return workflowhandler.New(workflowhandler.Deps{
+		Projects:    projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),

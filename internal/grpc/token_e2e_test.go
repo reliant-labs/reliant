@@ -341,7 +341,7 @@ func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM())})
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM())})
 	require.NoError(t, err)
 	return serveDaemonListener(t, newTestDaemonListener(t, authority, gateway))
 }
