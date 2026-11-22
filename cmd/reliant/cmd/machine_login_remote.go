@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	crypto_tls "crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,10 +109,9 @@ func runRemoteCLILogin(cmd *cobra.Command, target loginTarget, vendor vendorcli.
 	if err != nil {
 		return err
 	}
-	dialer := websocket.Dialer{NetDialContext: transport.LocalhostDialContext, Proxy: http.ProxyFromEnvironment}
-	if conn.skipTLSVerify || shouldSkipTLSVerify(conn.ServerURL) {
-		dialer.TLSClientConfig = &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only, as connection.httpClient
-	}
+	// The same TLS verification as every other call to this server
+	// (connection.tlsConfig): verified, except a local dev server.
+	dialer := websocket.Dialer{NetDialContext: transport.LocalhostDialContext, Proxy: http.ProxyFromEnvironment, TLSClientConfig: conn.tlsConfig()}
 	header := http.Header{"Authorization": {"Bearer " + conn.Token}}
 	ws, resp, err := dialer.DialContext(cmd.Context(), wsURL, header)
 	if err != nil {

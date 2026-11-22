@@ -406,14 +406,25 @@ func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 	tr := &http.Transport{
 		// Resolve *.localhost → 127.0.0.1 for dev multi-worktree setups where
 		// macOS can't resolve subdomain.localhost via DNS.
-		DialContext: transport.LocalhostDialContext,
-	}
-	if c.skipTLSVerify || shouldSkipTLSVerify(c.ServerURL) {
-		tr.TLSClientConfig = &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only
+		DialContext:     transport.LocalhostDialContext,
+		TLSClientConfig: c.tlsConfig(),
 	}
 	return &http.Client{
 		Transport: &bearerAuthTransport{token: bearer, target: c.describeServer(), base: tr},
 	}
+}
+
+// tlsConfig is the TLS configuration every connection to this server uses:
+// nil (Go's default verification against the system roots), except for a
+// local dev server's self-signed certificate (shouldSkipTLSVerify) or an
+// explicit RELIANT_SKIP_TLS_VERIFY. Every client the CLI builds for the
+// server — Connect and websocket alike — takes it from here, so there is one
+// place the exception lives.
+func (c *connection) tlsConfig() *crypto_tls.Config {
+	if c.skipTLSVerify || shouldSkipTLSVerify(c.ServerURL) {
+		return &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only: a localhost server or RELIANT_SKIP_TLS_VERIFY
+	}
+	return nil
 }
 
 // sdkClient builds the SDK client for this connection. The SDK rides the CLI's
