@@ -205,6 +205,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 onClick={onToggleChatSidebar}
                 className="header-icon-btn p-1.5 rounded text-xs transition-colors"
                 aria-label="Toggle Chat Sidebar"
+                data-tour="header-sidebar-toggle"
                 style={noDragRegionStyle}
               >
                 <Menu className="w-4 h-4" />
@@ -290,44 +291,49 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Daemon status */}
             <DaemonStatusDot />
 
-            {/* Terminal button */}
-            {onToggleTerminal && (
-              <Tooltip
-                content={
-                  formatShortcut("onToggleTerminal")
-                    ? `Toggle Terminal (${formatShortcut("onToggleTerminal")})`
-                    : "Toggle Terminal"
-                }
-                side="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={onToggleTerminal}
-                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                  aria-label="Toggle Terminal"
-                >
-                  <PanelBottom className="w-4 h-4" />
-                </button>
-              </Tooltip>
-            )}
+            {/* The workflows tour's last step labels these two as one (data-tour). */}
+            {(onToggleTerminal || onToggleFileBrowser) && (
+              <span data-tour="header-panel-toggles" className="inline-flex items-center gap-1">
+                {/* Terminal button */}
+                {onToggleTerminal && (
+                  <Tooltip
+                    content={
+                      formatShortcut("onToggleTerminal")
+                        ? `Toggle Terminal (${formatShortcut("onToggleTerminal")})`
+                        : "Toggle Terminal"
+                    }
+                    side="bottom"
+                    delay={300}
+                  >
+                    <button
+                      onClick={onToggleTerminal}
+                      className="header-icon-btn p-1.5 rounded text-xs transition-colors"
+                      aria-label="Toggle Terminal"
+                    >
+                      <PanelBottom className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
+                )}
 
-            {/* Toggle File Browser button */}
-            {onToggleFileBrowser && (
-              <Tooltip
-                content={`Toggle File Browser (${formatShortcut(
-                  "onToggleFileBrowser"
-                )})`}
-                side="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={onToggleFileBrowser}
-                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                  aria-label="Toggle File Browser"
-                >
-                  <PanelRight className="w-4 h-4" />
-                </button>
-              </Tooltip>
+                {/* Toggle File Browser button */}
+                {onToggleFileBrowser && (
+                  <Tooltip
+                    content={`Toggle File Browser (${formatShortcut(
+                      "onToggleFileBrowser"
+                    )})`}
+                    side="bottom"
+                    delay={300}
+                  >
+                    <button
+                      onClick={onToggleFileBrowser}
+                      className="header-icon-btn p-1.5 rounded text-xs transition-colors"
+                      aria-label="Toggle File Browser"
+                    >
+                      <PanelRight className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
+                )}
+              </span>
             )}
 
             {/* Workspaces button */}
