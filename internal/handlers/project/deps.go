@@ -65,17 +65,6 @@ type Repository interface {
 	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
 	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
 	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
-	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
-	// the running work that refuses it now, and what it would change.
-	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
-	ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error)
-	// The move ledger: a move is recorded (idempotently by the actor's
-	// request key) before its saga starts, and read back as it runs.
-	InsertProjectOrgMove(ctx context.Context, m *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
-	FindProjectOrgMoveByRequest(ctx context.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error)
-	GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error)
-	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
-
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	// RecordObservedProjectDaemonInScope records a checkout the platform
 	// made or found, only while the project is in the machine's scope
@@ -101,9 +90,6 @@ type Repository interface {
 	ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error)
 	ListRepoForgeAppsByProjects(ctx context.Context, projectIDs []string) ([]core.RepoForgeApp, error)
 	ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error)
-	// ListSharedProjects is the projects others shared with an org the
-	// caller is in (the sharing service's list; ListProjectsWithApps).
-	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
 	// SetRepoForgeApps records the forge apps a daemon found in a repo
 	// (projectfacts.RecordForgeApps).
 	SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error
@@ -122,6 +108,28 @@ type Repository interface {
 	CreateSetting(ctx context.Context, setting *db.Setting) error
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 	UpdateSetting(ctx context.Context, setting *db.Setting) error
+}
+
+// MoveLedger is a project move's ledger and preview reads. A move is recorded
+// (idempotently by the actor's request key) before its saga starts, and read
+// back as it runs; the preview is the running work that refuses a move now and
+// what it would change. None takes an owner: the handler decides who may read
+// or start a move (authz) around each call. store.ProjectOrgMoveExtStore
+// satisfies it.
+type MoveLedger interface {
+	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
+	ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error)
+	InsertProjectOrgMove(ctx context.Context, m *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
+	FindProjectOrgMoveByRequest(ctx context.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error)
+	GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error)
+	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
+}
+
+// SharedProjects is the projects others shared with an org the caller is in
+// (the sharing service's list; ListProjectsWithApps). The caller passes them
+// through authz. store.ShareEventExtStore satisfies it.
+type SharedProjects interface {
+	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
 }
 
 // Router sends commands to a user's daemon. toolexec.DaemonRouter

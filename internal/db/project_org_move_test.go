@@ -42,6 +42,15 @@ func newMoveFixture(t *testing.T) *moveFixture {
 	return &moveFixture{t: t, repo: repo, raw: raw}
 }
 
+// commit is what orgmove's commit step runs: the move's transaction, with the
+// refetch the owner's clients get in it.
+func (f *moveFixture) commit(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
+	return store.CommitProjectOrgMove(ctx, f.repo.ORM(), c, func(ctx context.Context, res *core.ProjectOrgMoveResult) error {
+		projectID := res.Move.ProjectID
+		return f.repo.EmitUserRefetch(ctx, res.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
+	})
+}
+
 func (f *moveFixture) exec(query string, args ...any) {
 	f.t.Helper()
 	_, err := f.raw.Exec(query, args...)
@@ -98,13 +107,13 @@ func (f *moveFixture) trigger(id, projectID string, enabled bool, connectionID *
 func (f *moveFixture) prepared(projectID string) *core.ProjectOrgMove {
 	f.t.Helper()
 	ctx := context.Background()
-	m, created, err := f.repo.InsertProjectOrgMove(ctx, &core.ProjectOrgMove{
+	m, created, err := store.InsertProjectOrgMove(ctx, f.repo.ORM(), &core.ProjectOrgMove{
 		ID: uuid.NewString(), ProjectID: projectID, OwnerUserID: moveOwner, ActorUserID: moveOwner,
 		FromOrgID: moveSrc, ToOrgID: moveDst, RequestKey: uuid.NewString(),
 	})
 	require.NoError(f.t, err)
 	require.True(f.t, created)
-	m, err = f.repo.TransitionProjectOrgMove(ctx, m.ID,
+	m, err = store.TransitionProjectOrgMove(ctx, f.repo.ORM(), m.ID,
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStatePreparing}, core.ProjectOrgMoveStatePrepared, "", nil)
 	require.NoError(f.t, err)
 	return m
@@ -198,7 +207,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	shareEventsBefore := f.count(`SELECT count(*) FROM share_events`)
 
 	move := f.prepared("p-move")
-	res, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	res, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	require.False(t, res.AlreadyMoved)
 	require.Nil(t, res.Blockers)
@@ -266,7 +275,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM connections WHERE id = 'conn-org' AND org_id = $1`, moveSrc), "the source org's connection is not touched")
 
 	// The ledger.
-	got, err := f.repo.GetProjectOrgMove(ctx, move.ID)
+	got, err := store.GetProjectOrgMove(ctx, f.repo.ORM(), move.ID)
 	require.NoError(t, err)
 	assert.Equal(t, core.ProjectOrgMoveStateMoved, got.State)
 	assert.Equal(t, core.ProjectOrgMoveCounts{
@@ -274,7 +283,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	}, got.Counts)
 
 	// A retried commit is a no-op that reports the move it made.
-	again, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	again, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.True(t, again.AlreadyMoved)
 	assert.Equal(t, got.Counts, again.Move.Counts)
@@ -299,13 +308,13 @@ func TestMoveProjectOrg_ANullOrgProjectIsInTheDefaultOrg(t *testing.T) {
 	f.run("r-null", "c-null", core.Completed())
 
 	move := f.prepared("p-null")
-	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID, DefaultOrgID: "org-elsewhere"})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID, DefaultOrgID: "org-elsewhere"})
 	require.ErrorIs(t, err, ErrOrgChanged, "the default org is not the move's source")
-	_, err = f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.ErrorIs(t, err, ErrOrgChanged, "no default org: an unassigned project is in no org")
 	assert.Nil(t, f.org("projects", "p-null"))
 
-	_, err = f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID, DefaultOrgID: moveSrc})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID, DefaultOrgID: moveSrc})
 	require.NoError(t, err)
 	assert.Equal(t, strp(moveDst), f.org("projects", "p-null"))
 	assert.Equal(t, strp(moveDst), f.org("chats", "c-null"))
@@ -375,12 +384,12 @@ func TestMoveProjectOrg_RefusesUnlessQuiescent(t *testing.T) {
 			tc.setup(f)
 			move := f.prepared("p-busy")
 
-			preview, err := f.repo.ProjectOrgMoveBlockers(ctx, "p-busy")
+			preview, err := store.ProjectOrgMoveBlockers(ctx, f.repo.ORM(), "p-busy")
 			require.NoError(t, err)
 			require.False(t, preview.Empty())
 			tc.check(t, preview)
 
-			res, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+			res, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 			require.ErrorIs(t, err, core.ErrProjectNotQuiescent)
 			require.NotNil(t, res)
 			tc.check(t, res.Blockers)
@@ -390,7 +399,7 @@ func TestMoveProjectOrg_RefusesUnlessQuiescent(t *testing.T) {
 			tr, err := f.repo.GetTrigger(ctx, "t-1")
 			require.NoError(t, err)
 			assert.True(t, tr.Enabled, "a refused move pauses nothing")
-			got, err := f.repo.GetProjectOrgMove(ctx, move.ID)
+			got, err := store.GetProjectOrgMove(ctx, f.repo.ORM(), move.ID)
 			require.NoError(t, err)
 			assert.Equal(t, core.ProjectOrgMoveStatePrepared, got.State)
 		})
@@ -431,7 +440,7 @@ func TestMoveProjectOrg_SerializesWithTheOwnersOrgLock(t *testing.T) {
 
 	moveDone := make(chan error, 1)
 	go func() {
-		_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+		_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 		moveDone <- err
 	}()
 	require.Eventually(t, func() bool {
@@ -454,7 +463,7 @@ func TestMoveProjectOrg_SerializesWithTheOwnersOrgLock(t *testing.T) {
 	// Once the run ends, the move commits; a write that decided on the
 	// source org before it is refused.
 	f.exec(`UPDATE workflows SET state = 3, stop_reason = 1, completed_at = NOW() WHERE id = 'r-race'`)
-	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Equal(t, strp(moveDst), f.org("workflows", "r-race"))
 	err = f.repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
@@ -477,38 +486,38 @@ func TestProjectOrgMoves_Ledger(t *testing.T) {
 		ID: uuid.NewString(), ProjectID: "p-ledger", OwnerUserID: moveOwner, ActorUserID: moveOwner,
 		FromOrgID: moveSrc, ToOrgID: moveDst, RequestKey: "key-1",
 	}
-	first, created, err := f.repo.InsertProjectOrgMove(ctx, req)
+	first, created, err := store.InsertProjectOrgMove(ctx, f.repo.ORM(), req)
 	require.NoError(t, err)
 	require.True(t, created)
 	assert.Equal(t, core.ProjectOrgMoveStatePreparing, first.State)
 
 	retry := *req
 	retry.ID = uuid.NewString()
-	again, created, err := f.repo.InsertProjectOrgMove(ctx, &retry)
+	again, created, err := store.InsertProjectOrgMove(ctx, f.repo.ORM(), &retry)
 	require.NoError(t, err)
 	assert.False(t, created, "the same request key is the same move")
 	assert.Equal(t, first.ID, again.ID)
 
 	other := *req
 	other.ID, other.RequestKey = uuid.NewString(), "key-2"
-	_, _, err = f.repo.InsertProjectOrgMove(ctx, &other)
+	_, _, err = store.InsertProjectOrgMove(ctx, f.repo.ORM(), &other)
 	require.ErrorIs(t, err, core.ErrProjectOrgMoveInProgress)
 
-	_, err = f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: first.ID})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: first.ID})
 	require.ErrorIs(t, err, core.ErrProjectOrgMoveState, "a move that is not prepared does not commit")
-	_, err = f.repo.TransitionProjectOrgMove(ctx, first.ID,
+	_, err = store.TransitionProjectOrgMove(ctx, f.repo.ORM(), first.ID,
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStatePrepared}, core.ProjectOrgMoveStateMoved, "", nil)
 	require.ErrorIs(t, err, core.ErrProjectOrgMoveState)
-	_, err = f.repo.TransitionProjectOrgMove(ctx, uuid.NewString(),
+	_, err = store.TransitionProjectOrgMove(ctx, f.repo.ORM(), uuid.NewString(),
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStatePreparing}, core.ProjectOrgMoveStateAborting, "", nil)
 	require.ErrorIs(t, err, core.ErrProjectOrgMoveNotFound)
 
 	for _, to := range []core.ProjectOrgMoveState{core.ProjectOrgMoveStateAborting, core.ProjectOrgMoveStateAborted} {
-		_, err = f.repo.TransitionProjectOrgMove(ctx, first.ID,
+		_, err = store.TransitionProjectOrgMove(ctx, f.repo.ORM(), first.ID,
 			[]core.ProjectOrgMoveState{core.ProjectOrgMoveStatePreparing, core.ProjectOrgMoveStateAborting}, to, "control-plane refused", nil)
 		require.NoError(t, err)
 	}
-	next, created, err := f.repo.InsertProjectOrgMove(ctx, &other)
+	next, created, err := store.InsertProjectOrgMove(ctx, f.repo.ORM(), &other)
 	require.NoError(t, err)
 	assert.True(t, created, "an aborted move frees the project")
 	assert.NotEqual(t, first.ID, next.ID)
@@ -565,7 +574,7 @@ func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
 
 	moveDone := make(chan error, 1)
 	go func() {
-		_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+		_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 		moveDone <- err
 	}()
 	require.Eventually(t, func() bool {
@@ -584,7 +593,7 @@ func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
 	assert.Equal(t, strp(moveDst), tr.OrgID)
 	assert.False(t, tr.Enabled)
 	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, tr.PausedReason, "the system's pause is kept, not claimed by the move")
-	got, err := f.repo.GetProjectOrgMove(ctx, move.ID)
+	got, err := store.GetProjectOrgMove(ctx, f.repo.ORM(), move.ID)
 	require.NoError(t, err)
 	assert.Zero(t, got.Counts.TriggersPaused, "the move paused nothing: the trigger was already paused when it read it")
 }
@@ -619,7 +628,7 @@ func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
 	f.exec(`UPDATE chats SET active_daemon_id = 'd-laptop' WHERE id IN ('c-pinned', 'c-archived')`)
 	f.exec(`UPDATE chats SET active_daemon_id = 'd-box' WHERE id = 'c-shared'`)
 
-	e, err := f.repo.ProjectOrgMoveEffects(ctx, "p-fx", moveDst)
+	e, err := store.ProjectOrgMoveEffects(ctx, f.repo.ORM(), "p-fx", moveDst)
 	require.NoError(t, err)
 	assert.Equal(t, 3, e.Chats)
 	assert.Equal(t, 2, e.Runs)
@@ -639,7 +648,7 @@ func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
 
 	// The preview reads what the commit then does.
 	move := f.prepared("p-fx")
-	res, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	res, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Equal(t, e.Chats, res.Move.Counts.Chats)
 	assert.Equal(t, e.Runs, res.Move.Counts.Runs)
@@ -661,10 +670,10 @@ func TestMoveProjectOrg_AnnouncesTheMoveToTheOwner(t *testing.T) {
 		return f.count(`SELECT count(*) FROM user_updates WHERE user_id = $1 AND project_id = 'p-say' AND update_type = $2 AND data::jsonb->>'type' = $3 AND org_id = $4`,
 			moveOwner, int32(UserUpdateRefetch), string(RefetchProjectOrgMoved), moveDst)
 	}
-	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Equal(t, 1, announced())
-	_, err = f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err = f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Equal(t, 1, announced(), "a retried commit announces nothing")
 }
@@ -678,18 +687,18 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	f.trigger("t-moved", "p-res", true, nil)
 	f.trigger("t-person", "p-res", false, nil)
 	move := f.prepared("p-res")
-	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 
-	paused, err := f.repo.ListProjectTriggersPausedBy(ctx, "p-res", core.TriggerPausedOrgMove)
+	paused, err := store.ListProjectTriggersPausedBy(ctx, f.repo.ORM(), "p-res", core.TriggerPausedOrgMove)
 	require.NoError(t, err)
 	require.Len(t, paused, 1)
 	assert.Equal(t, "t-moved", paused[0].ID)
-	none, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	none, err := store.ListProjectTriggersResumedSince(ctx, f.repo.ORM(), "p-res", move.CreatedAt)
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
-	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
+	resumed, err := store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
 	require.NoError(t, err)
 	assert.True(t, resumed)
 	tr, err := f.repo.GetTrigger(ctx, "t-moved")
@@ -697,17 +706,17 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	assert.True(t, tr.Enabled)
 	assert.Empty(t, tr.PausedReason)
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-moved' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
-	back, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	back, err := store.ListProjectTriggersResumedSince(ctx, f.repo.ORM(), "p-res", move.CreatedAt)
 	require.NoError(t, err)
 	require.Len(t, back, 1, "what the move resumed, from the history")
 	assert.Equal(t, "t-moved", back[0].ID)
 
 	person, err := f.repo.GetTrigger(ctx, "t-person")
 	require.NoError(t, err)
-	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-person", core.TriggerPausedOrgMove, person.UpdatedAt)
+	resumed, err = store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-person", core.TriggerPausedOrgMove, person.UpdatedAt)
 	require.NoError(t, err)
 	assert.False(t, resumed, "a person's pause is theirs")
-	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
+	resumed, err = store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
 	require.NoError(t, err)
 	assert.False(t, resumed, "resuming twice resumes once")
 }
@@ -721,9 +730,9 @@ func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
 	f.project("p-edit", strp(moveSrc))
 	f.trigger("t-edit", "p-edit", true, nil)
 	move := f.prepared("p-edit")
-	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	_, err := f.commit(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
-	paused, err := f.repo.ListProjectTriggersPausedBy(ctx, "p-edit", core.TriggerPausedOrgMove)
+	paused, err := store.ListProjectTriggersPausedBy(ctx, f.repo.ORM(), "p-edit", core.TriggerPausedOrgMove)
 	require.NoError(t, err)
 	require.Len(t, paused, 1)
 	checked := paused[0]
@@ -736,7 +745,7 @@ func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, core.TriggerPausedOrgMove, now.PausedReason, "an edit that keeps it disabled keeps the move's pause")
 
-	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, checked.UpdatedAt)
+	resumed, err := store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-edit", core.TriggerPausedOrgMove, checked.UpdatedAt)
 	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 	assert.False(t, resumed)
 	now, err = f.repo.GetTrigger(ctx, "t-edit")
@@ -745,7 +754,7 @@ func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
 	assert.Zero(t, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-edit' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
 
 	// Checked again, at its new version, it resumes.
-	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, now.UpdatedAt)
+	resumed, err = store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-edit", core.TriggerPausedOrgMove, now.UpdatedAt)
 	require.NoError(t, err)
 	assert.True(t, resumed)
 }
@@ -759,14 +768,14 @@ func TestListProjectOrgMoves(t *testing.T) {
 	f.project("p-l2", strp(moveSrc))
 	first := f.prepared("p-l1")
 	second := f.prepared("p-l2")
-	byOrg, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{OrgID: moveDst})
+	byOrg, err := store.ListProjectOrgMoves(ctx, f.repo.ORM(), core.ProjectOrgMoveFilters{OrgID: moveDst})
 	require.NoError(t, err)
 	require.Len(t, byOrg, 2)
 	assert.ElementsMatch(t, []string{first.ID, second.ID}, []string{byOrg[0].ID, byOrg[1].ID})
-	mine, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{UserID: moveOwner, Limit: 1})
+	mine, err := store.ListProjectOrgMoves(ctx, f.repo.ORM(), core.ProjectOrgMoveFilters{UserID: moveOwner, Limit: 1})
 	require.NoError(t, err)
 	assert.Len(t, mine, 1)
-	none, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{OrgID: "org-elsewhere"})
+	none, err := store.ListProjectOrgMoves(ctx, f.repo.ORM(), core.ProjectOrgMoveFilters{OrgID: "org-elsewhere"})
 	require.NoError(t, err)
 	assert.Empty(t, none)
 }

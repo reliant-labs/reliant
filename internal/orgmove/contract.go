@@ -57,8 +57,10 @@ type Outcome struct {
 type Store interface {
 	GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error)
 	TransitionProjectOrgMove(ctx context.Context, id string, from []core.ProjectOrgMoveState, to core.ProjectOrgMoveState, detail string, counts *core.ProjectOrgMoveCounts) (*core.ProjectOrgMove, error)
-	MoveProjectOrg(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error)
-	GetProject(ctx context.Context, id string) (*core.Project, error)
+	// CommitProjectOrgMove is the move's transaction. inTx runs inside it,
+	// after a move that was not already committed, so what it writes lands
+	// with the move or not at all.
+	CommitProjectOrgMove(ctx context.Context, c core.ProjectOrgMoveCommit, inTx func(ctx context.Context, result *core.ProjectOrgMoveResult) error) (*core.ProjectOrgMoveResult, error)
 	ListProjectTriggersPausedBy(ctx context.Context, projectID, reason string) ([]*core.Trigger, error)
 	// ListProjectTriggersResumedSince is what a move turned back on, from
 	// the triggers' change history, so a retried step sees what an earlier
@@ -76,6 +78,18 @@ type ControlPlane interface {
 
 // Members counts an org's live members, asked of control-plane now as a member
 // (*orgs.Resolver is one). known is false when it gives no count.
+// Projects reads the project a move names, for its audit name.
+type Projects interface {
+	GetProject(ctx context.Context, id string) (*core.Project, error)
+}
+
+// Announcer tells the project owner's clients the project moved, in the
+// commit's own transaction: stamped with the target org, it reaches them in the
+// org it is now in. A retried commit announces nothing more.
+type Announcer interface {
+	AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error
+}
+
 type Members interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }

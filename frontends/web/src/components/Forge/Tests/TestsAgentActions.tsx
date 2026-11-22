@@ -29,10 +29,10 @@ import Button from "@/components/forge-ui/button";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { testKeys } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
-import { useOrgScope } from "@/lib/orgScope";
+import { useOrgScope, whenOrgScopeReady } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
 import { useTestApi } from "@/services/controlPlane/tests/TestApiContext";
-import type { CoverageTarget, TestFlake } from "@/services/controlPlane/tests/types";
+import type { CoverageTarget, FileCoverage, TestFlake } from "@/services/controlPlane/tests/types";
 
 import { ASK_AGENT_HINT, ASK_AGENT_LABEL, useAskReliant } from "../Observability/AskReliant/AskReliant";
 import { useAskAgentMode } from "../Observability/AskReliant/askAgentMode";
@@ -96,10 +96,12 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
   const org = useOrgScope();
   const client = useQueryClient();
   const build = useCallback(async (): Promise<AskSubject> => {
+    // Never read unscoped: wait for the org (the button can be pressed before it resolves).
+    const { orgId } = org.ready ? org : await whenOrgScopeReady();
     const testId = flake.test.id;
     const detail = await client.fetchQuery({
-      queryKey: testKeys.test(org.orgId, project, testId),
-      queryFn: ({ signal }) => api.getTest({ orgId: org.orgId, project, testId }, { signal }),
+      queryKey: testKeys.test(orgId, project, testId),
+      queryFn: ({ signal }) => api.getTest({ orgId, project, testId }, { signal }),
       staleTime: LIVE_MS,
     });
     // The default branch the flake gate measures from: the summary's (cached when Flaky tests read it). Without it, the prompt says "<default branch>".
@@ -107,14 +109,14 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
       defaultBranch ??
       (await client
         .fetchQuery({
-          queryKey: testKeys.summary(org.orgId, project, "", ""),
-          queryFn: ({ signal }) => api.getTestSummary({ orgId: org.orgId, project }, { signal }),
+          queryKey: testKeys.summary(orgId, project, "", ""),
+          queryFn: ({ signal }) => api.getTestSummary({ orgId, project }, { signal }),
           staleTime: LIVE_MS,
         })
         .then((summary) => summary.branch || undefined)
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
-  }, [api, client, defaultBranch, flake, org.orgId, project]);
+  }, [api, client, defaultBranch, flake, org, project]);
   return useAgentAction({ project, projectId, build });
 }
 
@@ -218,24 +220,29 @@ export function RaiseCoverageButton({
   const org = useOrgScope();
   const client = useQueryClient();
   const build = useCallback(async (): Promise<AskSubject> => {
+    // Never read unscoped: wait for the org (the button can be pressed before it resolves).
+    const { orgId } = org.ready ? org : await whenOrgScopeReady();
     const query = { target, path: pkg };
     const tree = await client.fetchQuery({
-      queryKey: testKeys.coverage(org.orgId, project, query),
-      queryFn: ({ signal }) => api.getCoverage({ orgId: org.orgId, project, ...query }, { signal }),
+      queryKey: testKeys.coverage(orgId, project, query),
+      queryFn: ({ signal }) => api.getCoverage({ orgId, project, ...query }, { signal }),
       staleTime: SETTLED_MS,
     });
     const paths = filesToRead(tree).slice(0, MAX_UNCOVERED_FILES);
-    const files = await Promise.all(
-      paths.map((path) =>
+    // Read in parallel, each started here, after the org is known (not in a callback of its own).
+    const reads: Promise<FileCoverage>[] = [];
+    for (const path of paths) {
+      reads.push(
         client.fetchQuery({
-          queryKey: testKeys.fileCoverage(org.orgId, project, target, path, ""),
-          queryFn: ({ signal }) => api.getFileCoverage({ orgId: org.orgId, project, target, path }, { signal }),
+          queryKey: testKeys.fileCoverage(orgId, project, target, path, ""),
+          queryFn: ({ signal }) => api.getFileCoverage({ orgId, project, target, path }, { signal }),
           staleTime: SETTLED_MS,
         })
-      )
-    );
+      );
+    }
+    const files = await Promise.all(reads);
     return coverageSubject({ pkg, tree, files, defaultBranch });
-  }, [api, client, defaultBranch, org.orgId, pkg, project, target]);
+  }, [api, client, defaultBranch, org, pkg, project, target]);
   const hint = `Start an agent on it now, in a new chat on its own workspace and git branch: it adds tests that assert behaviour until ${pkg} reaches ${defaultCoverageTarget(currentPercent)}% combined, and runs the flake gate on them.`;
   return (
     <AgentButton
