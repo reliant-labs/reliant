@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -48,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
 	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -55,6 +58,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -146,12 +150,12 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Syncer: syncer, Fires: fires,
+		Repo: repo, Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------
-	launcher := launch.New(launch.Deps{Store: repo, Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(
@@ -292,6 +296,10 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		Items:      extstore.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:    extstore.NewTriggerEventExtStore(repo.ORM()),
+		Notices:    extstore.NewTriggerExtStore(repo.ORM()),
+		Storage:    worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
 		Recoveries: extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      extstore.NewWorktreeExtStore(repo.ORM()),
 	})

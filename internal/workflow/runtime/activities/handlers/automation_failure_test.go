@@ -29,10 +29,6 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 				GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 					return &db.Chat{ID: "chat", LaunchKind: kind, TriggerID: &tid}, nil
 				},
-				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-					return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("client_secret: secret")}}, nil
-				},
-				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 					return &db.Message{Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(-time.Second)}, nil
 				},
@@ -48,9 +44,14 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 						require.Equal(t, key, id)
 					}
 					return nil, true, nil
-				},
+				}}
+			repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+				return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("client_secret: secret")}}, nil
+			}}
+			repoRuns := &MockRunRecords{
+				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 			}
-			a := NewWorkflowStatusActivity(repo)
+			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows})
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			require.Equal(t, "Node gate failed: [REDACTED: credential-bearing diagnostic omitted]", detail)
@@ -84,22 +85,23 @@ func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T)
 				GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 					return &db.Chat{ID: "chat", LaunchKind: "schedule", TriggerID: &tid}, nil
 				},
-				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-					return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(string(raw))}}, nil
-				},
-				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, detail string) error {
-					require.NotContains(t, detail, "opaque-secret-value")
-					return nil
-				},
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) { return nil, nil },
 				SaveMessageToThreadOnceFunc: func(_ context.Context, _, _ string, _ int32, content string, _ *string, _ []string, _ *int32, _ string) (*db.Message, bool, error) {
 					require.NotContains(t, content, "opaque-secret-value")
 					require.Contains(t, content, "credential-bearing diagnostic omitted")
 					saved = true
 					return nil, true, nil
+				}}
+			repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+				return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(string(raw))}}, nil
+			}}
+			repoRuns := &MockRunRecords{
+				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, detail string) error {
+					require.NotContains(t, detail, "opaque-secret-value")
+					return nil
 				},
 			}
-			NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
+			NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			require.True(t, saved)
 		}
 	}
@@ -118,21 +120,22 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
 		},
-		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-			return []*db.StepExecution{{ID: "row", StepID: "stopped", ActivityName: "SaveMessage", CreatedAt: end,
-				Success:      ptr.Of(false),
-				ErrorMessage: ptr.Of("declared the run's outcome: failure"),
-				OutputJSON:   ptr.Of(`{"message":"` + text + `"}`)}}, nil
-		},
-		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 			return &db.Message{ID: "m", Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(-time.Millisecond)}, nil
 		},
 		ListContentBlocksFunc: func(context.Context, string) ([]*db.MessageContentBlock, error) {
 			return []*db.MessageContentBlock{{BlockType: pb.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &text}}, nil
-		},
+		}}
+	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+		return []*db.StepExecution{{ID: "row", StepID: "stopped", ActivityName: "SaveMessage", CreatedAt: end,
+			Success:      ptr.Of(false),
+			ErrorMessage: ptr.Of("declared the run's outcome: failure"),
+			OutputJSON:   ptr.Of(`{"message":"` + text + `"}`)}}, nil
+	}}
+	repoRuns := &MockRunRecords{
+		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 	}
-	NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(),
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
 		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "stopped"})
 	require.Equal(t, "Node stopped failed: declared the run's outcome: failure: "+text, detail)
 	require.Zero(t, repo.CallCount("SaveMessageToThreadOnce"))
@@ -142,11 +145,12 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 func TestAutomationFailureNamesADeclaringNodeWithNoAttempt(t *testing.T) {
 	detail := ""
 	repo := &MockWorkflowStatusStore{
-		GetChatFunc:                        func(context.Context, string) (*db.Chat, error) { return &db.Chat{ID: "c"}, nil },
-		ListRunNodeExecutionsFunc:          func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil },
+		GetChatFunc: func(context.Context, string) (*db.Chat, error) { return &db.Chat{ID: "c"}, nil }}
+	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }}
+	repoRuns := &MockRunRecords{
 		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 	}
-	NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(),
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
 		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "verdict"})
 	require.Equal(t, "Node verdict declared the run's outcome: failure.", detail)
 }
@@ -159,19 +163,20 @@ func TestAutomationFailurePreservesAuthoredFailureMessage(t *testing.T) {
 		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
 		},
-		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-			return []*db.StepExecution{{StepID: "gate", ErrorMessage: ptr.Of("bad"), CreatedAt: end}}, nil
-		},
-		SetLaunchEventRunFailureDetailFunc: func(context.Context, string, string) error { return nil },
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 			return &db.Message{ID: "message", Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(time.Second)}, nil
-		},
+		}}
+	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+		return []*db.StepExecution{{StepID: "gate", ErrorMessage: ptr.Of("bad"), CreatedAt: end}}, nil
+	}}
+	repoRuns := &MockRunRecords{
+		SetLaunchEventRunFailureDetailFunc: func(context.Context, string, string) error { return nil },
 	}
 	// Use the existing content-block seam directly: the fallback must not need
 	// to load a whole transcript just to inspect the latest saved message.
 	repo.ListContentBlocksFunc = func(context.Context, string) ([]*db.MessageContentBlock, error) {
 		return []*db.MessageContentBlock{{BlockType: pb.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &text}}, nil
 	}
-	NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "c", WorkflowID: "root"})
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "c", WorkflowID: "root"})
 	require.Zero(t, repo.CallCount("SaveMessageToThreadOnce"))
 }

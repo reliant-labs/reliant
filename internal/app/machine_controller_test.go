@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -90,7 +91,7 @@ func TestMachineControllerActsOnlyOnTheUsersMachinesAsTheUser(t *testing.T) {
 		"others": {ID: "others", UserID: "someone-else", Name: "theirs"},
 	}}
 	waker, actions := &fakeWaker{}, &fakeMachineActions{}
-	m := &machineController{repo: repo, waker: waker, actions: actions}
+	m := &machineController{repo: repo, poolRows: repo, waker: waker, actions: actions}
 	ctx := context.Background()
 
 	list, err := m.ListMachines(ctx, "machine-owner")
@@ -116,7 +117,7 @@ func TestMachineControllerActsOnlyOnTheUsersMachinesAsTheUser(t *testing.T) {
 func TestMachineControllerActivationMachineIsTheUnattendedTriggersMachine(t *testing.T) {
 	triggerID := "trigger"
 	repo := &fakeMachineRegistry{trigger: &core.Trigger{ID: triggerID, DaemonID: "cicd"}}
-	m := &machineController{repo: repo}
+	m := &machineController{repo: repo, poolRows: repo}
 	ctx := context.Background()
 
 	got, err := m.ActivationMachine(ctx, "chat")
@@ -148,7 +149,7 @@ func TestMachineControllerListsPoolsAndLabels(t *testing.T) {
 		pools:   []*core.MachinePool{{ID: "p1", Name: "cicd"}},
 		members: map[string][]core.MachinePoolMemberRow{"p1": {{DaemonID: "cicd", LiveRuns: 2}}},
 	}
-	list, err := (&machineController{repo: repo}).ListMachines(context.Background(), "u")
+	list, err := (&machineController{repo: repo, poolRows: repo}).ListMachines(context.Background(), "u")
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	require.Equal(t, map[string]string{"pool": "cicd"}, list[0].Labels)
@@ -164,12 +165,15 @@ func TestMachineControllerPoolWritesNeedTheApprovedCard(t *testing.T) {
 	registry, err := daemon_registry.New(daemon_registry.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{},
 		Repo: &daemon_registry.MockRepository{
+			GetDaemonFunc:           func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id, UserID: "u"}, nil },
+			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+		},
+		Pools: &daemon_registry.MockPools{
 			SetDaemonLabelsFunc: func(_ context.Context, userID, id string, _ map[string]string) (bool, error) {
 				writes = append(writes, "label "+id+" for "+userID)
 				return true, nil
 			},
-			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id, UserID: "u"}, nil },
-			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool, _ string, _ time.Time) (*core.MachinePool, error) {
 				writes = append(writes, "put "+p.Name+" for "+p.UserID)
 				return p, nil
 			},
@@ -181,12 +185,11 @@ func TestMachineControllerPoolWritesNeedTheApprovedCard(t *testing.T) {
 			ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
 				return nil, nil
 			},
-			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
 		},
 	})
 	require.NoError(t, err)
 	repo := &fakeMachineRegistry{daemons: map[string]*db.Daemon{"cicd": {ID: "cicd", UserID: "u"}}}
-	m := &machineController{repo: repo, pools: registry}
+	m := &machineController{repo: repo, poolRows: repo, pools: registry}
 	spec := tools.MachinePoolSpec{Name: "cicd", MemberIdleTimeout: "10m"}
 
 	bare := context.Background()

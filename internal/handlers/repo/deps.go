@@ -13,7 +13,6 @@ import (
 
 // Repository is the slice of *db.Repo the repo handlers use.
 type Repository interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error
 
 	GetRepo(ctx context.Context, id string) (*core.Repo, error)

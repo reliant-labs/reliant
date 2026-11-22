@@ -31,6 +31,7 @@ LIVENESS_PATHS kind=string flag="" default="/health,/healthz" required=false opt
 LOG_FORMAT kind=string flag="log-format" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 MAX_UPLOAD_SIZE kind=int64 flag="" default="10485760" required=false optional=false sensitive=false allowed=[] aliases=[]
 MCP_OAUTH_ISSUERS kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+MCP_OAUTH_SCOPES kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 NATS_PASSWORD kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 NATS_URL kind=string flag="" default="" required=true optional=false sensitive=true allowed=[] aliases=[]
 NATS_USER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

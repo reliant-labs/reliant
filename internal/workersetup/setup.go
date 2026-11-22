@@ -9,6 +9,7 @@ package workersetup
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -21,10 +22,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -68,6 +71,11 @@ type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
 	Database       *db.Repo
+	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
+	// routing reads and writes (credentials/provideraccounts).
+	ProviderAccounts AccountStore
+	// OrgAccounts holds the org key notices the sweep claims and confirms (credentials/orgaccounts).
+	OrgAccounts    OrgKeyNoticeStore
 	StreamingHub   streaming.StreamingHub
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
@@ -131,6 +139,10 @@ type Config struct {
 	// SecretResolver resolves declared secrets for the step activities (a
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
+
+	// StepKeys mints and revokes the LLM gateway step key a run node with
+	// llm_gateway runs with (the control plane); nil refuses every such node.
+	StepKeys handlers.StepKeyIssuer
 
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
@@ -279,9 +291,24 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
+	activityDeps.StepKeys = cfg.StepKeys
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	if cfg.Database != nil {
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
+		}
+		activityDeps.LLMUsage = usage
+		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)
+		}
+		activityDeps.ProviderBackoff = backoff
+	}
+	if cfg.ProviderAccounts != nil && cfg.Database != nil {
+		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	}
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -341,11 +368,13 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		// {labels: …}` places its run (or a node) through this, on every
 		// worker with a database: a run is not a trigger fire, so it needs
 		// no launcher.
-		runs := machinepool.NewRunPlacer(cfg.Database)
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
+		placements := store.NewRunMachinePlacementExtStore(cfg.Database.ORM())
+		runs := machinepool.NewRunPlacer(poolStore, placements, cfg.Database)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			runs = runs.WithWaker(poolMemberWaker{w: w})
 		}
-		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: cfg.Database, Placer: runs}.Execute,
+		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: placements, Placer: runs}.Execute,
 			activity.RegisterOptions{Name: machinepool.PlaceRunActivityName})
 	}
 	if cfg.TriggerPollers != nil {
@@ -353,7 +382,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
@@ -361,7 +390,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	if cfg.TriggerLauncher != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
-		pools := machinepool.NewPlacer(cfg.Database)
+		var poolStore machinepool.Store
+		if cfg.Database != nil {
+			poolStore = store.NewMachinePoolExtStore(cfg.Database.ORM())
+		}
+		pools := machinepool.NewPlacer(poolStore)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
@@ -442,7 +475,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
 		out.background = append(out.background, func(ctx context.Context) {
 			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
 				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
 		})
 	}

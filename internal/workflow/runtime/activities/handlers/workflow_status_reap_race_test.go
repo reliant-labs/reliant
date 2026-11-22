@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The reconciler's ReapOrphanedThreads runs every pass, on its own
@@ -51,8 +52,22 @@ func (r *reapingRepo) UpdateWorkflowStatus(ctx context.Context, id string, statu
 	return r.around(func() error { return r.Repo.UpdateWorkflowStatus(ctx, id, status) })
 }
 
-func (r *reapingRepo) CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
-	return r.around(func() error { return r.Repo.CascadeTerminalStatusToDescendants(ctx, workflowID, reason) })
+// reapingWorkflows is the activity's workflow role with a reconciler pass around
+// the descendants' cascade, as reapingRepo has around its own writes.
+type reapingWorkflows struct {
+	WorkflowRuns
+	repo *reapingRepo
+}
+
+func (w reapingWorkflows) CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason core.WorkflowStopReason) error {
+	return w.repo.around(func() error { return w.WorkflowRuns.CascadeTerminalStatusToDescendants(ctx, workflowID, reason) })
+}
+
+// deps is the WorkflowStatusActivity's deps with the passes in place.
+func (r *reapingRepo) deps() WorkflowStatusDeps {
+	d := workflowStatusDeps(r)
+	d.Workflows = reapingWorkflows{WorkflowRuns: NewWorkflowRuns(r.ORM()), repo: r}
+	return d
 }
 
 func (r *reapingRepo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
@@ -107,7 +122,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	}
 
 	// Turn 1 runs and completes; both halves end terminal.
-	plain := NewWorkflowStatusActivity(h.Repo())
+	plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("started"), &output))
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("completed"), &output))
@@ -117,7 +132,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 
 	// Turn 2 starts with a reconciler pass between every write.
 	repo := &reapingRepo{Repo: h.Repo(), t: t}
-	interleaved := NewWorkflowStatusActivity(repo)
+	interleaved := NewWorkflowStatusActivity(repo.deps())
 	require.NoError(t, h.ExecuteActivity(interleaved.Execute, turn("started"), &output))
 
 	assert.Empty(t, repo.reapedIn(chatID),
@@ -164,7 +179,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 				ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",
 				Status: "started", Thread: chatID,
 			}
-			plain := NewWorkflowStatusActivity(h.Repo())
+			plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 			var output WorkflowStatusOutput
 			require.NoError(t, h.ExecuteActivity(plain.Execute, input, &output))
 
@@ -184,7 +199,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 			require.NoError(t, err)
 
 			repo := &reapingRepo{Repo: h.Repo(), t: t}
-			interleaved := NewWorkflowStatusActivity(repo)
+			interleaved := NewWorkflowStatusActivity(repo.deps())
 			input.Status = tc.status
 			require.NoError(t, h.ExecuteActivity(interleaved.Execute, input, &output))
 

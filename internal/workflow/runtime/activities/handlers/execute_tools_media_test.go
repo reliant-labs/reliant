@@ -228,7 +228,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 		}},
 	}
 	var execOut ExecuteToolsOutput
-	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), ToolExecutor: executor, Preemption: dbstore.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), ToolExecutor: executor, Preemption: dbstore.NewAgentMessageExtStore(h.Repo().ORM())}).WithToolCallResults(testToolCallResults(h.Repo())).Execute, ExecuteToolsInput{
 		ChatID: chatID, Thread: thread,
 		ToolCalls: []ToolCall{{ID: callID, Name: "view", Input: `{"file_path":"x"}`}},
 	}, &execOut))

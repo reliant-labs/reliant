@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -24,7 +26,7 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 	store.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	store.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
 	store.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) }
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{
 		{

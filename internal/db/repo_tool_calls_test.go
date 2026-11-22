@@ -192,7 +192,7 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 	result.UpdatedAt = time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
-	got, err := repo.GetToolCallResult(ctx, call.ID)
+	got, err := store.FindToolCallResult(ctx, repo.ORM(), call.ID)
 	require.NoError(t, err)
 	require.Equal(t, "second", got.Content)
 	require.True(t, got.IsError)

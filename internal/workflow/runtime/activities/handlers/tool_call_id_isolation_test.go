@@ -88,7 +88,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: c.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: c.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(c.h.Repo())).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},
@@ -127,7 +127,7 @@ func TestRepro_ToolCallWithAReusedIDIsNotAnsweredFromAnotherChat(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, chatA, call.ChatID, "chat A's call record must stay chat A's")
 	require.JSONEq(t, `{"command":"cat /a/secret"}`, string(call.Input))
-	result, err := c.h.Repo().GetToolCallResult(ctx, "bash")
+	result, err := store.FindToolCallResult(ctx, c.h.Repo().ORM(), "bash")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "chat A's private output", result.Content, "chat B's output must not replace chat A's recorded result")
@@ -159,7 +159,7 @@ func TestRepro_ToolCallWithAReusedIDDoesNotOverwriteAnotherChatsRunningCall(t *t
 	require.Equal(t, chatA, call.ChatID)
 	require.Equal(t, core.ToolCallStatusExecuting, call.Status, "chat A's call is still running; chat B finishing must not end it")
 	require.JSONEq(t, `{"command":"sleep 600"}`, string(call.Input))
-	result, err := c.h.Repo().GetToolCallResult(ctx, "shell-1")
+	result, err := store.FindToolCallResult(ctx, c.h.Repo().ORM(), "shell-1")
 	require.NoError(t, err)
 	require.Nil(t, result, "chat B's output must not be recorded as the result of chat A's call")
 }

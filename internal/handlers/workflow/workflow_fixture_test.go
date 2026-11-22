@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	workflow "github.com/reliant-labs/reliant/internal/handlers/workflow"
@@ -29,18 +31,17 @@ func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.MockRepository {
 	for _, d := range drafts {
 		bySlug[d.Slug] = d
 	}
-	return &workflow.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == "p-1" && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Name: "proj"}, nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
+	return projectaccesstest.Bound(&workflow.MockRepository{
 		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 			if d, ok := bySlug[slug]; ok && userID == d.UserID {
 				return d, nil
 			}
 			return nil, nil
 		},
-	}
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == "p-1" && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Name: "proj"}, nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 }

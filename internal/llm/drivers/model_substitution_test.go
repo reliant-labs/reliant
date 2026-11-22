@@ -153,10 +153,10 @@ func TestSubstituteUnservableModel_LeavesEverythingElseAlone(t *testing.T) {
 	}
 }
 
-// providerKeysRepo is the slice of APIKeyStore BuildAvailableDrivers reads
+// providerKeysRepo is the slice of AccountStore BuildAvailableDrivers reads
 // for API-key providers. Any other method panics (nil embedded interface).
 type providerKeysRepo struct {
-	APIKeyStore
+	AccountStore
 	keys map[string]string
 }
 

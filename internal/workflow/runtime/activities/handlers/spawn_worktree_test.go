@@ -34,7 +34,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), f.repo),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), f.repo, workflowRunsOf(f.repo)),
 	}
 }
 
@@ -265,7 +265,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())}).WithToolCallResults(testToolCallResults(f.repo))
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -393,7 +393,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())}).WithToolCallResults(testToolCallResults(f.repo))
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

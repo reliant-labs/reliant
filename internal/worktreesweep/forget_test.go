@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -74,13 +75,13 @@ func TestForget_AWorkspaceNoConnectedMachineHasIsForgottenOnceAllHaveAnswered(t 
 	require.NoError(t, repo.ArchiveWorktree(ctx, wtID))
 
 	sender := &folderlessSender{asked: map[string]int{}}
-	s := New(repo, sender)
+	s := New(stores(repo), sender)
 	require.NoError(t, s.Sweep(ctx))
 	require.Equal(t, 1, sender.asked[first], "the connected machine is asked whether it has the folder")
 
 	unowned := func() *Held {
 		t.Helper()
-		view, err := StorageView(ctx, repo, userID)
+		view, err := StorageView(ctx, stores(repo), userID)
 		require.NoError(t, err)
 		for _, m := range view {
 			if m.DaemonID == "" {
@@ -99,7 +100,7 @@ func TestForget_AWorkspaceNoConnectedMachineHasIsForgottenOnceAllHaveAnswered(t 
 	// Another machine connects. Until it is asked, it may have the folder.
 	connect(second)
 	assert.False(t, unowned().Forgettable, "a connected machine that was not asked keeps it")
-	require.ErrorIs(t, Forget(ctx, repo, userID, wtID), ErrNotForgettable)
+	require.ErrorIs(t, Forget(ctx, stores(repo), userID, wtID), ErrNotForgettable)
 
 	// Its next pass (the hold's back-off later) asks the new machine too.
 	s.now = func() time.Time { return time.Now().Add(holdBackoffMax + time.Minute) }
@@ -107,8 +108,8 @@ func TestForget_AWorkspaceNoConnectedMachineHasIsForgottenOnceAllHaveAnswered(t 
 	require.Equal(t, 1, sender.asked[second])
 	require.True(t, unowned().Forgettable, "every connected machine said it does not have the folder")
 
-	require.ErrorIs(t, Forget(ctx, repo, "someone-else", wtID), ErrNotHeld, "only its owner may forget it")
-	require.NoError(t, Forget(ctx, repo, userID, wtID))
+	require.ErrorIs(t, Forget(ctx, stores(repo), "someone-else", wtID), ErrNotHeld, "only its owner may forget it")
+	require.NoError(t, Forget(ctx, stores(repo), userID, wtID))
 
 	assert.Nil(t, unowned(), "forgotten: it leaves Storage")
 	got, err := repo.GetWorktree(ctx, wtID)
@@ -123,7 +124,7 @@ func TestForget_AWorkspaceNoConnectedMachineHasIsForgottenOnceAllHaveAnswered(t 
 	asked := sender.asked[first] + sender.asked[second]
 	require.NoError(t, s.Sweep(ctx))
 	assert.Equal(t, asked, sender.asked[first]+sender.asked[second], "a forgotten row is never sent to a machine")
-	require.ErrorIs(t, Forget(ctx, repo, userID, wtID), ErrNotHeld)
+	require.ErrorIs(t, Forget(ctx, stores(repo), userID, wtID), ErrNotHeld)
 }
 
 // A row a machine has claimed is that machine's to settle: Forget never
@@ -148,11 +149,11 @@ func TestForget_RefusesARowAMachineClaimed(t *testing.T) {
 	require.NoError(t, repo.UpdateWorktreeCleanupMetadata(ctx, wtID, &db.CleanupMetadata{
 		HeldReason: string(worktreereclaim.ReasonNoMachine), AbsentOn: []string{daemon},
 	}))
-	recorded, err := repo.AdoptWorktreeDaemon(ctx, wtID, daemon)
+	recorded, err := store.NewWorktreeExtStore(repo.ORM()).AdoptWorktreeDaemon(ctx, wtID, daemon)
 	require.NoError(t, err)
 	require.Equal(t, daemon, recorded)
 
-	require.ErrorIs(t, Forget(ctx, repo, userID, wtID), ErrNotForgettable)
+	require.ErrorIs(t, Forget(ctx, stores(repo), userID, wtID), ErrNotForgettable)
 	got, err := repo.GetWorktree(ctx, wtID)
 	require.NoError(t, err)
 	assert.False(t, got.CleanupMetadata.DirectoryDeleted)

@@ -20,12 +20,28 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// reliantKeyStore is the slice of the repository the healer needs.
+// reliantKeyStore is the slice of the account store and the repository the healer needs.
 type reliantKeyStore interface {
+	reliantKeyAccounts
+	LockProviderKey(ctx context.Context, userID, provider string) (release func(), err error)
+}
+
+// reliantKeyAccounts is the slice of credentials/provideraccounts.Service the healer needs.
+type reliantKeyAccounts interface {
 	ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
 	ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error)
+}
+
+// reliantKeyLocker serializes key replacement per (user, provider) across replicas. *db.Repo satisfies it.
+type reliantKeyLocker interface {
 	LockProviderKey(ctx context.Context, userID, provider string) (release func(), err error)
+}
+
+// keyStore joins the accounts and the lock into the healer's store.
+type keyStore struct {
+	reliantKeyAccounts
+	reliantKeyLocker
 }
 
 // reliantKeyMinter mints an rlat_ token acting as a user, without their JWT.
@@ -58,7 +74,12 @@ type ReliantKeyHealer struct {
 	now            func() time.Time
 }
 
-func NewReliantKeyHealer(store reliantKeyStore, minter reliantKeyMinter) *ReliantKeyHealer {
+func NewReliantKeyHealer(accounts reliantKeyAccounts, locker reliantKeyLocker, minter reliantKeyMinter) *ReliantKeyHealer {
+	return NewReliantKeyHealerOver(keyStore{accounts, locker}, minter)
+}
+
+// NewReliantKeyHealerOver is NewReliantKeyHealer over one store that holds both.
+func NewReliantKeyHealerOver(store reliantKeyStore, minter reliantKeyMinter) *ReliantKeyHealer {
 	return &ReliantKeyHealer{store: store, minter: minter, failedOrgMints: map[string]time.Time{}, now: time.Now}
 }
 
@@ -534,7 +555,7 @@ func RunReliantKeySweeps(ctx context.Context, h *ReliantKeyHealer, interval time
 //
 // perOrg is ControlPlaneConfig.managed_keys_per_org: whether a managed key is
 // minted per (person, org).
-func InstallReliantKeyHealer(repo *db.Repo, baseURL, internalSecret string, perOrg bool) *ReliantKeyHealer {
+func InstallReliantKeyHealer(accounts reliantKeyAccounts, repo *db.Repo, baseURL, internalSecret string, perOrg bool) *ReliantKeyHealer {
 	if baseURL == "" || internalSecret == "" {
 		return nil
 	}
@@ -542,7 +563,7 @@ func InstallReliantKeyHealer(repo *db.Repo, baseURL, internalSecret string, perO
 		BaseURL: baseURL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(internalSecret) },
 	})
-	h := NewReliantKeyHealer(repo, minter).WithPerOrgKeys(perOrg)
+	h := NewReliantKeyHealer(accounts, repo, minter).WithPerOrgKeys(perOrg)
 	SetReliantKeyHealer(h)
 	return h
 }

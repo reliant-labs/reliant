@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgcredentials"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
@@ -155,7 +156,7 @@ func TestSweepStaleGrants_KeepsOnlyGrantsOfTheCurrentMembership(t *testing.T) {
 			f.grant("k2", "org-a", "late", t0.Add(time.Second))
 		}
 	}
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
+	s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 
 	n, err := s.SweepStaleGrants(ctx)
 	require.NoError(t, err)
@@ -190,7 +191,7 @@ func TestSweepStaleGrants_AnEmptyAnswerOnTheWireIsNoMember(t *testing.T) {
 	}))
 	defer srv.Close()
 	cp := accesstokenclient.New(accesstokenclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return "signed", nil }})
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: cp, GoneOrgs: cp, Now: fixedNow})
+	s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: cp, GoneOrgs: cp, Now: fixedNow})
 
 	n, err := s.SweepStaleGrants(context.Background())
 	require.NoError(t, err)
@@ -205,7 +206,7 @@ func TestSweepStaleGrants_SweepsEveryPage(t *testing.T) {
 	for i := range 450 {
 		f.grant("k1", "org-a", fmt.Sprintf("u%03d", i), t0.Add(-time.Hour))
 	}
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: &membership{}, GoneOrgs: &goneOrgs{}, Now: fixedNow})
+	s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: &membership{}, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 	n, err := s.SweepStaleGrants(context.Background())
 	require.NoError(t, err)
 	assert.EqualValues(t, 450, n)
@@ -225,7 +226,7 @@ func TestSweepStaleGrants_DeletesNothingItCannotJudge(t *testing.T) {
 			f.grant("k1", "org-a", "a-first", t0.Add(-time.Hour))
 			f.grant("k1", "org-a", "b-second", t0.Add(-time.Hour))
 			m := &membership{errs: map[key]error{{"a-first", "org-a"}: err}}
-			s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
+			s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 			_, got := s.SweepStaleGrants(context.Background())
 			if name == "unsupported" {
 				assert.NoError(t, got)
@@ -252,7 +253,7 @@ func TestSweepGoneOrgs_PurgesOnlyOrgsGonePastTheGrace(t *testing.T) {
 		"org-old":    now.Add(-orgcredentials.GoneOrgGrace - time.Minute),
 		"org-recent": now.Add(-orgcredentials.GoneOrgGrace + time.Minute),
 	}}
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: &membership{}, GoneOrgs: g, Now: func() time.Time { return now }})
+	s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: &membership{}, GoneOrgs: g, Now: func() time.Time { return now }})
 
 	purged, err := s.SweepGoneOrgs(context.Background())
 	require.NoError(t, err)
@@ -274,7 +275,7 @@ func TestSweepGoneOrgs_PurgesNothingWithoutAnAnswer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t)
 			f.orgKey("k-1", "org-1")
-			s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: &membership{}, GoneOrgs: &goneOrgs{err: err}})
+			s := orgcredentials.New(orgcredentials.Deps{Store: db.TestOrgAccounts(t, f.env.Repo), Membership: &membership{}, GoneOrgs: &goneOrgs{err: err}})
 			_, got := s.SweepGoneOrgs(context.Background())
 			if name == "unsupported" {
 				assert.NoError(t, got)

@@ -19,7 +19,7 @@ import (
 	deployv1 "github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1"
 	"github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1/controlplanev1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -49,7 +49,7 @@ type changeController struct {
 // changeProjects is how the calling chat's project names its org and forge
 // project, the defaults for a list or a new change.
 type changeProjects interface {
-	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetProject(ctx context.Context, id string) (*core.Project, error)
 }
 
 // changeEnvironments lists an org's deploy environments, to name an

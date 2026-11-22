@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/store"
-
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +21,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -328,7 +328,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	}))
 
 	starter := &recordingStarter{}
-	runs := New(launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: noopRecorder{}, TaskQueue: "test-queue"}), nil)
+	runs := New(launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: noopRecorder{}, TaskQueue: "test-queue"}), nil)
 
 	req := tools.StartRunRequest{
 		OwnerUserID: owner, ProjectID: projectID, Workflow: "builtin://agent",
@@ -367,7 +367,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	assert.Len(t, starter.calls, 1, "a retried start must not start Temporal twice")
 
 	// The new run counts toward the live cap until it finishes.
-	live, err := repo.CountLiveLaunchedRuns(ctx, owner, core.TriggerEventKindAgentStartRun)
+	live, err := store.CountLiveLaunchedRuns(ctx, repo.ORM(), owner, core.TriggerEventKindAgentStartRun)
 	require.NoError(t, err)
 	assert.Equal(t, 1, live)
 }

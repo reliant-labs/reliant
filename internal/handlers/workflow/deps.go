@@ -36,7 +36,6 @@ type Repository interface {
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*db.WorkflowDraft, error)
@@ -61,13 +60,17 @@ type Repository interface {
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 
-	// GetMachinePoolByName checks a workflow's `daemon: {pool: …}` names
-	// one of the user's pools (core.ErrMachinePoolNotFound when not).
-	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
-
 	// Installs is each machine's checkout of the project and who owns each
 	// machine (projectcheckout.Resolve).
 	daemonplacement.Installs
+}
+
+// Pools checks a workflow's `daemon: {pool: …}` names one of the user's
+// pools. store.MachinePoolExtStore satisfies it.
+type Pools interface {
+	// GetMachinePoolByName is core.ErrMachinePoolNotFound when the user has
+	// no such pool.
+	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
 }
 
 // Sender sends one request/response command to the machine holding a

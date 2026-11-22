@@ -56,7 +56,7 @@ func seedProviders(t *testing.T, ctx context.Context, repo *db.Repo, userID stri
 // access token or key. A provider with nothing stored is absent.
 func providerCredentials(t *testing.T, ctx context.Context, repo *db.Repo, userID string) map[string]string {
 	t.Helper()
-	accounts, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
+	accounts, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, userID)
 	require.NoError(t, err)
 	stored := map[string]string{}
 	for _, a := range accounts {

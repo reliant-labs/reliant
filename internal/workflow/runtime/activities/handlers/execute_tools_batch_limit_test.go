@@ -32,7 +32,7 @@ func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
 	executor.SetResult(secondID, &toolexec.ToolResult{Success: true, Content: secondContent})
 
 	compactionThreshold := int64(10_000)
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
 		ChatID:              f.chatID,

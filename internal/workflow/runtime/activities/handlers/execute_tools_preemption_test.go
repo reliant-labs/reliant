@@ -81,7 +81,7 @@ func (e *waitingExecutor) wasArmed(toolCallID string) bool {
 const testPreemptionPoll = 50 * time.Millisecond
 
 func newPreemptionTestActivity(store ExecuteToolsStore, preemption MailboxPreempter, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, ToolExecutor: executor, Preemption: preemption})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, ToolExecutor: executor, Preemption: preemption}).WithToolCallResults(testToolCallResults(store))
 	a.preemptionPoll = testPreemptionPoll
 	return a
 }

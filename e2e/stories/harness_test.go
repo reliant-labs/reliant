@@ -46,6 +46,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -202,7 +205,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
@@ -335,7 +338,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		LastActive: now,
 	}), "create story project's main worktree")
 
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo, Planning: planningtest.New(t, s.Repo)})
 
 	executor := cfg.toolExecutor
 	if executor == nil {
@@ -357,7 +360,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -407,6 +410,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Backoff:       providerbackofftest.New(t, s.Repo),
 		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
 		Messages:      store.NewMessageExtStore(s.Repo.ORM()),
@@ -435,11 +439,14 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   s.Repo,
-		Syncer: triggerSyncer,
-		Fires:  triggerFires,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
+		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
+		Syncer:   triggerSyncer,
+		Fires:    triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 

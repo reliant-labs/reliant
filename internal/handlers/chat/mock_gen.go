@@ -224,7 +224,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=0ccd208e3f5b8e35124f0539b545a868e557f2440e711625330bceeb2467f7ea
+// forge:hash=486910ed5b96927754753d99d7343c235dc4af5459d0d3ec5a79630def40d979
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -250,7 +250,6 @@ type MockRepository struct {
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	MoveChatToProjectFunc                                    func(context.Context, db.ChatMove) (bool, error)
-	ListCapacityWakeTargetsFunc                              func(context.Context, string) ([]string, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
@@ -336,7 +335,6 @@ type MockRepository struct {
 	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
-	ClearUsageLimitWaitFunc                                  func(context.Context, string, string, time.Time) error
 	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -350,7 +348,6 @@ type MockRepository struct {
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachineWorkflowsJSONFunc                       func(context.Context, string, string) (*string, bool, error)
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
-	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
 	GetTriggerEventByDedupeFunc                              func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
@@ -368,6 +365,7 @@ type MockRepository struct {
 	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
 	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
+	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	PinChatDaemonIfUnsetFunc                                 func(context.Context, string, string) (string, error)
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
 }
@@ -514,15 +512,6 @@ func (m *MockRepository) MoveChatToProject(ctx context.Context, p1 db.ChatMove) 
 		return m.MoveChatToProjectFunc(ctx, p1)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "MoveChatToProject")
-}
-
-// ListCapacityWakeTargets records the call and delegates to ListCapacityWakeTargetsFunc when set.
-func (m *MockRepository) ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error) {
-	m.Recorder.Record("ListCapacityWakeTargets", ctx, userID)
-	if m.ListCapacityWakeTargetsFunc != nil {
-		return m.ListCapacityWakeTargetsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListCapacityWakeTargets")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.
@@ -1290,15 +1279,6 @@ func (m *MockRepository) LockChatRunControl(ctx context.Context, chatID string) 
 	return nil, contractkit.MockNotSet("MockRepository", "LockChatRunControl")
 }
 
-// ClearUsageLimitWait records the call and delegates to ClearUsageLimitWaitFunc when set.
-func (m *MockRepository) ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error {
-	m.Recorder.Record("ClearUsageLimitWait", ctx, chatID, threadID, now)
-	if m.ClearUsageLimitWaitFunc != nil {
-		return m.ClearUsageLimitWaitFunc(ctx, chatID, threadID, now)
-	}
-	return contractkit.MockNotSet("MockRepository", "ClearUsageLimitWait")
-}
-
 // ClaimPendingTriggerEvent records the call and delegates to ClaimPendingTriggerEventFunc when set.
 func (m *MockRepository) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	m.Recorder.Record("ClaimPendingTriggerEvent", ctx, id, payload, def)
@@ -1414,15 +1394,6 @@ func (m *MockRepository) GetProjectPresetsJSON(ctx context.Context, projectID st
 		return m.GetProjectPresetsJSONFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectPresetsJSON")
-}
-
-// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
-func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
-	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
-	if m.GetProjectWithUserCheckFunc != nil {
-		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -1576,6 +1547,15 @@ func (m *MockRepository) WorkflowSourceDiagnostic(ctx context.Context, projectID
 		return m.WorkflowSourceDiagnosticFunc(ctx, projectID, daemonID, ref)
 	}
 	return "", contractkit.MockNotSet("MockRepository", "WorkflowSourceDiagnostic")
+}
+
+// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
+func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
+	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
+	if m.GetProjectWithUserCheckFunc != nil {
+		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
 }
 
 // PinChatDaemonIfUnset records the call and delegates to PinChatDaemonIfUnsetFunc when set.

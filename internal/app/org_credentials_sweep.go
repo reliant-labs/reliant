@@ -5,7 +5,7 @@ package app
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/orgcredentials"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
@@ -19,8 +19,8 @@ type OrgCredentialSweep struct{ sweeper *orgcredentials.Sweeper }
 // OrgCredentialSweepDeps is the repository and the token authority, which is
 // control-plane's AccessTokenInternalService when hosted.
 type OrgCredentialSweepDeps struct {
-	DB        *db.Repo
-	Authority tokenauthority.Authority
+	OrgAccounts orgaccounts.Service
+	Authority   tokenauthority.Authority
 }
 
 // NewOrgCredentialSweep is the sweep, or nothing (nil) without a control
@@ -36,7 +36,7 @@ func NewOrgCredentialSweep(d OrgCredentialSweepDeps) (*OrgCredentialSweep, error
 		return nil, nil
 	}
 	return &OrgCredentialSweep{sweeper: orgcredentials.New(orgcredentials.Deps{
-		Store: d.DB, Membership: cp, GoneOrgs: cp,
+		Store: d.OrgAccounts, Membership: cp, GoneOrgs: cp,
 	})}, nil
 }
 

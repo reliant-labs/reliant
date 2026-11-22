@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
@@ -108,7 +109,7 @@ func runCallLLMWithRetries(t *testing.T, h *IdempotencyTestHelper, driver llm.Dr
 	t.Helper()
 	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
-	}, MCPBinder: nil})
+	}, MCPBinder: nil}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -228,7 +229,7 @@ func TestCallLLM_UsageLedgerRecordsFailureAsClassOnly(t *testing.T) {
 	driver := &ledgerUsageDriver{name: "claude", failures: 99}
 	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
-	}, MCPBinder: nil})
+	}, MCPBinder: nil}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	var out CallLLMOutput
 	err := h.ExecuteActivity(callLLM.Execute, buildPlainCallLLMInput(chat.ID), &out)
 	require.Error(t, err)

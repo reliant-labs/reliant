@@ -54,7 +54,7 @@ func (s *Service) AddOrgProviderAPIKey(
 	}
 
 	owner := core.OrgAccountOwner(orgID)
-	acct, created, err := s.deps.Store.UpsertProviderAccount(ctx, core.AccountUpsert{
+	acct, created, err := s.deps.Accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 		Owner:           owner,
 		OrgAccess:       access,
 		CreatedByUserID: userID,
@@ -68,7 +68,7 @@ func (s *Service) AddOrgProviderAPIKey(
 		return nil, svcerr.Wrap(err)
 	}
 	if created {
-		if acct, err = s.deps.Store.PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &name}); err != nil {
+		if acct, err = s.deps.Accounts.PatchOwnedProviderAccount(ctx, owner, acct.ID, core.AccountPatch{Label: &name}); err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 	} else {

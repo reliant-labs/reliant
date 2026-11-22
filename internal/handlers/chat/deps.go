@@ -101,9 +101,6 @@ type Repository interface {
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	// MoveChatToProject moves an idle chat, with its plans, to another project.
 	MoveChatToProject(ctx context.Context, m db.ChatMove) (bool, error)
-	// ListCapacityWakeTargets lists the root runs of a user's chats that may
-	// have a thread blocked on a provider (WakeUserChats).
-	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)
 
 	// Threads and the workflows that run them.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
@@ -172,6 +169,9 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
+	// GetProjectWithUserCheck is the org-aware project read the handlers and the
+	// launcher share; db.Repo delegates it to projectaccess.
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore

@@ -139,6 +139,12 @@ func GetProjectByRemoteURLAndUser(ctx context.Context, db orm.Context, remoteURL
 // project in several orgs; when more than one matches, the oldest is
 // returned, so the answer never depends on the plan.
 func GetProjectByPathAndUserInScope(ctx context.Context, db orm.Context, path, userID string, scope *core.OrgScope) (*core.Project, error) {
+	if path == "" {
+		return nil, fmt.Errorf("project path cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	opts := []orm.QueryOption{orm.WhereEq(ProjectFieldPath, path), orm.WhereEq(ProjectFieldUserID, userID)}
 	if scope != nil {
 		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
@@ -156,6 +162,12 @@ func GetProjectByPathAndUserInScope(ctx context.Context, db orm.Context, path, u
 // GetProjectByRemoteURLAndUserInScope is GetProjectByRemoteURLAndUser kept
 // to scope, as GetProjectByPathAndUserInScope is to its path.
 func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	opts := []orm.QueryOption{
 		orm.WhereEq(ProjectFieldRemoteURL, gitremote.StripCredentials(remoteURL)),
 		orm.WhereEq(ProjectFieldUserID, userID),

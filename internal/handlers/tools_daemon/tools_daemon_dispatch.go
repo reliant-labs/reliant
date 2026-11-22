@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/logging"

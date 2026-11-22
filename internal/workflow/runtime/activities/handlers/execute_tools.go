@@ -277,6 +277,9 @@ type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
 	preemption   MailboxPreempter
 	toolExecutor toolexec.ToolExecutor
+	// results reads the durable result of a finished tool call. Set by
+	// WithToolCallResults.
+	results ToolCallResults
 	// funding reads what a chat's person said about spending their own
 	// accounts (runFunding). Set by WithRunFunding; nil is org_only.
 	funding RunFundingStore
@@ -293,6 +296,29 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+}
+
+// WithToolCallResults gives the tool-execution path the reader of the durable
+// result a finished tool call recorded. RegisterAll always sets it; without it
+// a retried terminal call is answered with the interrupted stub rather than its
+// recorded result (findToolCallResult), and is still never re-executed.
+func (a *ExecuteToolsActivity) WithToolCallResults(r ToolCallResults) *ExecuteToolsActivity {
+	a.results = r
+	return a
+}
+
+// errNoToolCallResults is findToolCallResult's answer for an activity built
+// without WithToolCallResults.
+var errNoToolCallResults = errors.New("execute tools: no tool call result reader (WithToolCallResults was not set)")
+
+// findToolCallResult reads the durable result recorded for toolCallID, or
+// errNoToolCallResults when the activity has no reader. Every caller treats an
+// error as "no result survived", the same as a missing row.
+func (a *ExecuteToolsActivity) findToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
+	if a.results == nil {
+		return nil, errNoToolCallResults
+	}
+	return a.results.FindToolCallResult(ctx, toolCallID)
 }
 
 // WithRunFunding gives the tool-execution path what a chat's person said about
@@ -988,7 +1014,12 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 		"tool_call_id", toolCallID,
 		"status", call.Status)
 
-	result, err := a.repo.GetToolCallResult(ctx, toolCallID)
+	result, err := a.findToolCallResult(ctx, toolCallID)
+	if errors.Is(err, errNoToolCallResults) {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Terminal tool call's recorded result cannot be read; answering with the interrupted stub",
+			"tool_call_id", toolCallID,
+			"error", err)
+	}
 	if err != nil || result == nil {
 		// Terminal row, but no result content survived (e.g. a historical
 		// Cancelled row that predates durable status). Same stub every other

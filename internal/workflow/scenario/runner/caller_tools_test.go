@@ -6,15 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // deniedLoopWorkflow and deniedOnceScenario are a shape the retired graph
@@ -100,7 +103,7 @@ func TestRunScenarioTool_ExecutesOnTheRuntime(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowScenario(ctx, stored))
 
-	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, ScenarioRunner: RunScenario})
+	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM()), ScenarioRunner: RunScenario})
 	resp, err := factory.RunScenario().Run(rctx.NewToolContext(ctx, "", "", nil, nil), tools.ToolCall{
 		ID:    "c1",
 		Input: `{"id":"` + draft.ID + `","name":"denied_once"}`,
@@ -130,7 +133,7 @@ func TestRunScenarioTool_WithoutRunnerIsUnavailable(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
 
-	resp, err := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo}).RunScenario().Run(
+	resp, err := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM())}).RunScenario().Run(
 		rctx.NewToolContext(ctx, "", "", nil, nil),
 		tools.ToolCall{ID: "c1", Input: `{"id":"` + draft.ID + `","name":"x"}`})
 	require.NoError(t, err)

@@ -81,7 +81,7 @@ func serverToolExecutor(repo *db.Repo) toolexec.ToolExecutor {
 func (f *noMachineFixture) execute(t *testing.T, executor toolexec.ToolExecutor, caps *reliantv1.ToolCapabilities, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, ExecuteToolsInput{
 		ChatID:       f.chat.ID,
 		Thread:       f.chat.ID,
 		Capabilities: caps,

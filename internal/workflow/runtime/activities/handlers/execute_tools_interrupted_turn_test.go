@@ -82,7 +82,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, input, &output))
 
 	for _, callID := range []string{finished, running, background, neverStarted, response} {
 		assert.Zero(t, executor.GetExecutionCount(callID), "an interrupted turn runs nothing: %s", callID)
@@ -119,7 +119,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 		"a backgrounded row is the reconciler's to close from the process's real outcome")
 	assert.Equal(t, core.ToolCallStatusCancelled, status(neverStarted),
 		"a call that never started is recorded, so the UI shows it stopped rather than nothing")
-	recorded, err := f.h.Repo().GetToolCallResult(ctx, neverStarted)
+	recorded, err := store.FindToolCallResult(ctx, f.h.Repo().ORM(), neverStarted)
 	require.NoError(t, err)
 	require.NotNil(t, recorded)
 	assert.Equal(t, NotRunInterruptedToolResultContent, recorded.Content,
@@ -168,7 +168,7 @@ func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
 
 	var output ExecuteToolsOutput
 	store := unreadableToolCallStore{ExecuteToolsStore: f.h.Repo()}
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, ToolExecutor: executor}).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, ToolExecutor: executor}).WithToolCallResults(testToolCallResults(store)).Execute, input, &output))
 
 	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
 	require.Len(t, output.ToolResults, 1)

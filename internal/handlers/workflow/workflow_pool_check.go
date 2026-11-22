@@ -103,7 +103,7 @@ func appendPath(base []string, elems ...string) []string {
 // poolLookup answers checkMachinePools for userID through the repository.
 func (s *Service) poolLookup(ctx context.Context, userID string) func(name string) error {
 	return func(name string) error {
-		_, err := s.deps.Repo.GetMachinePoolByName(ctx, userID, name)
+		_, err := s.deps.Pools.GetMachinePoolByName(ctx, userID, name)
 		return err
 	}
 }
