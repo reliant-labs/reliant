@@ -1219,7 +1219,7 @@ type backgroundProcessDaemons struct {
 
 // attachedDaemons is the attachment-lease read backgroundProcessDaemons makes.
 type attachedDaemons interface {
-	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, cutoff time.Time) ([]string, error)
 }
 
 func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -1227,7 +1227,10 @@ func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context,
 }
 
 func (d backgroundProcessDaemons) ConnectedDaemonIDs(ctx context.Context, userID string) ([]string, error) {
-	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, backgroundProcessLeaseWindow)
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, time.Now().UTC().Add(-backgroundProcessLeaseWindow))
 }
 
 // WorkflowReconciler is background workflow reconciliation: stuck-task
@@ -1289,7 +1292,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetResetGuard(d.ResetGuard)
 	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
 	r.SetQueuedDelivery(d.Queued)
-	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
 		r.SetHeldRunActivity(d.Activity)
 	}
