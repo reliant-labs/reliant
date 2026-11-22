@@ -21,6 +21,7 @@ import type { Chat } from "@/gen/reliant/v1/chat_pb";
 import type { Project } from "@/gen/reliant/v1/project_pb";
 import { useListSharedChats, useListSharedProjects } from "@/hooks/sharing-service-hooks_gen";
 import { useOrgMemberNames, useSetChatShared, useSetProjectShared } from "@/hooks/sharing-queries";
+import { homePath, projectsPath } from "@/lib/paths";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
 import type { MyOrg } from "@/services/controlPlane/orgs";
@@ -79,9 +80,17 @@ export function SharedItems({ org }: { org: MyOrg }) {
   return (
     <div className="space-y-6" data-testid="shared-items">
       <p className="text-meta text-muted-foreground">
-        What other members of {org.name} shared with it, read-only. Your own shares are not listed here: stop sharing them
-        from the chat or the project.
+        What other members of {org.name} shared with it, read-only. Your own shares are not listed here: open your chat's
+        Share dialog to stop sharing, or your project's Settings to stop sharing the project.
       </p>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" href={homePath()}>
+          Manage your chats
+        </Button>
+        <Button variant="outline" size="sm" href={projectsPath()}>
+          Manage your projects
+        </Button>
+      </div>
       {error && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-meta text-destructive-ink">
           {error}
@@ -90,10 +99,10 @@ export function SharedItems({ org }: { org: MyOrg }) {
 
       <SharedList
         id="shared-chats"
-        title="Shared chats"
+        title="Other members' shared chats"
         query={chats}
         items={chats.data?.chats ?? []}
-        empty="No member has shared a chat."
+        empty="No other member has shared a chat."
         loadError="Could not load the shared chats."
         offset={chatOffset}
         onOffset={setChatOffset}
@@ -114,10 +123,10 @@ export function SharedItems({ org }: { org: MyOrg }) {
 
       <SharedList
         id="shared-projects"
-        title="Shared projects"
+        title="Other members' shared projects"
         query={projects}
         items={projects.data?.projects ?? []}
-        empty="No member has shared a project."
+        empty="No other member has shared a project."
         loadError="Could not load the shared projects."
         offset={projectOffset}
         onOffset={setProjectOffset}

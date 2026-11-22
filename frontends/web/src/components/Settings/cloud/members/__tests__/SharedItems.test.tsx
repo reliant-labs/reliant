@@ -20,6 +20,7 @@ vi.mock("@/lib/toast-manager", () => ({ toast: { success: (m: string) => toastSu
 import { ResourceVisibility } from "@/gen/reliant/v1/common_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { homePath, projectsPath } from "@/lib/paths";
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
@@ -101,6 +102,11 @@ describe("Settings › Members › Shared", () => {
     await waitFor(() => expect(chat).toHaveTextContent("Shared by Bob"));
     expect(screen.getByTestId("shared-project-row-p1")).toHaveTextContent("shop");
     expect(screen.getByText(/Your own shares are not listed here/)).toBeInTheDocument();
+    expect(screen.getByText(/open your chat's Share dialog/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage your chats" })).toHaveAttribute("href", homePath());
+    expect(screen.getByRole("link", { name: "Manage your projects" })).toHaveAttribute("href", projectsPath());
+    expect(screen.getByRole("heading", { name: "Other members' shared chats" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Other members' shared projects" })).toBeInTheDocument();
     expect(calls.listChats).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, limit: 100, offset: 0 }));
     expect(calls.listProjects).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, limit: 100, offset: 0 }));
   });
@@ -115,7 +121,7 @@ describe("Settings › Members › Shared", () => {
     expect(calls.setChat).not.toHaveBeenCalled();
     await userEvent.click(within(dialog).getByRole("button", { name: "Make private" }));
     await waitFor(() => expect(calls.setChat).toHaveBeenCalledWith(expect.objectContaining({ chatId: "c1", visibility: ResourceVisibility.PRIVATE })));
-    expect(await screen.findByTestId("shared-chats-empty")).toHaveTextContent("No member has shared a chat.");
+    expect(await screen.findByTestId("shared-chats-empty")).toHaveTextContent("No other member has shared a chat.");
     expect(toastSuccess).toHaveBeenCalledWith("Made Fix the flaky deploy private");
   });
 
@@ -152,7 +158,7 @@ describe("Settings › Members › Shared", () => {
       "SharingService.ListSharedProjects": { response: { projects: full } },
     });
     await openShared();
-    expect(await screen.findByTestId("shared-chats-empty")).toHaveTextContent("No member has shared a chat.");
+    expect(await screen.findByTestId("shared-chats-empty")).toHaveTextContent("No other member has shared a chat.");
     expect(await screen.findByTestId("shared-projects-page")).toHaveTextContent("Showing 1–100");
     expect(screen.getByTestId("shared-projects-next")).toHaveTextContent("Next 100");
   });
