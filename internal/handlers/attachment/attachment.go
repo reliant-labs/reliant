@@ -14,6 +14,13 @@ import (
 // does not say otherwise: 10 MB.
 const defaultMaxFileSize = int64(10 * 1024 * 1024)
 
+// attachmentURL is where a client fetches the attachment with this id. It
+// is wire-only (no column holds it), so every rpc that returns an Attachment
+// fills it from the id.
+func attachmentURL(id string) string {
+	return fmt.Sprintf("/api/attachments/%s", id)
+}
+
 // attachmentToWire is the wire shape of a stored attachment, without its
 // bytes.
 func attachmentToWire(a *core.Attachment) *reliantv1.Attachment {
@@ -27,7 +34,7 @@ func attachmentToWire(a *core.Attachment) *reliantv1.Attachment {
 		FilePath:       a.FilePath,
 		CreatedAt:      timestamppb.New(a.CreatedAt),
 		UpdatedAt:      timestamppb.New(a.UpdatedAt),
-		Url:            fmt.Sprintf("/api/attachments/%s", a.ID),
+		Url:            attachmentURL(a.ID),
 		AttachmentType: a.AttachmentType,
 	}
 }

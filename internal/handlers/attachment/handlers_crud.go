@@ -36,13 +36,16 @@ func (s *Service) GetAttachment(ctx context.Context, req *connect.Request[pb.Get
 		return fetch(ctx, id, append(opts, ownedBy(userID))...)
 	}
 	// The bytes ride beside the metadata: the entity carries them, the
-	// Attachment message does not.
+	// Attachment message does not. The url is wire-only, so the projection
+	// leaves it empty; Upload and CreateFileReference return it, and so
+	// must a read-back of the same attachment.
 	pack := op.Pack
 	op.Pack = func(e *store.Attachment) (*pb.GetAttachmentResponse, error) {
 		resp, err := pack(e)
 		if err != nil {
 			return nil, err
 		}
+		resp.Attachment.Url = attachmentURL(e.ID)
 		resp.Content = e.Content
 		return resp, nil
 	}
