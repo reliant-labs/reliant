@@ -27,8 +27,6 @@ type Repository interface {
 	ListUserPresetsByProject(ctx context.Context, userID, projectID string) ([]*db.Preset, error)
 	ListPresetsByTag(ctx context.Context, userID, tag, projectID string) ([]*db.Preset, error)
 
-	// The project whose committed presets apply, checked against the caller.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 
 	// The settings that hold a user's default preset per scope.

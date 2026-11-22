@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -51,7 +52,7 @@ func TestApprovalResolveActivity_Timeout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Execute the resolve activity with timeout status
-	activity := NewApprovalResolveActivity(h.Repo())
+	activity := NewApprovalResolveActivity(approvalclose.NewFromRepo(h.Repo()))
 	input := ApprovalResolveInput{
 		ApprovalID: approvalID,
 		Status:     "timeout",

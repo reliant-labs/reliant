@@ -22,7 +22,7 @@ func (s *Service) RestoreInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
+	if err := s.deps.Items.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to restore inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil

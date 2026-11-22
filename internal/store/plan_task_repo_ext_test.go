@@ -264,13 +264,13 @@ func TestTaskDependencyQueries(t *testing.T) {
 	blocks := int32(reliantv1.DependencyType_DEPENDENCY_TYPE_BLOCKS)
 	related := int32(reliantv1.DependencyType_DEPENDENCY_TYPE_RELATED)
 	// a1 -blocks-> a2 (store, explicit created_at), a3 -related-> a2
-	// (Repository), a2 -blocks-> b1 (store, created_at left to its DEFAULT).
+	// (ExtStore), a2 -blocks-> b1 (store, created_at left to its DEFAULT).
 	d1 := &core.TaskDependency{ID: "d1", FromTaskID: "a1", ToTaskID: "a2", DependencyType: blocks, CreatedAt: base}
 	if err := store.InsertTaskDependency(ctx, env.ORM, d1); err != nil {
 		t.Fatalf("InsertTaskDependency: %v", err)
 	}
-	if err := env.Repo.CreateTaskDependency(ctx, &core.TaskDependency{ID: "d2", FromTaskID: "a3", ToTaskID: "a2", DependencyType: related, CreatedAt: base.Add(time.Minute)}); err != nil {
-		t.Fatalf("Repo.CreateTaskDependency: %v", err)
+	if err := store.NewTaskDependencyExtStore(env.ORM).InsertTaskDependency(ctx, &core.TaskDependency{ID: "d2", FromTaskID: "a3", ToTaskID: "a2", DependencyType: related, CreatedAt: base.Add(time.Minute)}); err != nil {
+		t.Fatalf("ExtStore.InsertTaskDependency: %v", err)
 	}
 	d3 := &core.TaskDependency{ID: "d3", FromTaskID: "a2", ToTaskID: "b1", DependencyType: blocks}
 	if err := store.InsertTaskDependency(ctx, env.ORM, d3); err != nil {
@@ -339,9 +339,9 @@ func TestTaskDependencyQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDependenciesByPlan: %v", err)
 	}
-	twinByPlan, err := env.Repo.ListDependenciesByPlan(ctx, "plan-a")
+	twinByPlan, err := store.NewTaskDependencyExtStore(env.ORM).ListDependenciesByPlan(ctx, "plan-a")
 	if err != nil {
-		t.Fatalf("Repo.ListDependenciesByPlan: %v", err)
+		t.Fatalf("ExtStore.ListDependenciesByPlan: %v", err)
 	}
 	same(t, "ListDependenciesByPlan(plan-a)", byPlan, twinByPlan, "d1", "d2", "d3")
 

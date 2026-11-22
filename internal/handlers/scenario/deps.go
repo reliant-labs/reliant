@@ -15,7 +15,6 @@ import (
 // workflows a scenario runs.
 type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 	GetWorkflowScenario(ctx context.Context, id string) (*db.WorkflowScenario, error)
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*db.WorkflowScenario, error)

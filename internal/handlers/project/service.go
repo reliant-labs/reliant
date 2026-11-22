@@ -25,6 +25,8 @@ type Deps struct {
 	// Repo stores projects and what hangs off them: their daemons, repos,
 	// main worktree, seeded config row and prompts.
 	Repo Repository
+	// Detachments records and reads a project's detachments from machines.
+	Detachments Detachments
 	// Router runs every filesystem and git operation on the caller's
 	// daemon, which owns the filesystem. The API server always has one; in
 	// a composition without one, the daemon-backed steps fail through their
@@ -55,6 +57,12 @@ type Deps struct {
 	// every gate off.
 	// forge:optional-dep
 	OrgRollout *configv1.OrgsConfig
+	// Ledger is a move's ledger and preview (MoveLedger). Required: every
+	// project move rpc reads it.
+	Ledger MoveLedger
+	// Shared lists what others shared with the caller's org for
+	// ListProjectsWithApps (SharedProjects).
+	Shared SharedProjects
 	// Moves starts a move's saga (orgmove.ProjectOrgMoveWorkflow). Nil — no
 	// Temporal — refuses MoveProjectToOrg.
 	// forge:optional-dep
@@ -89,6 +97,15 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("project: Deps.Repo is required")
+	}
+	if d.Detachments == nil {
+		return fmt.Errorf("project: Deps.Detachments is required")
+	}
+	if d.Ledger == nil {
+		return fmt.Errorf("project: Deps.Ledger is required")
+	}
+	if d.Shared == nil {
+		return fmt.Errorf("project: Deps.Shared is required")
 	}
 	return nil
 }

@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/store"
-
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -73,7 +71,7 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnThreadID, string(legacy)))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
@@ -144,7 +142,7 @@ func TestChatSnapshot_ThreadUpdateUsesThreadsTableLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stale)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -201,7 +199,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredOrigin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, threadID, string(stored)))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, SpawnCalls: store.NewToolCallExtStore(repo.ORM())}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 

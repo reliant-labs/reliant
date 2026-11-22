@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -483,7 +485,7 @@ func TestCreateWorkflow_DefaultTemplate(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	// Create with no args — should use default template and random name
@@ -513,7 +515,7 @@ func TestCreateWorkflow_WithName(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	name := "my-custom-workflow"
@@ -540,7 +542,7 @@ func TestCreateWorkflow_WithContent(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	content := validWorkflowYAML
@@ -567,7 +569,7 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo)
+	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	// Does not parse as a workflow: rejected even as a draft.

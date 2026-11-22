@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -352,6 +353,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
@@ -458,6 +460,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          repo,
+		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Syncer:        syncer,
 		Fires:         fires,
 		ControlPlane:  hostedControlPlane(d.ControlPlane),
@@ -518,10 +521,19 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	if err != nil {
 		return nil, err
 	}
+	planner, err := newToolPlanning(d.Logger, d.Config, repo)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
+		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
+		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
+		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
@@ -554,10 +566,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: newMachineController(newMachineRegistry(repo.ORM()), d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(repo, d.Router),
+		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),
@@ -702,6 +714,26 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
+// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
+// step keys, nil without one (a nil interface, never a nil client in one):
+// every run node with llm_gateway is then refused. A control plane the worker
+// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
+// the same way.
+func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
+// projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
+// owner, written in the commit's own transaction (the ctx it is called with).
+type projectMoveAnnouncer struct{ repo *db.Repo }
+
+func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
+	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+}
+
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
 // no orgs (a nil *orgs.Resolver would be a non-nil interface).
 func orgMembers(r *orgs.Resolver) orgmove.Members {
@@ -722,9 +754,12 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 	if ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret == "" {
 		return nil, nil
 	}
+	o := d.DB.ORM()
 	svc, err := orgmove.New(orgmove.Deps{
 		Logger:       slog.Default(),
-		Store:        d.DB,
+		Store:        store.NewProjectOrgMoveExtStore(o),
+		Projects:     store.NewProjectExtStore(o),
+		Announcer:    projectMoveAnnouncer{repo: d.DB},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),
@@ -839,6 +874,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1195,4 +1231,16 @@ func (p *ProjectPurge) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// newToolPlanning is the plan, task and dependency store the planning tools
+// write through.
+func newToolPlanning(logger *slog.Logger, cfg *config.Config, repo *db.Repo) (planning.Service, error) {
+	return planning.NewInstrumented(planning.Deps{
+		Logger:       logger,
+		Config:       cfg,
+		Plans:        store.NewPlanExtStore(repo.ORM()),
+		Tasks:        store.NewTaskExtStore(repo.ORM()),
+		Dependencies: store.NewTaskDependencyExtStore(repo.ORM()),
+	})
 }

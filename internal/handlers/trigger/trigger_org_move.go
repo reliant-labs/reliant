@@ -63,7 +63,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 	if err := s.refreshTriggerAccess(ctx, &enabling); err != nil {
 		return ownerFixes(err, "check the owner's integration access")
 	}
-	resumed, err = s.deps.Repo.ResumeTriggerPausedBy(ctx, t.ID, core.TriggerPausedOrgMove, t.UpdatedAt)
+	resumed, err = s.deps.OrgMoves.ResumePausedTrigger(ctx, t.ID, core.TriggerPausedOrgMove, t.UpdatedAt)
 	if err != nil {
 		return false, "", fmt.Errorf("turn the trigger back on: %w", err)
 	}

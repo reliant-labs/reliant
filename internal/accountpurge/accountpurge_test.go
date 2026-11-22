@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -556,7 +557,7 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+			_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, db.LLMCallUsage{
 				ID: fmt.Sprintf("late-%d", i), UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
 				AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
 			})
@@ -580,7 +581,7 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 	}
 
 	// A call that finishes long after the purge is refused too.
-	written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, db.LLMCallUsage{
 		ID: "much-later", UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
 		Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
 	})
@@ -631,7 +632,7 @@ func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+		written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, db.LLMCallUsage{
 			ID: "started-mid-purge", UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
 			AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1,
 			CreatedAt: time.Now(), // later than the purge transaction's start

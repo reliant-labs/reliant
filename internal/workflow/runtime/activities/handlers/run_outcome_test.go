@@ -25,7 +25,8 @@ func TestResolveRunOutcome(t *testing.T) {
 	var asked []time.Time
 	var askedRuns []string
 	handled := &db.HandledNodeFailure{Node: "post_failed", Error: "channel_not_found"}
-	store := &MockWorkflowStatusStore{
+	store := &MockWorkflowStatusStore{}
+	storeRuns := &MockRunRecords{
 		FirstHandledNodeFailureFunc: func(_ context.Context, workflowID, runID string, since time.Time) (*db.HandledNodeFailure, error) {
 			asked = append(asked, since)
 			askedRuns = append(askedRuns, runID)
@@ -38,7 +39,7 @@ func TestResolveRunOutcome(t *testing.T) {
 			return nil, nil
 		},
 	}
-	a := &WorkflowStatusActivity{repo: store}
+	a := &WorkflowStatusActivity{repo: store, runs: storeRuns}
 	ctx := context.Background()
 
 	for _, tc := range []struct {
@@ -82,7 +83,8 @@ func TestWorkflowStatus_RecordsTheRunOutcome(t *testing.T) {
 	t.Parallel()
 
 	var rowOutcome, eventOutcome, eventDetail string
-	store := &MockWorkflowStatusStore{
+	store := &MockWorkflowStatusStore{}
+	storeRuns := &MockRunRecords{
 		FirstHandledNodeFailureFunc: func(context.Context, string, string, time.Time) (*db.HandledNodeFailure, error) {
 			return &db.HandledNodeFailure{Node: "post_failed", Error: "channel_not_found"}, nil
 		},
@@ -100,7 +102,7 @@ func TestWorkflowStatus_RecordsTheRunOutcome(t *testing.T) {
 		},
 		SetLaunchEventRunStatusFunc: func(context.Context, string, string) error { return nil },
 	}
-	a := &WorkflowStatusActivity{repo: store}
+	a := &WorkflowStatusActivity{repo: store, runs: storeRuns}
 	input := WorkflowStatusInput{WorkflowID: "wf", ChatID: "chat", Status: "completed", LaunchRun: true}
 	input.resolved = a.resolveRunOutcome(context.Background(), input)
 

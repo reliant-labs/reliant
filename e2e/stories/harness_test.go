@@ -45,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/planningtest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -334,7 +335,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		LastActive: now,
 	}), "create story project's main worktree")
 
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo, Planning: planningtest.New(t, s.Repo)})
 
 	executor := cfg.toolExecutor
 	if executor == nil {
@@ -428,11 +429,12 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   s.Repo,
-		Syncer: triggerSyncer,
-		Fires:  triggerFires,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Syncer:   triggerSyncer,
+		Fires:    triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 
