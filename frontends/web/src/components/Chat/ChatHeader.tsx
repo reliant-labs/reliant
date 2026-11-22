@@ -60,6 +60,7 @@ import { useTopBarSlot, useTopBarVariant } from "../Layout/topBar";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { machineDisplayName } from "@/lib/machineName";
+import { useProjectStore } from "../../store/projectStore";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -129,6 +130,9 @@ export function ChatHeader({
   }, [variant]);
   const inAppBar = variant === "a" && slotEl !== null && slotOwner === slotToken.current;
   const { dragRegionStyle, noDragRegionStyle } = useTitleBarChrome();
+  // Proposed: the app tag only when it says something the bar's project name does not.
+  const projectName = useProjectStore((state) => state.currentProject?.name);
+  const showAppTag = !!chat?.appName && !(proposed && chat.appName === projectName);
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
@@ -284,6 +288,7 @@ export function ChatHeader({
           title={title}
           className={cn(
             "min-w-0 truncate rounded-md px-1 text-ui font-medium text-foreground transition-colors",
+            inAppBar && "min-w-[8rem]",
             !(isNewChat || isViewer) && "cursor-text hover:text-foreground/80",
           )}
         >
@@ -301,7 +306,7 @@ export function ChatHeader({
       )}
 
       {/* The app the chat was started from (Chat.app_name, D4). */}
-      {!isNewChat && chat?.appName && <ChatAppTag name={chat.appName} />}
+      {!isNewChat && showAppTag && chat?.appName && <ChatAppTag name={chat.appName} />}
 
       {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
       {!isNewChat && (isShared || isViewer) && (
@@ -318,7 +323,11 @@ export function ChatHeader({
 
       {/* The prompt scrolled out of view: the timeline renders it here. */}
       {pinnedPromptSlotRef && (
-        <div ref={pinnedPromptSlotRef} className="flex min-w-0 max-w-[40%] shrink justify-end" data-testid="chat-pinned-prompt-slot" />
+        <div
+          ref={pinnedPromptSlotRef}
+          className={cn("min-w-0 max-w-[40%] shrink justify-end", inAppBar ? "hidden 2xl:flex 2xl:max-w-[30%]" : "flex")}
+          data-testid="chat-pinned-prompt-slot"
+        />
       )}
 
       {/* Threads: one switcher, only when there is more than one. */}

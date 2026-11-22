@@ -82,6 +82,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     const {
       isElectron,
+      isMac,
+      isFullscreen,
       trafficLightPadding,
       dragRegionStyle,
       noDragRegionStyle,
@@ -208,7 +210,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
           {/* Toggle Chat Sidebar button. A plain hamburger (owner, 2026-11-22):
               the one glyph every app uses for "show the navigation", the same
               one the mobile shell's MobileMenuButton draws. */}
-          {onToggleChatSidebar && (
+          {/* Proposed: in the macOS app a docked nav has its own toggle beside
+              the traffic lights (AppShell), so the bar does not repeat it. */}
+          {onToggleChatSidebar && !(proposed && isMac && !isFullscreen && !windowAligned) && (
             <Tooltip
               content={`Toggle Chat Sidebar (${formatShortcut(
                 "onToggleSidebar"
@@ -248,8 +252,12 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                   {currentProject.name}
                 </button>
               </Tooltip>
-              <span aria-hidden="true" className="text-muted-foreground/50">/</span>
-              <span className="flex min-w-0 items-center gap-1 px-1.5 text-muted-foreground" title={branchName}>
+              {/* Variant A gives the room to the chat title below xl: the branch is in the nav's chat groups. */}
+              <span aria-hidden="true" className={cn("text-muted-foreground/50", variant === "a" && "hidden xl:inline")}>/</span>
+              <span
+                className={cn("min-w-0 items-center gap-1 px-1.5 text-muted-foreground", variant === "a" ? "hidden xl:flex" : "flex")}
+                title={branchName}
+              >
                 <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
                 <span className="max-w-[14rem] truncate">{branchName}</span>
               </span>
