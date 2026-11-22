@@ -491,6 +491,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge test`](#reliant-forge-test) | Record the project's own test lanes (never runs a test suite of its own) |
 | [`reliant forge test begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`reliant forge test capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
+| [`reliant forge test collect`](#reliant-forge-test-collect) | Pull coverage from an env's running instrumented servers into a test run |
 | [`reliant forge test coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
 | [`reliant forge test flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
 | [`reliant forge test flakes confirm`](#reliant-forge-test-flakes-confirm) | Rerun a red run's failing tests once to tell flakes from breaks (always exits 0) |
@@ -8164,6 +8165,7 @@ reliant forge env down [environment] [flags]
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Stop every forge stack running on this machine, across all projects (the only way to reach a stack whose project directory is gone) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--collect` | `bool` | - | First pull the env's coverage (as forge test collect does) into the active test run, or a new one; FORGE_TEST_RUN set does this too. Best effort: never fails the teardown |
 
 ---
 
@@ -8791,6 +8793,7 @@ reliant forge env preview delete [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--branch` | `string` | - | The branch the preview is for (instead of --pr) |
+| `--collect` | `bool` | - | First pull the preview's coverage (as forge test collect does) into the active test run, or a new one; FORGE_TEST_RUN set does this too. Best effort: never fails the deletion |
 | `--from` | `string` | `preview` | The committed template env the preview copies (deploy/kcl/<from>/) |
 | `--name` | `string` | - | The instance to delete, by name (instead of --pr / --branch) |
 | `--name-template` | `string` | - | How the instance is named: {env} is --from, {id} is pr-<n> or the branch (default "{env}-{id}") |
@@ -18789,6 +18792,8 @@ Print one of forge's published JSON Schemas (draft 2020-12).
   test-coverage-view, test-runs
         forge.test.coverage-view/v1, forge.test.runs/v1: what `forge test
         coverage --json` and `forge test runs --json` print.
+  test-collect  forge.test.collect/v1: what `forge test collect <env> --json`
+        pulled from each workload of an env.
 
   test-run-result
         forge.test.run-result/v1: what `forge test run --json` prints.
@@ -22009,6 +22014,7 @@ reliant forge test [flags]
 |---------|-------------|
 | [`begin`](#reliant-forge-test-begin) | Print a run directory for the project's test lanes to record into (plumbing) |
 | [`capture`](#reliant-forge-test-capture) | Run a test lane's command unchanged and record its results (plumbing) |
+| [`collect`](#reliant-forge-test-collect) | Pull coverage from an env's running instrumented servers into a test run |
 | [`coverage`](#reliant-forge-test-coverage) | Show recorded coverage per package or file, for a path, a lane or a diff (runs nothing) |
 | [`flakes`](#reliant-forge-test-flakes) | Flaky tests in the local test record, with the quarantine command for each |
 | [`ingest`](#reliant-forge-test-ingest) | Copy reports from a runner forge does not wrap (pytest JUnit, jest LCOV, …) into a recorded run |
@@ -22094,6 +22100,61 @@ reliant forge test capture --run <dir> --lane <name> [--results <file>] -- <comm
 | `--render` | `string` | `auto` | How a go test -json stream is printed: auto (verbose when the command passes -v), text, verbose or raw |
 | `--results` | `string` | - | Report file the command writes (JUnit XML, Vitest JSON), copied into the lane after it exits |
 | `--run` | `string` | - | Run directory to record into (default: $FORGE_TEST_RUN, else a new run) |
+
+---
+
+#### reliant forge test collect
+
+Pull coverage from an env's running instrumented servers into a test run
+
+Pulls the Go coverage of the env's running instrumented workloads (the -cover
+builds forge makes for local, ephemeral and preview envs) into a run, as the
+lane's go-covdata input:
+
+  host     GET http://127.0.0.1:<pprof port>/debug/coverage, plus what earlier
+           processes flushed to .forge/tests/covdata/<env>/<workload>/
+  compose  docker cp of the container's GOCOVERDIR (compose binds pprof on
+           0.0.0.0, so the pull endpoint is withheld): what its process
+           flushed at exit
+  cluster  a port-forward to each running pod's debug port (6060), then the
+           same GET
+
+The coverage goes in <run>/<lane>/covdata/<workload>/, grouped by build: the
+newest build is the workload's coverage, and an older one (an air rebuild, a
+pod of the last rollout) is kept under stale/<hash>/, labelled "stale build"
+and never merged. Without --run, FORGE_TEST_RUN is the run, else a new one is
+begun; a collect after `forge test capture --lane e2e` joins that lane.
+
+--reset starts the counts from zero instead, without changing the running
+processes (the endpoint is read-only): each live process's counters are
+pulled and recorded as its baseline, which every later collect subtracts, and
+the counter files already flushed (by any process, including one that exited
+before the reset) are recorded and left out of every later collect. A process
+started after the reset, or restarted, is counted whole, and a file flushed
+after the reset is always collected. Run it before the lane, collect after it.
+
+A workload that is not a forge Go build reports
+"coverage: unavailable (not a forge Go build)"; one the env does not
+instrument, "not instrumented". Collection is best effort per workload.
+
+Exit codes: 0 when anything was collected, or there was nothing to collect; 2
+when an instrumented workload could not be reached and nothing was collected;
+1 for a bad argument. --json prints forge.test.collect/v1.
+
+```
+reliant forge test collect <env> [--workload <w>] [--reset] [--run <dir>] [--lane e2e] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print forge.test.collect/v1 |
+| `--lane` | `string` | `e2e` | Lane to record the coverage under |
+| `--reset` | `bool` | - | Start the counts from zero instead of collecting: record the live counters as a baseline later collects subtract, and leave the counter files flushed before it out of every later collect |
+| `--run` | `string` | - | Run directory to record into (default: $FORGE_TEST_RUN, else a new run) |
+| `--workload` | `stringArray` | `[]` | Collect only this workload (repeatable; default: every workload of the env) |
 
 ---
 
