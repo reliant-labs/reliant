@@ -43,7 +43,7 @@ func (r orgUpdatesRepo) GetLatestUserUpdateSequence(context.Context, string) (in
 	return int64(len(r.log)), nil
 }
 
-func (r orgUpdatesRepo) GetUserUpdatesSince(_ context.Context, _ string, since int64, limit int) ([]db.UserUpdate, error) {
+func (r orgUpdatesRepo) UserUpdatesSince(_ context.Context, _ string, since int64, limit int) ([]db.UserUpdate, error) {
 	var out []db.UserUpdate
 	for _, u := range r.log {
 		if u.SequenceNumber > since && len(out) < limit {
@@ -118,7 +118,7 @@ func orgUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.Use
 // adjusts the service before it serves.
 func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string, tune ...func(*Service)) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})))
 	for _, f := range tune {
 		f(svc)
 	}

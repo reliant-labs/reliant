@@ -600,23 +600,6 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
-// ListRecentTranscriptSiblingMessages returns, ascending, the newest
-// `limit` messages with seq >= fromSeq on threads other than mainThreadID
-// that are not spawn threads, bounded in SQL. The chat snapshot reads its
-// sibling rows through this: node and fork threads render inline in the
-// transcript, while a spawn renders as a tool-call card that fetches its
-// own thread (ListMessages with thread_id) when expanded.
-func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if mainThreadID == "" {
-		return nil, fmt.Errorf("main thread ID cannot be empty")
-	}
-
-	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
-}
-
 // CountMessagesInChat returns the true message count for a chat, read from
 // the trigger-maintained chat_thread_message_counts rather than counted.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
