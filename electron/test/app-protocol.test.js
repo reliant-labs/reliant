@@ -189,3 +189,26 @@ test('the registered handler answers config.js before the web root', async () =>
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.text(), 'window.__FORGE_CONFIG__ = {};\n');
 });
+
+test('with an API handler, /_api/… goes to it and never to the web root; without one it stays a file path', async () => {
+  const { isApiRequest } = require('../src/app-protocol');
+  assert.strictEqual(isApiRequest(`${APP_ORIGIN}/_api/@reliant/x`), true);
+  assert.strictEqual(isApiRequest(`${APP_ORIGIN}/assets/_api/x`), false);
+  assert.strictEqual(isApiRequest('app://other/_api/x'), false);
+
+  let handler;
+  const seen = [];
+  const protocol = { handle: (_scheme, fn) => { handler = fn; }, isProtocolHandled: () => true };
+  require('../src/app-protocol').registerAppProtocol(protocol, '/nonexistent-web-root', { warn() {}, error() {} }, {
+    configScript: () => '',
+    apiHandler: async (request) => { seen.push(request.url); return new Response('api', { status: 200 }); },
+  });
+  const res = await handler({ url: `${APP_ORIGIN}/_api/@reliant/auth/session` });
+  assert.strictEqual(await res.text(), 'api');
+  assert.deepStrictEqual(seen, [`${APP_ORIGIN}/_api/@reliant/auth/session`]);
+
+  let plain;
+  require('../src/app-protocol').registerAppProtocol({ handle: (_s, fn) => { plain = fn; }, isProtocolHandled: () => true },
+    '/nonexistent-web-root', { warn() {}, error() {} }, { configScript: () => '' });
+  assert.strictEqual((await plain({ url: `${APP_ORIGIN}/_api/@reliant/auth/session` })).status, 404);
+});

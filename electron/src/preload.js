@@ -213,6 +213,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Rejects rather than resolving falsy when the listener cannot start: the
   // renderer's fallback lives in one catch block, and a falsy resolve would
   // route past it (electron.d.ts states this contract).
+  // Forge sign-in (AUTH_PROVIDER "forge"; main.js forge-auth:*,
+  // forge-auth.js). Sign-in runs in the system browser through forge's
+  // sign-in handoff; the session it yields stays in the main process, which
+  // proxies the renderer's same-origin /_api/@… calls with it. Nothing here
+  // returns a credential: only who signed in. A build with Supabase sign-in
+  // answers success: false.
+  forgeAuth: {
+    signIn: () => ipcRenderer.invoke('forge-auth:sign-in'),
+    signOut: () => ipcRenderer.invoke('forge-auth:sign-out'),
+    sessionChanged: () => ipcRenderer.invoke('forge-auth:session-changed'),
+    onChanged: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('forge-auth:changed', listener);
+      return () => ipcRenderer.removeListener('forge-auth:changed', listener);
+    },
+  },
+
   startOAuthRedirect: async () => {
     const result = await ipcRenderer.invoke('oauth:start-redirect');
     if (!result?.success || !result.redirectUri) {

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { z } from 'zod'
 // The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
@@ -452,6 +453,19 @@ const oauthCallbackRoute = createRoute({
   path: '/auth/callback',
   validateSearch: oauthCallbackSearchSchema,
   component: OAuthCallback,
+})
+
+// Desktop sign-in consent (forge's sign-in handoff): the desktop app opens this
+// in the system browser. Root-level and unguarded like /oauth/cli: the session
+// is reliant-api's cookie, not Supabase's, and the page follows the server's
+// sign-in link itself, keeping `req` across it. The page reads `req` from the
+// raw query (tanstack JSON-parses search values), so a malformed one is
+// dropped here rather than failing the route.
+const handoffConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/handoff',
+  validateSearch: z.object({ req: z.string().optional().catch(undefined) }),
+  component: lazyRoute(() => import('./components/Auth/HandoffConsent'), 'HandoffConsent'),
 })
 
 // App-owned GitHub OAuth connect callback. GITHUB_REDIRECT_URI points GitHub at
@@ -1258,6 +1272,7 @@ const mobileIndexRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
+  handoffConsentRoute,
   githubOAuthCallbackRoute,
   connectionOAuthCallbackRoute,
   oauthConsentRoute,

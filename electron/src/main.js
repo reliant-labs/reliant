@@ -9,6 +9,7 @@ const {
   globalShortcut,
   Notification,
   protocol,
+  session,
   WebContentsView,
 } = require("electron");
 
@@ -79,6 +80,7 @@ const {
 } = require("./app-protocol");
 const { configScript, loadReleaseRendererConfig, resolveRendererConfig } = require("./runtime-config");
 const oauthLoopback = require("./oauth-loopback");
+const forgeAuthModule = require("./forge-auth");
 const oauthProviderLogin = require("./oauth-provider-login");
 const { openStripeCheckout } = require("./stripe-checkout");
 const installRecord = require("./install-info");
@@ -94,6 +96,7 @@ const {
   buildAuthLoadReply,
   describeAuthPrincipalChange,
   shouldRestartBackendForAuthChange,
+  startBackendRestart,
   runAuthWrite,
 } = require("./backend-auth");
 const windowStateClient = require("./window-state-client");
@@ -1414,6 +1417,84 @@ async function restartBackendForAuthPrincipalChange(previousSession, nextSession
   return { restarted: true, port };
 }
 
+// ── Forge sign-in (forge-auth.js) ───────────────────────────────────────
+//
+// Which sign-in this build uses: the renderer config's AUTH_PROVIDER (the
+// release document, RELIANT_AUTH_PROVIDER over it), read once, so the main
+// process and the renderer it serves always agree.
+let forgeAuth = null;
+let forgeApiProxy = null;
+let cachedDesktopAuthProvider = null;
+function desktopAuthProvider() {
+  if (!cachedDesktopAuthProvider) {
+    cachedDesktopAuthProvider = forgeAuthModule.authProviderOf(
+      resolveRendererConfig({ release: loadReleaseRendererConfig(), env: process.env })
+    );
+    log.info("[Auth] Sign-in provider:", cachedDesktopAuthProvider);
+  }
+  return cachedDesktopAuthProvider;
+}
+
+/**
+ * The daemon follows the forge session's principal, as it follows the
+ * Supabase session's (auth:save / auth:clear): a different person gets the
+ * daemon respawned with a PAT minted for them, and the previous person's
+ * daemon.json entry is dropped.
+ */
+function onForgePrincipalChange(previous, next, reason) {
+  const asSession = (p) => (p ? { user: { id: p.subject, email: p.email } } : null);
+  if (previous && (!next || next.subject !== previous.subject) && backendManager) {
+    backendManager.clearDaemonCredsForOrigin(previous.subject);
+  }
+  startBackendRestart({
+    restart: () => restartBackendForAuthPrincipalChange(asSession(previous), asSession(next), `forge-auth:${reason}`),
+    reason: `forge-auth:${reason}`,
+    logger: log,
+  });
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) window.webContents.send("forge-auth:changed", { signedIn: Boolean(next) });
+  });
+}
+
+/**
+ * Build the forge sign-in and its API proxy, and read the stored session
+ * before the daemon spawns, so it starts with the right account. The read is
+ * capped: an API that is slow to answer starts the daemon signed out, and
+ * the principal it learns later respawns it.
+ */
+async function startForgeAuth() {
+  const status = backendManager.getStatus();
+  const apiUrl = status.rendererApiUrl || status.apiUrl;
+  const authSession = session.fromPartition(forgeAuthModule.AUTH_PARTITION);
+  forgeAuth = new forgeAuthModule.ForgeAuth({
+    apiUrl,
+    cookies: authSession.cookies,
+    // In development the renderer is the Vite dev server, whose own proxy
+    // forwards /_api/@…: the cookie is mirrored into its jar (HttpOnly).
+    devMirror: app.isPackaged ? null : { cookies: session.defaultSession.cookies, url: DEV_URL },
+    openExternal: (url) => shell.openExternal(url),
+    onPrincipalChange: onForgePrincipalChange,
+    logger: log,
+  });
+  forgeApiProxy = forgeAuthModule.createApiProxy({
+    upstreams: { reliant: apiUrl, cp: status.controlPlaneUrl || "" },
+    auth: forgeAuth,
+    appOrigin: APP_ORIGIN,
+    logger: log,
+  });
+  const init = forgeAuth.init();
+  const settled = await Promise.race([
+    init.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 5000)),
+  ]);
+  if (!settled) {
+    log.warn("[Auth] The forge session was not read within 5s; the daemon starts signed out until it is");
+    init.then((principal) => {
+      if (principal) onForgePrincipalChange(null, principal, "startup");
+    });
+  }
+}
+
 // IPC handlers
 // Handle logs from renderer process
 ipcMain.on("log-from-renderer", (event, level, ...args) => {
@@ -2362,6 +2443,56 @@ ipcMain.handle("billing:open-checkout", async (_event, { checkoutUrl, returnUrl 
     return { success: false, error: error.message };
   }
 });
+
+// Forge sign-in (AUTH_PROVIDER "forge"; forge-auth.js). The renderer asks; the
+// session id never comes back over IPC, only who signed in.
+function isAppSender(event) {
+  const origin = forgeAuthModule.originOf(event && event.senderFrame && event.senderFrame.url);
+  return origin === APP_ORIGIN || origin === DEV_URL;
+}
+
+ipcMain.handle("forge-auth:sign-in", async (event) => {
+  if (!forgeAuth) return { success: false, error: "Forge sign-in is not enabled in this build" };
+  if (!isAppSender(event)) return { success: false, error: "not allowed" };
+  try {
+    const who = await forgeAuth.signIn();
+    surfaceMainWindowAfterBrowser();
+    return { success: true, subject: who.subject, email: who.email, name: who.name };
+  } catch (error) {
+    log.warn("[IPC] Forge sign-in did not complete:", error.message);
+    surfaceMainWindowAfterBrowser();
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("forge-auth:sign-out", async (event) => {
+  if (!forgeAuth) return { success: false, error: "Forge sign-in is not enabled in this build" };
+  if (!isAppSender(event)) return { success: false, error: "not allowed" };
+  await forgeAuth.signOut();
+  return { success: true };
+});
+
+// The renderer signed in or out in-window (through the proxy or, in dev, the
+// Vite proxy): re-read /auth/session so the daemon follows.
+ipcMain.handle("forge-auth:session-changed", async (event) => {
+  if (!forgeAuth) return { success: false };
+  if (!isAppSender(event)) return { success: false };
+  try {
+    await forgeAuth.cookie.load();
+    await forgeAuth.refreshPrincipal("renderer");
+    return { success: true };
+  } catch (error) {
+    log.warn("[IPC] Could not re-read the forge session:", error.message);
+    return { success: false };
+  }
+});
+
+function surfaceMainWindowAfterBrowser() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 ipcMain.handle("auth:load", async () => {
   try {
@@ -3883,6 +4014,16 @@ app.whenReady().then(async () => {
             env: process.env,
           })
         ),
+      // Forge sign-in only: app://bundle/_api/@reliant|@cp/* goes to the APIs
+      // with the session cookie this process holds (forge-auth.js). The
+      // proxy is built with the backend manager below; a request before
+      // that is answered 503, which the renderer retries like any outage.
+      apiHandler: desktopAuthProvider() === forgeAuthModule.AUTH_PROVIDER_FORGE
+        ? (request) =>
+            forgeApiProxy
+              ? forgeApiProxy(request)
+              : new Response("Starting", { status: 503, headers: { "content-type": "text/plain" } })
+        : undefined,
     });
     log.info("[App] ✓ app:// protocol registered for", webRoot);
   }
@@ -3920,8 +4061,18 @@ app.whenReady().then(async () => {
   // the current --server origin before spawning the daemon binary. Without
   // this, the daemon falls back to its own interactive registration flow,
   // which is broken under headless Electron (no TTY).
-  backendManager = new BackendManager({ authStorage });
+  //
+  // Forge sign-in reads its principal and credential from forge-auth.js
+  // instead (its storage() has the same shape); the Supabase store is then
+  // never read.
+  const forgeMode = desktopAuthProvider() === forgeAuthModule.AUTH_PROVIDER_FORGE;
+  backendManager = new BackendManager({
+    authStorage: forgeMode ? { loadStoredAuth: () => (forgeAuth ? forgeAuth.storage().loadStoredAuth() : null) } : authStorage,
+  });
   log.info(`[Backend] ✓ BackendManager created in ${Date.now() - backendCreateStart}ms`);
+  if (forgeMode) {
+    await startForgeAuth();
+  }
 
   // Push a "daemon connected" event to the renderer the instant the daemon's
   // gateway stream comes up, instead of leaving the UI to discover it on its
