@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -36,7 +37,7 @@ func TestPageErrorsBoundsTheReadByThePage(t *testing.T) {
 			EntityID: "err-a", SequenceNumber: 42, Data: []byte(`{"id":"err-a"}`), CreatedAt: t0.Add(time.Second),
 		}}, nil
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}
 
 	out := svc.pageErrors(context.Background(), "chat-1", "main", 13, page, true)
 	if got.chatID != "chat-1" || got.thread != "main" || got.beforeSeq != 13 {
@@ -64,7 +65,7 @@ func TestPageErrorsDegradesOnAFailedRead(t *testing.T) {
 	repo.ListErrorUpdatesInRangeFunc = func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error) {
 		return nil, errors.New("db down")
 	}
-	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}}}
 	page := []*db.Message{{ID: "a", Seq: 1, CreatedAt: time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)}}
 	if out := svc.pageErrors(context.Background(), "chat-1", "main", 2, page, true); out != nil {
 		t.Fatalf("errors = %+v, want none", out)

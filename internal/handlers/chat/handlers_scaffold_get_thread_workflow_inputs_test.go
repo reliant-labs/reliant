@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 )
@@ -21,7 +22,7 @@ func TestGetThreadWorkflowInputs_Generated(t *testing.T) {
 	repo.GetWorkflowByThreadFunc = func(context.Context, string, string) (*db.Workflow, error) {
 		return nil, nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetThreadWorkflowInputsRequest, pb.GetThreadWorkflowInputsResponse]{
 		{

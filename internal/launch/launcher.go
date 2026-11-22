@@ -57,12 +57,13 @@ type RunRecorder interface {
 // greenfield probe included — happens inside the run, so a launch costs a
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
-	repo      Store
-	temporal  TemporalStarter
-	runs      RunRecorder
-	threads   ThreadCreator
-	taskQueue string
-	pinner    ChatPinner
+	repo       Store
+	selections chatselection.Store
+	temporal   TemporalStarter
+	runs       RunRecorder
+	threads    ThreadCreator
+	taskQueue  TaskQueue
+	pinner     ChatPinner
 	// sources reads an org-accounts-only launch's sources
 	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
 	sources orgSources
@@ -107,37 +108,17 @@ type ChatPinner interface {
 	Pin(ctx context.Context, chat *db.Chat)
 }
 
-// LauncherOption configures a Launcher.
-type LauncherOption func(*Launcher)
-
-// WithChatPinner makes every run this launcher starts pin an unpinned chat
-// first. Without it a launch pins nothing: the chat runs wherever default
-// resolution points on each call.
-func WithChatPinner(p ChatPinner) LauncherOption {
-	return func(l *Launcher) { l.pinner = p }
-}
-
-// NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
-// queue runs execute on.
-func NewLauncher(
-	repo Store,
-	threadCreator ThreadCreator,
-	temporal TemporalStarter,
-	runRecorder RunRecorder,
-	taskQueue string,
-	opts ...LauncherOption,
-) *Launcher {
-	l := &Launcher{
-		repo:      repo,
-		temporal:  temporal,
-		runs:      runRecorder,
-		threads:   threadCreator,
-		taskQueue: taskQueue,
+// New builds a launcher over its Deps.
+func New(deps Deps) *Launcher {
+	return &Launcher{
+		repo:       deps.Store,
+		selections: deps.Selections,
+		temporal:   deps.Temporal,
+		runs:       deps.Runs,
+		threads:    deps.Threads,
+		taskQueue:  deps.TaskQueue,
+		pinner:     deps.Pinner,
 	}
-	for _, opt := range opts {
-		opt(l)
-	}
-	return l
 }
 
 // errEventExists aborts the session transaction when another launch recorded
@@ -1380,7 +1361,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// they are continuations, not launches.
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                l.taskQueue,
+		TaskQueue:                string(l.taskQueue),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		Memo:                     map[string]interface{}{"trigger_event_id": p.eventID},
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
@@ -1561,7 +1542,7 @@ func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-ch
 		}()
 		options := client.StartWorkflowOptions{
 			ID:                       fmt.Sprintf("generate-title-%s", chatID),
-			TaskQueue:                l.taskQueue,
+			TaskQueue:                string(l.taskQueue),
 			WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		}
 		input := map[string]interface{}{
@@ -1650,9 +1631,9 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	// start records none.
 	if _, picked := patch["model"]; picked && chat.OrgID != nil && *chat.OrgID != "" &&
 		userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
-		ctx = db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
+		ctx = chatselection.WithPersonPick(ctx, chatselection.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 	}
-	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+	if _, err := chatselection.NewInstrumented(chatselection.Deps{Store: l.selections}).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
 	}
 	return nil

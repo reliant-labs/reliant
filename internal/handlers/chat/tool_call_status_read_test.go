@@ -87,7 +87,7 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 		UpdatedAt:   time.Now().UTC(),
 	}))
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}}
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID,
 	}))

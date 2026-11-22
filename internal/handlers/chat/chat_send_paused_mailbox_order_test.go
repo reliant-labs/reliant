@@ -63,7 +63,7 @@ func newPausedSendService(repo *db.Repo, pause runs.PauseController) (*Service, 
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}}
 	return &Service{
-		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal},
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal
 }

@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -73,7 +74,7 @@ func TestThreadResetUsesThreadBaselineNotRootPreset(t *testing.T) {
 	assert.Equal(t, fx.rootThreadID, temporal.signals[0].WorkflowID)
 	assert.Equal(t, workflow.SignalUpdateWorkflowState, temporal.signals[0].Name)
 	assert.Equal(t, map[string]interface{}{"mode": "plan", "__thread": childID, "__reset_keys": []string{"mode"}}, temporal.signals[0].Arg)
-	after, err := repo.GetChatSelection(ctx, fx.chatID)
+	after, err := store.NewChatSelectionExtStore(repo.ORM()).GetChatSelection(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Version, after.Version)
 	assert.Equal(t, before.Params, after.Params)
@@ -91,7 +92,7 @@ func TestModeResetUsesPresetAndFreshSendRemovesStoredOverride(t *testing.T) {
 	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, paramsOf(t, map[string]any{"mode": nil})))
 	require.NoError(t, err)
 	assert.Equal(t, "plan", temporal.lastStart(t).Inputs["mode"])
-	stored, err := repo.GetChatSelection(ctx, fx.chatID)
+	stored, err := store.NewChatSelectionExtStore(repo.ORM()).GetChatSelection(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.NotContains(t, stored.Params, "mode")
 	update, err := service.launcher().BuildStateUpdateForActiveWorkflow(ctx, "test-user", chat, "builtin://agent", nil, paramsOf(t, map[string]any{"mode": nil}))
@@ -201,7 +202,7 @@ func TestThreadResetWithoutBaselineFailsWithoutMutation(t *testing.T) {
 	_, err := service.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
 	assert.Empty(t, temporal.signals)
-	after, err := repo.GetChatSelection(ctx, fx.chatID)
+	after, err := store.NewChatSelectionExtStore(repo.ORM()).GetChatSelection(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Version, after.Version)
 	assert.Equal(t, "plan", after.Params["mode"])

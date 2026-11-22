@@ -29,7 +29,7 @@ func newFailedSendService(repo *db.Repo, temporalExists bool) (*Service, *wakeTe
 	}}
 	pause := &questionSignalPause{}
 	return &Service{
-		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Temporal: temporal},
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Temporal: temporal},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal, pause
 }

@@ -18,7 +18,7 @@ import (
 
 // Only the chat's owner, signed in as a person, picks the root's provider,
 // and only with a model the server did not substitute: only then is the
-// selection write marked to record their pick (db.WithPersonPick).
+// selection write marked to record their pick (chatselection.WithPersonPick).
 func TestPersonPickContext(t *testing.T) {
 	person := auth.WithCredential(context.Background(), auth.CredentialSession)
 	cli := auth.WithCredential(context.Background(), auth.CredentialAccessToken)
@@ -39,10 +39,10 @@ func TestPersonPickContext(t *testing.T) {
 		{"a chat with no org", person, "alice", noOrg, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pick, ok := db.PersonPickFrom(personPickContext(tc.ctx, tc.sender, tc.chat, tc.chosen))
+			pick, ok := chatselection.PersonPickFrom(personPickContext(tc.ctx, tc.sender, tc.chat, tc.chosen))
 			assert.Equal(t, tc.want, ok)
 			if tc.want {
-				assert.Equal(t, db.PersonPick{UserID: "alice", OrgID: "org-acme"}, pick)
+				assert.Equal(t, chatselection.PersonPick{UserID: "alice", OrgID: "org-acme"}, pick)
 			}
 		})
 	}

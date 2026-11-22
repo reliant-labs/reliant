@@ -94,7 +94,7 @@ func TestGetChat_NeedsRecovery(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc.temporal, Pause: nil})}
+			svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc.temporal, Pause: nil})}
 			resp, err := svc.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: chatID}))
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, resp.Msg.Chat.NeedsRecovery)
@@ -115,7 +115,7 @@ func TestGetChat_SlowTemporalIsBounded(t *testing.T) {
 	ghostCheckTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { ghostCheckTimeout = prev })
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &describeFake{block: true}, Pause: nil})}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &describeFake{block: true}, Pause: nil})}
 	start := time.Now()
 	resp, err := svc.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: chatID}))
 	elapsed := time.Since(start)

@@ -35,7 +35,7 @@ func TestBranchChatResponseCarriesPendingWorkflowState(t *testing.T) {
 	}))
 	sourceChatID, messageID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: messageID,

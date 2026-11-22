@@ -55813,6 +55813,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Selections",
+      "interface": "github.com/reliant-labs/reliant/internal/chatselection.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Spawns",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
       "methods": [],
