@@ -700,6 +700,18 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
+// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
+// step keys, nil without one (a nil interface, never a nil client in one):
+// every run node with llm_gateway is then refused. A control plane the worker
+// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
+// the same way.
+func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
 // no orgs (a nil *orgs.Resolver would be a non-nil interface).
 func orgMembers(r *orgs.Resolver) orgmove.Members {
@@ -837,6 +849,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

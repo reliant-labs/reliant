@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -53,6 +54,12 @@ type ExecuteRunStepInput struct {
 	// starts in. A relative one is relative to the run's checkout; empty is
 	// the checkout itself.
 	WorkDir string `json:"work_dir,omitempty"`
+	// NodePath is the node's path in the run (loop and sub-workflow
+	// prefixes included), for the step key's attribution.
+	NodePath string `json:"node_path,omitempty"`
+	// LLMGateway is the node's `llm_gateway`: run the command with a step
+	// key minted for it (run_step_llm_gateway.go). Never the key itself.
+	LLMGateway *RunStepLLMGateway `json:"llm_gateway,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -73,6 +80,9 @@ type ExecuteRunStepOutput struct {
 	WorktreeID   string `json:"worktree_id"`        // worktree ID if used
 	WorktreePath string `json:"worktree_path"`      // worktree path if used
 	LogFile      string `json:"log_file,omitempty"` // absolute path to log file if written
+	// LLMGateway is the step key the command ran with, when the node sets
+	// llm_gateway (nodes.<id>.llm_gateway): never the key itself.
+	LLMGateway *RunStepLLMGatewayOutput `json:"llm_gateway,omitempty"`
 }
 
 // ============================================================================
@@ -95,6 +105,9 @@ type ExecuteRunStepActivity struct {
 	// router resolves a run node's machine named by name, type or labels to
 	// the machine whose checkout the command runs in (WithDaemonRouter).
 	router toolexec.DaemonRouter
+	// stepKeys mints and revokes a run node's LLM gateway step key
+	// (WithStepKeys). nil: a node with llm_gateway is refused.
+	stepKeys StepKeyIssuer
 }
 
 // WithDaemonRouter lets a run node that names its machine by name, type or
@@ -214,6 +227,12 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			})
 	}
 
+	// A node with llm_gateway: the step key this attempt mints, or on a retry
+	// the one an earlier attempt may have minted, is revoked on every way out
+	// (run_step_llm_gateway.go).
+	stepKey := a.stepKeyScope(input, requestID, retry)
+	defer stepKey.release(ctx)
+
 	// Set default timeout if not provided (5 minutes)
 	timeout := input.Timeout
 	if timeout == 0 {
@@ -283,6 +302,22 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
+	// llm_gateway: the machine must apply step keys, and the key is minted
+	// for it, before anything is sent. A refusal is the step's verdict; the
+	// command never runs without its key. A retry mints nothing: it only
+	// reattaches to the command its first attempt sent.
+	var stepEnv *daemon.StepEnv
+	if stepKey != nil && !retry {
+		env, refusal := stepKey.prepare(ctx, a, &execCtx, timeout)
+		if refusal != "" {
+			logging.WarnContext(ctx, "[RunStep] llm_gateway refused; the command was not run",
+				"chat_id", input.ChatID, "step_id", input.StepID, "refusal", refusal)
+			return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+				Duration: time.Since(startTime).Milliseconds(), LLMGateway: stepKey.finish(ctx)}, nil
+		}
+		stepEnv = env
+	}
+
 	// Determine working directory: the run's checkout, where its log file is
 	// resolved, and the directory the command starts in, the node's work_dir
 	// when it names one (relative to the checkout).
@@ -338,12 +373,14 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			"exit_code", result.ExitCode, "error", err)
 	} else {
 		observe := a.observeMachine(execCtx)
-		result, err = executeUntilDelivered(withRunRequestID(execSpanCtx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
+		result, err = executeUntilDelivered(withRunStepEnv(withRunRequestID(execSpanCtx, requestID), stepEnv), executor, wait, observe, input.Command, commandDir, timeout)
 		result, reattached, err = reattachAfterTransportDrop(execSpanCtx, executor, input, requestID, timeout, result, err)
 	}
 	execSpan.End(runExecEnd(ctx, result, err, reattached))
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
-	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
+	// The machine redacted the key already; this is the worker's own guard,
+	// before anything is kept, logged or written.
+	stdout, stderr, exitCode, interrupted := stepKey.redact(result.Stdout), stepKey.redact(result.Stderr), result.ExitCode, result.Interrupted
 	if err == nil && foreign && exitCode != 0 && !interrupted {
 		stderr = foreignWorkspaceRunNote(ctx, a.repo, worktreePath, execCtx.WorktreeDaemonID, foreignMachine) + stderr
 	}
@@ -389,6 +426,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 					"request_id", requestID,
 					"cause", context.Cause(ctx),
 				)
+				// The command keeps running on its machine with its key; the
+				// retry reattaches to it and revokes the key at its end.
+				stepKey.keep()
 				return ExecuteRunStepOutput{}, runStepReleased(transportErr)
 			}
 			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
@@ -417,6 +457,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 
 	duration := time.Since(startTime).Milliseconds()
 	combinedOutput := outputBuilder.String()
+	// The command is over: its key dies now, before the log-file write or
+	// anything else, and the step reports what it spent.
+	llmGateway := stepKey.finish(ctx)
 
 	// Write log file if configured (daemon-side via executor)
 	var logFilePath string
@@ -474,6 +517,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		WorktreeID:   worktreeID,
 		WorktreePath: worktreePath,
 		LogFile:      logFilePath,
+		LLMGateway:   llmGateway,
 	}
 
 	// Write run_output to chat_updates for UI display
