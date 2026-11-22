@@ -56500,9 +56500,7 @@
       "field": "Shared",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.SharedProjects",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
