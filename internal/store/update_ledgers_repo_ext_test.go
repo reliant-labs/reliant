@@ -192,3 +192,22 @@ func TestUserUpdates_AcrossLayers(t *testing.T) {
 		t.Fatalf("user counter = %+v, %v; want 4", c, err)
 	}
 }
+
+// A read of a stream with no owner answers an error, never every owner's rows.
+func TestStreamReads_EmptyOwnerFailsClosed(t *testing.T) {
+	f := newMsgFixture(t, "chat-empty-owner")
+	ctx := context.Background()
+	o := f.env.ORM
+	if _, err := store.UserUpdatesSince(ctx, o, "", 0, 10); err == nil {
+		t.Error("UserUpdatesSince with no user succeeded")
+	}
+	if _, err := store.OrgUpdatesSince(ctx, o, "", 0, 10); err == nil {
+		t.Error("OrgUpdatesSince with no org succeeded")
+	}
+	if _, err := store.LatestOrgUpdateSequence(ctx, o, ""); err == nil {
+		t.Error("LatestOrgUpdateSequence with no org succeeded")
+	}
+	if _, err := store.ListRecentTranscriptSiblingMessages(ctx, o, "", f.main, 0, 10); err == nil {
+		t.Error("ListRecentTranscriptSiblingMessages with no chat succeeded")
+	}
+}

@@ -96,6 +96,9 @@ func LatestUserUpdateSequence(ctx context.Context, db orm.Context, userID string
 // UserUpdatesSince is a user's updates after sinceSeq, ascending, at most
 // limit of them.
 func UserUpdatesSince(ctx context.Context, db orm.Context, userID string, sinceSeq int64, limit int) ([]core.UserUpdate, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	rows, err := ListUserUpdate(ctx, db,
 		orm.WhereEq(UserUpdateFieldUserID, userID),
 		orm.WhereGt(UserUpdateFieldSequenceNumber, sinceSeq),

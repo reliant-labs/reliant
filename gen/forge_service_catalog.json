@@ -57071,6 +57071,28 @@
     },
     {
       "consumer": "Streaming",
+      "field": "Heads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Heads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "OrgFeed",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeed",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeedResolver",
       "methods": [],
@@ -57090,6 +57112,28 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Siblings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Siblings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "UserLog",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.UserLog",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
