@@ -4,14 +4,19 @@
 # .tools/bin runs only when it is the pin (any forge for a `dev` pin); then
 # the pin through reliant (`reliant forge` in the project; outside it, the
 # pinned build reliant's hand-off keeps, never reliant's own forge); then
-# `go run …@<pin>`; and with none of them it fails with 127. --machine takes any forge and never `go run`. The pin is the nearest
-# forge.yaml above the working directory, else the script's own checkout's.
+# `go install …@<pin>` once into the user cache, run directly so forge's own
+# exit status (2, not `go run`'s 1) reaches the caller; and with none of them
+# it fails with 127. --machine takes any forge and never `go install`. The pin
+# is the nearest forge.yaml above the working directory, else the script's own
+# checkout's.
 #
-#   scripts/test-forge.sh        (seconds; needs only bash, sed, head, tr, env)
+#   scripts/test-forge.sh        (seconds; needs only bash and coreutils)
 set -euo pipefail
 src=$(cd "$(dirname "$0")" && pwd)/forge.sh
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-forge.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
+# The go-install cache (step 4) goes here, never in the real user cache.
+export XDG_CACHE_HOME=$tmp/xdg
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 pin=v1.2.3-0.20260101000000-abcdefabcdef
@@ -19,7 +24,7 @@ other=v1.2.2
 
 # The tools forge.sh itself needs, and nothing that could be a forge.
 mkdir -p "$tmp/tools"
-for t in bash sed head tr dirname env find uname mkdir chmod; do
+for t in bash sed head tr dirname env find uname mkdir chmod mktemp mv rm cat wc; do
   ln -s "$(command -v "$t")" "$tmp/tools/$t"
 done
 
@@ -47,7 +52,27 @@ script=$proj/scripts/forge.sh
 fake "$tmp/at-pin" forge "$pin"
 fake "$tmp/at-other" forge "$other"
 fake "$tmp/rel" reliant "v9"
-fake "$tmp/go" go "go1.99"
+# A go that can only `go install` the pin: into $GOBIN, a forge that echoes
+# its arguments and exits 2 or 3 for the args "exit2" / "exit3". Each call is
+# logged to go.calls; FAKE_GO_FAIL makes the build fail.
+mkdir -p "$tmp/go"
+cat >"$tmp/go/go" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >>"$tmp/go.calls"
+[ "\${1:-} \${2:-}" = "install github.com/reliant-labs/forge/cmd/forge@$pin" ] || { echo "fake go: unexpected \$*" >&2; exit 2; }
+[ -n "\${GOBIN:-}" ] && [ "\${GOFLAGS:-}" = -trimpath ] || { echo "fake go: GOBIN or GOFLAGS unset" >&2; exit 1; }
+[ -z "\${FAKE_GO_FAIL:-}" ] || { echo "fake go: build failed" >&2; exit 1; }
+cat >"\$GOBIN/forge" <<'FORGE'
+#!/usr/bin/env bash
+echo "go-installed \$*"
+case "\${1:-}" in exit2) exit 2 ;; exit3) exit 3 ;; esac
+exit 0
+FORGE
+chmod +x "\$GOBIN/forge"
+EOF
+chmod +x "$tmp/go/go"
+plat=$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
+installed=$XDG_CACHE_HOME/reliant-forge/$pin/$plat/forge
 
 # which <dir> <PATH extra> [args...]: forge.sh --which run in dir.
 which() {
@@ -68,8 +93,8 @@ cp "$tmp/at-pin/forge" "$proj/.tools/bin/forge"
 check "$proj/.tools/bin/forge" "$(which "$proj" "$tmp/at-other:$tmp/rel")" ".tools/bin/forge at the pin"
 rm -rf "$proj/.tools"
 
-check "env GOPRIVATE=github.com/reliant-labs/* GOFLAGS=-trimpath go run github.com/reliant-labs/forge/cmd/forge@$pin" \
-  "$(which "$proj" "$tmp/at-other:$tmp/go")" "no reliant: go run the pin"
+check "$installed" "$(which "$proj" "$tmp/at-other:$tmp/go")" "no reliant: the pin, go installed into the user cache"
+[ -x "$installed" ] || fail "no reliant: --which printed $installed but did not build it"
 set +e
 out=$(cd "$proj" && env -u FORGE_BIN PATH="$tmp/tools:$tmp/at-other" "$script" generate 2>&1)
 rc=$?
@@ -131,8 +156,8 @@ check "reliant forge" "$(which "$tmp/outside" "$tmp/rel-at-pin")" "outside a pro
 # reliant's own forge, but go run the pin.
 rm -rf "$cache"
 sed -i.bak "s|/$pin/linux-amd64/forge|/moved/forge|" "$tmp/handoff/reliant"
-check "env GOPRIVATE=github.com/reliant-labs/* GOFLAGS=-trimpath go run github.com/reliant-labs/forge/cmd/forge@$pin" \
-  "$(outside "$tmp/handoff:$tmp/go" --which)" "outside a project, the pinned build not found: go run, not reliant's own forge"
+check "$installed" \
+  "$(outside "$tmp/handoff:$tmp/go" --which)" "outside a project, the pinned build not found: go install, not reliant's own forge"
 
 # Running: forge's arguments pass through, and so does its exit status.
 check "$tmp/at-pin/forge lint --quiet" "$(cd "$proj" && env -u FORGE_BIN PATH="$tmp/tools:$tmp/at-pin" "$script" lint --quiet)" "arguments"
@@ -142,5 +167,32 @@ set +e
 rc=$?
 set -e
 check 3 "$rc" "forge's exit status"
+
+# Through go install: built once, then run directly, so forge's exit status
+# arrives as forge's. Under `go run` every non-zero exit came back as 1 (go
+# printing `exit status 2`), and test-flake.sh read forge's 2 "no new or
+# edited tests" as a failure (reliant#3243's merge-queue regression).
+gorun() { # forge.sh's args, run in the project with only the fake go
+  (cd "$proj" && env -u FORGE_BIN PATH="$tmp/tools:$tmp/at-other:$tmp/go" "$script" "$@")
+}
+rm -rf "$XDG_CACHE_HOME" "$tmp/go.calls"
+check "go-installed lint --quiet" "$(gorun lint --quiet)" "go install: arguments"
+for want in 2 3; do
+  set +e
+  gorun "exit$want" >/dev/null 2>&1
+  rc=$?
+  set -e
+  check "$want" "$rc" "go install: forge's exit status $want"
+done
+check 1 "$(wc -l <"$tmp/go.calls" | tr -d ' ')" "go install: built once, then reused"
+check "" "$(find "$XDG_CACHE_HOME" -name '.install.*')" "go install: no scratch directory left behind"
+rm -rf "$XDG_CACHE_HOME"
+set +e
+out=$(FAKE_GO_FAIL=1 gorun generate 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || fail "go install fails: exit status 0"
+case "$out" in *"go install"*"failed"*) ;; *) fail "go install fails: message '$out' does not say so" ;; esac
+[ ! -e "$installed" ] || fail "go install fails: a binary was cached anyway"
 
 echo "PASS: forge.sh"
