@@ -41,7 +41,7 @@ func (s *Service) CreateTrigger(
 		return nil, svcerr.Unavailable("the schedule backend is unavailable; cannot create a trigger that would never fire")
 	}
 	// Fixed at creation: every chat the trigger launches belongs to it.
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, trigger.ProjectID, userID)
 	if err != nil {
 		return nil, triggerDBError("get project", err)
 	}

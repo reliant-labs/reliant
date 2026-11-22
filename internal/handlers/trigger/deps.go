@@ -77,9 +77,6 @@ type Repository interface {
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
-	// The project, worktree and chat a trigger names, checked against the
-	// caller.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 

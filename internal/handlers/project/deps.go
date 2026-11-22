@@ -47,7 +47,6 @@ type Repository interface {
 	// unique per (org, user, path) and (org, user, remote_url).
 	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
