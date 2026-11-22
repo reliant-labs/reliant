@@ -46,6 +46,15 @@ type ToolsOptions struct {
 	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
 	// spawn_status report it is unavailable here, like every database tool.
 	SpawnQuestions SpawnQuestions
+	// Scenarios, LaunchedRuns, WorktreeChats and WorkflowSlugs are the row
+	// stores behind the scenario, start_run, worktree and create_workflow
+	// tools (store.WorkflowScenarioExtStore, TriggerEventExtStore,
+	// ChatExtStore and WorkflowDraftExtStore). Optional: nil makes the tool
+	// that needs one report that it is unavailable here, like a nil Repo.
+	Scenarios     ScenarioStore
+	LaunchedRuns  LaunchedRunCounter
+	WorktreeChats WorktreeChatLister
+	WorkflowSlugs WorkflowSlugChecker
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
@@ -504,7 +513,7 @@ func (f *ToolsFactory) SpawnStop() Tool {
 }
 
 func (f *ToolsFactory) StartRun() Tool {
-	return NewStartRunTool(f.store(), f.opts.RunStarter)
+	return NewStartRunTool(f.store(), f.opts.LaunchedRuns, f.opts.RunStarter)
 }
 
 func (f *ToolsFactory) ListRuns() Tool {
@@ -623,7 +632,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools
@@ -644,7 +653,7 @@ func (f *ToolsFactory) MoveCode() Tool {
 
 // Workflow editing tools
 func (f *ToolsFactory) CreateWorkflow() Tool {
-	return NewCreateWorkflowTool(f.store())
+	return NewCreateWorkflowTool(f.store(), f.opts.WorkflowSlugs)
 }
 
 func (f *ToolsFactory) EditWorkflow() Tool {
@@ -694,23 +703,23 @@ func (f *ToolsFactory) ListScenarios() Tool {
 }
 
 func (f *ToolsFactory) ViewScenario() Tool {
-	return NewViewScenarioTool(f.store())
+	return NewViewScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) EditScenario() Tool {
-	return NewEditScenarioTool(f.store())
+	return NewEditScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) WriteScenario() Tool {
-	return NewWriteScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewWriteScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 func (f *ToolsFactory) DeleteScenario() Tool {
-	return NewDeleteScenarioTool(f.store())
+	return NewDeleteScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) RunScenario() Tool {
-	return NewRunScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewRunScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 // RequestMachine returns request_machine, the no-machine run's way to offer

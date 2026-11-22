@@ -12,6 +12,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -19,7 +21,6 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
-	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -144,7 +145,8 @@ type ViewScenarioParams struct {
 }
 
 type viewScenarioTool struct {
-	repo viewScenarioStore
+	repo      viewScenarioStore
+	scenarios scenarioFinder
 }
 
 const (
@@ -158,8 +160,8 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewViewScenarioTool(repo viewScenarioStore) Tool {
-	tool := &viewScenarioTool{repo: repo}
+func NewViewScenarioTool(repo viewScenarioStore, scenarios scenarioFinder) Tool {
+	tool := &viewScenarioTool{repo: repo, scenarios: scenarios}
 	return NewToolWrapper[ViewScenarioParams, ToolResponse](tool)
 }
 
@@ -176,7 +178,7 @@ func (t *viewScenarioTool) RequiresPermission(args ViewScenarioParams) (bool, er
 }
 
 func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.scenarios == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -189,7 +191,7 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 		return NewTextErrorResponse(err.Error()), nil
 	}
 
-	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
+	scenario, err := t.scenarios.FindWorkflowScenarioByName(ctx, draft.ID, args.Name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to get scenario: %v", err)), nil
 	}
@@ -250,7 +252,8 @@ type EditScenarioParams struct {
 }
 
 type editScenarioTool struct {
-	repo editScenarioStore
+	repo      editScenarioStore
+	scenarios ScenarioStore
 }
 
 const (
@@ -271,8 +274,8 @@ create_workflow or list_workflows.
 }`
 )
 
-func NewEditScenarioTool(repo editScenarioStore) Tool {
-	tool := &editScenarioTool{repo: repo}
+func NewEditScenarioTool(repo editScenarioStore, scenarios ScenarioStore) Tool {
+	tool := &editScenarioTool{repo: repo, scenarios: scenarios}
 	return NewToolWrapper[EditScenarioParams, ToolResponse](tool)
 }
 
@@ -289,7 +292,7 @@ func (t *editScenarioTool) RequiresPermission(args EditScenarioParams) (bool, er
 }
 
 func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.scenarios == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -305,7 +308,7 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 		return NewTextErrorResponse(err.Error()), nil
 	}
 
-	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
+	scenario, err := t.scenarios.FindWorkflowScenarioByName(ctx, draft.ID, args.Name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to get scenario: %v", err)), nil
 	}
@@ -354,7 +357,7 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 	scenario.Description = desc
 	scenario.UpdatedAt = time.Now().UTC()
 
-	if err := t.repo.UpdateWorkflowScenario(ctx, scenario); err != nil {
+	if err := t.scenarios.ReplaceWorkflowScenario(ctx, scenario); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to save scenario: %v", err)), nil
 	}
 
@@ -373,8 +376,9 @@ type WriteScenarioParams struct {
 }
 
 type writeScenarioTool struct {
-	repo   writeScenarioStore
-	runner ScenarioRunner
+	repo      writeScenarioStore
+	scenarios ScenarioStore
+	runner    ScenarioRunner
 }
 
 const (
@@ -437,8 +441,8 @@ create_workflow or list_workflows.
 }`
 )
 
-func NewWriteScenarioTool(repo writeScenarioStore, runner ScenarioRunner) Tool {
-	tool := &writeScenarioTool{repo: repo, runner: runner}
+func NewWriteScenarioTool(repo writeScenarioStore, scenarios ScenarioStore, runner ScenarioRunner) Tool {
+	tool := &writeScenarioTool{repo: repo, scenarios: scenarios, runner: runner}
 	return NewToolWrapper[WriteScenarioParams, ToolResponse](tool)
 }
 
@@ -455,7 +459,7 @@ func (t *writeScenarioTool) RequiresPermission(args WriteScenarioParams) (bool, 
 }
 
 func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.scenarios == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -472,7 +476,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 	}
 
 	// Check if scenario already exists
-	existing, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
+	existing, err := t.scenarios.FindWorkflowScenarioByName(ctx, draft.ID, args.Name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to check existing scenario: %v", err)), nil
 	}
@@ -509,7 +513,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 		existing.Description = desc
 		existing.UpdatedAt = now
 
-		if err := t.repo.UpdateWorkflowScenario(ctx, existing); err != nil {
+		if err := t.scenarios.ReplaceWorkflowScenario(ctx, existing); err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("Failed to update scenario: %v", err)), nil
 		}
 	} else {
@@ -538,7 +542,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 	if t.runner == nil {
 		return NewTextResponse(fmt.Sprintf("Scenario '%s' saved. Scenario execution is not available in this process, so it was not run.", args.Name)), nil
 	}
-	return runScenarioByName(ctx, t.repo, t.runner, draft, args.Name)
+	return runScenarioByName(ctx, t.repo, t.scenarios, t.runner, draft, args.Name)
 }
 
 // =============================================================================
@@ -551,7 +555,8 @@ type DeleteScenarioParams struct {
 }
 
 type deleteScenarioTool struct {
-	repo deleteScenarioStore
+	repo      deleteScenarioStore
+	scenarios scenarioFinder
 }
 
 const (
@@ -564,8 +569,8 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewDeleteScenarioTool(repo deleteScenarioStore) Tool {
-	tool := &deleteScenarioTool{repo: repo}
+func NewDeleteScenarioTool(repo deleteScenarioStore, scenarios scenarioFinder) Tool {
+	tool := &deleteScenarioTool{repo: repo, scenarios: scenarios}
 	return NewToolWrapper[DeleteScenarioParams, ToolResponse](tool)
 }
 
@@ -582,7 +587,7 @@ func (t *deleteScenarioTool) RequiresPermission(args DeleteScenarioParams) (bool
 }
 
 func (t *deleteScenarioTool) Execute(ctx *rctx.ToolContext, args DeleteScenarioParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.scenarios == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -595,7 +600,7 @@ func (t *deleteScenarioTool) Execute(ctx *rctx.ToolContext, args DeleteScenarioP
 		return NewTextErrorResponse(err.Error()), nil
 	}
 
-	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
+	scenario, err := t.scenarios.FindWorkflowScenarioByName(ctx, draft.ID, args.Name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to get scenario: %v", err)), nil
 	}
@@ -620,8 +625,9 @@ type RunScenarioParams struct {
 }
 
 type runScenarioTool struct {
-	repo   runScenarioStore
-	runner ScenarioRunner
+	repo      runScenarioStore
+	scenarios scenarioFinder
+	runner    ScenarioRunner
 }
 
 // ScenarioRunner executes one scenario against a workflow on the real
@@ -643,8 +649,8 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewRunScenarioTool(repo runScenarioStore, runner ScenarioRunner) Tool {
-	tool := &runScenarioTool{repo: repo, runner: runner}
+func NewRunScenarioTool(repo runScenarioStore, scenarios scenarioFinder, runner ScenarioRunner) Tool {
+	tool := &runScenarioTool{repo: repo, scenarios: scenarios, runner: runner}
 	return NewToolWrapper[RunScenarioParams, ToolResponse](tool)
 }
 
@@ -661,7 +667,7 @@ func (t *runScenarioTool) RequiresPermission(args RunScenarioParams) (bool, erro
 }
 
 func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.scenarios == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -678,7 +684,7 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 		return NewTextErrorResponse("Scenario execution is not available in this process"), nil
 	}
 
-	return runScenarioByName(ctx, t.repo, t.runner, draft, args.Name)
+	return runScenarioByName(ctx, t.repo, t.scenarios, t.runner, draft, args.Name)
 }
 
 // =============================================================================
@@ -686,8 +692,8 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 // =============================================================================
 
 // runScenarioByName runs a scenario and returns the formatted result
-func runScenarioByName(ctx *rctx.ToolContext, repo scenarioExecStore, runner ScenarioRunner, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
-	scenario, err := repo.GetWorkflowScenarioByName(ctx, draft.ID, name)
+func runScenarioByName(ctx *rctx.ToolContext, repo scenarioExecStore, scenarios scenarioFinder, runner ScenarioRunner, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
+	scenario, err := scenarios.FindWorkflowScenarioByName(ctx, draft.ID, name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find scenario: %v", err)), nil
 	}
