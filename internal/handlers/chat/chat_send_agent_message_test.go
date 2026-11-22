@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -277,6 +278,7 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 // them would destroy a message that would in fact have been delivered --
 // strictly worse than the late delivery this fix exists to prevent.
 func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -490,6 +492,7 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 }
 
 func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)

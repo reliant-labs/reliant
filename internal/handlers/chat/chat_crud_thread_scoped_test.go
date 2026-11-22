@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -190,6 +191,7 @@ func TestListMessages_ThreadScoped_UnknownThread(t *testing.T) {
 // TestListMessages_ThreadScoped_ThreadFromAnotherChat proves the thread must
 // belong to the authorized chat -- a thread id alone is not an access grant.
 func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
