@@ -98,6 +98,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -662,7 +663,7 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 }
 
 func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
-	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
+	return NewProjectPurge(ProjectPurgeDeps{Purges: projectpurge.New(projectpurge.Deps{DB: g.Database().ORM()})})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -1331,6 +1332,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
+		Purges:       projectpurge.New(projectpurge.Deps{DB: o}),
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
