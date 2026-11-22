@@ -34,6 +34,10 @@ func TestNoSourcePathsFromRuntimeCaller(t *testing.T) {
 	skipDirs := map[string]bool{
 		".git": true, "node_modules": true, "testdata": true, "vendor": true,
 		"tmp": true, "data": true, "dist": true, ".reliant": true,
+		// forge's per-checkout state: every recorded test run adds a
+		// directory under .forge/tests/runs/, and a walk into it would key
+		// this test's cached result on each one.
+		".forge": true,
 	}
 	err := filepath.WalkDir(repo, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

@@ -286,12 +286,25 @@ so it cannot disagree with a local run:
   failure here: `.github/workflows/cp-contract-drift.yml` keeps one
   `cp-contract:drift` issue open while main's copy lags. A change to CI itself (`ci.yml`, `.github/actions/`,
   `ci-lanes.sh`, `Taskfile.yml`) runs every lane.
-- **New and changed tests run three times.** `tools/test-affected
-  changed-tests` names every Test function the diff adds or edits (by
-  function, in files that build without tags); `task test:flake`
-  (`scripts/test-flake.sh`) runs them with `-short -count=3`. A test that fails
-  on a repeat is a flake: delete it (rewrite it as a new deterministic test if
-  it is worth having), never re-run it.
+- **New and changed tests run three times.** `task test:flake`
+  (`scripts/test-flake.sh`) runs every Test function the diff adds or edits
+  with `-short -count=3`, through forge's flake gate (`forge test flakes
+  gate`, which records the run; forge.yaml grades `flake-check: error`). The
+  nested sdk/go module's tests, outside the root module forge's gate reads,
+  are named by `tools/test-affected changed-tests` and run from that module.
+  A test that fails on a repeat is a flake: delete it
+  (rewrite it as a new deterministic test if it is worth having), never
+  re-run it.
+- **The gates' test lanes are recorded.** The merge gate's affected Go tests
+  (lane `short`, with coverage) and vitest files (`web-affected`, results
+  only), and the release gate's `task test` (`unit`), `task test:web`
+  (`frontend`, with v8 coverage), `task test:integration` and `task test:e2e`,
+  run through `forge test capture` (`scripts/test-capture.sh`) into
+  `.forge/tests/runs/`; `forge test report` summarises a commit's runs and
+  main uploads them (ci.yml's `test-upload`). The record never changes a
+  verdict; `FORGE_TESTS=off` turns it off. A test that lists the repository
+  tree must skip `.forge/` (and hidden directories): each recorded run adds a
+  directory there, which would otherwise key its cached result on every run.
 - **`CI result`** is the run's single verdict: green when every job that ran
   passed, and the tier's gate ran. On a PR a lane the change does not reach is
   skipped, which is fine; off a PR every lane but the contract must have run.
