@@ -119,7 +119,9 @@ test('Inbox selection survives rotation and split-pane resizing', async ({ page 
 
 test('navigation dialog traps focus, closes on Escape, and restores focus', async ({ page }, info) => {
   await mockMobileBackend(page);
-  await page.goto('/m/chats');
+  // A top-level phone screen: the drawer (the one shell's nav, U6 3/16) opens
+  // at its top level, with the Inbox. At the chat list it opens drilled into Agents.
+  await page.goto('/m/inbox');
   const open = page.getByRole('button', { name: /Open menu/ });
   await expectReachable(open, !!info.project.use.hasTouch);
   await open.click();
@@ -136,10 +138,6 @@ test('navigation dialog traps focus, closes on Escape, and restores focus', asyn
   await expect(dialog).toBeHidden();
   await expect(open).toBeFocused();
   await open.click();
-  // The drawer draws the one shell's nav (U6 3/16), drilled into the area of
-  // the page under it: the chat list is Agents. Back shows the top level,
-  // where the Inbox is, and keeps the drawer open.
-  await dialog.getByTestId('nav-back').click();
   const inbox = dialog.getByRole('link', { name: /^Inbox/ });
   await expectReachable(inbox, !!info.project.use.hasTouch);
   await inbox.click();
