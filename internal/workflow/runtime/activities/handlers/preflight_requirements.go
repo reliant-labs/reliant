@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -28,6 +29,7 @@ type PreflightRequirementsInput struct {
 	Tools          []string                 `json:"tools,omitempty"`
 	Integrations   []string                 `json:"integrations,omitempty"`
 	Repos          []string                 `json:"repos,omitempty"`
+	CLILogin       []string                 `json:"cli_login,omitempty"` // requires.cli_login
 	ActingIdentity string                   `json:"acting_identity,omitempty"`
 	Automation     string                   `json:"automation,omitempty"`
 }
@@ -47,8 +49,9 @@ const PreflightRequirementsErrType = requirements.UnmetErrType
 const preflightProbeTimeout = 3 * time.Minute
 
 // PreflightRequirementsActivity checks a run's `requires:` before its first
-// node: tools on the machine's PATH, checkouts that exist and reach origin
-// with no local tag diverged from origin's, and integrations whose connection
+// node: tools on the machine's PATH, vendor agent CLIs installed and signed in
+// there, checkouts that exist and reach origin with no local tag diverged
+// from origin's, and integrations whose connection
 // resolves for the run's owner. Unmet requirements fail the run, with every
 // problem named; a check that could not run (the machine did not answer) is
 // an ordinary error the activity's retry policy owns.
@@ -78,14 +81,14 @@ func NewPreflightRequirementsActivity(repo RunExecutorContextStore, executor too
 func (a *PreflightRequirementsActivity) Name() string        { return "PreflightRequirements" }
 func (a *PreflightRequirementsActivity) DisplayName() string { return "Preflight Requirements" }
 func (a *PreflightRequirementsActivity) Description() string {
-	return "Check a run's declared requirements (tools, integrations, checkouts) before its first node"
+	return "Check a run's declared requirements (tools, CLI sign-ins, integrations, checkouts) before its first node"
 }
 func (a *PreflightRequirementsActivity) Category() schema.ActivityCategory {
 	return schema.CategoryUtility
 }
 
 func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input PreflightRequirementsInput) (PreflightRequirementsOutput, error) {
-	req := &reliantv1.WorkflowRequirements{Tools: input.Tools, Integrations: input.Integrations, Repos: input.Repos}
+	req := &reliantv1.WorkflowRequirements{Tools: input.Tools, Integrations: input.Integrations, Repos: input.Repos, CliLogin: input.CLILogin}
 	if requirements.Empty(req) {
 		return PreflightRequirementsOutput{}, nil
 	}
@@ -122,6 +125,10 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 				remote.SetContext(execCtx)
 				machine = runExecutorMachine{exec: remote, dir: execCtx.ProjectPath}
 			}
+			if len(input.CLILogin) > 0 {
+				// A CLI sign-in's fix names the machine to sign it in on.
+				machine = namedMachine{Machine: machine, name: a.machineArg(ctx, execCtx)}
+			}
 		}
 	}
 
@@ -152,6 +159,31 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 type runExecutorMachine struct {
 	exec RunExecutor
 	dir  string
+}
+
+// Name is not known to the executor; namedMachine supplies it.
+func (runExecutorMachine) Name() string { return "" }
+
+// namedMachine is a probe machine with the name `reliant machine login
+// --machine` knows it by.
+type namedMachine struct {
+	requirements.Machine
+	name string
+}
+
+func (m namedMachine) Name() string { return m.name }
+
+// machineArg is how `reliant machine login --machine` names the machine the
+// probe runs on (daemonplacement.MachineArg); "" when it cannot be resolved.
+func (a *PreflightRequirementsActivity) machineArg(ctx context.Context, execCtx RunExecutorContext) string {
+	id := ""
+	if execCtx.DaemonSelector != nil {
+		id = execCtx.DaemonSelector.ID
+	}
+	if id == "" {
+		id = configMachine(ctx, a.router, execCtx.UserID, execCtx.DaemonSelector)
+	}
+	return daemonplacement.MachineArg(ctx, a.repo, id)
 }
 
 func (m runExecutorMachine) Run(ctx context.Context, command string) (string, int, error) {

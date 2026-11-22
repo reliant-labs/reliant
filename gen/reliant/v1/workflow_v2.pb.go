@@ -8986,7 +8986,13 @@ type WorkflowRequirements struct {
 	// Repos are checkouts, relative to the project root ("." for the root
 	// itself), that must exist and reach their origin. Reaching origin is
 	// checked with git ls-remote, which writes nothing into the checkout.
-	Repos         []string `protobuf:"bytes,3,rep,name=repos,proto3" json:"repos,omitempty"`
+	Repos []string `protobuf:"bytes,3,rep,name=repos,proto3" json:"repos,omitempty"`
+	// CliLogin are vendor agent CLIs (claude, codex, gemini, cursor, copilot)
+	// that must be installed and signed in on the run's machine: each is
+	// checked with the vendor's own status command, whose output never leaves
+	// the machine; Reliant never reads, stores or relays a vendor's sign-in.
+	// A person signs one in with `reliant machine login <vendor>`.
+	CliLogin      []string `protobuf:"bytes,4,rep,name=cli_login,json=cliLogin,proto3" json:"cli_login,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9038,6 +9044,13 @@ func (x *WorkflowRequirements) GetIntegrations() []string {
 func (x *WorkflowRequirements) GetRepos() []string {
 	if x != nil {
 		return x.Repos
+	}
+	return nil
+}
+
+func (x *WorkflowRequirements) GetCliLogin() []string {
+	if x != nil {
+		return x.CliLogin
 	}
 	return nil
 }
@@ -10097,11 +10110,13 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\venvironment\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"\\\n" +
 	"\rNodeSecretRef\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
-	"\venvironment\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"f\n" +
+	"\venvironment\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"\xac\x03\n" +
 	"\x14WorkflowRequirements\x12\x14\n" +
 	"\x05tools\x18\x01 \x03(\tR\x05tools\x12\"\n" +
 	"\fintegrations\x18\x02 \x03(\tR\fintegrations\x12\x14\n" +
-	"\x05repos\x18\x03 \x03(\tR\x05repos\"\xf4\x01\n" +
+	"\x05repos\x18\x03 \x03(\tR\x05repos\x12\xc3\x02\n" +
+	"\tcli_login\x18\x04 \x03(\tB\xa5\x02\x82\xb5\x18\xa0\x02\n" +
+	"\xfd\x01Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`J\fCLI sign-ins\x82\x01\x0f[claude, codex]R\bcliLogin\"\xf4\x01\n" +
 	"\x13WorkflowConcurrency\x12\x1f\n" +
 	"\vmax_running\x18\x01 \x01(\rR\n" +
 	"maxRunning\x12@\n" +

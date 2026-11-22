@@ -17,7 +17,10 @@ import (
 )
 
 // requirementsStore is the chat → project lookup, for a chat on a machine.
-type requirementsStore struct{ noMachine bool }
+type requirementsStore struct {
+	noMachine  bool
+	daemonName string
+}
 
 func (s requirementsStore) GetChat(_ context.Context, id string) (*db.Chat, error) {
 	return &db.Chat{ID: id, ProjectID: "p1", NoMachine: s.noMachine}, nil
@@ -33,8 +36,8 @@ func (requirementsStore) GetWorktree(context.Context, string) (*db.Worktree, err
 func (requirementsStore) ListProjectDaemonsForProject(context.Context, string) ([]*core.ProjectDaemon, error) {
 	return []*core.ProjectDaemon{{DaemonID: "d1", Path: "/home/workspace/projects/acme", InstallState: core.ProjectInstallInstalled}}, nil
 }
-func (requirementsStore) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
-	return &db.Daemon{ID: id, UserID: "u1"}, nil
+func (s requirementsStore) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	return &db.Daemon{ID: id, UserID: "u1", Name: s.daemonName}, nil
 }
 
 // fakeProbeMachine is the run's machine: it answers the probe with out.
@@ -49,6 +52,8 @@ func (m *fakeProbeMachine) Run(_ context.Context, command string) (string, int, 
 	m.ran = command
 	return m.out, 0, m.err
 }
+
+func (*fakeProbeMachine) Name() string { return "" }
 
 // fakeConnections is the connection store: the integrations it holds
 // resolve, others fail the way connections does for a missing one.
@@ -141,4 +146,40 @@ func TestPreflightRequirementsConnectionCheck(t *testing.T) {
 	check := connectionCheck{src: conns}
 	require.ErrorContains(t, check.Check(context.Background(), "not-an-integration"), "not an integration")
 	require.ErrorContains(t, check.Check(context.Background(), "github"), "github is not connected")
+}
+
+// A required CLI that is not signed in fails the run, non-retryably, and the
+// fix names the machine the run's commands go to, by the name
+// `reliant machine login --machine` resolves.
+func TestPreflightRequirementsCLILogin(t *testing.T) {
+	for _, tc := range []struct {
+		name, daemonName, machine string
+	}{
+		{"named machine", "ci-box", "ci-box"},
+		{"unnamed machine is named by its id", "", "d1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &fakeProbeMachine{out: "RELIANT_CLI\tclaude\tsigned_out\nRELIANT_CLI\tcodex\tsigned_in\nREQUIRES_PROBE_DONE\n"}
+			a := newRequirementsActivity(requirementsStore{daemonName: tc.daemonName}, m, nil)
+			out, err := a.Execute(context.Background(), PreflightRequirementsInput{ChatID: "chat1", CLILogin: []string{"claude", "codex"}})
+			require.Error(t, err)
+			var appErr *temporal.ApplicationError
+			require.True(t, errors.As(err, &appErr))
+			assert.Equal(t, PreflightRequirementsErrType, appErr.Type())
+			assert.True(t, appErr.NonRetryable())
+			require.Len(t, out.Problems, 1)
+			assert.Equal(t, requirements.Problem{Kind: "cli", Name: "claude", Machine: tc.machine,
+				Problem: "Claude Code isn't signed in on machine " + tc.machine,
+				Fix:     "run `reliant machine login claude --machine " + tc.machine + "`"}, out.Problems[0])
+			assert.Contains(t, m.ran, "RELIANT_CLI", "the probe carries the vendor status script")
+		})
+	}
+}
+
+func TestPreflightRequirementsCLILoginSignedIn(t *testing.T) {
+	m := &fakeProbeMachine{out: "RELIANT_CLI\tgemini\tsigned_in\nREQUIRES_PROBE_DONE\n"}
+	a := newRequirementsActivity(requirementsStore{}, m, nil)
+	out, err := a.Execute(context.Background(), PreflightRequirementsInput{ChatID: "chat1", CLILogin: []string{"gemini"}})
+	require.NoError(t, err)
+	assert.Empty(t, out.Problems)
 }
