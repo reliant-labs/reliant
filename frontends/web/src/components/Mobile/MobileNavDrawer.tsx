@@ -180,8 +180,9 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
 
         {/* The one nav model, drill-ins and all; it scrolls inside itself
             (`overscroll-contain`, so a scroll that reaches its end never
-            chains to the page behind the drawer). */}
-        <div className="flex min-h-0 flex-1 flex-col overscroll-contain">
+            chains to the page behind the drawer). Its rows are touch
+            targets here: 44px, not the desktop's 32px row height. */}
+        <div className="flex min-h-0 flex-1 flex-col overscroll-contain [--row-h:2.75rem]">
           <MobileHybridNav
             pathname={pathname}
             search={search}
