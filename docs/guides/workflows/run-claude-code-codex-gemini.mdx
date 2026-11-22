@@ -22,25 +22,25 @@ Use this guide when you want a vendor CLI inside a workflow, for example a night
 
 <Steps>
   <Step title="Sign each CLI in on the machine">
-    Run `reliant machine login` with the vendor's id. With no `--machine` it means this computer's own Reliant machine. To sign in on another machine, such as a cloud machine, name it. The machine has to be running.
+    Run `reliant machine login` with the vendor's id. With no `--machine` it means this computer's own Reliant machine: the one whose daemon is running here, or the only one set up here. If there are several, or none, the command stops and asks you to name one. To sign in on another machine, such as a cloud machine, pass its name or id (`reliant machine list` shows yours). That machine has to be running.
 
     ```bash terminal
     reliant machine login claude --machine build-box
     ```
 
-    The vendor ids are `claude`, `codex`, `gemini`, `cursor` and `copilot`. What happens next is the vendor's own sign-in, run on the machine:
+    The vendor ids are `claude`, `codex`, `gemini`, `cursor` and `copilot`; one id per sign-in. Before it starts, the command prints a `warning:` line when the machine has an ephemeral disk (the sign-in lasts only until it stops), is shared through your organization, or is in a machine pool (see [Terms](#terms-personal-or-organization)). What happens next is the vendor's own sign-in, run on the machine:
 
     1. If the CLI isn't installed there, it is installed first, at a version Reliant pins, under the machine's home directory. This needs `npm` on the machine (Node.js), and for Cursor Agent and the GitHub CLI a way to download files.
     2. The vendor's login starts. On a machine with no browser it prints a URL or a short device code. Open the URL on any computer, approve, and paste back the one-time code if it asks for one.
-    3. When the vendor says you are signed in, the command checks the result and prints it.
+    3. When the vendor's sign-in ends, the command checks the result and prints it. It exits with an error unless the CLI is signed in.
 
-    From a laptop to another machine, your terminal is a window onto the machine's login prompt, like SSH. Reliant carries what you type and what the vendor prints, and nothing else. It never reads, stores or relays the sign-in: the vendor's CLI writes it to its own file on the machine, and Reliant only ever asks the CLI whether it is signed in.
+    On this computer the sign-in runs right here, with no server involved. On another machine your terminal is a window onto the machine's login prompt, like SSH. Reliant carries what you type and what the vendor prints, and nothing else. It never reads, stores or relays the sign-in: the vendor's CLI writes it to its own file on the machine, and Reliant only ever asks the CLI whether it is signed in.
 
-    Each vendor's flow differs a little (the table below). Codex's device-code sign-in has to be turned on first in your ChatGPT security settings, or by your workspace admin for a workspace account, and the command tells you so. Gemini CLI opens its own session: sign in, then type `/quit`.
+    Each vendor's flow differs a little (the table below). Codex's device-code sign-in has to be turned on first in your ChatGPT security settings, or by your workspace admin for a workspace account, and the command tells you so. Gemini CLI opens its own session: sign in, then type `/quit`. Signing in needs a terminal and a person: it refuses to run from an agent's shell, though `--status` works there.
   </Step>
 
   <Step title="Check the sign-ins">
-    `--status` reports each CLI on the machine as signed in, signed out, sign-in expired or not installed. It changes nothing and can run from a script (`--json`).
+    `--status` reports each CLI on the machine as signed in, signed out, sign-in expired or not installed. It changes nothing, and it works from an agent's shell. `--json` prints the same report for a script: the machine's `id` and `name`, and a `logins` list whose entries have `vendor`, `name` and `state` (`signed_in`, `signed_out`, `expired`, `not_installed` or `unknown`).
 
     ```bash terminal
     reliant machine login --status --machine build-box
@@ -55,11 +55,11 @@ Use this guide when you want a vendor CLI inside a workflow, for example a night
       GitHub Copilot CLI (copilot)  not installed
     ```
 
-    Name vendors to check only those: `reliant machine login --status claude codex`. The check never makes a model call, so it costs nothing and uses none of your plan.
+    Name vendors to check only those: `reliant machine login --status claude codex`. The check never makes a model call, so it uses none of your plan. A CLI found only in `~/.local/bin` while that directory isn't on the PATH gets a `hint:` line under the table (see [Where the CLIs are installed](#where-the-clis-are-installed)).
   </Step>
 
   <Step title="Declare the sign-ins the workflow needs">
-    `requires:` is checked on the machine before a run's first step ([Declare what a run needs](/automations/overview#declare-what-a-run-needs-requires)). `cli_login` lists the vendor CLIs that must be installed and signed in. Each step that calls one takes `credentials: inherit`, which is the default; the next section says why it matters.
+    `requires:` is checked on the machine before a run's first step ([Declare what a run needs](/automations/overview#declare-what-a-run-needs-requires)). `cli_login` lists the vendor CLIs that must be installed and signed in. Each step that calls one takes `credentials: inherit`, which is the default; the next section says why it matters. `validate` rejects a vendor id it doesn't know and lists the valid ones.
 
     This workflow asks Claude Code and then Codex for a read-only review of the repository every weekday morning, and saves both answers:
 
@@ -147,7 +147,7 @@ Use this guide when you want a vendor CLI inside a workflow, for example a night
     reliant workflow lint .reliant/workflows/two-reviews.yaml
     ```
 
-    `validate` rejects a vendor id it doesn't know and lists the valid ones. [Lint](/workflows/lint) warns about missing scenarios until you add some (see the last card below), and also warns when a step calls a vendor CLI that `cli_login` doesn't list, and when a step that calls `claude` or `codex` sets `credentials: none`. Then start a run to see it work:
+    [Lint](/workflows/lint) warns about missing scenarios until you add some (see the last card below). It has two rules for these CLIs, and they apply to every workflow, triggered or not: [`requires-undeclared-cli-login`](/workflows/lint#requires-undeclared-cli-login) warns when a `run` command calls a vendor CLI that `cli_login` doesn't list, and [`credentials-none-cli-login`](/workflows/lint#credentials-none-cli-login) warns when a `credentials: none` step calls `claude`, `codex` or `copilot`. Then start a run to see it work:
 
     ```bash terminal
     reliant workflow run two-reviews --project-id <project-id> --follow
@@ -159,22 +159,26 @@ Use this guide when you want a vendor CLI inside a workflow, for example a night
 
 A run step takes `credentials: inherit` by default: the command is a child of the machine's daemon, running as the user who signed the CLIs in, so it sees that user's home directory and the CLI finds its own login there.
 
-`credentials: none` is the opposite. It is for steps that read text a stranger wrote, and it takes the machine's logins away: on Linux, which every cloud machine is, the command runs in a sandbox where `~/.claude` and `~/.codex` do not exist, and so does `~/.config/gh`, the login GitHub Copilot CLI uses ([What `credentials: none` hides](/deep-dives/daemon-security-model#6-credentials-none)). A `claude` or `codex` started there finds no sign-in and runs signed out, even though `reliant machine login --status` says it is signed in. Its environment is scrubbed of anything that looks like an API key too.
+`credentials: none` is the opposite. It is for steps that read text a stranger wrote, and it takes the machine's logins away: on Linux, which every cloud machine is, the command runs in a sandbox where `~/.claude`, `~/.codex` and `~/.config/gh` (the login GitHub Copilot CLI uses) do not exist ([What `credentials: none` hides](/deep-dives/daemon-security-model#6-credentials-none)). A `claude`, `codex` or `copilot` started there finds no sign-in and runs signed out, even though `reliant machine login --status` says it is signed in. Gemini CLI's and Cursor Agent's files aren't hidden, but the environment is scrubbed of anything that looks like an API key for every CLI.
 
 That is the right behavior for a step that must not hold your logins, and the wrong one for a step whose whole job is to use one. So give the vendor CLI's step `credentials: inherit`, and keep `credentials: none` for the steps around it that handle untrusted input ([Run AI agent commands without access to your credentials](/guides/machines/sandbox-agent-commands-credentials-none)). A vendor CLI that can read a pull request's text and also holds your logins is the combination that guide exists to prevent, so a workflow that points one at untrusted text should limit what that CLI may do.
 
 ## What a run that isn't signed in reports
 
-A run checks `requires:` once its machine is up and before any step runs. When a CLI isn't ready, the run fails at once, before any side effect. Its error names the CLI and the machine and gives the fix, along with anything else `requires:` found missing:
+A run checks `requires:` once its machine is up and before any step runs. When a CLI isn't ready, the run fails at once, before any side effect. Its error lists every problem `requires:` found, one line each, with the fix:
 
 ```text
-Claude Code isn't signed in on machine build-box
-Fix: run `reliant machine login claude --machine build-box`
+the run's requirements are not met (requires:), so nothing ran:
+- cli claude: Claude Code isn't signed in on machine build-box. Fix: run `reliant machine login claude --machine build-box`
 ```
 
-A CLI that isn't installed on the machine is reported as `Claude Code (claude) isn't installed on machine build-box`, with the same fix, because `machine login` installs it. One whose sign-in stopped working says `Claude Code's sign-in on machine build-box has expired`. Only a vendor whose own status can tell an expired sign-in from a signed-out one reports it (see [the table](#the-five-vendor-clis)). A check that could not tell is retried and reported as such if it still cannot. Run the fix, then start the run again.
+A CLI that isn't installed on the machine is reported as `Claude Code (claude) isn't installed on machine build-box`, with the same fix plus `(it installs the CLI)`. One whose sign-in stopped working says `Claude Code's sign-in on machine build-box has expired`. Only a vendor whose own status can tell an expired sign-in from a signed-out one reports it (see [the table](#the-five-vendor-clis)). A check that couldn't tell, because the vendor's status timed out or answered something unexpected, is a problem too, not a pass: it says `could not tell whether Claude Code is signed in`, and its fix is `reliant machine login --status claude --machine build-box` to see why. Run the fix, then start the run again.
 
 A sign-in can also lapse after the check, between the check and the step: the vendor expires it, or you sign out. Then the step itself fails with whatever the vendor CLI prints, and your exit-code route is what carries it to a message.
+
+## Where the CLIs are installed
+
+When `reliant machine login` has to install a CLI, it puts it under the machine's home directory and links it into `~/.local/bin`. The Reliant daemon adds `~/.local/bin` to the end of the PATH of the commands it runs, so a `run` step, or an agent's shell, can call `claude` by name. That needs a Reliant release newer than v1.28.0 on the machine (check it with `reliant --version`). On an older daemon the `requires:` check says so: `Claude Code is installed in ~/.local/bin on machine build-box, which is not on the PATH its run steps get`, and suggests updating Reliant on the machine or calling the CLI by its full path, `"$HOME/.local/bin/claude"`. `reliant machine login --status` prints the same as a `hint:`. A CLI you installed yourself somewhere already on the PATH is used as it is.
 
 ## Cloud machines keep the sign-ins
 
@@ -208,7 +212,7 @@ It stops being yours when someone else can use it. The consumer plans of Anthrop
 
 For org-wide or shared use, use credentials the vendor issues for automation instead: an API key or service account owned by your organization, such as an Anthropic Console API key, an OpenAI platform API key, a Google API key or Vertex service account, a Cursor team service-account key, or the enterprise access tokens a vendor offers for automation. The vendors say so themselves: OpenAI's [Codex documentation](https://developers.openai.com/codex/auth) says to use API key authentication for programmatic workflows such as CI/CD jobs, and [Cursor's CLI documentation](https://cursor.com/docs/cli/reference/authentication) says the same for automation. [GitHub's Copilot CLI documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli) is the one without an organization-owned token: Copilot is always one seat's.
 
-A `run` step can't take a secret today, and a key doesn't belong in a workflow file, a step's command or a prompt. So keep shared and team workflows off the vendor CLIs signed in with a person's plan, and let them use Reliant's own agents on your organization's AI accounts ([AI providers](/settings/api-keys)). Terms change, and these links are the vendors' current pages; read the terms of the plan you hold.
+Today a `run` step can't take a secret, and a key doesn't belong in a workflow file, a step's command or a prompt, so there is no way yet to hand a vendor CLI an organization's key from a workflow. For org-wide automations, use organization API keys with Reliant's own agents: add them as the organization's AI accounts ([AI providers](/settings/api-keys)) and the workflow's agent steps spend those. Where a workflow has to run a vendor CLI, run it on each person's own machine, signed in with that person's own plan, for that person's own runs. Terms change, and these links are the vendors' current pages; read the terms of the plan you hold.
 
 ## How this differs from connecting a plan to Reliant
 
@@ -237,13 +241,16 @@ Either one can sit beside the other. A workflow can have a Reliant agent plan a 
     The machine has no sign-in, or lost it. Run the command in the error, `reliant machine login claude --machine build-box`, and start the run again. If the machine has an ephemeral disk, it loses the sign-in every time it stops.
   </Accordion>
   <Accordion title="machine build-box runs a Reliant too old for 'reliant machine login'">
-    A machine signs in remotely only when its daemon is new enough. Update Reliant on it, or run `reliant machine login` in a terminal on the machine itself, which needs nothing from the daemon.
+    A machine signs in remotely only when its daemon is new enough. The error says `update Reliant on it, then run this again`. Or run `reliant machine login` in a terminal on the machine itself, which needs nothing from the daemon.
+  </Accordion>
+  <Accordion title="an agent cannot sign a vendor CLI in from its shell">
+    Signing in is the user's act, so the command refuses inside an agent's shell. Run `reliant machine login <vendor>` in your own terminal. `reliant machine login --status` works from an agent's shell.
   </Accordion>
   <Accordion title="machine build-box is not running or not connected">
-    Start it with `reliant machine start build-box` and try again. A suspended cloud machine keeps its sign-ins on its disk.
+    The error says `start it ('reliant machine start build-box') and try again`. A suspended cloud machine keeps its sign-ins on its disk.
   </Accordion>
   <Accordion title="The CLI is signed in, but my step runs signed out">
-    The step has `credentials: none`, which hides `~/.claude`, `~/.codex` and `~/.config/gh` from the command. Give the step `credentials: inherit`, and keep `none` for steps that read untrusted text. Lint flags the combination.
+    The step has `credentials: none`, which hides `~/.claude`, `~/.codex` and `~/.config/gh` from the command. Give the step `credentials: inherit`, and keep `none` for steps that read untrusted text. `reliant workflow lint` flags it as `credentials-none-cli-login`. It covers `claude`, `codex` and `copilot`.
   </Accordion>
   <Accordion title="Gemini CLI says it is signed in, but a step can't use it">
     Reliant checks only that Gemini CLI's sign-in file exists. A sign-in the vendor has since revoked still passes. Run `reliant machine login gemini` again.
