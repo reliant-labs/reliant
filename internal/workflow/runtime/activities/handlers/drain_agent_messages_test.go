@@ -23,12 +23,12 @@ import (
 )
 
 func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity {
-	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}))
+	return NewDrainAgentMessagesActivity(DrainAgentMessagesDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 }
 
 func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
 	t.Helper()
-	require.NoError(t, repo.EnqueueAgentMessage(context.Background(), &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(context.Background(), repo.ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: fromThreadID,
@@ -175,7 +175,7 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 		"the envelope must precede the bodies it describes")
 
 	// Both queued rows must now be marked delivered against the envelope.
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "delivered rows must drop out of the queue")
 }
@@ -219,7 +219,7 @@ func TestDrainAgentMessages_AnnouncesDrainedRowIDs(t *testing.T) {
 
 	// The ids the strip is currently showing — captured before the drain,
 	// because after it they are gone from the queue.
-	queuedBefore, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queuedBefore, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, queuedBefore, 2)
 	wantIDs := []string{queuedBefore[0].ID, queuedBefore[1].ID}
@@ -307,7 +307,7 @@ func TestDrainAgentMessages_CompletionNoticeStillDelivers(t *testing.T) {
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: childThreadID, ChatID: chatID})
 	require.NoError(t, err)
 
-	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: childThreadID,
@@ -389,7 +389,7 @@ func TestDrainAgentMessages_LeavesNoPartialDelivery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 4, "one envelope plus one message per queued row, all or nothing")
 
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "every row in the batch must be marked delivered together")
 }
@@ -641,7 +641,7 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: childThreadID, ChatID: chatID, Title: &title})
 	require.NoError(t, err)
 
-	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: childThreadID,
@@ -757,7 +757,7 @@ func TestDrainAgentMessages_CancelledAndFailedNotificationText(t *testing.T) {
 			_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: childThreadID, ChatID: chatID, Title: &title})
 			require.NoError(t, err)
 
-			require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+			require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 				ID:           uuid.New().String(),
 				ChatID:       chatID,
 				FromThreadID: childThreadID,
@@ -803,7 +803,7 @@ func TestDrainAgentMessages_HumanMessageStillPlainVisible(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: chatID,
@@ -856,7 +856,7 @@ func TestDrainAgentMessages_RunMessageIsTheSendingRuns(t *testing.T) {
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: prFixRun, ChatID: prFixRun})
 	require.NoError(t, err)
 
-	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: prFixRun,
@@ -911,7 +911,7 @@ func TestDrainAgentMessages_LLMOnlyRowDrainsHidden(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, h.Repo().ORM(), &db.AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: chatID,
@@ -923,7 +923,7 @@ func TestDrainAgentMessages_LLMOnlyRowDrainsHidden(t *testing.T) {
 		DisplayStyle: db.QueuedDisplayStyle(db.WithLLMOnlyDelivery(ctx)),
 	}))
 
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.NotNil(t, queued[0].DisplayStyle, "the queued row keeps its display style")

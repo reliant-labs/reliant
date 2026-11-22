@@ -122,7 +122,7 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 	require.True(t, resp.Msg.Success)
 	assert.Contains(t, resp.Msg.Message, "Queued")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, fx.chatID, queued[0].ChatID)
@@ -151,7 +151,7 @@ func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, clientMessageID, queued[0].ID)
@@ -222,7 +222,7 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "an undeliverable doorbell must not discard the durable row")
 	assert.Equal(t, "still worth queueing", queued[0].Body)
@@ -304,7 +304,7 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, resp.Msg.Success, "a run that has not finished still has a next turn")
 
-			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 			require.NoError(t, err)
 			require.Len(t, queued, 1)
 		})
@@ -370,7 +370,7 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	require.True(t, resp.Msg.Success,
 		"queueing into the running turn must be accepted, got: %s", resp.Msg.Message)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "steer the turn that is running right now", queued[0].Body)
@@ -397,7 +397,7 @@ func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, otherFx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), otherFx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a cross-chat thread must never receive a queued message")
 }
@@ -422,7 +422,7 @@ func TestSendAgentMessage_RejectsTerminalThread(t *testing.T) {
 	assert.False(t, resp.Msg.Success)
 	assert.Contains(t, resp.Msg.Message, "already finished")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a finished thread must never silently receive a queued message")
 }
@@ -472,12 +472,12 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 
 	// Deliver the third message before listing -- it must be excluded, and
 	// must never resurface once drained.
-	all, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	all, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, all, 3)
 	savedMsg, err := repo.SaveMessageToThread(ctx, fx.chatID, fx.childThreadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "delivered before list", nil, nil, nil)
 	require.NoError(t, err)
-	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{all[2].ID}, time.Now(), savedMsg.ID)
+	_, markErr := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{all[2].ID}, time.Now(), savedMsg.ID)
 	require.NoError(t, markErr)
 
 	resp, err := service.ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
@@ -544,7 +544,7 @@ func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
@@ -554,7 +554,7 @@ func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Success)
 
-	after, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	after, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, after, "a subsequent list must no longer return the cancelled message")
 }
@@ -573,7 +573,7 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	}))
 	require.NoError(t, err)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	msgID := queued[0].ID
@@ -581,7 +581,7 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	// Simulate the agent's drain winning the race before cancel arrives.
 	savedMsg, err := repo.SaveMessageToThread(ctx, fx.chatID, fx.childThreadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "already delivered", nil, nil, nil)
 	require.NoError(t, err)
-	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{msgID}, time.Now(), savedMsg.ID)
+	_, markErr := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{msgID}, time.Now(), savedMsg.ID)
 	require.NoError(t, markErr)
 
 	resp, err := service.CancelQueuedAgentMessage(ctx, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
@@ -612,7 +612,7 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "protect me",
 	}))
 	require.NoError(t, err)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
@@ -639,7 +639,7 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	assert.False(t, crossResp.Msg.Success, "a message_id from a different chat must never be cancellable")
 
 	// The message must still be queued after both rejected attempts.
-	after, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	after, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, after, 1)
 }

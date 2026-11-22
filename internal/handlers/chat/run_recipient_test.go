@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
@@ -70,7 +71,7 @@ func (s *Service) withTemporal(t Temporal) *Service {
 
 func queuedBodies(t *testing.T, ctx context.Context, repo *db.Repo, thread string) []string {
 	t.Helper()
-	rows, err := repo.ListQueuedAgentMessagesForThread(ctx, thread)
+	rows, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), thread)
 	require.NoError(t, err)
 	var bodies []string
 	for _, r := range rows {

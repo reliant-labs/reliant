@@ -118,7 +118,7 @@ func TestSendMessage_FailedRunCoarseRestartQueuesBehindTheMailbox(t *testing.T) 
 	assert.True(t, resp.Msg.Queued)
 
 	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued first", "typed after the failure"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -166,7 +166,7 @@ func TestSendMessage_FailedRunQuestionAnswerStillResumesTheQuestion(t *testing.T
 
 	assert.Equal(t, []string{markResumeAnswer("go with the minimal one")},
 		only(transcriptBodies(t, ctx, repo, fx.chatID), markResumeAnswer("go with the minimal one"), "queued first"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 1, "the queue is left for the next call_llm")
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -211,7 +211,7 @@ func TestSendMessage_FailedRunRepeatAfterQueuedRecoveryIsReplayed(t *testing.T) 
 	assert.True(t, queued)
 	assert.Equal(t, 1, pause.interruptResumes, "the repeat does not recover the run a second time")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Len(t, remaining, 2, "queued once")
 }

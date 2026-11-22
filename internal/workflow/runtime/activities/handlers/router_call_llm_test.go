@@ -165,7 +165,7 @@ func TestCallLLM_ResponseTool_PopulatesResponseData(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	input := buildResponseToolInput(chat.ID, &reliantv1.ResponseTool{
 		Name:        &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "routing_decision"}},
@@ -212,7 +212,7 @@ func TestCallLLM_ResponseTool_NoResponseToolConfigured(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	// No ResponseTool in the input
 	input := buildResponseToolInput(chat.ID, nil)
@@ -254,7 +254,7 @@ func TestCallLLM_ResponseTool_TextAndToolCall(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	input := buildResponseToolInput(chat.ID, &reliantv1.ResponseTool{
 		Name:        &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "routing_decision"}},

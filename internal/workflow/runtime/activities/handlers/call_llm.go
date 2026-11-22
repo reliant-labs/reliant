@@ -150,6 +150,9 @@ type CallLLMDeps struct {
 	Spawns SpawnTree
 	// Threads saves the turn's messages and the notices it posts.
 	Threads MessageSaver
+	// Mailbox is the thread's queued mail: the turn peeks at it for late
+	// arrivals and drains it at its boundary.
+	Mailbox MailboxQueue
 	// Hub carries the turn's streaming deltas.
 	Hub streaming.StreamingHub
 	// ToolsFactory builds the turn's tool set.
@@ -168,6 +171,7 @@ type CallLLMActivity struct {
 	repo           CallLLMStore
 	spawns         SpawnTree
 	threads        MessageSaver
+	mailbox        MailboxQueue
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -276,6 +280,7 @@ func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 		repo:           deps.Store,
 		spawns:         deps.Spawns,
 		threads:        deps.Threads,
+		mailbox:        deps.Mailbox,
 		hub:            deps.Hub,
 		toolsFactory:   deps.ToolsFactory,
 		configProvider: deps.ConfigProvider,
@@ -1215,7 +1220,7 @@ func (a *CallLLMActivity) hasQueuedAgentMessages(ctx context.Context, thread str
 	if thread == "" {
 		return false
 	}
-	queued, err := a.repo.ListQueuedAgentMessagesForThread(ctx, thread)
+	queued, err := a.mailbox.ListQueuedAgentMessagesForThread(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Could not check the mailbox for late arrivals; "+
 			"a message queued during this turn may wait for the next send",
@@ -1316,7 +1321,7 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 		return 0
 	}
 
-	drain := NewDrainAgentMessagesActivity(a.repo, a.threads)
+	drain := NewDrainAgentMessagesActivity(DrainAgentMessagesDeps{Store: a.repo, Mailbox: a.mailbox, Threads: a.threads})
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",

@@ -314,6 +314,9 @@ func CountQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toTh
 // every wait short for as long as it stayed there. One statement, so two
 // calls polling the same thread cannot both claim one message.
 func MarkQueuedAgentMessagesPreempting(ctx context.Context, db orm.Context, toThreadID string, preemptedAt time.Time) (int64, error) {
+	if toThreadID == "" {
+		return 0, fmt.Errorf("to thread ID cannot be empty")
+	}
 	res, err := db.Exec(ctx, `UPDATE agent_messages SET preempted_at = $2
 WHERE to_thread_id = $1 AND status = 1 AND preempted_at IS NULL`, toThreadID, preemptedAt)
 	if err != nil {
@@ -370,6 +373,9 @@ func MarkAgentMessagesDelivered(ctx context.Context, db orm.Context, ids []strin
 func SetAgentMessagesDeliveredMessageID(ctx context.Context, db orm.Context, ids []string, deliveredMessageID string) error {
 	if len(ids) == 0 {
 		return nil
+	}
+	if deliveredMessageID == "" {
+		return fmt.Errorf("delivered message ID is required")
 	}
 	_, err := db.Bun().NewRaw(`UPDATE agent_messages SET delivered_message_id = ?0 WHERE id = ANY(?1::text[])`,
 		deliveredMessageID, pgdialect.Array(ids)).Exec(ctx)
@@ -448,6 +454,9 @@ func ClaimQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toTh
 // blocking question — UpdateThreadStatus closes them in the same write — so
 // its mail is still resolved.
 func MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, db orm.Context, toThreadID string) (int64, error) {
+	if toThreadID == "" {
+		return 0, fmt.Errorf("to thread ID cannot be empty")
+	}
 	res, err := db.Bun().NewUpdate().Model((*AgentMessage)(nil)).
 		Set("status = ?", core.AgentMessageStatusUndelivered).
 		Where("to_thread_id = ?", toThreadID).

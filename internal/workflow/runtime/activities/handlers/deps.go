@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolbindings"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/messageconv"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
@@ -204,7 +205,6 @@ type CallLLMStore interface {
 	workflowsource.MachineStore
 	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
-	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	// GetDaemon and ListDaemonsByUserID are daemonPlatformReader
 	// (resolveShellPlatform).
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -311,9 +311,6 @@ type DeleteWorktreeStore interface {
 type DrainAgentMessagesStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
-	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
@@ -332,6 +329,13 @@ type EmitToolCallStatusStore interface {
 type EnqueueAgentMessageStore interface {
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
 	EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage) (db.SpawnReportOutcome, error)
+}
+
+// EnqueueAgentMessageDeps is what an EnqueueAgentMessageActivity is built from.
+type EnqueueAgentMessageDeps struct {
+	// Mailbox queues the message and announces it to the chat's clients.
+	// *agentmailbox.Mailbox satisfies it.
+	Mailbox EnqueueAgentMessageStore
 }
 
 // ExecuteRunStepStore is what ExecuteRunStepActivity reads and writes.
@@ -372,9 +376,6 @@ type ExecuteToolsStore interface {
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	// MarkQueuedAgentMessagesPreempting is preemptionStore
-	// (newBatchPreemption).
-	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
 	toolbindings.SettingsReader
 	ThreadWorktreeReader
 	db.ToolCallStatusStore
@@ -489,7 +490,6 @@ type SaveMessageStore interface {
 // ThreadStatusStore is what ThreadStatusActivity writes.
 type ThreadStatusStore interface {
 	UpdateThreadStatus(ctx context.Context, threadID string, status db.ThreadStatus, completedAt *time.Time) (*db.Thread, error)
-	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
@@ -641,4 +641,60 @@ type UsageLimitWaitDeps struct {
 	Waits ProviderBackoffMarkers
 	// Threads saves the notice the wait posts to the transcript.
 	Threads MessageSaver
+}
+
+// MailboxPreempter marks a thread's queued mail as having cut a waiting tool
+// call short. store.AgentMessageExtStore satisfies it.
+type MailboxPreempter interface {
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
+}
+
+// ExecuteToolsDeps is what an ExecuteToolsActivity (and the InvokeTool and
+// automation-approval activities that run its path) is built from.
+type ExecuteToolsDeps struct {
+	// Store is what the activity reads and writes.
+	Store ExecuteToolsStore
+	// ToolExecutor runs the tools on the user's machine.
+	ToolExecutor toolexec.ToolExecutor
+	// Preemption ends a batch's waiting calls when mail arrives for the
+	// thread. Nil never preempts.
+	Preemption MailboxPreempter
+}
+
+// MailboxQueue is the drain's read and claim of a thread's queued mail.
+// store.AgentMessageExtStore satisfies it.
+type MailboxQueue interface {
+	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
+	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
+	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
+}
+
+// DrainAgentMessagesDeps is what a DrainAgentMessagesActivity is built from.
+type DrainAgentMessagesDeps struct {
+	// Store is what the drain reads and writes beside the mailbox.
+	Store DrainAgentMessagesStore
+	// Mailbox is the thread's queued mail.
+	Mailbox MailboxQueue
+	// Threads saves the envelope message.
+	Threads MessageSaver
+}
+
+// MailboxReader peeks at whether a thread has queued mail.
+// store.AgentMessageExtStore satisfies it.
+type MailboxReader interface {
+	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
+}
+
+// MailboxResolver marks a thread's stranded queued mail undelivered once its
+// loop has exited. store.AgentMessageExtStore satisfies it.
+type MailboxResolver interface {
+	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+}
+
+// ThreadStatusDeps is what a ThreadStatusActivity is built from.
+type ThreadStatusDeps struct {
+	// Store is what the activity writes.
+	Store ThreadStatusStore
+	// Mailbox resolves the mail a finished thread left behind.
+	Mailbox MailboxResolver
 }

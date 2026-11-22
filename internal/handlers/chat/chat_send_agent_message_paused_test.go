@@ -140,7 +140,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the resumed run reads as running")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message stays queued for the resumed run's next call_llm")
 	assert.Equal(t, "continue", queued[0].Body)
@@ -202,7 +202,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToASubAgent(t *testing.T
 	assert.Equal(t, []string{"resume:" + fx.rootThreadID, "wake:" + fx.childThreadID}, *fx.log,
 		"the doorbell still names the sub-agent: it is the thread with input")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
@@ -243,7 +243,7 @@ func TestSendAgentMessage_PausedChatThatCannotResumeWithdrawsTheMessage(t *testi
 	assert.False(t, resp.Success)
 	assert.Contains(t, resp.Message, "Send this as a normal message")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a message nothing will deliver must not stay queued")
 	assert.Empty(t, threadWakeSignals(fx.temporal.signals), "nothing is woken for a withdrawn message")

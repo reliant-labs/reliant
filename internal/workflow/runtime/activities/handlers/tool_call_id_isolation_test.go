@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -87,7 +88,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(c.h.Repo(), executor).WithToolCallResults(testToolCallResults(c.h.Repo())).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: c.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(c.h.Repo())).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},
@@ -202,7 +203,7 @@ func TestToolCallIDIsolation_RedispatchInTheSameThreadIsStillNotReExecuted(t *te
 func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, toolCallID, body string) error {
 	t.Helper()
 	var out EnqueueAgentMessageOutput
-	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(c.h.Repo()).Execute, EnqueueAgentMessageInput{
+	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(c.h.Repo().ORM()), Announcer: c.h.Repo()})}).Execute, EnqueueAgentMessageInput{
 		ChatID: chatID, FromThreadID: child, ToThreadID: parent,
 		Kind: int32(core.AgentMessageKindCompletion), Body: body, ToolCallID: toolCallID,
 	}, &out)
@@ -225,12 +226,12 @@ func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
 	require.NoError(t, c.spawnReportFor(t, chatA, childA, chatA, "spawn", "chat A's child: result A"))
 	require.NoError(t, c.spawnReportFor(t, chatB, childB, chatB, "spawn", "chat B's child: result B"))
 
-	queuedB, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatB)
+	queuedB, err := store.ListQueuedAgentMessagesForThread(ctx, c.h.Repo().ORM(), chatB)
 	require.NoError(t, err)
 	require.Len(t, queuedB, 1, "chat B's parent has no report in its mailbox: chat B's child's result was dropped")
 	require.Equal(t, "chat B's child: result B", queuedB[0].Body)
 
-	queuedA, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatA)
+	queuedA, err := store.ListQueuedAgentMessagesForThread(ctx, c.h.Repo().ORM(), chatA)
 	require.NoError(t, err)
 	require.Len(t, queuedA, 1)
 	require.Equal(t, "chat A's child: result A", queuedA[0].Body, "chat B's report must not touch chat A's")
@@ -258,7 +259,7 @@ func TestToolCallIDIsolation_SecondSpawnReusingAnIDInOneChatFailsLoudly(t *testi
 	require.Error(t, err, "a different spawn's report must not be silently discarded")
 	require.ErrorContains(t, err, core.ErrSpawnReportSlotTaken.Error())
 
-	queued, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatA)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, c.h.Repo().ORM(), chatA)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, "first spawn's result", queued[0].Body)

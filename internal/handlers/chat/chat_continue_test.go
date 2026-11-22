@@ -280,7 +280,7 @@ func TestContinueQueued_QueuedMailboxRowIsOwed(t *testing.T) {
 	_, err := f.repo.SaveMessageToThread(f.ctx, f.chatID, f.threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		"done", &f.threadID, nil, nil)
 	require.NoError(t, err)
-	require.NoError(t, f.repo.EnqueueAgentMessage(f.ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(f.ctx, f.repo.ORM(), &db.AgentMessage{
 		ID: "queued-1", FromThreadID: f.threadID, ChatID: f.chatID, ToThreadID: f.threadID,
 		Kind: core.AgentMessageKindHumanMessage, Body: "continue", Status: core.AgentMessageStatusQueued, CreatedAt: time.Now(),
 	}))

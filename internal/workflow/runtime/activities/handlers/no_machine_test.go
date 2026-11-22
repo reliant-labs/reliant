@@ -104,7 +104,7 @@ func setupNoMachineFixture(t *testing.T, noMachine bool) *noMachineFixture {
 		chat:    chat,
 		driver:  driver,
 		mcp:     runtime,
-		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: binder}),
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: binder}),
 	}
 }
 
@@ -299,7 +299,7 @@ func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := newMockToolExecutor()
-			activity := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
+			activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
 			shellID, viewID := "call-shell-"+uuid.NewString(), "call-view-"+uuid.NewString()
 
 			var output ExecuteToolsOutput
@@ -336,7 +336,7 @@ func TestExecuteTools_NoMachineRunStillRunsServerToolsOnAMarkedContext(t *testin
 
 	f := setupNoMachineFixture(t, true)
 	executor := &contextRecordingExecutor{}
-	activity := NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo()))
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{

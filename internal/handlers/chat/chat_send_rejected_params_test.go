@@ -120,7 +120,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			assert.Empty(t, transcriptBodies(t, ctx, repo, fx.chatID),
 				"a refused send must not leave its message in the transcript")
-			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			assert.Empty(t, queued, "a refused send must not queue its message for the run")
 			assert.Empty(t, temporal.signals, "a refused send must not signal the run")

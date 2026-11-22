@@ -69,7 +69,7 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message must be accepted into the mailbox of a live agent")
 
@@ -77,7 +77,7 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 	// reaches a terminal status through the ThreadStatus activity, which is
 	// the single writer of terminal threads.status for every exit path
 	// (completion, failure, cancellation, expiry).
-	threadStatus := handlers.NewThreadStatusActivity(repo)
+	threadStatus := handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM())})
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(threadStatus.Execute)
@@ -104,7 +104,7 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 
 	// And it must be gone from the pending queue the UI polls, so the user
 	// stops being told it is about to be read.
-	stillQueued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	stillQueued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, stillQueued, "a resolved row must no longer read as pending delivery")
 }
@@ -139,7 +139,7 @@ func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, resp.Msg.Success)
 
-			threadStatus := handlers.NewThreadStatusActivity(repo)
+			threadStatus := handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM())})
 			suite := &temporaltest.WorkflowTestSuite{}
 			env := suite.NewTestActivityEnvironment()
 			env.RegisterActivity(threadStatus.Execute)
@@ -183,7 +183,7 @@ func TestThreadStatus_LeavesQueueAloneWhileThreadRuns(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	threadStatus := handlers.NewThreadStatusActivity(repo)
+	threadStatus := handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM())})
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(threadStatus.Execute)

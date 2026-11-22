@@ -92,7 +92,7 @@ func TestCallLLM_ContinueTurnCallsProviderOnAssistantTail(t *testing.T) {
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID,
 		"I'll inspect the local dev auth setup before attempting the workflow again.")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
@@ -122,7 +122,7 @@ func TestCallLLM_AssistantTailStillYieldsWithoutContinueTurn(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "All done.")
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
@@ -160,7 +160,7 @@ func TestCallLLM_PausedTurnStopReason(t *testing.T) {
 			chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: countingResolver(driver), MCPBinder: nil})
 
 			var output CallLLMOutput
 			require.NoError(t, h.ExecuteActivity(activityInstance.Execute,

@@ -97,6 +97,8 @@ type Reconciler struct {
 	repo       ReconcilerStore
 	approvals  Approvals
 	questions  Questions
+	mailbox    Mailbox
+	orphans    Orphans
 	tempClient client.Client
 
 	// owners answers whose chat a pass is working on, so the records it logs
@@ -515,6 +517,8 @@ func New(deps Deps) *Reconciler {
 	return &Reconciler{
 		repo:                    repo,
 		questions:               deps.Questions,
+		mailbox:                 deps.Mailbox,
+		orphans:                 deps.Orphans,
 		tempClient:              tempClient,
 		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
@@ -2523,7 +2527,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		}
 
 		toolCallID := call.ToolCallID
-		inserted, err := r.repo.EnqueueAgentMessageIfAbsent(ctx, &db.AgentMessage{
+		inserted, err := r.mailbox.EnqueueAgentMessageIfAbsent(ctx, &db.AgentMessage{
 			ID:           uuid.New().String(),
 			ChatID:       call.ChatID,
 			FromThreadID: call.ChildThreadID,
@@ -2789,7 +2793,7 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 // the user said something, and it is what lets the UI report "never
 // delivered" honestly instead of showing a promise it cannot keep.
 func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *passStats) (int, error) {
-	threadIDs, err := r.repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	threadIDs, err := r.orphans.ListThreadsWithOrphanedAgentMessages(ctx)
 	if err != nil {
 		logging.ErrorContext(ctx, "[Reconciler] Failed to list threads with orphaned agent messages", "error", err)
 		return 0, fmt.Errorf("failed to list threads with orphaned agent messages: %w", err)
@@ -2804,7 +2808,7 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 		if r.mailboxMayStillBeDelivered(ctx, threadID) {
 			continue
 		}
-		rows, err := r.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
+		rows, err := r.orphans.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 		if err != nil {
 			logging.ErrorContext(ctx, "[Reconciler] Failed to resolve orphaned agent messages",
 				"threadID", threadID, "error", err)
