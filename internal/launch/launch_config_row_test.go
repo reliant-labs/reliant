@@ -31,7 +31,7 @@ func (c *wholeConfigRowCounter) GetProjectConfigRecord(ctx context.Context, proj
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
-	return store.GetProjectConfigRecord(ctx, c.Repo.ORM(), projectID)
+	return store.GetProjectConfigRecord(ctx, c.ORM(), projectID)
 }
 
 // A chat start resolves its workflow, validates the workflow tree and its

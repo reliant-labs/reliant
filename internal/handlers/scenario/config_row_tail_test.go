@@ -47,7 +47,7 @@ func (r *wholeConfigRowReads) GetProjectConfigRecord(ctx context.Context, projec
 	r.mu.Lock()
 	r.callers = append(r.callers, runtime.FuncForPC(pc).Name())
 	r.mu.Unlock()
-	return store.GetProjectConfigRecord(ctx, r.Repo.ORM(), projectID)
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 func (r *wholeConfigRowReads) reads() []string {
