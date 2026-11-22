@@ -22,6 +22,9 @@ type Deps struct {
 	// Repo reads a message, the chat that owns it, and what it renders
 	// with: content blocks, attachments and durable tool call status.
 	Repo Repository
+	// Senders titles the sender of the message (store.ThreadExtStore
+	// satisfies it).
+	Senders Senders
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -35,6 +38,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("message: Deps.Repo is required")
+	}
+	if d.Senders == nil {
+		return fmt.Errorf("message: Deps.Senders is required")
 	}
 	return nil
 }

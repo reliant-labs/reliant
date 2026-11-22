@@ -54,7 +54,7 @@ func TestApprovalCreate_WaitsOutAConcurrentChatWriterInOneTransaction(t *testing
 	repo := &attemptCountingRepo{Repo: f.h.Repo()}
 	var out ApprovalCreateOutput
 	assertCreateWaitsOutChatWriter(t, f, repo, func() error {
-		return f.h.ExecuteActivity(NewApprovalCreateActivity(repo).Execute, ApprovalCreateInput{
+		return f.h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(repo)).Execute, ApprovalCreateInput{
 			ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, StepID: "gate", Title: "Turn on the lane?",
 		}, &out)
 	})

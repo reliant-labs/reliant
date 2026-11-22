@@ -40,7 +40,7 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 
 func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
 	t.Helper()
-	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}}))
+	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 }
 
 func ownedChat(_ context.Context, id string) (*db.Chat, error) {

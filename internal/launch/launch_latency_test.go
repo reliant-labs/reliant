@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/stretchr/testify/assert"
@@ -91,7 +93,7 @@ func (s *rendezvousStarter) ExecuteWorkflow(
 func TestLaunchStartsTitleConcurrentlyWithRoot(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := newRendezvousStarter(repo)
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID:   launchTestUserID,
@@ -118,7 +120,7 @@ func TestLaunchSucceedsWhenTitleStartFails(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := newRendezvousStarter(repo)
 	starter.failTitle = true
-	launcher := New(Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID:   launchTestUserID,

@@ -43,6 +43,14 @@ type Deps struct {
 	// Selections stores each chat's composer selection (chatselection.Store;
 	// store.ChatSelectionExtStore satisfies it).
 	Selections chatselection.Store
+	// Messages answers the send's idempotency checks (Messages, deps.go).
+	Messages Messages
+	// ToolBlocks reads tool-result blocks for the branch repair and
+	// GetToolResult (ToolBlocks, deps.go).
+	ToolBlocks ToolBlocks
+	// Senders titles the senders of the messages a read assembles
+	// (store.ThreadExtStore satisfies it).
+	Senders Senders
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -108,6 +116,15 @@ func (d Deps) validateDeps() error {
 	if d.Selections == nil {
 		return fmt.Errorf("chat: Deps.Selections is required")
 	}
+	if d.Messages == nil {
+		return fmt.Errorf("chat: Deps.Messages is required")
+	}
+	if d.ToolBlocks == nil {
+		return fmt.Errorf("chat: Deps.ToolBlocks is required")
+	}
+	if d.Senders == nil {
+		return fmt.Errorf("chat: Deps.Senders is required")
+	}
 	if d.Temporal == nil {
 		return fmt.Errorf("chat: Deps.Temporal is required")
 	}
@@ -166,7 +183,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.NewService(s.deps.Repo), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.NewService(s.deps.Repo), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

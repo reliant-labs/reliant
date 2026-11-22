@@ -285,7 +285,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// in the strip; emitting before would clear the strip against a
 		// transcript that has not shown them yet. Rolling back is safe --
 		// the rows stay queued and the next boundary re-drains them.
-		if err := a.repo.EmitAgentMessagesDrainedUpdate(txCtx, input.ChatID, db.AgentMessagesDrainedUpdate{
+		if err := db.EmitAgentMessagesDrainedUpdate(txCtx, a.repo, input.ChatID, db.AgentMessagesDrainedUpdate{
 			Thread:     input.Thread,
 			MessageIDs: ids,
 		}); err != nil {

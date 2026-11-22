@@ -157,7 +157,7 @@ func TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings(t *testing.T
 	ctx := context.Background()
 
 	finishedID := "toolu_" + uuid.New().String()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), newBlockingToolExecutor())
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), newBlockingToolExecutor()).WithToolCallResults(testToolCallResults(f.h.Repo()))
 
 	// Temporal's TestActivityEnvironment exposes no way to cancel a running
 	// activity's context from outside, and calling into activity code with a

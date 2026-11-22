@@ -81,7 +81,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 // the branch starts with — the only message the branch's own thread holds.
 func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, forkPoint string) string {
 	t.Helper()
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM())}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threads.NewService(repo)}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId: sourceChatID, MessageId: forkPoint,
 	}))

@@ -559,7 +559,7 @@ func (s *Service) findOrphanedToolCalls(ctx context.Context, toolCallIDs []strin
 
 	for i, toolCallID := range toolCallIDs {
 		// Check if there's a matching tool_result in the database
-		resultBlock, err := s.deps.Repo.GetToolResultBlock(ctx, toolCallID)
+		resultBlock, err := s.deps.ToolBlocks.FindToolBlock(ctx, toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 		if err != nil {
 			logging.WarnContext(ctx, "[BranchChat] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 			continue
