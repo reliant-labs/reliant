@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // acme is a made-up integration: nothing here is GitHub's, which is the
@@ -207,6 +208,9 @@ type call struct {
 	action string
 	params map[string]any
 	user   string
+	// scope is the run scope the call was made under: whose listing it
+	// was, for its integration.call span.
+	scope telemetry.RunScope
 }
 
 // fakeRunner answers an action with a canned function and records the call,
@@ -229,7 +233,7 @@ func (f *fakeRunner) RunAuthenticated(ctx context.Context, _ *reliantv1.Integrat
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, call{action: a.GetId(), params: copyMap(params), user: cred.ConnectionID()})
+	f.calls = append(f.calls, call{action: a.GetId(), params: copyMap(params), user: cred.ConnectionID(), scope: telemetry.RunScopeFromContext(ctx)})
 	h, ok := f.reply[a.GetId()]
 	if !ok {
 		return nil, fmt.Errorf("no canned reply for %s", a.GetId())
@@ -384,6 +388,26 @@ func TestListRunsAsTheCaller(t *testing.T) {
 	_, err = f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "bob", Type: "acme.team"})
 	require.NoError(t, err)
 	assert.Equal(t, "user:bob", f.runner.last("teams.list").user)
+}
+
+// A listing runs outside any run, so it names whose it is for the calls it
+// makes: the caller, and the org when the caller knows one (an automation
+// being enabled). Their integration.call spans carry them.
+func TestListAndResolveNameTheCallerAndOrgForTelemetry(t *testing.T) {
+	f := newFixture(t, -1)
+	f.runner.reply["teams.list"] = ok(teams(1))
+	_, err := f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.team"})
+	require.NoError(t, err)
+	assert.Equal(t, telemetry.RunScope{UserID: "alice"}, f.runner.last("teams.list").scope)
+
+	_, err = f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.team", OrgID: "org-1", Query: "x"})
+	require.NoError(t, err)
+	assert.Equal(t, telemetry.RunScope{UserID: "alice", OrgID: "org-1"}, f.runner.last("teams.list").scope)
+
+	f.runner.reply["people.get"] = ok(map[string]any{"login": "octo"})
+	_, err = f.svc.Resolve(context.Background(), inputoptions.ResolveRequest{UserID: "bob", Type: "acme.person", Values: []string{"7"}, OrgID: "org-2"})
+	require.NoError(t, err)
+	assert.Equal(t, telemetry.RunScope{UserID: "bob", OrgID: "org-2"}, f.runner.last("people.get").scope)
 }
 
 func TestListNamedConnectionIsPassedToTheAction(t *testing.T) {

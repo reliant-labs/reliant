@@ -79,6 +79,10 @@ type ListRequest struct {
 	// ActingIdentity is "owner" (the default) or "app"; it only feeds the
 	// type's warnings.
 	ActingIdentity string
+	// OrgID is the org the listing is made for, when the caller knows one
+	// (an automation being enabled in its org); "" for a person's own picker,
+	// which names none. It only attributes the integration call's span.
+	OrgID string
 }
 
 // ResolveRequest labels stored values.
@@ -89,6 +93,8 @@ type ResolveRequest struct {
 	Scope          map[string]any
 	Values         []string
 	ActingIdentity string
+	// OrgID is ListRequest.OrgID.
+	OrgID string
 }
 
 // State says whether the caller could list at all.

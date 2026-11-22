@@ -236,6 +236,11 @@ type CleanupMetadata struct {
 	// the user made.
 	LandedAt        *time.Time `json:"landed_at,omitempty"`
 	ArchivedBecause string     `json:"archived_because,omitempty"`
+	// NotReclaimable is why the daemon last found a quiet live worktree
+	// neither landed nor recoverable (worktreereclaim.Result.NotReclaimable),
+	// so a finished workspace that stays on disk says what holds it. Cleared
+	// when an answer no longer carries one.
+	NotReclaimable string `json:"not_reclaimable,omitempty"`
 	// AbsentOn names the machines that, asked about an archived row with no
 	// machine on record, answered that they do not have its folder. Once
 	// every connected machine is on it the row may be forgotten

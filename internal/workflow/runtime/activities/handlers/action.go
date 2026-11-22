@@ -13,9 +13,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.temporal.io/sdk/activity"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 )
@@ -153,7 +155,14 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 			return failedAction(uses, "invalid_argument", "a hosted_use action cannot use declared secrets"), nil
 		}
 		grant := strings.TrimSpace(model.CelStringRaw(args.GetHostedUse()))
-		return a.executeHosted(ctx, uses, grant, params, rtx), nil
+		// The controller makes this call, not the runner, so its
+		// integration.call span is opened here.
+		ctx, call := telemetry.StartIntegrationCall(httpaction.WithCallOrg(ctx, a.credentials, rtx.WorkflowID),
+			resolved.Manifest.GetId(), resolved.Spec.GetId(), uses,
+			attribute.Bool(telemetry.AttrIntegrationHosted, true))
+		out := a.executeHosted(ctx, uses, grant, params, rtx)
+		endHostedCall(call, out, params)
+		return out, nil
 	}
 
 	site := httpaction.CallSite{

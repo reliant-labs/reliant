@@ -5,8 +5,6 @@ package db
 import (
 	"context"
 
-	"github.com/reliant-labs/forge/pkg/orm"
-
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -17,28 +15,9 @@ import (
 // whose owner or org no longer match c write nothing. Deciding whether the
 // actor may make the change is the caller's (internal/authz).
 //
-// ReadCommitted: the UPDATE's own row lock and its re-checked predicate
-// (visibility IS [NOT] NULL, owner, org) are what make a concurrent share and
-// unshare serialize; the event is written only by the one that changed it.
-func (r *Repo) ApplyShareChange(ctx context.Context, c core.ShareChange) (bool, error) {
-	var changed bool
-	err := r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
-		var err error
-		changed, err = store.ApplyShareChange(txCtx, r.ORM(), c)
-		return err
-	})
-	return changed, err
-}
-
-// ListSharedChats lists the chats shared with an org that the viewer did not
-// create (store.ListSharedChats). The caller passes them through authz.
-func (r *Repo) ListSharedChats(ctx context.Context, f core.SharedChatFilters) ([]*core.Chat, error) {
-	return store.ListSharedChats(ctx, r.ORM(), f)
-}
-
 // ListSharedProjects lists the projects shared with an org that the viewer
 // did not create (store.ListSharedProjects). The caller passes them through
-// authz.
+// authz. The project handler still reads it here; it leaves with that service.
 func (r *Repo) ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error) {
 	return store.ListSharedProjects(ctx, r.ORM(), f)
 }
