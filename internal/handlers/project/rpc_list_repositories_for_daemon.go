@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
@@ -22,7 +23,7 @@ func (s *Service) ListRepositoriesForDaemon(
 	if req.Msg.DaemonId == "" {
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repositories"))
 	}

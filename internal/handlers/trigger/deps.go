@@ -91,12 +91,12 @@ type Repository interface {
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
 	daemonchoice.Reader
-	AutomationKeyStore
 	TriggerLister
 }
 
 // AutomationKeyStore is where automationGrants keeps the delegated
 // daemon:resume token of each (user, daemon) with an enabled trigger.
+// credentials/automationtokens.Service satisfies it.
 type AutomationKeyStore interface {
 	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
 	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error

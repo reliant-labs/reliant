@@ -45,15 +45,17 @@ type CleanupOutput struct {
 type CleanupActivity struct {
 	repo       CleanupStore
 	approvals  ApprovalResolveStore
+	workflows  WorkflowLoader
 	toolBlocks ToolResultFinder
 }
 
 // NewCleanupActivity creates a new CleanupActivity; Approvals closes the run's
-// pending approvals.
+// pending approvals and Workflows reads a spawn's child run.
 func NewCleanupActivity(deps CleanupDeps) *CleanupActivity {
 	return &CleanupActivity{
 		repo:       deps.Store,
 		approvals:  deps.Approvals,
+		workflows:  deps.Workflows,
 		toolBlocks: deps.ToolBlocks,
 	}
 }
@@ -312,7 +314,7 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 		// A spawn is the case that matters, and it can be checked exactly:
 		// ask the workflow that is executing it.
 		if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
-			if wf, err := a.repo.GetWorkflow(ctx, *call.ChildWorkflowID); err == nil && wf != nil {
+			if wf, err := a.workflows.LoadWorkflow(ctx, *call.ChildWorkflowID); err == nil && wf != nil {
 				if workflowStatusIsTerminal(wf.Status) {
 					// The child is over and still wrote no result: a real orphan.
 					return false

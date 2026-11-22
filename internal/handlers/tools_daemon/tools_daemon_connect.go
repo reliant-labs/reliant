@@ -403,7 +403,7 @@ func jsonStringSlicePtr(values []string) (*string, error) {
 // machine created it, so it says nothing about this machine's disk. The
 // daemon's project discovery replaces the list with what it finds.
 func (s *Service) daemonProjectPaths(ctx context.Context, daemonID string) ([]string, error) {
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, daemonID)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}

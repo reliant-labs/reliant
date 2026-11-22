@@ -25,7 +25,6 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ownershipRepo is an in-memory daemons table with the same immutable-owner
@@ -50,11 +49,6 @@ func (r *ownershipRepo) ownerOf(id string) string {
 }
 
 func (r *ownershipRepo) ListProjects(context.Context, db.ProjectFilters) ([]*db.Project, error) {
-	return nil, nil
-}
-
-// ListProjectDaemonsForDaemon: the connecting machine holds no checkouts.
-func (r *ownershipRepo) ListProjectDaemonsForDaemon(context.Context, string) ([]*core.ProjectDaemon, error) {
 	return nil, nil
 }
 

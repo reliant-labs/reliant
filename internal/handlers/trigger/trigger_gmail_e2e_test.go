@@ -57,6 +57,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -297,6 +298,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 		Items:      extstore.NewInboxDismissalExtStore(repo.ORM()),
 		Firings:    extstore.NewTriggerEventExtStore(repo.ORM()),
 		Notices:    extstore.NewTriggerExtStore(repo.ORM()),
+		Storage:    worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
 		Recoveries: extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      extstore.NewWorktreeExtStore(repo.ORM()),
 	})

@@ -53,7 +53,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 
 	// Create threads service and activity
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	// Use Temporal test suite to provide proper activity context
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -140,7 +140,7 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	// Use Temporal test suite
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -234,7 +234,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	// Use Temporal test suite
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -280,7 +280,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 	defer repo.Close()
 
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -304,7 +304,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 	defer repo.Close()
 
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -328,7 +328,7 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 	defer repo.Close()
 
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -403,7 +403,7 @@ func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
 	before, err := repo.GetLatestUpdateSequence(ctx, chatID)
 	require.NoError(t, err)
 
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
@@ -483,7 +483,7 @@ func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
 	}))
 
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
@@ -539,7 +539,7 @@ func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 
 	// Create threads service and activity
 	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
-	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()

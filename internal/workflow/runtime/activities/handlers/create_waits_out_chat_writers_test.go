@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // One assistant turn that makes N tool calls needing approval (or asks N
@@ -71,7 +72,7 @@ func TestQuestionCreate_WaitsOutAConcurrentChatWriterInOneTransaction(t *testing
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var out QuestionCreateOutput
 	assertCreateWaitsOutChatWriter(t, f, repo, func() error {
-		return f.h.ExecuteActivity(NewQuestionCreateActivity(repo).Execute, QuestionCreateInput{
+		return f.h.ExecuteActivity(NewQuestionCreateActivity(repo, store.NewQuestionExtStore(repo.ORM())).Execute, QuestionCreateInput{
 			ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 		}, &out)
 	})
