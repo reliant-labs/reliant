@@ -150,10 +150,9 @@ func (s *GenAISpan) RecordResponse(resp *DriverResponse, servedModel string) {
 // hanging up (the user pressed stop, a newer turn superseded this one), not a
 // provider failure, so it sets no error status.
 //
-// The error's text is never on the span: a provider can echo anything into
-// it, the prompt included. It is logged here instead, once per failed call,
-// on the call's context, so the record carries the run's ids and the span's
-// trace beside it.
+// The error's text is never on the span or in the log: a provider can echo
+// anything into it, the prompt included. Only the error class and call metadata
+// are logged on the call's context, alongside its run ids and trace.
 func (s *GenAISpan) RecordError(err error) {
 	if err == nil {
 		return
@@ -164,7 +163,7 @@ func (s *GenAISpan) RecordError(err error) {
 		return
 	}
 	logging.WarnContext(s.ctx, "LLM provider call failed",
-		"error", err, telemetry.AttrErrorType, errType,
+		telemetry.AttrErrorType, errType,
 		"provider", s.provider, "model", s.requested)
 }
 
