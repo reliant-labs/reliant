@@ -51,19 +51,8 @@ func TestInboxQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListInboxPending: %v", err)
 	}
-	twin, err := env.Repo.ListInboxPending(ctx, storetest.SeedUserID)
-	if err != nil {
-		t.Fatalf("Repo.ListInboxPending: %v", err)
-	}
-	if len(got) != 3 || !reflect.DeepEqual(convInboxKeys(got), convInboxKeys(twin)) {
-		t.Fatalf("ListInboxPending = %v, Repo = %v; want approval, question, waiting machine", convInboxKeys(got), convInboxKeys(twin))
-	}
-	for i := range got {
-		g, w := *got[i], *twin[i]
-		g.WaitingSince, w.WaitingSince = g.WaitingSince.UTC(), w.WaitingSince.UTC()
-		if g != w {
-			t.Fatalf("ListInboxPending[%d] = %+v, Repo = %+v", i, g, w)
-		}
+	if len(got) != 3 {
+		t.Fatalf("ListInboxPending = %v; want approval, question, waiting machine", convInboxKeys(got))
 	}
 	kinds := []core.InboxPendingKind{got[0].Kind, got[1].Kind, got[2].Kind}
 	if !reflect.DeepEqual(kinds, []core.InboxPendingKind{core.InboxPendingApproval, core.InboxPendingQuestion, core.InboxPendingWaitingForMachine}) ||
@@ -80,8 +69,8 @@ func TestInboxQueries(t *testing.T) {
 	if err := store.DismissInboxItems(ctx, env.ORM, storetest.SeedUserID, []string{keys[0], keys[1]}, at); err != nil {
 		t.Fatalf("DismissInboxItems: %v", err)
 	}
-	if err := env.Repo.DismissInboxItems(ctx, storetest.SeedUserID, []string{keys[1], keys[2]}, at.Add(time.Minute)); err != nil {
-		t.Fatalf("Repo.DismissInboxItems: %v", err)
+	if err := store.DismissInboxItems(ctx, env.ORM, storetest.SeedUserID, []string{keys[1], keys[2]}, at.Add(time.Minute)); err != nil {
+		t.Fatalf("DismissInboxItems (again): %v", err)
 	}
 	if err := store.DismissInboxItems(ctx, env.ORM, "someone-else", []string{keys[0]}, at); err != nil {
 		t.Fatalf("DismissInboxItems(other user): %v", err)
@@ -94,13 +83,9 @@ func TestInboxQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDismissedInboxItemIDs: %v", err)
 	}
-	twinDismissed, err := env.Repo.ListDismissedInboxItemIDs(ctx, storetest.SeedUserID, candidates)
-	if err != nil {
-		t.Fatalf("Repo.ListDismissedInboxItemIDs: %v", err)
-	}
 	want := map[string]bool{keys[0]: true, keys[1]: true, keys[2]: true}
-	if !reflect.DeepEqual(dismissed, want) || !reflect.DeepEqual(twinDismissed, want) {
-		t.Fatalf("ListDismissedInboxItemIDs = %v, Repo = %v, want %v", dismissed, twinDismissed, want)
+	if !reflect.DeepEqual(dismissed, want) {
+		t.Fatalf("ListDismissedInboxItemIDs = %v, want %v", dismissed, want)
 	}
 	// The second dismissal of keys[1] kept the first one's time.
 	row, err := store.GetInboxDismissalByPK(ctx, env.ORM, storetest.SeedUserID, keys[1])
@@ -111,8 +96,8 @@ func TestInboxQueries(t *testing.T) {
 	if err := store.RestoreInboxItems(ctx, env.ORM, storetest.SeedUserID, []string{keys[0], "never-dismissed"}); err != nil {
 		t.Fatalf("RestoreInboxItems: %v", err)
 	}
-	if err := env.Repo.RestoreInboxItems(ctx, storetest.SeedUserID, []string{keys[2]}); err != nil {
-		t.Fatalf("Repo.RestoreInboxItems: %v", err)
+	if err := store.RestoreInboxItems(ctx, env.ORM, storetest.SeedUserID, []string{keys[2]}); err != nil {
+		t.Fatalf("RestoreInboxItems (again): %v", err)
 	}
 	dismissed, err = store.ListDismissedInboxItemIDs(ctx, env.ORM, storetest.SeedUserID, keys)
 	if err != nil || !reflect.DeepEqual(dismissed, map[string]bool{keys[1]: true}) {
@@ -182,5 +167,44 @@ func mustExecConv(t *testing.T, env *storetest.Env, query string, args ...any) {
 	t.Helper()
 	if _, err := env.SQL.Exec(query, args...); err != nil {
 		t.Fatalf("%s: %v", query, err)
+	}
+}
+
+// Every Inbox read and write takes the owner and refuses an empty one: a
+// store List with no owner would otherwise answer every user's rows.
+func TestInboxStore_EmptyOwnerFailsClosed(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	ids := []string{"approval:a1"}
+
+	if _, err := store.ListInboxPending(ctx, env.ORM, ""); err == nil {
+		t.Error("ListInboxPending with no owner must fail")
+	}
+	if _, err := store.ListDismissedInboxItemIDs(ctx, env.ORM, "", ids); err == nil {
+		t.Error("ListDismissedInboxItemIDs with no owner must fail")
+	}
+	if err := store.DismissInboxItems(ctx, env.ORM, "", ids, time.Now()); err == nil {
+		t.Error("DismissInboxItems with no owner must fail")
+	}
+	if err := store.RestoreInboxItems(ctx, env.ORM, "", ids); err == nil {
+		t.Error("RestoreInboxItems with no owner must fail")
+	}
+	if _, err := store.ListAttentionIncidents(ctx, env.ORM, ""); err == nil {
+		t.Error("ListAttentionIncidents with no owner must fail")
+	}
+	if _, err := store.AttentionManagedChats(ctx, env.ORM, "", []string{"c1"}); err == nil {
+		t.Error("AttentionManagedChats with no owner must fail")
+	}
+	if _, err := store.RecentTriggerOutcomes(ctx, env.ORM, "", []string{"t1"}, 5); err == nil {
+		t.Error("RecentTriggerOutcomes with no owner must fail")
+	}
+	if _, err := store.FiringsSinceLastUnmanagedSuccess(ctx, env.ORM, "", []string{"t1"}, 5); err == nil {
+		t.Error("FiringsSinceLastUnmanagedSuccess with no owner must fail")
+	}
+	if _, err := store.ListNoOrgAccountPauses(ctx, env.ORM, "", nil); err == nil {
+		t.Error("ListNoOrgAccountPauses with no owner must fail")
+	}
+	if _, err := store.ListPersonallyFundedTriggers(ctx, env.ORM, ""); err == nil {
+		t.Error("ListPersonallyFundedTriggers with no owner must fail")
 	}
 }

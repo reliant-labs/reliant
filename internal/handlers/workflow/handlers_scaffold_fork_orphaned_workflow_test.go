@@ -41,6 +41,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -65,7 +67,11 @@ func TestForkOrphanedWorkflow_Generated(t *testing.T) {
 		GetWorkflowDraftFunc: func(context.Context, string) (*db.WorkflowDraft, error) {
 			return nil, svcerr.NotFound("workflow draft")
 		},
-	}}))
+	}, Projects: projectaccesstest.For(&workflow.MockRepository{
+		GetWorkflowDraftFunc: func(context.Context, string) (*db.WorkflowDraft, error) {
+			return nil, svcerr.NotFound("workflow draft")
+		},
+	})}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ForkOrphanedWorkflowRequest, pb.ForkOrphanedWorkflowResponse]{
 		{

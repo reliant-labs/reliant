@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
@@ -110,10 +112,7 @@ func forgeTestProjects(path string) *MockRepository {
 // forgeTestInstalls is forgeTestProjects with the given checkouts, each on a
 // machine the test user owns.
 func forgeTestInstalls(rows ...*core.ProjectDaemon) *MockRepository {
-	return &MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-			return &db.Project{ID: id, Name: "control-plane", Path: forgeTestCreatorPath}, nil
-		},
+	return projectaccesstest.Bound(&MockRepository{
 		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) {
 			return false, nil
 		},
@@ -129,7 +128,9 @@ func forgeTestInstalls(rows ...*core.ProjectDaemon) *MockRepository {
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-	}
+	}, func(_ context.Context, id, _ string) (*db.Project, error) {
+		return &db.Project{ID: id, Name: "control-plane", Path: forgeTestCreatorPath}, nil
+	})
 }
 
 // newForgeTestService wires the Service over a stub router and project lookup.
@@ -140,7 +141,7 @@ func newForgeTestService(router *forgeTestRouter) *Service {
 // newForgeService builds the Service as server.go does. Every required Dep is
 // set, so New cannot refuse it.
 func newForgeService(router Router, projects Repository) *Service {
-	svc, err := New(Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Router: router, Repo: projects})
+	svc, err := New(Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Router: router, Repo: projects, Projects: projectaccesstest.For(projects)})
 	if err != nil {
 		panic(err)
 	}

@@ -56,7 +56,7 @@ func storedProjectScenarios(ctx context.Context, repo Repository, projectID stri
 
 // projectBelongsToUser verifies the authenticated user owns the given project.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	return svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 }
 

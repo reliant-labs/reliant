@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -217,13 +219,13 @@ func TestForgeService_InstallLookupFailureIsInternal(t *testing.T) {
 
 // withRemote gives the project row a git remote, so it can be cloned.
 func withRemote(repo *MockRepository, remote string) *MockRepository {
-	get := repo.GetProjectWithUserCheckFunc
-	repo.GetProjectWithUserCheckFunc = func(ctx context.Context, id, userID string) (*db.Project, error) {
+	get := projectaccesstest.FuncOf(repo)
+	projectaccesstest.Bind(repo, func(ctx context.Context, id, userID string) (*db.Project, error) {
 		p, err := get(ctx, id, userID)
 		if p != nil {
 			p.RemoteURL = &remote
 		}
 		return p, err
-	}
+	})
 	return repo
 }

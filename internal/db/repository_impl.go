@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -600,23 +601,6 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
-// ListRecentTranscriptSiblingMessages returns, ascending, the newest
-// `limit` messages with seq >= fromSeq on threads other than mainThreadID
-// that are not spawn threads, bounded in SQL. The chat snapshot reads its
-// sibling rows through this: node and fork threads render inline in the
-// transcript, while a spawn renders as a tool-call card that fetches its
-// own thread (ListMessages with thread_id) when expanded.
-func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if mainThreadID == "" {
-		return nil, fmt.Errorf("main thread ID cannot be empty")
-	}
-
-	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
-}
-
 // CountMessagesInChat returns the true message count for a chat, read from
 // the trigger-maintained chat_thread_message_counts rather than counted.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
@@ -1009,31 +993,7 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 }
 
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
-	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	// The store read filters on the owner; authz confirms the row it returns,
-	// as GetChatRowWithUserCheck does.
-	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
-	case denial == nil:
-		return project, nil
-	case errors.Is(denial, authz.ErrDenied):
-		return nil, core.ErrProjectNotFound
-	default:
-		// Still NotFound to every caller, with why as the withheld cause:
-		// the launcher tells a creator who left the project's org
-		// (authz.ErrNotOrgMember) from a membership outage, which must not
-		// be mistaken for an answer.
-		return nil, svcerr.WithCause(core.ErrProjectNotFound, denial)
-	}
+	return projectaccess.NewFromORM(r.ORM()).GetProjectWithUserCheck(ctx, id, userID)
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet
@@ -2756,34 +2716,8 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 	})
 }
 
-// SetWorkflowOutcome records the run's verdict — the outcome declared by the
-// terminal node it reached. Distinct from UpdateWorkflowStatus: status is the
-// Temporal-owned lifecycle and gets reconciled back from Temporal, so it cannot
-// carry "the work did not pass". No chat-activity emit: the outcome does not
-// change whether the chat is busy, only what the finished run means.
-func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
-}
-
-// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
-func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
-}
-
 // HandledNodeFailure is a node of an ended run whose last attempt failed.
 type HandledNodeFailure = store.HandledNodeFailure
-
-// FirstHandledNodeFailure returns a node of the run, or of a run under it,
-// whose last attempt in run runID (since since, for an attempt that names no
-// run) failed, or nil (store.FirstHandledNodeFailure).
-func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
-	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
-}
-
-// SetWorkflowFailureDetail records why a run failed, on the run.
-func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
-	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
-}
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
@@ -3200,29 +3134,6 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
-// SetLaunchEventRunFailureDetail records why the launch run failed.
-func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
-	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
-}
-
-// SetLaunchEventRunStatus records how the run a trigger fired ended, on
-// the chat's launch event (core.TriggerEvent.RunStatus).
-func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
-}
-
-// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
-// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
-func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
-}
-
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3240,36 +3151,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
-// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
-// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
-func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListInboxPending(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
-}
-
-func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
-}
-
-func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
 // CreateRunEvent inserts the event, doing nothing when its DedupeKey
@@ -3351,15 +3232,6 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies
-// (payload, sender, origin), for health that is judged but never shown.
-func (r *Repo) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerOutcomes(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
@@ -3374,9 +3246,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 // Attention-managed actors are excluded before the success boundary and cap;
 // callers needing diagnostic health continue to use the unfiltered reads.
 func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
 	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
@@ -3473,12 +3342,6 @@ func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, lim
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
 }
 
-// MarkDeclaredFailureNode records that a run's top-level node declared the
-// run's outcome: failure (store.MarkDeclaredFailureNode).
-func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
-	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
-}
-
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
@@ -3496,13 +3359,6 @@ func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus)
 // ==================== Workflow Checkpoints ====================
 // Position truth for resume-at-position: last top-level node entered (and
 // loop iteration for loop nodes) per workflow ID.
-
-func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error {
-	if checkpoint == nil {
-		return fmt.Errorf("checkpoint cannot be nil")
-	}
-	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
-}
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.
@@ -4285,18 +4141,6 @@ func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider stri
 	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
 
-// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
-// (store.HasNoOrgAccountPauses).
-func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
-	return store.HasNoOrgAccountPauses(ctx, r.ORM())
-}
-
-// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
-// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
-func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
-	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
-}
-
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
 // moving each one's next attempt lease on (store.ClaimDuePauseNotices).
 func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
@@ -4312,10 +4156,4 @@ func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt
 // ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
 func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
 	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
-// accounts (store.ListPersonallyFundedTriggers).
-func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
-	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

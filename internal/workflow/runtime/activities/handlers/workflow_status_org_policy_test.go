@@ -21,7 +21,7 @@ func (f *streakFixture) endRun(chatID, errText string) {
 		Error: errText, LaunchRun: true,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, in, &out))
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
 }
 
 func (f *streakFixture) trigger() *core.Trigger {

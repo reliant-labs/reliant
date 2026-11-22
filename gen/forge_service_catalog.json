@@ -56008,6 +56008,19 @@
     },
     {
       "consumer": "Forge",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Forge",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/forge.Repository",
       "methods": [],
@@ -56074,6 +56087,28 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Firings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Firings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Items",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Items",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Marks",
       "interface": "github.com/reliant-labs/reliant/internal/worktreesweep.MarkDecisionStore",
       "methods": [],
@@ -56104,6 +56139,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Notices",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Notices",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Inbox",
@@ -56183,6 +56229,19 @@
       "consumer": "Llmusage",
       "field": "Tx",
       "interface": "github.com/reliant-labs/reliant/internal/llmusage.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
         "Database"
@@ -56428,6 +56487,19 @@
     },
     {
       "consumer": "PackageCommands",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
       "methods": [],
@@ -56516,6 +56588,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Preset",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Preset",
@@ -56819,6 +56904,19 @@
     },
     {
       "consumer": "Repo",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Repo",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.Repository",
       "methods": [],
@@ -56875,6 +56973,19 @@
       "consumer": "Run",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
         "Database"
@@ -57089,6 +57200,28 @@
     },
     {
       "consumer": "Streaming",
+      "field": "Heads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Heads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "OrgFeed",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeed",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeedResolver",
       "methods": [],
@@ -57108,6 +57241,28 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Siblings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Siblings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "UserLog",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.UserLog",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -57715,6 +57870,19 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

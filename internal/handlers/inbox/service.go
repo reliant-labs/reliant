@@ -25,6 +25,10 @@ type Deps struct {
 	// Repo reads what waits on the caller (pending rows, automation
 	// health, machines and their storage) and records dismissals.
 	Repo Repository
+	// Items, Firings and Notices are the Inbox's own reads (deps.go).
+	Items   Items
+	Firings Firings
+	Notices Notices
 	// Recoveries lists the caller's worktree recoveries.
 	Recoveries Recoveries
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
@@ -62,6 +66,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("inbox: Deps.Repo is required")
+	}
+	if d.Items == nil || d.Firings == nil || d.Notices == nil {
+		return fmt.Errorf("inbox: Deps.Items, Firings and Notices are required")
 	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("inbox: Deps.Recoveries is required")
