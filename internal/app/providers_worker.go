@@ -355,7 +355,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
 		Router:      d.Router,
-		LocalModels: local.NewRepoDirectory(d.DB),
+		LocalModels: local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)

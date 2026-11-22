@@ -331,7 +331,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
 		TagPrefs:           g.Database(),
-		LocalModels:        local.NewRepoDirectory(g.Database()),
+		LocalModels:        local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -1075,7 +1075,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database()),
+		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:        g.OrgResolver(),
 	})
 }
@@ -1230,7 +1230,8 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
+		Machines:    g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),

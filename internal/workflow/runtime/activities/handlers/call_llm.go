@@ -145,6 +145,8 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// modelEndpoints lists the user's configured model endpoints; nil lists none.
+	modelEndpoints local.EndpointSource
 	// machines resolves the turn's selector to the machine whose synced
 	// config it reads (configMachine); nil reads the project's union for any
 	// selector that names no id. Set by WithDaemonRouter.
@@ -188,6 +190,14 @@ func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLL
 	return a
 }
 
+// WithModelEndpoints lets "<name>@local" resolve the user's configured model
+// endpoints (store.ModelEndpointExtStore); without it only detected local
+// models resolve.
+func (a *CallLLMActivity) WithModelEndpoints(endpoints local.EndpointSource) *CallLLMActivity {
+	a.modelEndpoints = endpoints
+	return a
+}
+
 // localModelSpec is what resolving a "<name>@local" selector needs. Without a
 // relay, detected local models and via-machine endpoints report themselves
 // unavailable; endpoints reached directly still work. A run with no machine
@@ -200,7 +210,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		}
 	}
 	return &LocalModelSpec{
-		Directory:      local.NewRepoDirectory(a.repo),
+		Directory:      local.NewRepoDirectory(a.repo, a.modelEndpoints),
 		Transport:      relay,
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
