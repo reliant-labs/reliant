@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -16,6 +17,7 @@ import (
 // interleaved is the real store with a hook that runs between MatchAccount's read and its clear:
 // the deterministic stand-in for another request landing in that window.
 type interleaved struct {
+	provideraccounts.Service
 	*db.Repo
 	beforeClear func()
 }
@@ -34,7 +36,7 @@ func TestMatchAccount_DelayedClearDoesNotUndoARebind(t *testing.T) {
 	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	acct, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+	acct, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: "dana", Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.ClaudeIdentityKey("dana", "ws-a"), ExternalAccountID: "dana", OrganizationID: "ws-a",
 		Secrets: core.AccountSecrets{Secret: "t", Refresh: "r"},
@@ -45,7 +47,7 @@ func TestMatchAccount_DelayedClearDoesNotUndoARebind(t *testing.T) {
 	require.NoError(t, err)
 
 	ws := core.OrgProviderWorkspace{OrgID: "org-1", Provider: "claude", ExternalOrgID: "ws-a", DisplayName: "A", BoundByUserID: "ada"}
-	store := interleaved{Repo: repo, beforeClear: func() {
+	store := interleaved{Service: db.TestAccounts(t, repo), Repo: repo, beforeClear: func() {
 		_, _, err := repo.BindOrgProviderWorkspace(ctx, ws)
 		require.NoError(t, err)
 	}}

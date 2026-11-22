@@ -379,8 +379,8 @@ var sealedScanSkip = []string{
 // sealedPathAllowlist maps a repo-relative file to why it may still touch a sealed
 // table.
 var sealedPathAllowlist = map[string]string{
+	"internal/db/provider_accounts_store.go": "the seal helper the facade's org rotate still uses; deleted with internal/credentials/orgaccounts",
 	"internal/accountpurge/accountpurge.go":  "deletes a purged account's rows in its own transaction; moves with the credentials purge in the connection wave",
-	"internal/db/provider_accounts_store.go": "the provider-account store; moves to internal/credentials/provideraccounts",
 	"internal/db/org_provider_accounts.go":   "an org's accounts, grants, seats; moves to internal/credentials/orgaccounts",
 	"internal/db/org_credentials.go":         "the gone-org purge and stale-grant sweep; moves to internal/credentials/orgaccounts",
 	"internal/db/connections.go":             "the connection store and its secrets lock; moves to internal/credentials/connectionvault",

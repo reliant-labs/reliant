@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -100,7 +101,7 @@ nodes:
 	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
-	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	t.Run("default listing is create-chat safe", func(t *testing.T) {
 		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
@@ -203,7 +204,7 @@ nodes:
 	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
-	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID}))
 	require.NoError(t, err)

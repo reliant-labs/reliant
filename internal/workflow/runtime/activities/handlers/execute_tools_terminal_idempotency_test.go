@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -147,6 +148,52 @@ func TestTerminalIdempotency_TerminalRowWithNoResultFallsBackToStub(t *testing.T
 
 	assert.Equal(t, 0, executor.GetExecutionCount(toolCallID),
 		"a terminal row must block re-execution even with no result content")
+	assert.True(t, output.ToolResults[0].GetIsError())
+	assert.Equal(t, InterruptedToolResultContent, output.ToolResults[0].GetContent())
+}
+
+// TestTerminalIdempotency_NoResultReaderFallsBackToStub: an activity built
+// without WithToolCallResults (RegisterAll always sets it) answers a retried
+// terminal call with the interrupted stub instead of panicking on the missing
+// reader, and still never re-executes it.
+func TestTerminalIdempotency_NoResultReaderFallsBackToStub(t *testing.T) {
+	t.Parallel()
+
+	f := setupDurableStatusFixture(t)
+	defer f.h.Cleanup()
+	ctx := context.Background()
+
+	toolCallID := "toolu_" + uuid.New().String()
+	executor := newMockToolExecutor()
+
+	completedAt := time.Now()
+	require.NoError(t, f.h.Repo().UpsertToolCall(ctx, &core.ToolCall{
+		ID:          toolCallID,
+		ChatID:      f.chatID,
+		ToolName:    "bash",
+		Status:      core.ToolCallStatusCompleted,
+		RequestedAt: completedAt,
+		CompletedAt: &completedAt,
+		CreatedAt:   completedAt,
+		UpdatedAt:   completedAt,
+	}))
+	require.NoError(t, f.h.Repo().UpsertToolCallResult(ctx, f.chatID, &core.ToolCallResult{
+		ToolCallID: toolCallID,
+		Content:    "recorded output",
+		CreatedAt:  completedAt,
+		UpdatedAt:  completedAt,
+	}))
+
+	var output ExecuteToolsOutput
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+		ChatID:    f.chatID,
+		Thread:    f.chatID,
+		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: `{"command":"echo hi"}`}},
+	}, &output))
+	require.Len(t, output.ToolResults, 1)
+
+	assert.Equal(t, 0, executor.GetExecutionCount(toolCallID),
+		"a terminal row must block re-execution even when its result cannot be read")
 	assert.True(t, output.ToolResults[0].GetIsError())
 	assert.Equal(t, InterruptedToolResultContent, output.ToolResults[0].GetContent())
 }
