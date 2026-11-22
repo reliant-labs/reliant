@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func saveTestSetup(t *testing.T) (context.Context, *db.Repo, *Service, string) {
 		ID: projectID, UserID: "test-user", Name: "Save Validation Project",
 		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)})), projectID
+	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM())})), projectID
 }
 
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {

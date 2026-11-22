@@ -44,7 +44,6 @@ const (
 // CheckoutRestoreRepo is the repository's part of CheckoutRestoreStore.
 type CheckoutRestoreRepo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	// RecordFailedProjectDaemonRestoreInScope marks the checkout failed,
@@ -52,6 +51,12 @@ type CheckoutRestoreRepo interface {
 	// re-read under its row lock, is in scope: the clone it follows can take
 	// minutes.
 	RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error)
+}
+
+// RestorePools lists the owner's machine pools, to tell whether a machine is
+// a pool member. store.MachinePoolExtStore satisfies it.
+type RestorePools interface {
+	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
 }
 
 // CheckoutRestoreStore is what restoring a pool member's checkouts reads and
@@ -120,7 +125,7 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 		}
 		return nil
 	}
-	restorePoolMemberCheckouts(ctx, restoreAdapter{s.deps.Repo, s.deps.Installs}, run, conn.daemonID, conn.userID, scope, missing)
+	restorePoolMemberCheckouts(ctx, restoreAdapter{s.deps.Repo, s.deps.Installs}, s.deps.Pools, run, conn.daemonID, conn.userID, scope, missing)
 }
 
 // restorePoolMemberCheckouts is the testable core: when daemonID is a member
@@ -134,8 +139,8 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 // placement reads as "connected; checking its checkout": the member is
 // waited for, not passed over. Success stamps the row verified; a failure
 // marks it failed with the reason, which placement then reports.
-func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore, run cloneRunner, daemonID, userID string, scope *core.OrgScope, missing []*db.Project) {
-	member, err := isPoolMember(ctx, store, daemonID, userID)
+func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore, pools RestorePools, run cloneRunner, daemonID, userID string, scope *core.OrgScope, missing []*db.Project) {
+	member, err := isPoolMember(ctx, store, pools, daemonID, userID)
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: could not tell whether the machine is a pool member",
 			"error", err, "daemonID", daemonID)
@@ -225,7 +230,7 @@ func failRestore(ctx context.Context, store CheckoutRestoreStore, project *db.Pr
 }
 
 // isPoolMember reports whether daemonID's labels match one of userID's pools.
-func isPoolMember(ctx context.Context, store CheckoutRestoreStore, daemonID, userID string) (bool, error) {
+func isPoolMember(ctx context.Context, store CheckoutRestoreStore, poolStore RestorePools, daemonID, userID string) (bool, error) {
 	d, err := store.GetDaemon(ctx, daemonID)
 	if err != nil {
 		return false, err
@@ -233,7 +238,7 @@ func isPoolMember(ctx context.Context, store CheckoutRestoreStore, daemonID, use
 	if d == nil || len(d.Labels) == 0 {
 		return false, nil
 	}
-	pools, err := store.ListMachinePoolsForUser(ctx, userID)
+	pools, err := poolStore.ListMachinePoolsForUser(ctx, userID)
 	if err != nil {
 		return false, err
 	}
