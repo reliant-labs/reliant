@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -46,7 +47,7 @@ nodes:
 			Definition: definition, Status: db.WorkflowDraftStatusComplete, Version: 1,
 			CreatedAt: f.now, UpdatedAt: f.now,
 		}))
-		require.NoError(t, f.Repo.ReplaceIntegrationAccess(ctx, tc.owner, "github", tc.owner, f.now,
+		require.NoError(t, store.ReplaceIntegrationAccess(ctx, f.Repo.ORM(), tc.owner, "github", tc.owner, f.now,
 			[]core.IntegrationAccessGrant{{AccountKey: "98765", ResourceKey: "123456"}}))
 	}
 	// Alice comes first in route order: accidentally sharing her pin would

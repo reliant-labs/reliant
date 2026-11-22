@@ -18,6 +18,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
@@ -90,7 +91,7 @@ func (f *receiptFixture) trigger(t *testing.T, id string, kind core.TriggerKind,
 
 func (f *receiptFixture) grant(t *testing.T) {
 	t.Helper()
-	require.NoError(t, f.Repo.ReplaceIntegrationAccess(t.Context(), "alice", "github", "11", f.now,
+	require.NoError(t, store.ReplaceIntegrationAccess(t.Context(), f.Repo.ORM(), "alice", "github", "11", f.now,
 		[]core.IntegrationAccessGrant{{AccountKey: "98765", ResourceKey: "123456"}}))
 }
 

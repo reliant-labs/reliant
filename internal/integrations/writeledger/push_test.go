@@ -22,14 +22,14 @@ func TestPushIntentIsRecordedBeforeThePushWithItsSha(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 	chatID, _ := seedRun(t, repo, "autopilot-issue")
-	rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo})
 
 	intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "Acme/App", Branch: "autopilot/issue-1", SHA: "abc1234def", RunID: chatID, NodeID: "publish"})
 	require.NoError(t, err)
 
 	// Before the push is made, the row is visible, matches by target and sha,
 	// and names the run.
-	recent, err := repo.IntegrationWrites().ListRecentIntegrationWrites(ctx, "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
+	recent, err := ledgerOf(repo).ListRecentIntegrationWrites(ctx, "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
 	require.NoError(t, err)
 	require.Len(t, recent, 1)
 	w := recent[0]
@@ -47,7 +47,7 @@ func TestPushIntentIsRecordedBeforeThePushWithItsSha(t *testing.T) {
 	assert.Equal(t, "abc1234def", c.HeadSHA)
 
 	intent.Settle(ctx, writeledger.PushOutcome{Pushed: true})
-	got, err := repo.IntegrationWrites().GetIntegrationWriteByObject(ctx, "github", "github:acme/app", provenance.KindBranch, "abc1234def")
+	got, err := ledgerOf(repo).GetIntegrationWriteByObject(ctx, "github", "github:acme/app", provenance.KindBranch, "abc1234def")
 	require.NoError(t, err, "a done push is found by its sha, which is how the push event is matched exactly")
 	assert.Equal(t, core.IntegrationWriteDone, got.Status)
 }
@@ -56,12 +56,12 @@ func TestPushIntentIsRecordedBeforeThePushWithItsSha(t *testing.T) {
 func TestPushToAPullRequestHeadIsAlsoRecordedAsItsSynchronize(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
-	rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo})
 	intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "acme/app", Branch: "fix-save", SHA: "cccccccccccccccccccccccccccccccccccccccc", PullNumber: 7, Actor: core.IntegrationActorApp})
 	require.NoError(t, err)
 	assert.Len(t, intent.IDs(), 2)
 
-	recent, err := repo.IntegrationWrites().ListRecentIntegrationWrites(ctx, "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
+	recent, err := ledgerOf(repo).ListRecentIntegrationWrites(ctx, "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
 	require.NoError(t, err)
 	require.Len(t, recent, 2)
 	targets := map[string]bool{}
@@ -76,7 +76,7 @@ func TestPushToAPullRequestHeadIsAlsoRecordedAsItsSynchronize(t *testing.T) {
 // the webhook parser makes from GitHub's real push payload.
 func TestAPushWriteAgreesWithItsPushEcho(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo})
 	_, err := rec.BeginPush(context.Background(), writeledger.Push{Repo: "acme/app", Branch: "main", SHA: "eeee000000000000000000000000000000000002"})
 	require.NoError(t, err)
 	w := mustOne(t, repo)
@@ -103,7 +103,7 @@ func TestFailedPushIsSettledFailedAndAmbiguousWhenItMayHaveApplied(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			repo := db.NewTestRepo(t)
 			ctx := context.Background()
-			rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+			rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo})
 			intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "acme/app", Branch: "x", SHA: "abc1234"})
 			require.NoError(t, err)
 			intent.Settle(ctx, tc.out)
@@ -143,7 +143,7 @@ func TestNilLedgerAndNilIntentAreInert(t *testing.T) {
 
 func mustOne(t *testing.T, repo *db.Repo) *core.IntegrationWrite {
 	t.Helper()
-	recent, err := repo.IntegrationWrites().ListRecentIntegrationWrites(context.Background(), "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
+	recent, err := ledgerOf(repo).ListRecentIntegrationWrites(context.Background(), "github", "github:acme/app", time.Now().Add(-time.Minute), 10)
 	require.NoError(t, err)
 	require.Len(t, recent, 1)
 	return recent[0]
