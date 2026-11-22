@@ -47,8 +47,8 @@ type gitRoot struct {
 // dirScan is what one walk of a directory found.
 type dirScan struct {
 	// Newest is the newest modification time of any entry, the directory
-	// itself included. A node_modules counts by its own directory's time
-	// (an install or a removal in it changes that), and is not descended.
+	// itself included. Output directories are descended too: hidden git
+	// roots, recent writes and incomplete inspections must hold removal.
 	Newest time.Time
 	// Keep is whether KeepFile sits at the top.
 	Keep bool
@@ -79,7 +79,8 @@ func (s dirScan) unmeasured() string {
 }
 
 // scanDir walks dir once. It never follows a symlink, never crosses into
-// another filesystem, and never descends a node_modules or a .git directory.
+// another filesystem, and never descends a .git directory. The deletion
+// inventory additionally rejects same-device bind mounts using openat2.
 func scanDir(ctx context.Context, dir string) dirScan {
 	var s dirScan
 	top, err := os.Lstat(dir)
@@ -149,8 +150,8 @@ func scanDir(ctx context.Context, dir string) dirScan {
 		case name == "node_modules":
 			if inTarget == "" {
 				s.Targets = append(s.Targets, p)
+				inTarget = p
 			}
-			return fs.SkipDir
 		case inTarget == "" && isBuildOutput(p, name):
 			s.Targets = append(s.Targets, p)
 			inTarget = p

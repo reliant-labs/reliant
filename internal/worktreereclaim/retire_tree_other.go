@@ -22,6 +22,10 @@ func inspectRetirementTree(context.Context, string) (*retirementTree, error) {
 	return nil, errors.New("mount-safe retirement unsupported on this platform")
 }
 
+func inspectScratchTree(ctx context.Context, path string) (*retirementTree, error) {
+	return inspectRegenerableTree(ctx, path)
+}
+
 func inspectRegenerableTree(context.Context, string) (*retirementTree, error) {
 	return nil, errors.New("mount-safe shedding unsupported on this platform")
 }

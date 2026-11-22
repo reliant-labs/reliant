@@ -17,8 +17,16 @@ FORGE_STORAGE_POLICY kind=string flag="" default="" required=false optional=fals
 GRPC_PORT kind=int32 flag="grpc-port" default="9090" required=false optional=false sensitive=false allowed=[] aliases=[]
 HEALTH_PORT kind=int32 flag="health-port" default="8081" required=false optional=false sensitive=false allowed=[] aliases=[]
 INTERNAL_SERVICE_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+JWT_AUDIENCE kind=string flag="jwt-audience" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_ISSUER kind=string flag="jwt-issuer" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_JWKS_SNAPSHOT kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+JWT_JWKS_SNAPSHOT_FILE kind=string flag="jwt-jwks-snapshot-file" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_JWKS_SNAPSHOT_MAX_AGE kind=google.protobuf.Duration flag="jwt-jwks-snapshot-max-age" default="168h" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_JWKS_URL kind=string flag="jwt-jwks-url" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 JWT_PUBLIC_KEY kind=string flag="jwt-public-key" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 JWT_PUBLIC_KEY_FILE kind=string flag="jwt-public-key-file" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_ROLES_CLAIM kind=string flag="jwt-roles-claim" default="auto" required=false optional=false sensitive=false allowed=[] aliases=[]
+JWT_SIGNING_METHOD kind=string flag="jwt-signing-method" default="RS256" required=false optional=false sensitive=false allowed=[] aliases=[]
 LIVENESS_PATHS kind=string flag="" default="/health,/healthz" required=false optional=false sensitive=false allowed=[] aliases=[]
 LOG_FORMAT kind=string flag="log-format" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 MAX_UPLOAD_SIZE kind=int64 flag="" default="10485760" required=false optional=false sensitive=false allowed=[] aliases=[]
@@ -118,6 +126,8 @@ RELIANT_WORKTREE_RECLAIM_QUIET kind=google.protobuf.Duration flag="" default="24
 RELIANT_WORKTREE_RECLAIM_ROOTS kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 SHUTDOWN_TIMEOUT kind=google.protobuf.Duration flag="" default="30s" required=false optional=false sensitive=false allowed=[] aliases=[]
 STREAMING_DRIVER kind=string flag="streaming-driver" default="nats" required=false optional=false sensitive=false allowed=[nats] aliases=[]
+SUPABASE_JWT_AUDIENCE kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+SUPABASE_JWT_ISSUER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 TEMPORAL_HOST kind=string flag="temporal-host" default="localhost" required=false optional=false sensitive=false allowed=[] aliases=[]
 TEMPORAL_NAMESPACE kind=string flag="temporal-namespace" default="reliant" required=false optional=false sensitive=false allowed=[] aliases=[]
 TEMPORAL_PORT kind=int32 flag="temporal-port" default="7233" required=false optional=false sensitive=false allowed=[] aliases=[]
@@ -139,8 +149,15 @@ WORKSPACE_URL_SCHEME kind=string flag="" default="https" required=false optional
 --grpc-port shorthand="" type=int32 default="9090"
 --health-port shorthand="" type=int32 default="8081"
 --jwks-url shorthand="" type=string default=""
+--jwt-audience shorthand="" type=string default=""
+--jwt-issuer shorthand="" type=string default=""
+--jwt-jwks-snapshot-file shorthand="" type=string default=""
+--jwt-jwks-snapshot-max-age shorthand="" type=string default="168h"
+--jwt-jwks-url shorthand="" type=string default=""
 --jwt-public-key shorthand="" type=string default=""
 --jwt-public-key-file shorthand="" type=string default=""
+--jwt-roles-claim shorthand="" type=string default="auto"
+--jwt-signing-method shorthand="" type=string default="RS256"
 --log-format shorthand="" type=string default=""
 --log-level shorthand="" type=string default=""
 --pprof-port shorthand="" type=int32 default="6060"

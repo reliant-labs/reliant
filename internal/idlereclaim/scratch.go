@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // The scratch lifecycle. A scratch directory's last use is the latest of:
@@ -58,6 +60,22 @@ func (r *Reclaimer) scratchPass(ctx context.Context, dryRun bool) []Entry {
 // scratchDir decides, and unless dryRun does, what happens to one scratch
 // directory.
 func (r *Reclaimer) scratchDir(ctx context.Context, dir string, dryRun bool) Entry {
+	if dryRun {
+		return r.scratchDirAdmitted(ctx, dir, true)
+	}
+	var e Entry
+	err := r.underLease(ctx, dir, func() error {
+		e = r.scratchDirAdmitted(context.WithValue(ctx, admissionKey{}, dir), dir, false)
+		return nil
+	})
+	if err != nil {
+		return Entry{Path: dir, Action: ActionHeld, Reason: err.Error()}
+	}
+	return e
+}
+
+// All authorization, including activity and git state, is read after admission.
+func (r *Reclaimer) scratchDirAdmitted(ctx context.Context, dir string, dryRun bool) Entry {
 	now := r.now()
 	s := scanDir(ctx, dir)
 	used := latest(s.Newest, lastOf(r.ScratchUse, dir))
@@ -100,9 +118,9 @@ func (r *Reclaimer) scratchDir(ctx context.Context, dir string, dryRun bool) Ent
 	return e
 }
 
-// removeScratchDir removes the whole directory: moved into the trash under
-// the admission lease, then the registrations of the linked worktrees that
-// were in it are pruned from their repositories.
+// removeScratchDir removes only the descriptor-inventoried tree under
+// admission, then prunes its linked-worktree registrations. An incomplete
+// inventory or changed identity/content holds rather than falling back to trash.
 func (r *Reclaimer) removeScratchDir(ctx context.Context, dir string, s dirScan, e Entry) Entry {
 	e.Bytes = dirBytes(dir, nil)
 	e.Removed = []string{"."}
@@ -118,7 +136,18 @@ func (r *Reclaimer) removeScratchDir(ctx context.Context, dir string, s dirScan,
 			}
 		}
 	}
-	if _, err := r.moveAside(ctx, r.ScratchRoot, dir, dir); err != nil {
+	if err := worktreereclaim.RemoveInventoriedScratch(ctx, dir, func(ctx context.Context) error {
+		fresh := scanDir(ctx, dir)
+		if fresh.Keep || fresh.unmeasured() != "" || r.now().Sub(latest(fresh.Newest, lastOf(r.ScratchUse, dir), lastOf(r.ChatUse, dir))) < r.Config.ScratchRemoveIdle {
+			return fmt.Errorf("scratch authorization changed")
+		}
+		for _, root := range fresh.GitRoots {
+			if reason := uniqueWork(ctx, dir, root); reason != "" {
+				return fmt.Errorf("%s", reason)
+			}
+		}
+		return r.inUse(ctx, dir)
+	}); err != nil {
 		e.Action, e.Reason, e.Bytes, e.Removed = ActionHeld, "removing it: "+err.Error(), 0, nil
 		return e
 	}
@@ -140,7 +169,7 @@ func (r *Reclaimer) stripScratch(ctx context.Context, dir string, s dirScan, e *
 			return
 		}
 		rel := relOf(dir, t)
-		if gr := enclosingGitRoot(s.GitRoots, t); gr != nil && !gitIgnored(ctx, gr.Path, t) {
+		if gr := enclosingGitRoot(s.GitRoots, t); gr != nil && !untrackedOutput(ctx, gr.Path, t) {
 			e.Held = append(e.Held, rel+": git does not ignore it")
 			continue
 		}
@@ -158,7 +187,14 @@ func (r *Reclaimer) stripScratch(ctx context.Context, dir string, s dirScan, e *
 			continue
 		}
 		if !dryRun {
-			if _, err := r.moveAside(ctx, r.ScratchRoot, dir, t); err != nil {
+			if err := keepingMtime(filepath.Dir(t), r.ScratchRoot, func() error {
+				return worktreereclaim.RemoveInventoriedOutput(ctx, t, r.Config.ScratchStripIdle, now, func(ctx context.Context) error {
+					if gr := enclosingGitRoot(s.GitRoots, t); gr != nil && !untrackedOutput(ctx, gr.Path, t) {
+						return fmt.Errorf("output contains tracked files or is not ignored")
+					}
+					return r.inUse(ctx, dir)
+				})
+			}); err != nil {
 				e.Held = append(e.Held, rel+": "+err.Error())
 				continue
 			}

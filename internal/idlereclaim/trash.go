@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -25,33 +24,19 @@ const TrashDir = ".idle-reclaim-trash"
 // (daemonruntime.AcquireWorktreeRecovery): while it is held, new daemon work
 // in them is refused. Check inspects the processes again and must pass
 // immediately before the removal.
+type admissionKey struct{}
+
 type Lease interface {
 	Check(ctx context.Context) error
 	Release()
 }
 
-// moveAside renames target into root's trash under a lease over guard (the
-// directory whose use the removal must exclude: the scratch directory or the
-// checkout), restoring the mtime of target's parent so the removal is not
-// read as use of it. It returns the trashed path, which the caller deletes.
-func (r *Reclaimer) moveAside(ctx context.Context, root, guard, target string) (string, error) {
-	trash := filepath.Join(root, TrashDir)
-	if err := os.MkdirAll(trash, 0o700); err != nil {
-		return "", err
-	}
-	dest := filepath.Join(trash, filepath.Base(target)+"-"+strconv.FormatInt(r.now().UnixNano(), 36))
-	err := r.underLease(ctx, guard, func() error {
-		return keepingMtime(filepath.Dir(target), root, func() error { return os.Rename(target, dest) })
-	})
-	if err != nil {
-		return "", err
-	}
-	return dest, nil
-}
-
 // underLease runs remove under the admission lease over guard, after the
 // lease's process check passes, and releases it after.
 func (r *Reclaimer) underLease(ctx context.Context, guard string, remove func() error) error {
+	if admitted, _ := ctx.Value(admissionKey{}).(string); admitted == guard {
+		return remove()
+	}
 	if r.Acquire == nil {
 		return errors.New("no admission lease available")
 	}

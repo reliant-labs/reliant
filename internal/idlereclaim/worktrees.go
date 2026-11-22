@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // The node_modules strip of idle worktrees. A linked worktree under the
@@ -105,7 +107,18 @@ func (r *Reclaimer) worktreeCheckout(ctx context.Context, checkout string, dryRu
 			continue
 		}
 		if !dryRun {
-			if _, err := r.moveAside(ctx, r.WorktreeRoot, checkout, t); err != nil {
+			if err := r.underLease(ctx, checkout, func() error {
+				deep, why := checkoutNewest(ctx, checkout)
+				if why != "" || now.Sub(latest(deep, shallowActivity(checkout), lastOf(r.WorktreeUse, checkout))) < quiet {
+					return fmt.Errorf("checkout activity changed")
+				}
+				return worktreereclaim.RemoveInventoriedOutput(ctx, t, quiet, now, func(ctx context.Context) error {
+					if !untrackedOutput(ctx, checkout, t) {
+						return fmt.Errorf("output contains tracked files or is not ignored")
+					}
+					return r.inUse(ctx, checkout)
+				})
+			}); err != nil {
 				e.Held = append(e.Held, rel+": "+err.Error())
 				continue
 			}

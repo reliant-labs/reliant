@@ -3,6 +3,7 @@ package worktreereclaim
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strings"
 	"time"
@@ -27,6 +28,38 @@ func InspectRegenerable(ctx context.Context, dir string) (bytes int64, newest ti
 	}
 	defer tree.close()
 	return tree.bytes, tree.newest, nil
+}
+
+// RemoveInventoriedOutput keeps the descriptor-anchored inventory alive through
+// deletion. authorize runs after inventory, immediately before remove validates
+// that inventory again. Its context exempts the inventory's own descriptors.
+func RemoveInventoriedOutput(ctx context.Context, dir string, quiet time.Duration, now time.Time, authorize func(context.Context) error) error {
+	tree, err := inspectRegenerableTree(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer tree.close()
+	if now.Sub(tree.newest) < quiet {
+		return fmt.Errorf("output changed recently")
+	}
+	if err := authorize(withInspectionFiles(ctx, tree.inspectionFiles())); err != nil {
+		return err
+	}
+	return tree.remove(ctx, func() error { return ctx.Err() })
+}
+
+// RemoveInventoriedScratch removes an authorized scratch tree, holding on any
+// mount, unreadable entry or inventory change. authorize must check all git roots.
+func RemoveInventoriedScratch(ctx context.Context, dir string, authorize func(context.Context) error) error {
+	tree, err := inspectScratchTree(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer tree.close()
+	if err := authorize(withInspectionFiles(ctx, tree.inspectionFiles())); err != nil {
+		return err
+	}
+	return tree.remove(ctx, func() error { return ctx.Err() })
 }
 
 // NodeModulesTargets lists the node_modules directories of checkout, relative

@@ -127,6 +127,15 @@ func ignoredEntries(ctx context.Context, root string) ([]string, error) {
 	return strings.Split(out, "\n"), nil
 }
 
+// untrackedOutput rejects even force-added descendants of ignored directories.
+func untrackedOutput(ctx context.Context, root, target string) bool {
+	if !gitIgnored(ctx, root, target) {
+		return false
+	}
+	out, err := git(ctx, root, "ls-files", "--cached", "-z", "--", ":(literal)"+relOf(root, target))
+	return err == nil && out == ""
+}
+
 // gitIgnored reports whether git ignores p inside the working tree root.
 func gitIgnored(ctx context.Context, root, p string) bool {
 	_, err := git(ctx, root, "check-ignore", "-q", "--", relOf(root, p))

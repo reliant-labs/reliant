@@ -8,7 +8,7 @@
  */
 
 import { createContext, useContext, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
-import { PanelLeft } from "lucide-react";
+import { Menu } from "lucide-react";
 import { create } from "zustand";
 
 import Tooltip from "@/components/forge-ui/tooltip";
@@ -150,7 +150,7 @@ export function ShellNavToggle({ style }: { style?: CSSProperties }) {
         style={style}
         className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <PanelLeft className="size-4" aria-hidden="true" />
+        <Menu className="size-4" aria-hidden="true" />
       </button>
     </Tooltip>
   );
