@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -73,6 +74,27 @@ func TestGetProjectWithUserCheck_CrossTenantIsNotFound(t *testing.T) {
 	got, err = svc.GetProjectWithUserCheck(ctx, "in-acme", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "in-acme", got.ID)
+}
+
+// Scheduling deletion hides both personal and org projects, even before the
+// purge deadline and even from an owner with a valid org membership.
+func TestGetProjectWithUserCheck_ScheduledDeletionIsNotFound(t *testing.T) {
+	t.Parallel()
+	for _, orgID := range []*string{nil, org("acme")} {
+		for _, deadline := range []time.Time{
+			time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC),
+		} {
+			svc := projectaccess.New(projectaccess.Deps{Store: ownerStore{rows: map[string]*core.Project{
+				"deleting": {ID: "deleting", UserID: "alice", OrgID: orgID, DeleteAfter: &deadline},
+			}}})
+			ctx := authz.WithMembership(context.Background(), members{"alice/acme": true})
+			got, err := svc.GetProjectWithUserCheck(ctx, "deleting", "alice")
+			require.ErrorIs(t, err, core.ErrProjectNotFound)
+			assert.Nil(t, got)
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		}
+	}
 }
 
 // An owner who left the project's org, and an outage of the membership answer,

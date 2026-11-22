@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -17,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	repo "github.com/reliant-labs/reliant/internal/handlers/repo"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // The repo ownership check keeps hiding existence — a repo in someone else's

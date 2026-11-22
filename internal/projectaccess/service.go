@@ -29,6 +29,11 @@ func (s *service) GetProjectWithUserCheck(ctx context.Context, id string, userID
 	if err != nil {
 		return nil, err
 	}
+	// Scheduled deletion hides a project immediately, matching authz's
+	// project visibility rule regardless of when physical deletion runs.
+	if project == nil || project.DeleteAfter != nil {
+		return nil, core.ErrProjectNotFound
+	}
 	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
 	case denial == nil:
 		return project, nil
