@@ -185,6 +185,14 @@ message ApiServerConfig {
     env_var: "AUTH_SELF_SIGNUP"
     description: "Serve POST /auth/register outside development (with no delivered login policy)"
   }];
+  // The sign-in handoff (forge devidp.HandoffRoutes, mountHandoff in
+  // login_broker.go): where a person signed in here may hand a NEW session
+  // to. The desktop app's loopback listener is http://127.0.0.1/callback
+  // (any port matches, RFC 8252). Empty, the default, serves no handoff.
+  string handoff_redirects = 108 [(forge.v1.config) = {
+    env_var: "HANDOFF_REDIRECTS"
+    description: "Comma-separated EXACT redirect URIs a sign-in handoff may send its one-time code to: http://127.0.0.1/<path> (a desktop app's loopback, any port), https://<sibling host>/<path>, or a private-use scheme with a dot. One bad entry turns the handoff off. Empty serves no handoff"
+  }];
 
   // The email domains allowed to sign in, comma-separated; none allows every
   // domain. The loader trims each element and drops blank ones, which the
