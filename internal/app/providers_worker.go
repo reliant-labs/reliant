@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -690,6 +691,7 @@ func (a *AccountRecorder) Close(context.Context) error {
 type TemporalWorkerDeps struct {
 	DB               *db.Repo
 	ProviderAccounts provideraccounts.Service
+	OrgAccounts      orgaccounts.Service
 	Temporal         *TemporalClient
 	Streaming        *StreamingHub
 	Tools            *WorkerToolsFactory
@@ -882,6 +884,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
 		ProviderAccounts:       d.ProviderAccounts,
+		OrgAccounts:            d.OrgAccounts,
 		StreamingHub:           d.Streaming.Hub,
 		ToolsFactory:           d.Tools.ToolsFactory,
 		ToolExecutor:           d.Executor,

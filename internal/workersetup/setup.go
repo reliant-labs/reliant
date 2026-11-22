@@ -72,12 +72,14 @@ type Config struct {
 	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
 	// routing reads and writes (credentials/provideraccounts).
 	ProviderAccounts AccountStore
-	StreamingHub     streaming.StreamingHub
-	ToolsFactory     *tools.ToolsFactory
-	ToolExecutor     toolexec.ToolExecutor
-	DaemonRouter     toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
-	MCPBinder        toolexec.MCPContextBinder
-	ConfigProvider   config.ConfigProvider
+	// OrgAccounts holds the org key notices the sweep claims and confirms (credentials/orgaccounts).
+	OrgAccounts    OrgKeyNoticeStore
+	StreamingHub   streaming.StreamingHub
+	ToolsFactory   *tools.ToolsFactory
+	ToolExecutor   toolexec.ToolExecutor
+	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
+	MCPBinder      toolexec.MCPContextBinder
+	ConfigProvider config.ConfigProvider
 
 	// TriggerLauncher is the one door a scheduled fire launches through,
 	// normally *launch.Launcher.
@@ -298,7 +300,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		activityDeps.LLMUsage = usage
 	}
 	if cfg.ProviderAccounts != nil && cfg.Database != nil {
-		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 	}
 
 	// Register all activities
@@ -460,7 +462,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
 		out.background = append(out.background, func(ctx context.Context) {
 			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
+				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
 				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
 		})
 	}

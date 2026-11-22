@@ -28,6 +28,7 @@ import (
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
@@ -465,6 +466,13 @@ func (g *Graph) newProviderAccounts() (provideraccounts.Service, error) {
 	})
 }
 
+func (g *Graph) newOrgAccounts() (orgaccounts.Service, error) {
+	return NewOrgAccounts(OrgAccountsDeps{
+		DB:    g.Database(),
+		Vault: g.Vault(),
+	})
+}
+
 func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
@@ -615,6 +623,7 @@ func (g *Graph) newAccountRecorder() (*AccountRecorder, error) {
 func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
 		ProviderAccounts: g.ProviderAccounts(),
+		OrgAccounts:      g.OrgAccounts(),
 		Temporal:         g.TemporalClient(),
 		Streaming:        g.StreamingHub(),
 		Tools:            g.WorkerToolsFactory(),
@@ -1230,6 +1239,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Repo:       g.Database(),
+		OrgKeys:    g.OrgAccounts(),
 		Items:      store.NewInboxDismissalExtStore(g.Database().ORM()),
 		Firings:    store.NewTriggerEventExtStore(g.Database().ORM()),
 		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
@@ -1594,7 +1604,8 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 	return NewOrgProviderAccount(g.ApiServerConfig, org_provider_account.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Store:       orgAccountStore{g.ProviderAccounts(), g.Database()},
+		Accounts:    g.ProviderAccounts(),
+		OrgAccounts: g.OrgAccounts(),
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
@@ -1605,8 +1616,8 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 // newOrgCredentialSweep constructs the OrgCredentialSweep provider (NewOrgCredentialSweep, internal/app/org_credentials_sweep.go).
 func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
 	return NewOrgCredentialSweep(OrgCredentialSweepDeps{
-		DB:        g.Database(),
-		Authority: g.TokenAuthority(),
+		OrgAccounts: g.OrgAccounts(),
+		Authority:   g.TokenAuthority(),
 	})
 }
 
@@ -1644,7 +1655,7 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 	svc, err := seatmatch.New(seatmatch.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Store:   orgAccountStore{g.ProviderAccounts(), g.Database()},
+		Store:   seatmatchStore{g.ProviderAccounts(), g.OrgAccounts()},
 		Members: g.OrgResolver(),
 		// Attributing seats is off until every replica and the rollback target honour a
 		// seat's org (orgs.provider_workspace_seats_enabled).
