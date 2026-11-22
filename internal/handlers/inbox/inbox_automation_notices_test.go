@@ -66,13 +66,13 @@ func listKinds(t *testing.T, svc *Service, ctx context.Context, jwt string, kind
 // what the pausing firing recorded, and placed in its org.
 func TestListInbox_NoOrgAccountPauseReachesOwnerAndAdmins(t *testing.T) {
 	repo := newInflightRepo(0)
-	repo.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
+	repo.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
 	var asked []string
-	repo.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
+	repo.notices.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
 		asked = orgIDs
 		return []*core.Trigger{pausedForNoOrgAccount("t-mine", userID, "acme"), pausedForNoOrgAccount("t-theirs", "u-mia", "acme")}, nil
 	}
-	repo.GetLatestTriggerEventFunc = func(_ context.Context, id string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	repo.firings.GetLatestTriggerEventFunc = func(_ context.Context, id string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 		require.Equal(t, core.TriggerEventFailed, *outcome)
 		return &core.TriggerEvent{OutcomeDetail: "none of them can run claude-opus-4-6 (" + id + ")"}, nil
 	}
@@ -117,9 +117,9 @@ func TestListInbox_NoOrgAccountPauseOwnerOnlyWithoutAdminOrgs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			repo := newInflightRepo(0)
-			repo.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
+			repo.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
 			var asked []string
-			repo.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
+			repo.notices.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
 				asked = orgIDs
 				return []*core.Trigger{pausedForNoOrgAccount("t-mine", userID, "acme")}, nil
 			}
@@ -151,7 +151,7 @@ func TestListInbox_AutomationsOnPersonalAccounts(t *testing.T) {
 		{ID: "t-2", UserID: "user-1", OrgID: &acme, CreatedAt: created.Add(time.Hour)},
 		{ID: "t-3", UserID: "user-1", OrgID: &solo, CreatedAt: created},
 	}
-	repo.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return set, nil }
+	repo.notices.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return set, nil }
 	counts := &memberCounts{n: map[string]int{"acme": 2, "solo": 1}}
 	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, Members: counts}))
 	ctx := authz.WithMembership(sessionCtx(), memberOf{"home": true, "acme": true, "solo": true})

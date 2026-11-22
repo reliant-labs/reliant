@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/privacy"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -442,6 +443,8 @@ type ProcessRuntimeDeps struct {
 	ControlPlane *configv1.ControlPlaneConfig
 	Network      *configv1.NetworkConfig
 	Analytics    *configv1.AnalyticsConfig
+	// Privacy is where each user's analytics consent is read from.
+	Privacy privacy.Service
 }
 
 // NewProcessRuntime installs the database-backed process globals.
@@ -452,7 +455,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(repo)
 	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
-	analytics.Start(AnalyticsSettings(d.Analytics), repo, repo)
+	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, repo)
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 

@@ -127,6 +127,11 @@ func GetWorktreeByPath(ctx context.Context, db orm.Context, path string) (*core.
 // produced for this key, or nil when there is none. Scoped by project
 // because the key is client-generated.
 func GetWorktreeByIdempotencyKey(ctx context.Context, db orm.Context, projectID, key string) (*core.Worktree, error) {
+	// An empty key means the caller opted out of idempotency, not that it is
+	// asking about the rows that happen to have no key.
+	if projectID == "" || key == "" {
+		return nil, nil
+	}
 	return firstWorktree(ctx, db, func(q *bun.SelectQuery) {
 		q.Where("project_id = ?", projectID).Where("idempotency_key = ?", key)
 	})
@@ -523,6 +528,9 @@ func ListLiveWorktreePathsForUser(ctx context.Context, db orm.Context, userID st
 // RemoveWorktree hard-deletes the worktree row, archived or not; a missing
 // one is not an error.
 func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("worktree ID cannot be empty")
+	}
 	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)

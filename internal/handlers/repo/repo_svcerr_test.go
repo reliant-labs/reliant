@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	repo "github.com/reliant-labs/reliant/internal/handlers/repo"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // The repo ownership check keeps hiding existence — a repo in someone else's
@@ -24,14 +25,14 @@ import (
 func TestRepoOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
 	remove := func(t *testing.T, store *repo.MockRepository) error {
-		svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
+		svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 		_, err := svc.RemoveRepo(repo.AuthedContext(t), connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-1"}))
 		return err
 	}
 	foreign := ownedProjectRepo(t)
-	foreign.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) {
+	projectaccesstest.Bind(foreign, func(context.Context, string, string) (*db.Project, error) {
 		return nil, core.ErrProjectNotFound
-	}
+	})
 	err := remove(t, foreign)
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
@@ -61,6 +62,6 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 }
 
 func withProjectErr(store *repo.MockRepository, err error) *repo.MockRepository {
-	store.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, err }
+	projectaccesstest.Bind(store, func(context.Context, string, string) (*db.Project, error) { return nil, err })
 	return store
 }

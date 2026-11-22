@@ -23,6 +23,16 @@ type OrgResolver interface {
 	DefaultOrg(ctx context.Context, userID string) (string, error)
 }
 
+// Detachments forgets a project's checkout on a machine and reads back what
+// was forgotten. store.ProjectDaemonDetachmentExtStore satisfies it.
+type Detachments interface {
+	// DetachProjectFromDaemon forgets a checkout without touching its files
+	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
+	// reads back so the connect heal leaves the pair alone.
+	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
+}
+
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's projects and chats that have
@@ -71,11 +81,6 @@ type Repository interface {
 	// reclone of a checkout by the op id its machine acknowledges.
 	BeginCheckoutTeardown(ctx context.Context, projectID, daemonID, kind, path string, guard func(ctx context.Context) error) (*db.CheckoutTeardown, error)
 	SettleCheckoutTeardown(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error)
-	// DetachProjectFromDaemon forgets a checkout without touching its files
-	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
-	// reads back so the connect heal leaves the pair alone.
-	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
-	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)

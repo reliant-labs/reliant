@@ -106,6 +106,7 @@ const (
 	RuleScenarioTerminal       = "scenario-terminal-uncovered"
 	RuleAllowInvalid           = "lint-allow-invalid"
 	RuleAskQuestionType        = "ask-question-not-ask-user"
+	RuleLLMGatewayUnused       = "llm-gateway-cli-unused"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -135,6 +136,7 @@ var rules = []Rule{
 	rule(RuleScenarioTerminal, SeverityWarning, "No scenario expects the run to reach this terminal node."),
 	rule(RuleAllowInvalid, SeverityError, "A `lint:allow` comment names an unknown rule or gives no reason."),
 	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
+	rule(RuleLLMGatewayUnused, SeverityWarning, "A run node sets llm_gateway for a CLI its command never runs, so the step pays for a key nothing uses (almost always a copy-paste mistake)."),
 }
 
 // Rules lists every rule, in documentation order.

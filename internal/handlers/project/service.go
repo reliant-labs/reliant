@@ -25,6 +25,8 @@ type Deps struct {
 	// Repo stores projects and what hangs off them: their daemons, repos,
 	// main worktree, seeded config row and prompts.
 	Repo Repository
+	// Detachments records and reads a project's detachments from machines.
+	Detachments Detachments
 	// Router runs every filesystem and git operation on the caller's
 	// daemon, which owns the filesystem. The API server always has one; in
 	// a composition without one, the daemon-backed steps fail through their
@@ -95,6 +97,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("project: Deps.Repo is required")
+	}
+	if d.Detachments == nil {
+		return fmt.Errorf("project: Deps.Detachments is required")
 	}
 	if d.Ledger == nil {
 		return fmt.Errorf("project: Deps.Ledger is required")

@@ -24,7 +24,7 @@ func (s *Service) DismissInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
+	if err := s.deps.Items.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil

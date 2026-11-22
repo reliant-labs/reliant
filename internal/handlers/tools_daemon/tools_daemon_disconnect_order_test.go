@@ -38,7 +38,7 @@ func (l *statusAtDisconnect) OnDaemonDisconnected(_, daemonID string) {
 // another replica has since taken over. If this gateway answered for its own
 // dropped stream, a genuine disconnect would be ignored.
 func TestTeardownConnection_ListenersHearTheDisconnectAfterTheStatusSourceDropsTheDaemon(t *testing.T) {
-	svc := newTestService(listChangedRepo(nil))
+	svc := listChangedService(nil)
 	t.Cleanup(svc.Close)
 	rec := &statusAtDisconnect{svc: svc}
 	svc.AddConnectionListener(rec)

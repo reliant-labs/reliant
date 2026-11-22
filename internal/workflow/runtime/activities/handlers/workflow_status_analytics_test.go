@@ -44,7 +44,7 @@ func TestWorkflowStatus_ProductEventsFlagChildRuns(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	rec := newProductEventRecorder()
-	activity := NewWorkflowStatusActivity(h.Repo())
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	activity.trackerFor = rec.trackerFor
 
 	rootID, childID := uuid.NewString(), uuid.NewString()

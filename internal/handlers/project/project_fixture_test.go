@@ -3,6 +3,9 @@ package project
 import (
 	"context"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // newProjectService builds the service over a repository and a daemon router,
@@ -10,7 +13,11 @@ import (
 // (which fills Logger and Config).
 func newProjectService(t *testing.T, repo Repository, router Router) *Service {
 	t.Helper()
-	return NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Router: router}))
+	d := Deps{Repo: repo, Router: router}
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		d.Detachments = store.NewProjectDaemonDetachmentExtStore(r.ORM())
+	}
+	return NewTestProject(t, WithProjectDeps(d))
 }
 
 // placesAsNamed gives a test router the placement the project handlers rank

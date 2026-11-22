@@ -116,13 +116,17 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 // chatSnapshotOverStream subscribes userID to chatID and returns the first
 // chat snapshot the streaming service sends: the snapshot a client receives,
 // read the way the client reads it.
-func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, chatID string) *reliantv1.ChatSyncSnapshot {
+func chatSnapshotOverStream(t *testing.T, repo *db.Repo, userID, chatID string) *reliantv1.ChatSyncSnapshot {
 	t.Helper()
 
 	svc, err := streaming.New(streaming.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     repo,
+		Heads:    store.NewChatUpdateExtStore(repo.ORM()),
+		UserLog:  store.NewUserUpdateExtStore(repo.ORM()),
+		OrgFeed:  store.NewOrgUpdateExtStore(repo.ORM()),
+		Siblings: store.NewMessageExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 

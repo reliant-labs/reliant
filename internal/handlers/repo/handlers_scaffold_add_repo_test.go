@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -19,7 +21,7 @@ func TestAddRepo_Generated(t *testing.T) {
 	t.Parallel()
 
 	// Without a daemon router the path cannot be checked.
-	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t)}))
+	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t), Projects: projectaccesstest.For(ownedProjectRepo(t))}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AddRepoRequest, pb.AddRepoResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
@@ -43,7 +45,7 @@ func TestAddRepo_Generated(t *testing.T) {
 	}
 	store.CreateRepoFunc = func(context.Context, *core.Repo) error { return nil }
 	routed := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{
-		Repo: store,
+		Repo: store, Projects: projectaccesstest.For(store),
 		Router: daemonFunc(func(_ string, payload []byte) ([]byte, error) {
 			if string(payload) == `{"max_depth":1,"path":"/work/svc"}` {
 				return []byte(`{"discovered":[{"relative_path":"","remote_url":"git@example.com:svc.git"}]}`), nil

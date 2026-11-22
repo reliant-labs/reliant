@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -24,7 +26,7 @@ func TestSetWorkflowVisibility_Generated(t *testing.T) {
 		d.IsHidden = hidden
 		return &d, nil
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetWorkflowVisibilityRequest, pb.SetWorkflowVisibilityResponse]{
 		{

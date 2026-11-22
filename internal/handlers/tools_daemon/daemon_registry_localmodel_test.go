@@ -15,10 +15,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -147,7 +149,7 @@ func TestInventory_StoredSkippedWhenIdenticalAndPublished(t *testing.T) {
 
 	// Prove the second identical publish does NOT write: tamper with the
 	// stored value; an actual write would restore it.
-	require.NoError(t, repo.SetDaemonLocalModels(ctx, "daemon-1", `{"tampered":true}`))
+	require.NoError(t, store.SetDaemonLocalModels(ctx, repo.ORM(), "daemon-1", `{"tampered":true}`))
 	svc.handleLocalModelInventory(ctx, conn, sampleInventory())
 	after, _ := repo.ListDaemonLocalModels(ctx, "user-1")
 	assert.Equal(t, `{"tampered":true}`, after["daemon-1"], "identical inventory must not be rewritten")
@@ -179,8 +181,8 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	svc.mu.Lock()
 	svc.connections["daemon-1"] = conn
 	svc.mu.Unlock()
-	repo := &MockRepository{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
-	svc.deps.Repo = repo
+	repo := &MockLocalModels{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
+	svc.deps.LocalModels = repo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -276,7 +278,7 @@ func TestDaemonRegistry_ListAndGetCarryStoredLocalModels(t *testing.T) {
 	seedDaemon(t, repo, "user-1", "daemon-2", true)  // never published
 	encoded, err := protojson.Marshal(sampleInventory())
 	require.NoError(t, err)
-	require.NoError(t, repo.SetDaemonLocalModels(context.Background(), "daemon-1", string(encoded)))
+	require.NoError(t, store.SetDaemonLocalModels(context.Background(), repo.ORM(), "daemon-1", string(encoded)))
 
 	svc := newDaemonRegistry(t, repo, &localModelRouter{})
 	list, err := svc.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
