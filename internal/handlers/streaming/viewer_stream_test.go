@@ -161,7 +161,7 @@ func TestStreamChatUpdates_UnshareEndsAViewersStream(t *testing.T) {
 	client := sharedStreams(t, svc, f.Membership)
 	_, events, stream := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
 
-	changed, err := f.Repo.ApplyShareChange(context.Background(), core.ShareChange{
+	changed, err := applyShareChange(context.Background(), f.Repo, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: f.ChatID, OrgID: viewertest.OrgID, OwnerUserID: f.OwnerID,
 		ActorUserID: f.OwnerID, Action: core.ShareActionUnshare, At: time.Now(),
 	})

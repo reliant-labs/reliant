@@ -2029,8 +2029,9 @@ function SidebarComponent({
                       />
                     )}
 
-                    {/* Other members' shared chats, read-only; nothing when there are none. */}
-                    {chatListTab === "active" && !noChatsHere && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
+                    {/* Other members' shared chats, read-only; nothing when there are none. On both tabs:
+                        the shared list is not filtered by the viewer's archive. */}
+                    {!noChatsHere && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
 
                     {listLoading && (
                       <div role="status" aria-label="Loading chats" className="space-y-1.5 py-2 pl-8 pr-1" data-testid="chat-list-loading">

@@ -104,7 +104,7 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:      slog.Default(),
 		Config:      &typedconfig.Config{},
-		LocalModels: local.NewRepoDirectory(repo),
+		LocalModels: local.NewRepoDirectory(repo, nil),
 	})
 	require.NoError(t, err)
 	p2, h2 := reliantv1connect.NewCatalogServiceHandler(catalogService, asUser)
@@ -278,7 +278,7 @@ func TestLocalModelE2E(t *testing.T) {
 	})
 
 	localSpec := &handlers.LocalModelSpec{
-		Directory: local.NewRepoDirectory(repo),
+		Directory: local.NewRepoDirectory(repo, nil),
 		Transport: func(userID, daemon, endpoint string) http.RoundTripper {
 			return toolexec.NewLocalModelTransport(router, userID, daemon, endpoint)
 		},

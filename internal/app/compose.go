@@ -331,7 +331,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
 		TagPrefs:           g.Database(),
-		LocalModels:        local.NewRepoDirectory(g.Database()),
+		LocalModels:        local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -1075,7 +1075,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database()),
+		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:        g.OrgResolver(),
 	})
 }
@@ -1230,7 +1230,8 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
+		Machines:    g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),
@@ -1489,11 +1490,15 @@ func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 // newSharing constructs the sharing handler (internal/handlers/sharing):
 // read-only sharing of chats and projects with their org's live members.
 func (g *Graph) newSharing() (*sharing.Service, error) {
+	o := g.Database().ORM()
 	return sharing.New(sharing.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Orgs:   g.OrgResolver(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Chats:    store.NewChatsWithActivityExtStore(o),
+		Projects: store.NewProjectExtStore(o),
+		Shares:   store.NewShareEventExtStore(o),
+		Tx:       o,
+		Orgs:     g.OrgResolver(),
 	})
 }
 
