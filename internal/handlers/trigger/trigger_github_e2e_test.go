@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -141,7 +142,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	}}
 	ghServer := httptest.NewServer(gh)
 	defer ghServer.Close()
-	refresher := ghaccess.New(repo, userTokens{alice: "tok-alice", bob: "tok-bob"},
+	refresher := ghaccess.New(store.NewIntegrationEventAccessExtStore(repo.ORM()), store.NewIntegrationAccessRefreshExtStore(repo.ORM()), userTokens{alice: "tok-alice", bob: "tok-bob"},
 		ghaccess.Options{APIBaseURL: ghServer.URL, HTTPClient: ghServer.Client()})
 
 	intake := triggers.NewIntake(repo, temporalClient, taskQueue)

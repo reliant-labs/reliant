@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
@@ -977,6 +978,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgProviderAccount: g.OrgProviderAccount(),
 		OrgUsage:           g.OrgUsage(),
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
+		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 	})
 }
@@ -1059,6 +1061,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
 		Settler:        g.WorktreeSweep(),
@@ -1185,11 +1188,13 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.Database(),
-		Sweeper: g.WorktreeSweep(),
-		Orgs:    g.OrgResolver(),
+		Logger:     g.Log,
+		Config:     g.Cfg,
+		Repo:       g.Database(),
+		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Sweeper:    g.WorktreeSweep(),
+		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1586,6 +1591,27 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 		Credentials: g.WorkerIntegrationCredentials(),
 		Policies:    g.OrgPolicyResolver(),
 		Membership:  g.OrgResolver(),
+	})
+}
+
+// newCoverageSource constructs the coverage-source handler
+// (internal/handlers/coverage_source): a covered file's source, read from
+// GitHub with the viewer's own token once control-plane confirms a retained
+// coverage report names it. Without a control plane, or without a way to
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
+	blobs, err := CoverageSourceBlobs(g.Database(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	if err != nil {
+		return nil, err
+	}
+	return coverage_source.New(coverage_source.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Projects: g.Database(),
+		Orgs:     g.OrgResolver(),
+		Reports:  CoverageSourceReports(g.ServerProcessConfig.GetControlPlane()),
+		Blobs:    blobs,
+		Now:      nil, // optional — no provider
 	})
 }
 

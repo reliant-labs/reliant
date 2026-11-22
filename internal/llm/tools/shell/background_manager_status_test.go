@@ -58,7 +58,9 @@ func TestGetProcessStatus_NeverScansPorts(t *testing.T) {
 
 // The control for the test above: the spies are on PATH and GetProcess, which
 // does report ports, still scans for the same synthetic record. Without it a
-// spy that never ran would let a regression pass.
+// spy that never ran would let a regression pass. On Linux the scan reads
+// procfs and forks neither tool (wantPortScanForks is 0), so the spies, and
+// the test above, bite only where the scan is `ps` + `lsof`.
 func TestGetProcess_StillScansPortsOfARunningProcess(t *testing.T) {
 	testkit.Slow(t, "execs the ps and lsof spy scripts")
 	spies := installPortScanSpies(t)
@@ -68,8 +70,8 @@ func TestGetProcess_StillScansPortsOfARunningProcess(t *testing.T) {
 		t.Fatalf("GetProcess(running): %v", err)
 	}
 	for _, name := range []string{"ps", "lsof"} {
-		if got := spies.read(t, name); got != 1 {
-			t.Errorf("%s invocations = %d, want 1 port scan from GetProcess", name, got)
+		if got := spies.read(t, name); got != wantPortScanForks {
+			t.Errorf("%s invocations = %d, want %d from GetProcess's port scan", name, got, wantPortScanForks)
 		}
 	}
 }

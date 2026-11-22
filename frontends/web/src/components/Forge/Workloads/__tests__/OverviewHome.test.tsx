@@ -12,7 +12,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
+import { fixtureVulnerabilityApi } from "../../Security/fixtures";
+import { createWorkloadsFixtureApi, WORKLOADS_PROJECT } from "../__fixtures__/workloadFixtures";
 import { renderOverview } from "./workloadsTestUtils";
 
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
@@ -204,7 +205,7 @@ describe("its states", () => {
     renderOverview({ envs: [] });
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "empty");
     expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
-    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Deploy with an agent" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-getting-started-agent")).getByRole("button", { name: "Ask an agent to deploy this with forge" })).toBeInTheDocument();
     expect(screen.getByText("reliant forge env deploy <env>")).toBeInTheDocument();
   });
 
@@ -289,5 +290,28 @@ describe("its states", () => {
   it("explains an organization whose telemetry store does not exist yet", async () => {
     renderOverview({ obs: createWorkloadsFixtureApi("not-set-up") });
     await waitFor(() => expect(screen.getByTestId("obs-not-set-up")).toBeInTheDocument());
+  });
+});
+
+describe("the Overview's Vulnerabilities card", () => {
+  it("sits in the rail, scoped to the top bar's environment, linking to Security › Vulnerabilities in that scope", async () => {
+    renderOverview({ env: "staging" });
+    const rail = screen.getByTestId("overview-rail");
+    const card = await within(rail).findByTestId("overview-vulns");
+    expect(await within(card).findByTestId("overview-vulns-env-staging")).toBeInTheDocument();
+    expect(within(card).queryByTestId("overview-vulns-env-prod")).not.toBeInTheDocument();
+    expect(within(card).getByTestId("overview-vulns-link")).toHaveAttribute("href", `/forge/p/${WORKLOADS_PROJECT}/security/vulnerabilities?env=staging`);
+  });
+
+  it("says the control plane doesn't report vulnerabilities, never that there are none", async () => {
+    renderOverview({ vulns: fixtureVulnerabilityApi("not-configured") });
+    expect(await screen.findByTestId("overview-vulns-error-not-configured")).toBeInTheDocument();
+    expect(screen.queryByText("No known vulnerabilities")).not.toBeInTheDocument();
+  });
+
+  it("is absent for an environment Reliant has no record of", async () => {
+    renderOverview({ env: "qa" });
+    await screen.findByTestId("overview-unrecorded-env");
+    expect(screen.queryByTestId("overview-vulns")).not.toBeInTheDocument();
   });
 });

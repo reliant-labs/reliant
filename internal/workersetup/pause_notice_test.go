@@ -175,10 +175,6 @@ func runPauseNotice(t *testing.T, admins pauseNotifier) (*pauseStore, error) {
 	return store, env.GetWorkflowError()
 }
 
-// oldControlPlane is how a control plane that predates the notice kind answers
-// it (its NotifyOrgAdmins receives an empty oneof).
-var oldControlPlane = &controlplane.ProjectOrgMoveError{Code: "invalid_argument", Message: "a notice is required"}
-
 // The notice retries the lease answer and outages until the control plane
 // answers, and only then records the pause as notified. A refusal a retry
 // cannot change ends it unconfirmed; no control plane to ask is delivered (the
@@ -206,16 +202,14 @@ func TestOrgAutomationNoOrgAccountNotice_Delivery(t *testing.T) {
 	assert.Equal(t, []string{"t-1"}, store.confirmed, "no control plane: the inbox item is the notice")
 }
 
-// B1: a control plane that predates the notice kind (or has no
-// OrgNotifyInternalService, or answers Unimplemented) cannot send it yet. The
-// notice is not lost: the same pause's workflow waits and asks again, and once
-// the control plane is upgraded the email goes out and the pause is
-// confirmed, with no new pause.
+// B1: a control plane that has no OrgNotifyInternalService (or answers
+// Unimplemented) cannot send it yet. The notice is not lost: the same pause's
+// workflow waits and asks again, and once the control plane can send it the
+// email goes out and the pause is confirmed, with no new pause.
 func TestOrgAutomationNoOrgAccountNotice_WaitsForAnUpgradedControlPlane(t *testing.T) {
 	for name, cannot := range map[string]error{
-		"predates the kind": oldControlPlane,
-		"no service":        controlplane.ErrOrgNotifyUnsupported,
-		"unimplemented":     &controlplane.ProjectOrgMoveError{Code: "unimplemented"},
+		"no service":    controlplane.ErrOrgNotifyUnsupported,
+		"unimplemented": &controlplane.ProjectOrgMoveError{Code: "unimplemented"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			upgraded := &scriptedPauseNotifier{errs: []error{cannot, cannot}}
@@ -230,7 +224,7 @@ func TestOrgAutomationNoOrgAccountNotice_WaitsForAnUpgradedControlPlane(t *testi
 	// sweep starts the pause's notice again.
 	errs := make([]error, len(pauseNoticeUpgradeWaits)+1)
 	for i := range errs {
-		errs[i] = oldControlPlane
+		errs[i] = controlplane.ErrOrgNotifyUnsupported
 	}
 	never := &scriptedPauseNotifier{errs: errs}
 	store, err := runPauseNotice(t, never)
@@ -243,6 +237,7 @@ func TestOrgAutomationNoOrgAccountNotice_WaitsForAnUpgradedControlPlane(t *testi
 	assert.Equal(t, 1, sweepPauseNotices(context.Background(), store, orgKeyNoticeQueue{starter: restarted, taskQueue: "q"}),
 		"still owed: the sweep starts it again")
 
-	// A refusal that is not about the kind is not mistaken for one.
+	// A refusal is not mistaken for a control plane that cannot send the kind.
 	assert.False(t, cannotSendNoticeKind(&controlplane.ProjectOrgMoveError{Code: "invalid_argument", Message: "a field is too long"}))
+	assert.False(t, cannotSendNoticeKind(&controlplane.ProjectOrgMoveError{Code: "invalid_argument", Message: "a notice is required"}))
 }

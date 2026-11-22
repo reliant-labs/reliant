@@ -7,7 +7,8 @@ names each channel's current release. A self-run daemon or a standalone server
 reads that manifest to learn its upgrade target without our control plane, then
 verifies what it downloads. This is phase R0 of forge's
 `docs/proposals/self-upgrade.md` (§6). Forge's `pkg/selfupdate` (F1, F2) and
-`reliant update` (E2) are the consumers.
+`reliant update` (E2, `dev-docs/self-update.md`) are the consumers;
+`internal/cliupdate` pins the signing values below.
 
 Nothing that already shipped changed: the installers, their update feeds
 (`latest*.yml`, `alpha*.yml`), their URLs and the Homebrew dispatch are as they

@@ -68,19 +68,21 @@ func newClient(d Deps) (*Client, error) {
 	if d.Store == nil || d.Sign == nil {
 		return nil, errors.New("hosted HTTP store and signer are required")
 	}
-	h := *observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 45 * time.Second})
+	transport, err := privateControllerTransport(caFile)
+	if err != nil {
+		return nil, err
+	}
+	// Traced like every outbound client, over the controller's own transport
+	// rather than the process-wide one, which reads the proxy environment.
+	h := *observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 45 * time.Second, Base: transport})
 	if d.HTTPClient != nil {
 		h = *d.HTTPClient
 		if h.Timeout <= 0 {
 			h.Timeout = 45 * time.Second
 		}
-	}
-	if caFile != "" {
-		transport, err := privateControllerTransport(caFile)
-		if err != nil {
-			return nil, err
+		if caFile != "" {
+			h.Transport = transport
 		}
-		h.Transport = transport
 	}
 	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	root := strings.TrimRight(baseURL, "/")

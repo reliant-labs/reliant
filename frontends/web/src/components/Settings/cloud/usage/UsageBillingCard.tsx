@@ -44,7 +44,6 @@ export interface UsageBillingCardProps {
   minimumLine?: string | null;
   isLoading?: boolean;
   error?: string;
-  unavailableReason?: string;
   isSubmitting?: boolean;
   onRetry: () => void;
   onCheckout: (consent: { policyVersion: string; infraBudgetCents: bigint }) => void;
@@ -57,13 +56,13 @@ export const HOSTING_SUPPORT_MAILTO = `mailto:support@reliantlabs.io?subject=${e
 
 /**
  * Hosting billing is switched off on this server (production's
- * USAGE_BILLING_ENABLED), or the server predates it. Said plainly, with a way
+ * USAGE_BILLING_ENABLED). Said plainly, with a way
  * to ask for it — and never a pointer at machine plans, which do not enable
  * hosting and are a different product.
  */
-export function HostingBillingUnavailable({ reason, onRetry }: { reason?: string; onRetry: () => void }) {
+export function HostingBillingUnavailable({ onRetry }: { onRetry: () => void }) {
   return <div role="status" className="space-y-3" data-testid="hosting-billing-unavailable">
-    <p className="text-ui text-foreground">{reason ?? "App hosting billing isn’t available yet."}</p>
+    <p className="text-ui text-foreground">App hosting billing isn’t available yet.</p>
     <p className="text-sm text-muted-foreground">Until it opens, this organization can still use its free static site if it holds the free allowance. To host a backend or more sites sooner, contact support and we’ll set it up with you.</p>
     <div className="flex flex-wrap gap-2">
       <a href={HOSTING_SUPPORT_MAILTO} className="inline-flex items-center text-sm font-medium text-primary-ink hover:underline" data-testid="hosting-billing-contact-support">Contact support</a>
@@ -85,7 +84,7 @@ export function UsageBillingCard(props: UsageBillingCardProps) {
   const canCheckout = !props.agreement || pending;
   return <Card><CardHeader><CardTitle>App hosting billing</CardTitle></CardHeader><CardContent className="space-y-4">
     <p className="text-ui text-muted-foreground">Pay as you go for the apps you host. One agreement covers this organization’s apps and environments. Machine plans and AI credit are separate, and you don’t need a machine plan to host apps.</p>
-    {props.isLoading ? <p role="status">Loading app hosting billing…</p> : props.error ? <div role="alert"><p>{props.error}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : !props.enabled ? <HostingBillingUnavailable reason={props.unavailableReason} onRetry={props.onRetry} /> : active ? <>
+    {props.isLoading ? <p role="status">Loading app hosting billing…</p> : props.error ? <div role="alert"><p>{props.error}</p><Button variant="outline" onClick={props.onRetry}>Check billing status</Button></div> : !props.enabled ? <HostingBillingUnavailable onRetry={props.onRetry} /> : active ? <>
       <p role="status">App hosting billing is active.</p>
       {props.budgetControl ?? <>
         <p>Monthly budget: {formatCents(Number(props.agreement!.infraBudgetCents))}.</p>

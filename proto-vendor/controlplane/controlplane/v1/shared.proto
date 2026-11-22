@@ -539,15 +539,17 @@ message DaemonPricing {
 // DaemonSizePrice is one size's row of DaemonPricing.
 message DaemonSizePrice {
   string size = 1;
-  // Deprecated integer multiplier cannot represent exact cost-weight fractions.
-  int64 multiplier = 2 [deprecated = true];
+  // 2 was the integer multiplier, which could not represent exact cost-weight
+  // fractions; cost_weight replaces it.
+  reserved 2;
+  reserved "multiplier";
   // Exact rational num/den; not retail-price credit or a runtime billing multiplier.
   string cost_weight = 5;
   string route_id = 6;
   // Canonical exact rational cents per running hour (num/den).
   string exact_hourly_price_cents = 7;
   // Overage price per wall-clock hour at this size, in cents, as an exact
-  // decimal string: multiplier × the small hourly price.
+  // decimal string: cost_weight × the small hourly price.
   string hourly_price_cents = 3;
   // The disk a new machine of this size is provisioned with, in GiB: ONE disk,
   // used for anything. A plan of this size includes this much storage.
@@ -560,7 +562,9 @@ message Plan {
   string name = 3;
   PlanTier tier = 4;
   string stripe_price_id = 5;
-  string limits = 6 [deprecated = true]; // Deprecated: use structured_limits instead
+  // 6 was the free-form limits string; structured_limits replaces it.
+  reserved 6;
+  reserved "limits";
   google.protobuf.Timestamp created_at = 7;
   PlanLimits structured_limits = 8;
   // 9 previously reserved for stripe_slot_price_id (removed with compute slots)

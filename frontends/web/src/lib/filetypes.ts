@@ -5,7 +5,8 @@
  * Must be kept in sync with internal/attachment/filetypes.go
  */
 
-export type AttachmentType = 'image' | 'video' | 'document' | 'file_reference' | 'unsupported';
+// 'display' is an image a tool showed the user (present_image), never sent to a model.
+export type AttachmentType = 'image' | 'video' | 'document' | 'file_reference' | 'display' | 'unsupported';
 
 // Image extensions supported by Claude API (base64 image blocks)
 export const IMAGE_EXTENSIONS = new Set([

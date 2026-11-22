@@ -14,18 +14,24 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
 )
 
+// Recoveries is the recovery journal the recovery rpcs read and advance.
+// store.WorktreeRecoveryExtStore satisfies it. Every query takes the owner and
+// fails closed on a row that is not theirs.
+type Recoveries interface {
+	GetWorktreeRecovery(ctx context.Context, owner, id string) (*core.WorktreeRecovery, error)
+	ListWorktreeRecoveries(ctx context.Context, owner, project string) ([]*core.WorktreeRecovery, error)
+	BeginWorktreeRecoveryOperation(ctx context.Context, owner, id, operation, key, targetDaemonID string) error
+	CompleteWorktreeRecoveryCheckout(ctx context.Context, owner, id, repo, phase, detail string) error
+}
+
 // Repository is everything the worktree handlers read and write.
 type Repository interface {
-	GetWorktreeRecovery(context.Context, string, string) (*db.WorktreeRecovery, error)
-	ListWorktreeRecoveries(context.Context, string, string) ([]*db.WorktreeRecovery, error)
-	BeginWorktreeRecoveryOperation(context.Context, string, string, string, string, string) error
-	CompleteWorktreeRecoveryCheckout(context.Context, string, string, string, string, string) error
-	CancelWorktreeRecovery(context.Context, string, string, string) error
 	// Worktree rows: reads, idempotent creates, archive/unarchive, the
 	// cleanup metadata the sweep reads, and the permanent delete.
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)

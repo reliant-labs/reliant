@@ -7,7 +7,7 @@ import type { Project } from "@/hooks/project-queries";
 import { HomeBuildApp } from "../HomeBuildApp";
 
 // The new-chat screen's middle offers "Build an app" only to a project that is
-// not a forge project. A forge project's apps are the sidebar's (SidebarApps),
+// not a forge project. A forge project's apps are the nav's (its Apps section),
 // never a block in the middle of the screen.
 
 function setProject(overrides: Partial<Project>) {

@@ -152,6 +152,7 @@ func ParseAutoArchiveMode(v string) AutoArchiveMode {
 }
 
 // AutoArchiveStore is what archiving a finished or landed worktree needs.
+// store.WorktreeExtStore and store.ChatExtStore together satisfy it.
 type AutoArchiveStore interface {
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ArchiveWorktree(ctx context.Context, id string) error
@@ -182,6 +183,7 @@ type Sweeper struct {
 	marks    *reclaimMarks
 	shed     *liveShed
 	recovery *recoveryEngine
+	use      UseStore
 	// candidates and archived count this pass's finished active worktrees.
 	idleDone      atomic.Int64
 	blockedByChat atomic.Int64
@@ -242,13 +244,15 @@ type RunningChatStore interface {
 	ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error)
 }
 
+// IdleRetirementStore is what whole-worktree idle retirement reads and writes.
 type IdleRetirementStore interface {
+	RunningChatStore
 	ArchiveRecoverableIdleWorktree(context.Context, string, time.Time) (bool, error)
 }
 
 type liveShed struct {
 	after time.Duration
-	store RunningChatStore
+	store IdleRetirementStore
 }
 
 // WithIdleRetirement configures whole-worktree idle retirement (the configuration
@@ -256,7 +260,7 @@ type liveShed struct {
 // from a live checkout. Complete clean pushed/merged quiet workspaces may be
 // archived under the DB admission lock; dirty/unique/uncertain ones retain all
 // contents. Non-positive after disables it; auto-archive on is required.
-func (s *Sweeper) WithIdleRetirement(after time.Duration, store RunningChatStore) *Sweeper {
+func (s *Sweeper) WithIdleRetirement(after time.Duration, store IdleRetirementStore) *Sweeper {
 	if after <= 0 || store == nil {
 		s.shed = nil
 		return s
@@ -1201,10 +1205,18 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 }
 
 // UseStore records the use a daemon saw of a live worktree.
+// store.WorktreeExtStore satisfies it.
 type UseStore interface {
 	// NoteWorktreeUse raises the row's last_active to at (never past the
 	// database's now, never lower).
 	NoteWorktreeUse(ctx context.Context, id string, at time.Time) error
+}
+
+// WithUseStore makes the sweep record the use a daemon reports of a live
+// worktree. Without it the use is not recorded.
+func (s *Sweeper) WithUseStore(use UseStore) *Sweeper {
+	s.use = use
+	return s
 }
 
 // noteUse records the last use the daemon saw of a live worktree
@@ -1220,11 +1232,10 @@ func (s *Sweeper) noteUse(ctx context.Context, wt *core.Worktree, at *time.Time)
 		// The stamp of the tombstone's own writes (mark.go): not use.
 		return true
 	}
-	store, ok := s.store.(UseStore)
-	if !ok {
+	if s.use == nil {
 		return true
 	}
-	if err := store.NoteWorktreeUse(ctx, wt.ID, *at); err != nil {
+	if err := s.use.NoteWorktreeUse(ctx, wt.ID, *at); err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree use", "worktreeID", wt.ID, "error", err)
 		return false
 	}
@@ -1336,14 +1347,10 @@ func (s *Sweeper) archiveRecoverableIdle(ctx context.Context, userID string, wt 
 	if s.shed == nil || wt.IsMain || wt.DeletedAt != nil || s.keep != nil && s.keep.KeepFiles(ctx, userID) {
 		return
 	}
-	store, ok := s.shed.store.(IdleRetirementStore)
-	if !ok {
-		return
-	}
 	if s.auto == nil || s.auto.mode != AutoArchiveOn {
 		return
 	}
-	archived, err := store.ArchiveRecoverableIdleWorktree(ctx, wt.ID, s.now().Add(-s.recoverableAfter(wt)))
+	archived, err := s.shed.store.ArchiveRecoverableIdleWorktree(ctx, wt.ID, s.now().Add(-s.recoverableAfter(wt)))
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] could not retire idle recoverable worktree", "worktreeID", wt.ID, "error", err)
 		return

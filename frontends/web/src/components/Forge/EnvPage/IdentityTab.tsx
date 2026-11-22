@@ -72,19 +72,19 @@ export interface IdentityTabProps {
   lifecycle: EnvLifecycle;
   live: LiveEnv | null;
   liveLoading: boolean;
-  /** Names an environment of this project by its control-plane id (owners and sharers arrive as ids). */
-  envNameById: (id: string) => string | undefined;
   /**
    * "tab" (default): the environment page's Identity tab, one column, with a
    * link to the project's Users page. "page": the Users page itself
    * (Users/UsersPage.tsx) — the people first, the sign-in service beside them.
+   * "users" / "service": the Auth page's two tabs (Users/AuthPage.tsx, U6d) —
+   * the people alone, or the sign-in service (issuer, applications, export) alone.
    */
   layout?: IdentityLayout;
 }
 
-export type IdentityLayout = "tab" | "page";
+export type IdentityLayout = "tab" | "page" | "users" | "service";
 
-export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById, layout = "tab" }: IdentityTabProps) {
+export function IdentityTab({ envName, lifecycle, live, liveLoading, layout = "tab" }: IdentityTabProps) {
   if (lifecycle === "local") return <LocalIdentity envName={envName} />;
   if (liveLoading && !live) return <IdentitySkeleton />;
   if (!live) {
@@ -95,18 +95,16 @@ export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById
       </p>
     );
   }
-  return <DeployedIdentity envId={live.id} envName={envName} envNameById={envNameById} layout={layout} />;
+  return <DeployedIdentity envId={live.id} envName={envName} layout={layout} />;
 }
 
 function DeployedIdentity({
   envId,
   envName,
-  envNameById,
   layout,
 }: {
   envId: string;
   envName: string;
-  envNameById: (id: string) => string | undefined;
   layout: IdentityLayout;
 }) {
   const org = useIdentityOrg();
@@ -195,6 +193,23 @@ function DeployedIdentity({
     </p>
   );
 
+  if (layout === "users") {
+    return (
+      <div className="space-y-4" data-testid="identity-tab" data-layout="users">
+        {readOnlyNote}
+        <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
+      </div>
+    );
+  }
+  if (layout === "service") {
+    return (
+      <div className="space-y-4" data-testid="identity-tab" data-layout="service">
+        <StatusPanel envId={envId} status={s} />
+        <ExportPanel orgId={org.orgId} envId={envId} status={s} />
+      </div>
+    );
+  }
+
   if (layout === "page") {
     // The people are the page; the sign-in service that holds them sits beside
     // them on a wide screen and after them on a narrow one.
@@ -206,7 +221,7 @@ function DeployedIdentity({
             <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
           </div>
           <div className="min-w-0 space-y-4">
-            <StatusPanel envId={envId} status={s} envNameById={envNameById} narrow />
+            <StatusPanel envId={envId} status={s} narrow />
             <ExportPanel orgId={org.orgId} envId={envId} status={s} />
           </div>
         </div>
@@ -218,7 +233,7 @@ function DeployedIdentity({
     <div className="space-y-4" data-testid="identity-tab">
       <UsersPageLink envName={envName} />
       {readOnlyNote}
-      <StatusPanel envId={envId} status={s} envNameById={envNameById} />
+      <StatusPanel envId={envId} status={s} />
       <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
       <ExportPanel orgId={org.orgId} envId={envId} status={s} />
     </div>
@@ -373,21 +388,19 @@ const APP_COLUMNS: DataTableColumn<AppRow>[] = [
 function StatusPanel({
   envId,
   status: s,
-  envNameById,
   narrow = false,
 }: {
   envId: string;
   status: IdentityStatus;
-  envNameById: (id: string) => string | undefined;
   /** A side column: facts stacked, and the applications as a list rather than a table. */
   narrow?: boolean;
 }) {
   // The control plane names the owner and sharers (they can be in another
-  // project); an older server sends ids only, which this project may know.
+  // project); one that is no longer live keeps its id.
   const named = new Map(
     [s.ownerEnvironment, ...s.sharerEnvironments].filter((e): e is IdentityEnvironmentRef => !!e).map((e) => [e.id, e])
   );
-  const name = (id: string) => named.get(id)?.name || envNameById(id) || id;
+  const name = (id: string) => named.get(id)?.name || id;
   const describe = (id: string) => {
     const e = named.get(id);
     return e?.project ? `${e.project} / ${name(id)} (${id})` : id;

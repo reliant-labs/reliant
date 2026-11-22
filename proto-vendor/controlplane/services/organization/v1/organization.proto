@@ -24,7 +24,7 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/organiza
 service OrganizationService {
   // ListMyOrganizations lists every org the caller belongs to, with their role
   // in each, oldest org first, and which one is their default. An org switcher
-  // and `forge login`'s org choice are built on it.
+  // and `forge cloud login`'s org choice are built on it.
   rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -232,6 +232,45 @@ service OrganizationService {
         scope: "org_id"
         detail: ["role"]
         writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // --- The founder's free hosting organization (docs/design/free-hosting-expansion.md)
+  //
+  // Each accountable founder (the org's founder, organizations.owner_id)
+  // holds free static hosting for ONE org they founded: only that org's sites
+  // are served free. Usage and billing stay per org.
+
+  // MoveFreeHostingDesignation makes org_id the caller's free hosting org.
+  // Human callers only (reason "human_only"), and only the FOUNDER of org_id:
+  // a non-member is PermissionDenied "not_org_member" (an org that does not
+  // exist included, so org_id cannot probe which orgs exist), any other member
+  // PermissionDenied "free_hosting_founder_only". An org deleted while the
+  // request waited is NotFound. An org with active hosting billing cannot take
+  // it (FailedPrecondition, "free_hosting_target_billed").
+  //
+  // A founder may move it at most once per 30 days (FailedPrecondition,
+  // "free_hosting_move_cooldown", whose message carries the date it may move
+  // again), except away from an org with active hosting billing, which has no
+  // cooldown. dry_run previews the move and changes nothing: it never fails
+  // for the cooldown, reporting cooldown_applies instead. Moving to the org
+  // that already holds it is a no-op (moved false, no cooldown started).
+  //
+  // The response names the deployed sites that lose free hosting in the old
+  // org and the deployed sites that would be served free in the target. There
+  // is no site-count limit. Serving follows within minutes of a real move.
+  rpc MoveFreeHostingDesignation(MoveFreeHostingDesignationRequest) returns (MoveFreeHostingDesignationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "move_free_hosting"
+        target: {
+          kind: "org"
+          id: "response.to_org_id"
+        }
+        scope: "org_id"
+        detail: ["response.from_org_id"]
       }
     };
   }
@@ -590,4 +629,47 @@ message SetDefaultOrganizationRequest {
 
 message SetDefaultOrganizationResponse {
   string default_org_id = 1;
+}
+
+message MoveFreeHostingDesignationRequest {
+  // The org to make the caller's free hosting org; the caller must be its
+  // founder.
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Preview the move and change nothing.
+  bool dry_run = 2;
+}
+
+message MoveFreeHostingDesignationResponse {
+  // The org that held the caller's designation before; "" when none did.
+  string from_org_id = 1;
+  string to_org_id = 2;
+  // Deployed, enabled static sites that lose free hosting in from_org_id.
+  // Empty for a no-op or when from_org_id has active hosting billing.
+  repeated FreeHostingMoveSite stopping_sites = 3;
+  // All deployed, enabled static sites in to_org_id that would be served free.
+  repeated FreeHostingMoveSite served_sites = 4;
+  // Kept for compatibility. Always empty: there is no site-count limit.
+  repeated FreeHostingMoveSite unserved_sites = 5;
+  // True when the 30-day cooldown refuses the move. Only a dry run answers
+  // with it; a real move inside the cooldown is FailedPrecondition.
+  bool cooldown_applies = 6;
+  // When the caller may move it next: after this move when moved, else the
+  // end of the cooldown running now (which does not bind a move away from an
+  // org with active hosting billing; cooldown_applies says whether it binds
+  // this one). Unset when no cooldown runs.
+  google.protobuf.Timestamp next_move_allowed_at = 7;
+  // True when the designation moved (never for a dry run or a no-op).
+  bool moved = 8;
+}
+
+// FreeHostingMoveSite is one static site under the free hosting allowance.
+message FreeHostingMoveSite {
+  string deployment_id = 1;
+  string org_id = 2;
+  string project = 3;
+  string env = 4;
+  // The deployment's name.
+  string name = 5;
+  // The platform URL, with its scheme; "" until one is allocated.
+  string url = 6;
 }

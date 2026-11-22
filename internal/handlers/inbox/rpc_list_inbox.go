@@ -243,7 +243,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	// A missing source row or disconnected/deleted daemon cannot hide them.
 	g.Go(func() error {
 		return lim.do(gctx, func() error {
-			rows, err := s.deps.Repo.ListWorktreeRecoveries(gctx, userID, "")
+			rows, err := s.deps.Recoveries.ListWorktreeRecoveries(gctx, userID, "")
 			if err != nil {
 				return err
 			}

@@ -297,8 +297,13 @@ describe("what a release changed in one workload", () => {
   });
 
   it("says nothing changed, and passes on why objects could not be compared", () => {
-    expect(workloadChange(row, comparison({ deltas: [delta({ name: "web", workload: "web" })], workload: "api", unchanged: 3 }), "api")).toEqual({ kind: "unchanged", unchanged: 3 });
+    expect(workloadChange(row, comparison({ deltas: [], workload: "api", unchanged: 3 }), "api")).toEqual({ kind: "unchanged", unchanged: 3 });
     expect(workloadChange(row, comparison({ state: "bundle-missing", detail: "no bundle for v2" }), "api")).toEqual({ kind: "not-compared", detail: "no bundle for v2" });
+  });
+
+  it("does not attribute a foreign or inconsistent comparison count to this workload", () => {
+    expect(workloadChange(row, comparison({ deltas: [], workload: "web", unchanged: 3 }), "api")).toMatchObject({ kind: "not-compared" });
+    expect(workloadChange(row, comparison({ deltas: [delta({ name: "web", workload: "web" })], workload: "api", unchanged: 3 }), "api")).toEqual({ kind: "unchanged", unchanged: 0 });
   });
 
   it("takes the digest from the frozen artifact named like the workload, and never guesses another", () => {

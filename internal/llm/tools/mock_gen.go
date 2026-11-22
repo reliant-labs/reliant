@@ -1091,6 +1091,42 @@ func (m *MocksaveAttachmentStore) GetChat(ctx context.Context, id string) (*db.C
 // Compile-time check.
 var _ saveAttachmentStore = (*MocksaveAttachmentStore)(nil)
 
+// forge:section MockpresentImageStore
+// forge:hash=026fb5a9844fcc8d3cd55d8b532a67aec4710aaad7d70c461b9d8f15ed072a15
+
+// MockpresentImageStore is a test mock for the presentImageStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockpresentImageStore.<Method>Func not set" error.
+type MockpresentImageStore struct {
+	contractkit.Recorder
+	CreateAttachmentFunc func(context.Context, *db.Attachment) error
+	GetChatFunc          func(context.Context, string) (*db.Chat, error)
+}
+
+// CreateAttachment records the call and delegates to CreateAttachmentFunc when set.
+func (m *MockpresentImageStore) CreateAttachment(ctx context.Context, attachment *db.Attachment) error {
+	m.Recorder.Record("CreateAttachment", ctx, attachment)
+	if m.CreateAttachmentFunc != nil {
+		return m.CreateAttachmentFunc(ctx, attachment)
+	}
+	return contractkit.MockNotSet("MockpresentImageStore", "CreateAttachment")
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockpresentImageStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockpresentImageStore", "GetChat")
+}
+
+// Compile-time check.
+var _ presentImageStore = (*MockpresentImageStore)(nil)
+
 // forge:section MockgenerateImageStore
 // forge:hash=d742ad49b237530f069ee21e2c249cfa67ed7ebe87a4cf7be6f4c3b661855bea
 

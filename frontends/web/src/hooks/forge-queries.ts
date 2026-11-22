@@ -1284,8 +1284,8 @@ export function useForgeDeployStatus(
  * is fetched.
  *
  * A FAILURE HERE IS USUALLY NOT AN ERROR. control-plane answers Unavailable
- * when no OpenBao is bound, and Unimplemented when the control plane predates
- * the service; both mean "this deployment has no managed store", which is a
+ * when no OpenBao is bound, and Unimplemented when it does not serve the
+ * store; both mean "this deployment has no managed store", which is a
  * state the screen describes rather than a fault it reports. So the hook
  * resolves those into an `availability` the caller can render, and only a
  * genuine transport failure surfaces as `unreachable`.

@@ -94,15 +94,16 @@ func (ClaimableState) EnumDescriptor() ([]byte, []int) {
 	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{0}
 }
 
-// Which site keeps the claimer's one free static slot.
+// Which organization keeps free static hosting.
 type FreeSiteChoice int32
 
 const (
 	FreeSiteChoice_FREE_SITE_CHOICE_UNSPECIFIED FreeSiteChoice = 0
-	// The claimed site is live; the caller's existing free site is paused.
+	// Move the designation to the claimed org. All free sites in the previously
+	// designated org can stop.
 	FreeSiteChoice_FREE_SITE_CHOICE_CLAIMED FreeSiteChoice = 1
-	// The caller's existing free site stays live; the claimed site is claimed but
-	// paused.
+	// Keep the current designation. The claim completes, but the claimed org's
+	// free sites can stop.
 	FreeSiteChoice_FREE_SITE_CHOICE_EXISTING FreeSiteChoice = 2
 )
 
@@ -147,17 +148,18 @@ func (FreeSiteChoice) EnumDescriptor() ([]byte, []int) {
 	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{1}
 }
 
-// What a membership claim did about the free slot.
+// What a membership claim did about the free hosting designation.
 type FreeSiteOutcome int32
 
 const (
 	FreeSiteOutcome_FREE_SITE_OUTCOME_UNSPECIFIED FreeSiteOutcome = 0
-	// Nothing was paused: the caller had no other free site, or the situation
-	// changed since they chose (the other site was deleted, or they subscribed).
+	// No choice was needed at completion.
 	FreeSiteOutcome_FREE_SITE_OUTCOME_NO_CONFLICT FreeSiteOutcome = 1
-	// The claimed site is live; paused_site is the caller's other site.
+	// The claimed org holds the designation; paused_site represents the
+	// previously designated org.
 	FreeSiteOutcome_FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE FreeSiteOutcome = 2
-	// The caller's other site is live; paused_site is the claimed site.
+	// The current org keeps the designation; paused_site represents the
+	// claimed org.
 	FreeSiteOutcome_FREE_SITE_OUTCOME_EXISTING_SITE_LIVE FreeSiteOutcome = 3
 )
 
@@ -1205,7 +1207,7 @@ func (x *OpenClaimSessionResponse) GetExpiresIn() int64 {
 	return 0
 }
 
-// One static site, named for a person deciding which to keep.
+// A representative static site identifying an organization in the claim choice.
 type FreeSite struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentId string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
@@ -1296,9 +1298,9 @@ func (x *FreeSite) GetUrl() string {
 // FailedPrecondition/claimable_free_site_choice_required refusal.
 type FreeSiteChoiceRequired struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The caller's site that holds their free slot now.
+	// The oldest eligible site in the caller's designated org.
 	ExistingSite *FreeSite `protobuf:"bytes,1,opt,name=existing_site,json=existingSite,proto3" json:"existing_site,omitempty"`
-	// The site the claim would add.
+	// The oldest eligible site in the claimed org.
 	ClaimedSite   *FreeSite `protobuf:"bytes,2,opt,name=claimed_site,json=claimedSite,proto3" json:"claimed_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1351,8 +1353,8 @@ func (x *FreeSiteChoiceRequired) GetClaimedSite() *FreeSite {
 type CompleteClaimRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	ClaimToken string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
-	// Which site keeps the free slot when the caller already has a free site.
-	// Ignored (and may be unset) when they do not.
+	// Which organization keeps free hosting if a choice is required. Ignored
+	// when there is no conflict.
 	FreeSite      FreeSiteChoice `protobuf:"varint,2,opt,name=free_site,json=freeSite,proto3,enum=controlplane.v1.FreeSiteChoice" json:"free_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1450,7 +1452,7 @@ type GetClaimFreeSiteResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// True when claiming now needs a free_site choice.
 	ChoiceRequired bool `protobuf:"varint,1,opt,name=choice_required,json=choiceRequired,proto3" json:"choice_required,omitempty"`
-	// Set when choice_required.
+	// Set when choice_required; each names the oldest eligible site in its org.
 	ExistingSite  *FreeSite `protobuf:"bytes,2,opt,name=existing_site,json=existingSite,proto3" json:"existing_site,omitempty"`
 	ClaimedSite   *FreeSite `protobuf:"bytes,3,opt,name=claimed_site,json=claimedSite,proto3" json:"claimed_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1519,13 +1521,12 @@ type CompleteClaimResponse struct {
 	// Open holds on the claimed org's deploys, if any: the claimed org is
 	// ordinary, so billing rules apply from here on.
 	Holds []*v1.DeployHold `protobuf:"bytes,4,rep,name=holds,proto3" json:"holds,omitempty"`
-	// Path "membership" only: what the claim did about the caller's one free
-	// static slot. This is what happened, which can differ from what was asked
-	// when the situation changed between the choice and the claim.
+	// Path "membership" only: what happened to the free hosting designation.
+	// May differ from the choice if the situation changed before completion.
 	FreeSiteOutcome FreeSiteOutcome `protobuf:"varint,5,opt,name=free_site_outcome,json=freeSiteOutcome,proto3,enum=controlplane.v1.FreeSiteOutcome" json:"free_site_outcome,omitempty"`
-	// The site that is paused because of it (the other one holds the slot). Unset
-	// unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
-	// it runs again when the person subscribes or deletes the other site.
+	// Represents the org that did not get the designation, not the full list of
+	// affected sites. All of that org's free sites can stop. Unset unless the
+	// outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE.
 	PausedSite    *FreeSite `protobuf:"bytes,6,opt,name=paused_site,json=pausedSite,proto3" json:"paused_site,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

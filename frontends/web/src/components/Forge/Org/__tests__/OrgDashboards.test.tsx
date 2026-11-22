@@ -42,10 +42,10 @@ const summary = (kind: DashboardKind, projectId: string, key: string, title: str
 });
 
 const INDEX: DashboardSummary[] = [
-  summary("release", "shop", "shop-overview", "shop: overview"),
-  summary("workspace", "shop", "checkout", "Checkout latency"),
-  summary("release", "api", "api-overview", "api: overview"),
-  summary("workspace", "", "legacy", "Legacy board"),
+  summary("release", "shop", "shop-overview", "shop: overview", { group: "overview" }),
+  summary("workspace", "shop", "checkout", "Checkout latency", { group: "custom" }),
+  summary("release", "api", "api-overview", "api: overview", { group: "overview" }),
+  summary("workspace", "", "legacy", "Legacy board", { group: "custom" }),
 ];
 
 const hrefs = { dashboard: orgDashboardHref };
@@ -102,7 +102,7 @@ describe("DashboardsList, org mode", () => {
 
   it("lists every app's dashboards, grouped, with the app named, each linking into its app, and no Overview", async () => {
     renderOrgList();
-    // Generated overviews are Overview; saved ones are Custom (no group from this server).
+    // Generated overviews are Overview; saved ones are Custom.
     const overview = await screen.findByTestId("dashboards-group-overview");
     const custom = screen.getByTestId("dashboards-group-custom");
     expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();

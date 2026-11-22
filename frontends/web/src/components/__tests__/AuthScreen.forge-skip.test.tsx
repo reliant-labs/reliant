@@ -1,6 +1,6 @@
 /**
  * "Skip for now" on /auth. It signs in as a guest and then navigates. On the
- * forge host the guest goes straight to /apps (whose empty state, ForgeFirstRun,
+ * forge host the guest goes straight to their apps (/projects?show=apps) (whose empty state, ForgeFirstRun,
  * is the no-account deploy): there is no onboarding to start there, and `/` was
  * a second hop that, racing the sign-in screen's own bounce, ended on a blank
  * page. On Reliant it still goes to `/`, where onboarding starts.
@@ -40,12 +40,12 @@ beforeEach(() => {
 })
 
 describe('AuthScreen — Skip for now', () => {
-  it('on the forge host, lands the guest on /apps', async () => {
+  it('on the forge host, lands the guest on their apps (Projects)', async () => {
     isForgeShell.mockReturnValue(true)
     render(<AuthScreen />)
     fireEvent.click(screen.getByRole('button', { name: /skip for now/i }))
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/apps', search: {} }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps' } }))
     expect(signInAnonymously).toHaveBeenCalledTimes(1)
   })
 

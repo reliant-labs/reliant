@@ -40,7 +40,7 @@ Tools are organized by tags for filtering:
 ## Categories
 
 - [Planning & Task Management](#planning--task-management) (10 tools)
-- [File Operations](#file-operations) (8 tools)
+- [File Operations](#file-operations) (9 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
@@ -410,6 +410,7 @@ _Tools for reading, writing, and modifying files._
 | [`edit`](#edit) | file, coding:default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
 | [`find_replace`](#find_replace) | file | Performs find and replace operations across multiple files matching a glob pattern. |
 | [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
+| [`present_image`](#present_image) | file, readonly, coding:plan, coding:default | Show an image file from the machine to the user, in the chat. |
 | [`prove_test`](#prove_test) | execution, file | Prove a regression test actually tests your fix: one call runs the test with the |
 | [`read_attachment`](#read_attachment) | file, readonly, coding:plan, coding:default | Read the contents of a file the user attached to the conversation. |
 | [`save_attachment`](#save_attachment) | file, coding:default | Write an already-stored attachment to a file on disk. |
@@ -662,6 +663,39 @@ BEST PRACTICES:
 
 ---
 
+### present_image
+
+**Tags:** `file`, `readonly`, `coding:plan`, `coding:default`
+
+Show an image file from the machine to the user, in the chat.
+
+WHEN TO USE:
+- You made or found an image the USER should look at: a screenshot you took,
+  a chart or diagram you rendered, a generated asset, a visual diff.
+- The user may be on another device than the machine (a cloud machine, a
+  remote box), so a path like /tmp/shot.png is something they cannot open.
+  This puts the picture itself in the conversation, at a size they can read,
+  with click-to-enlarge.
+
+THIS IS NOT view:
+- view hands an image to YOU, so you can look at it. This hands it to the
+  USER. Presenting does not show you the image; if you need to see it too,
+  view the same file.
+
+HOW TO USE:
+- Pass one or more paths; relative paths resolve against the working
+  directory, and repo picks the base in a multi-repo project.
+- Add a caption when the image needs one line of context ("Login page after
+  the fix", "p95 latency, last 24h").
+
+NOTES:
+- PNG, JPEG, GIF and WebP, up to 20MB each and 10 per call. Render SVG to PNG
+  first (e.g. `rsvg-convert -o out.png in.svg`).
+- Each image is stored as an attachment owned by the user; the result reports
+  its attachment id, which save_attachment can write elsewhere later.
+
+---
+
 ### prove_test
 
 **Tags:** `execution`, `file`
@@ -690,6 +724,11 @@ PARAMETERS THAT MATTER:
   stay in place for both runs.
 - command: as narrow as possible — one package, one test
   ('go test -run TestX ./pkg/foo', 'npx vitest run src/x.test.ts'). It runs twice.
+- Working in another git worktree of a project repo (one made with the worktree
+  tool or 'git worktree add', e.g. under ~/.reliant/worktrees)? Give files as
+  ABSOLUTE paths in that worktree: the files are reverted there and the command
+  runs there. Relative paths resolve against the repo's own checkout, and repo
+  takes a repo name, never a path.
 
 VERDICTS:
 - proven: fails without the fix, passes with it.
@@ -794,6 +833,7 @@ LIMITATIONS:
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
 - Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
+- Viewing an image shows it to YOU, not the user; to show the user an image, use present_image
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
@@ -2255,6 +2295,14 @@ Make each question stand on its own. Include enough context for users, as someti
 - In each option's description, say what choosing it means in practice and its main trade-off; do not restate the label.
 - Say what you will do by default if nobody answers.
 - Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
+
+Write every question and option as you, the agent, speaking directly to the user, so that "I" and "you" each mean exactly one party:
+- "I", "me", "my" are you, the agent asking. "You", "your" are the person reading and answering.
+- Never call the reader "the user" or "they", and never call yourself "the agent" or "we": they read the question as if you were talking to them.
+- Name anyone else explicitly: "the sub-agent fixing the build", "the PR author", "the reviewer bot", "the owner", not "it", "they" or "you".
+- In option labels and descriptions, say who acts whenever it is not obvious: "I delete the branch" or "You review the diff first", not a bare "Delete the branch".
+- Good: "I found two migrations that conflict. Should I keep yours and drop mine? If you don't answer, I'll keep yours."
+- Bad: "Should the user's migration be kept? The agent will default to keeping it." (Whose migration? Who is "the user"?)
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.

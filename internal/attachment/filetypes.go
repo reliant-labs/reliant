@@ -27,6 +27,13 @@ const (
 	// TypeVideo - generated video clips. Never sent to a model; served to the
 	// UI with Range support.
 	TypeVideo AttachmentType = "video"
+	// TypeDisplay - an image a tool showed the USER (present_image): rendered
+	// in the chat timeline like any tool image, never replayed to a model.
+	// A type of its own rather than TypeImage plus a flag because the type is
+	// what every replay path already reads, and an image meant for a person
+	// is not bound by what a model accepts (size, pixels) or worth paying
+	// for in tokens on every later turn.
+	TypeDisplay AttachmentType = "display"
 	// TypeUnsupported - files that cannot be attached
 	TypeUnsupported AttachmentType = "unsupported"
 )
@@ -351,4 +358,9 @@ func SupportedExtensions() string {
 // IsVideo checks if the attachment type is a video
 func (t AttachmentType) IsVideo() bool {
 	return t == TypeVideo
+}
+
+// IsDisplay checks if the attachment is media shown to the user only.
+func (t AttachmentType) IsDisplay() bool {
+	return t == TypeDisplay
 }

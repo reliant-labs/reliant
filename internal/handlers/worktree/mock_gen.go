@@ -16,8 +16,64 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// forge:section MockRecoveries
+// forge:hash=2ac58e0175968babb3ccae09d4ad542d496bf36b57ed4e8874b1095bd5f8e096
+
+// MockRecoveries is a test mock for the Recoveries interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRecoveries.<Method>Func not set" error.
+type MockRecoveries struct {
+	contractkit.Recorder
+	GetWorktreeRecoveryFunc              func(context.Context, string, string) (*core.WorktreeRecovery, error)
+	ListWorktreeRecoveriesFunc           func(context.Context, string, string) ([]*core.WorktreeRecovery, error)
+	BeginWorktreeRecoveryOperationFunc   func(context.Context, string, string, string, string, string) error
+	CompleteWorktreeRecoveryCheckoutFunc func(context.Context, string, string, string, string, string) error
+}
+
+// GetWorktreeRecovery records the call and delegates to GetWorktreeRecoveryFunc when set.
+func (m *MockRecoveries) GetWorktreeRecovery(ctx context.Context, owner string, id string) (*core.WorktreeRecovery, error) {
+	m.Recorder.Record("GetWorktreeRecovery", ctx, owner, id)
+	if m.GetWorktreeRecoveryFunc != nil {
+		return m.GetWorktreeRecoveryFunc(ctx, owner, id)
+	}
+	return nil, contractkit.MockNotSet("MockRecoveries", "GetWorktreeRecovery")
+}
+
+// ListWorktreeRecoveries records the call and delegates to ListWorktreeRecoveriesFunc when set.
+func (m *MockRecoveries) ListWorktreeRecoveries(ctx context.Context, owner string, project string) ([]*core.WorktreeRecovery, error) {
+	m.Recorder.Record("ListWorktreeRecoveries", ctx, owner, project)
+	if m.ListWorktreeRecoveriesFunc != nil {
+		return m.ListWorktreeRecoveriesFunc(ctx, owner, project)
+	}
+	return nil, contractkit.MockNotSet("MockRecoveries", "ListWorktreeRecoveries")
+}
+
+// BeginWorktreeRecoveryOperation records the call and delegates to BeginWorktreeRecoveryOperationFunc when set.
+func (m *MockRecoveries) BeginWorktreeRecoveryOperation(ctx context.Context, owner string, id string, operation string, key string, targetDaemonID string) error {
+	m.Recorder.Record("BeginWorktreeRecoveryOperation", ctx, owner, id, operation, key, targetDaemonID)
+	if m.BeginWorktreeRecoveryOperationFunc != nil {
+		return m.BeginWorktreeRecoveryOperationFunc(ctx, owner, id, operation, key, targetDaemonID)
+	}
+	return contractkit.MockNotSet("MockRecoveries", "BeginWorktreeRecoveryOperation")
+}
+
+// CompleteWorktreeRecoveryCheckout records the call and delegates to CompleteWorktreeRecoveryCheckoutFunc when set.
+func (m *MockRecoveries) CompleteWorktreeRecoveryCheckout(ctx context.Context, owner string, id string, repo string, phase string, detail string) error {
+	m.Recorder.Record("CompleteWorktreeRecoveryCheckout", ctx, owner, id, repo, phase, detail)
+	if m.CompleteWorktreeRecoveryCheckoutFunc != nil {
+		return m.CompleteWorktreeRecoveryCheckoutFunc(ctx, owner, id, repo, phase, detail)
+	}
+	return contractkit.MockNotSet("MockRecoveries", "CompleteWorktreeRecoveryCheckout")
+}
+
+// Compile-time check.
+var _ Recoveries = (*MockRecoveries)(nil)
+
 // forge:section MockRepository
-// forge:hash=c75a88ea6acac121282ec3582685ee318696e7efc15fe18369a31bafb1fd800a
+// forge:hash=020fe496ee326a32e5715c9089eb6aead14fc71f5e96816b047877d44001c1ab
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -27,82 +83,32 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetWorktreeRecoveryFunc              func(context.Context, string, string) (*db.WorktreeRecovery, error)
-	ListWorktreeRecoveriesFunc           func(context.Context, string, string) ([]*db.WorktreeRecovery, error)
-	BeginWorktreeRecoveryOperationFunc   func(context.Context, string, string, string, string, string) error
-	CompleteWorktreeRecoveryCheckoutFunc func(context.Context, string, string, string, string, string) error
-	CancelWorktreeRecoveryFunc           func(context.Context, string, string, string) error
-	ListWorktreesFunc                    func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktreeByIdempotencyKeyFunc      func(context.Context, string, string) (*db.Worktree, error)
-	UnarchiveWorktreeFunc                func(context.Context, string) error
-	UpdateWorktreeCleanupMetadataFunc    func(context.Context, string, *db.CleanupMetadata) error
-	MergeWorktreeCleanupMetadataFunc     func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
-	DeleteWorktreeFunc                   func(context.Context, string) error
-	GetProjectFunc                       func(context.Context, string) (*db.Project, error)
-	GetProjectWithUserCheckFunc          func(context.Context, string, string) (*db.Project, error)
-	ListProjectDaemonsForProjectFunc     func(context.Context, string) ([]*db.ProjectDaemon, error)
-	GetChatFunc                          func(context.Context, string) (*db.Chat, error)
-	ListChatsFunc                        func(context.Context, db.ChatFilters) ([]*db.Chat, error)
-	UpdateChatStateFunc                  func(context.Context, string, db.ChatState, string) error
-	LockChatRunControlFunc               func(context.Context, string) (func(), error)
-	EmitUserRefetchFunc                  func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	CreateWorktreeFunc                   func(context.Context, *db.Worktree) error
-	UpdateWorktreeFunc                   func(context.Context, *db.Worktree) error
-	ArchiveWorktreeFunc                  func(context.Context, string) error
-	GetLiveWorktreeByNameFunc            func(context.Context, string, string) (*db.Worktree, error)
-	ListWorktreesByBranchFunc            func(context.Context, string, string) ([]*db.Worktree, error)
-	SettleCheckoutTeardownFunc           func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
-	GetRepoByProjectAndPathFunc          func(context.Context, string, string) (*core.Repo, error)
-	CreateRepoFunc                       func(context.Context, *core.Repo) error
-	ListReposByProjectFunc               func(context.Context, string) ([]*core.Repo, error)
-	UpdateProjectFunc                    func(context.Context, *db.Project, string) error
-	GetDaemonFunc                        func(context.Context, string) (*db.Daemon, error)
-	GetWorktreeFunc                      func(context.Context, string) (*db.Worktree, error)
-}
-
-// GetWorktreeRecovery records the call and delegates to GetWorktreeRecoveryFunc when set.
-func (m *MockRepository) GetWorktreeRecovery(p0 context.Context, p1 string, p2 string) (*db.WorktreeRecovery, error) {
-	m.Recorder.Record("GetWorktreeRecovery", p0, p1, p2)
-	if m.GetWorktreeRecoveryFunc != nil {
-		return m.GetWorktreeRecoveryFunc(p0, p1, p2)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorktreeRecovery")
-}
-
-// ListWorktreeRecoveries records the call and delegates to ListWorktreeRecoveriesFunc when set.
-func (m *MockRepository) ListWorktreeRecoveries(p0 context.Context, p1 string, p2 string) ([]*db.WorktreeRecovery, error) {
-	m.Recorder.Record("ListWorktreeRecoveries", p0, p1, p2)
-	if m.ListWorktreeRecoveriesFunc != nil {
-		return m.ListWorktreeRecoveriesFunc(p0, p1, p2)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListWorktreeRecoveries")
-}
-
-// BeginWorktreeRecoveryOperation records the call and delegates to BeginWorktreeRecoveryOperationFunc when set.
-func (m *MockRepository) BeginWorktreeRecoveryOperation(p0 context.Context, p1 string, p2 string, p3 string, p4 string, p5 string) error {
-	m.Recorder.Record("BeginWorktreeRecoveryOperation", p0, p1, p2, p3, p4, p5)
-	if m.BeginWorktreeRecoveryOperationFunc != nil {
-		return m.BeginWorktreeRecoveryOperationFunc(p0, p1, p2, p3, p4, p5)
-	}
-	return contractkit.MockNotSet("MockRepository", "BeginWorktreeRecoveryOperation")
-}
-
-// CompleteWorktreeRecoveryCheckout records the call and delegates to CompleteWorktreeRecoveryCheckoutFunc when set.
-func (m *MockRepository) CompleteWorktreeRecoveryCheckout(p0 context.Context, p1 string, p2 string, p3 string, p4 string, p5 string) error {
-	m.Recorder.Record("CompleteWorktreeRecoveryCheckout", p0, p1, p2, p3, p4, p5)
-	if m.CompleteWorktreeRecoveryCheckoutFunc != nil {
-		return m.CompleteWorktreeRecoveryCheckoutFunc(p0, p1, p2, p3, p4, p5)
-	}
-	return contractkit.MockNotSet("MockRepository", "CompleteWorktreeRecoveryCheckout")
-}
-
-// CancelWorktreeRecovery records the call and delegates to CancelWorktreeRecoveryFunc when set.
-func (m *MockRepository) CancelWorktreeRecovery(p0 context.Context, p1 string, p2 string, p3 string) error {
-	m.Recorder.Record("CancelWorktreeRecovery", p0, p1, p2, p3)
-	if m.CancelWorktreeRecoveryFunc != nil {
-		return m.CancelWorktreeRecoveryFunc(p0, p1, p2, p3)
-	}
-	return contractkit.MockNotSet("MockRepository", "CancelWorktreeRecovery")
+	ListWorktreesFunc                 func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	GetWorktreeByIdempotencyKeyFunc   func(context.Context, string, string) (*db.Worktree, error)
+	UnarchiveWorktreeFunc             func(context.Context, string) error
+	UpdateWorktreeCleanupMetadataFunc func(context.Context, string, *db.CleanupMetadata) error
+	MergeWorktreeCleanupMetadataFunc  func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
+	DeleteWorktreeFunc                func(context.Context, string) error
+	GetProjectFunc                    func(context.Context, string) (*db.Project, error)
+	GetProjectWithUserCheckFunc       func(context.Context, string, string) (*db.Project, error)
+	ListProjectDaemonsForProjectFunc  func(context.Context, string) ([]*db.ProjectDaemon, error)
+	GetChatFunc                       func(context.Context, string) (*db.Chat, error)
+	ListChatsFunc                     func(context.Context, db.ChatFilters) ([]*db.Chat, error)
+	UpdateChatStateFunc               func(context.Context, string, db.ChatState, string) error
+	LockChatRunControlFunc            func(context.Context, string) (func(), error)
+	EmitUserRefetchFunc               func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	CreateWorktreeFunc                func(context.Context, *db.Worktree) error
+	UpdateWorktreeFunc                func(context.Context, *db.Worktree) error
+	ArchiveWorktreeFunc               func(context.Context, string) error
+	GetLiveWorktreeByNameFunc         func(context.Context, string, string) (*db.Worktree, error)
+	ListWorktreesByBranchFunc         func(context.Context, string, string) ([]*db.Worktree, error)
+	SettleCheckoutTeardownFunc        func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
+	GetRepoByProjectAndPathFunc       func(context.Context, string, string) (*core.Repo, error)
+	CreateRepoFunc                    func(context.Context, *core.Repo) error
+	ListReposByProjectFunc            func(context.Context, string) ([]*core.Repo, error)
+	UpdateProjectFunc                 func(context.Context, *db.Project, string) error
+	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
+	GetWorktreeFunc                   func(context.Context, string) (*db.Worktree, error)
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.

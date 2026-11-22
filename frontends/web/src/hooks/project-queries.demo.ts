@@ -22,3 +22,10 @@ export const createProjectFromRepo: typeof Real.createProjectFromRepo = async ()
 };
 
 export const getCachedProjects: typeof Real.getCachedProjects = () => [];
+
+// services/projects/catalog.ts maps a server's project rows with it; the demo
+// asks no server for any (hooks/project-catalog-queries.demo.ts), so a call
+// here is a demo importer reaching for Reliant data.
+export const projectFromProto: typeof Real.projectFromProto = () => {
+  throw new Error("Reliant projects are not part of the forge demo.");
+};

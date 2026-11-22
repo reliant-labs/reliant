@@ -4,8 +4,8 @@
  * The landing page's `?journey=` on the forge brand (landingJourney.ts,
  * ForgeLandingJourney): `forge` starts the forge journey — on the public demo
  * for a signed-out visitor, on arrival or after sign-in for an account — and
- * `workflows` never runs here but links to Reliant, at the runtime config's
- * origin. Driven through a real router and the real auth guard (AuthGuard, as
+ * `workflows` never runs here but points at the Workflows area, in this app
+ * (one shell). Driven through a real router and the real auth guard (AuthGuard, as
  * routes.tsx mounts it on both its signed-in layouts).
  */
 
@@ -42,6 +42,8 @@ vi.mock("@/hooks/useAuthMode", () => ({ useAuthMode: () => ({ authMode: "supabas
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
 vi.mock("@/components/Layout/LoadingSpinner", () => ({ LoadingSpinner: () => <div data-testid="spinner" /> }));
 
+// The app registers the workflows journey's content (routes.tsx does, on both hosts).
+import "@/components/Onboarding/journeys/catalog";
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from "@/components/Forge/Demo/demoRoute";
 import { JourneyTour } from "@/components/Onboarding/JourneyTour";
 import { resolveTour } from "@/components/Onboarding/journeys/registry";
@@ -51,7 +53,6 @@ import { holdLandingJourney, readLandingJourney } from "@/lib/landingAttribution
 import { useAuthStore } from "@/store/authStore";
 import { useTourStore } from "@/store/tourStore";
 import { resetShellForTests } from "@/lib/shell";
-import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 import { AuthGuard } from "../../AuthGuard";
 import { ForgeLandingJourney } from "../ForgeLandingJourney";
@@ -111,7 +112,11 @@ function renderShell(path: string, extra: ComponentType = () => null, { landing 
       createForgeDemoRoute(() => root),
       createForgeDemoRedirectRoute(() => root),
       app.addChildren([createRoute({ getParentRoute: () => app, path: "/", component: () => <Navigate to="/apps" replace /> })]),
-      guarded.addChildren([createRoute({ getParentRoute: () => guarded, path: "/apps", component: () => <div data-testid="apps-page" /> })]),
+      guarded.addChildren([
+        createRoute({ getParentRoute: () => guarded, path: "/apps", component: () => <div data-testid="apps-page" /> }),
+        createRoute({ getParentRoute: () => guarded, path: "/projects", component: () => <div data-testid="projects-page" /> }),
+        createRoute({ getParentRoute: () => guarded, path: "/workflows/library", component: () => <div data-testid="workflows-page" /> }),
+      ]),
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
@@ -169,8 +174,8 @@ describe("landingJourneyAction", () => {
 
   it.each<[Partial<LandingJourneyInputs>, string]>([
     [{ held: undefined }, "none"],
-    [{ held: "workflows" }, "offer-reliant"],
-    [{ held: "workflows", tourOpen: true }, "offer-reliant"],
+    [{ held: "workflows" }, "offer-workflows"],
+    [{ held: "workflows", tourOpen: true }, "offer-workflows"],
     [{}, "start-forge"],
     [{ auth: "sign-in" }, "start-forge"],
     [{ auth: "wait" }, "wait"],
@@ -272,13 +277,12 @@ describe("?journey=workflows on the forge brand", () => {
     expect(resolveTour(parseTourParam("wf-new"))).toBeNull();
   });
 
-  it("offers Reliant instead, at the runtime config's origin, and stays put", async () => {
-    setRuntimeConfig({ APP_URL: "https://app.staging.test/" });
+  it("points at the Workflows area instead, in this app, and stays put", async () => {
     useAuthStore.setState({ user: SIGNED_IN });
     arriveWith("?journey=workflows");
     const router = renderShell("/apps?journey=workflows");
     const offer = await screen.findByTestId("forge-workflows-offer");
-    expect(screen.getByRole("link", { name: "Open Reliant" })).toHaveAttribute("href", "https://app.staging.test/?journey=workflows");
+    expect(screen.getByRole("link", { name: "Open Workflows" })).toHaveAttribute("href", "/workflows/library");
     expect(router.state.location.pathname).toBe("/apps");
     expect(searchOf(router).tour).toBeUndefined();
 
@@ -287,27 +291,34 @@ describe("?journey=workflows on the forge brand", () => {
     expect(readLandingJourney()).toBeUndefined();
   });
 
-  it("links to app.reliantlabs.io when the runtime config names no Reliant origin", async () => {
+  it("opens the Workflows area in place, never another origin", async () => {
+    useAuthStore.setState({ user: SIGNED_IN });
     arriveWith("?journey=workflows");
-    renderShell("/forge/demo?journey=workflows");
-    await screen.findByTestId("forge-workflows-offer");
-    expect(screen.getByRole("link", { name: "Open Reliant" })).toHaveAttribute("href", "https://app.reliantlabs.io/?journey=workflows");
+    const router = renderShell("/apps?journey=workflows");
+    fireEvent.click(await screen.findByRole("link", { name: "Open Workflows" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library"));
+    expect(screen.queryByTestId("forge-workflows-offer")).not.toBeInTheDocument();
+    expect(readLandingJourney()).toBeUndefined();
+    expect(trackEvent).toHaveBeenCalledWith("tour_link_clicked", { journey: "workflows", target: "workflows" });
   });
 });
 
 describe("the forge journey's end card on the forge brand", () => {
-  it("offers the workflows journey as a link to Reliant, from the runtime config", async () => {
-    setRuntimeConfig({ APP_URL: "https://app.staging.test" });
+  it("offers the workflows journey as the Workflows area, opened in place", async () => {
+    // Signed in: the Workflows area is behind sign-in, as every app page is.
+    useAuthStore.setState({ user: SIGNED_IN });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
-    renderShell("/forge/demo?tour=forge:fg-done", JourneyTour);
-    fireEvent.click(await screen.findByRole("button", { name: "Try AI workflows in Reliant" }));
-    expect(open).toHaveBeenCalledWith("https://app.staging.test/?journey=workflows", "_blank", "noopener");
+    const router = renderShell("/forge/demo?tour=forge:fg-done", JourneyTour);
+    const tryWorkflows = await screen.findByRole("button", { name: "Try AI workflows" });
     // The forge shell's CLI is `forge`, in both of the end card's command lists.
     const lists = screen.getAllByTestId("tour-commands");
     expect(lists).toHaveLength(2);
     expect(lists[0]).toHaveTextContent("forge scaffold service inventory");
     expect(lists[1]).toHaveTextContent("forge obs status prod");
     for (const list of lists) expect(list).not.toHaveTextContent("reliant forge");
+    fireEvent.click(tryWorkflows);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library"));
+    expect(open).not.toHaveBeenCalled();
     open.mockRestore();
   });
 });

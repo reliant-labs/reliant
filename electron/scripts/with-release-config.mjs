@@ -74,10 +74,10 @@ const BUILD_ENV = process.env.RELIANT_RELEASE_ENV || "";
  *
  * Rendered through forge's own KCL module, exactly as sync-release-config.mjs
  * renders it (.github/scripts/release-config-kcl.mjs) — a bare `kcl run`
- * cannot resolve control-plane's `import forge`.
+ * cannot resolve control-plane's `import forge` or forge's KCL plugin.
  *
  * Returns null (not an error) when the KCL is genuinely unreachable — no
- * checkout, no forge, no kcl — so an OSS contributor with no control-plane
+ * checkout, no forge — so an OSS contributor with no control-plane
  * checkout still builds from the cache.
  */
 function renderFromKCL(env) {
