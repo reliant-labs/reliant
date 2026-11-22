@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A tool call id is chosen by the model provider, so nothing guarantees it is
@@ -135,7 +136,7 @@ func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *test
 	})
 	require.ErrorIs(t, err, core.ErrToolCallIDInAnotherChat)
 
-	got, err := repo.GetToolCallResult(ctx, reusedToolCallID)
+	got, err := store.FindToolCallResult(ctx, repo.ORM(), reusedToolCallID)
 	require.NoError(t, err)
 	require.Equal(t, "chat A's output", got.Content)
 }

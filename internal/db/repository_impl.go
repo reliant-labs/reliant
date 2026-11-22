@@ -899,11 +899,6 @@ func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
 	return store.GetApproval(ctx, r.ORM(), id)
 }
 
-// GetApprovalByEntityID retrieves an approval by its entity_id
-func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
-}
-
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
 	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)

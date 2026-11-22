@@ -142,7 +142,7 @@ func TestApprovalAndQuestionCreate_EmitBlockedOnceForTheFirstPendingItem(t *test
 	f := newRunEventFixture(t, true)
 
 	var approvalOut ApprovalCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewApprovalCreateActivity(f.h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(f.h.Repo())).Execute, ApprovalCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, StepID: "gate", Title: "Deploy to production?",
 	}, &approvalOut))
 

@@ -275,6 +275,9 @@ func ptrValue(s *string) string {
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
 	toolExecutor toolexec.ToolExecutor
+	// results reads the durable result of a finished tool call. Set by
+	// WithToolCallResults.
+	results ToolCallResults
 	// funding reads what a chat's person said about spending their own
 	// accounts (runFunding). Set by WithRunFunding; nil is org_only.
 	funding RunFundingStore
@@ -291,6 +294,13 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+}
+
+// WithToolCallResults gives the tool-execution path the reader of the durable
+// result a finished tool call recorded.
+func (a *ExecuteToolsActivity) WithToolCallResults(r ToolCallResults) *ExecuteToolsActivity {
+	a.results = r
+	return a
 }
 
 // WithRunFunding gives the tool-execution path what a chat's person said about
@@ -985,7 +995,7 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 		"tool_call_id", toolCallID,
 		"status", call.Status)
 
-	result, err := a.repo.GetToolCallResult(ctx, toolCallID)
+	result, err := a.results.FindToolCallResult(ctx, toolCallID)
 	if err != nil || result == nil {
 		// Terminal row, but no result content survived (e.g. a historical
 		// Cancelled row that predates durable status). Same stub every other
