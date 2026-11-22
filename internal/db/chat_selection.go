@@ -57,7 +57,7 @@ func (r *Repo) MutateChatSelection(ctx context.Context, chatID string, mutate fu
 		// under the same lock: any later write advances the version and so
 		// voids it (ChatPersonPickDriver).
 		if pick, ok := PersonPickFrom(ctx); ok && out != nil {
-			key, _ := RootModelPick(out.Params)
+			key, _ := chatselection.RootModelPick(out.Params)
 			return store.PutChatPersonPick(txCtx, r.ORM(), chatID, pick.UserID, pick.OrgID, key, out.ChatProvider, out.Version, time.Now())
 		}
 		return nil

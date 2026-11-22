@@ -56491,6 +56491,17 @@
     },
     {
       "consumer": "ProviderAccount",
+      "field": "Funding",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.PersonalFunding",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Store",
       "methods": [],

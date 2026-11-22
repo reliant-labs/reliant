@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -108,7 +109,7 @@ func TestOrgFunding_TitleWithConsentUsesThePersonsAccount(t *testing.T) {
 	w, _, _, mine := limitedOrgChat(t)
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 	before := w.question()
 
@@ -142,7 +143,7 @@ func TestOrgFunding_CompactionUnderTheChatsAnswerSummarizesOnIt(t *testing.T) {
 	w, _, _, mine := limitedOrgChat(t)
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 
 	out, err := w.compact()

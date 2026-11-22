@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgfunding"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -196,7 +197,7 @@ func (w *orgFundingWorld) endLease() {
 	require.Equal(w.t, core.PersonalFundingUsePersonal, q.State)
 	ended := time.Now().Add(-time.Minute)
 	q.LeaseUntil = &ended
-	require.NoError(w.t, w.repo.GrantPersonalFunding(w.ctx, *q, time.Now()))
+	require.NoError(w.t, store.GrantChatPersonalFunding(w.ctx, w.repo.ORM(), *q, time.Now()))
 	require.False(w.t, w.question().LeaseActive(time.Now(), ""))
 }
 
@@ -217,7 +218,7 @@ func limitedOrgChat(t *testing.T) (w *orgFundingWorld, team, backup, mine core.P
 
 func (w *orgFundingWorld) question() *core.PersonalFunding {
 	w.t.Helper()
-	q, err := w.repo.GetChatPersonalFunding(w.ctx, w.chatID)
+	q, err := store.GetChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID)
 	require.NoError(w.t, err)
 	return q
 }
@@ -243,7 +244,7 @@ func TestOrgFunding_KeepWaitingThenAccessWithdrawnNeverSpendsThePersonsAccount(t
 	assert.Equal(t, core.PersonalFundingLimited, q.Reason)
 
 	// Keep waiting. The answer wakes the chat; it waits on.
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingKeepWaiting, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingKeepWaiting, time.Now())
 	require.NoError(t, err)
 	_, err = w.step()
 	requireWait(t, err)
@@ -304,7 +305,7 @@ func TestOrgFunding_LeaseEndedThenAccessWithdrawnAsksAgain(t *testing.T) {
 
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 	out, err := w.step()
 	require.NoError(t, err)
@@ -329,7 +330,7 @@ func TestOrgFunding_LeaseEndedWhileTheOrgIsStillLimitedAsksAgain(t *testing.T) {
 
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 	_, err = w.step()
 	require.NoError(t, err)
@@ -353,7 +354,7 @@ func TestOrgFunding_AnOrgKeyForOtherModelsDoesNotEndTheWait(t *testing.T) {
 
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingKeepWaiting, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingKeepWaiting, time.Now())
 	require.NoError(t, err)
 
 	owner := core.OrgAccountOwner(w.org)
@@ -379,7 +380,7 @@ func TestOrgFunding_TurnStartUpgradeMovesBackToTheOrg(t *testing.T) {
 
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 	out, err := w.step()
 	require.NoError(t, err)
@@ -403,7 +404,7 @@ func TestOrgFunding_LiveLeaseEndsWhenAnOrgKeyIsResumed(t *testing.T) {
 	w, team, _, mine := limitedOrgChat(t)
 	_, err := w.step()
 	requireWait(t, err)
-	_, err = w.repo.AnswerPersonalFunding(w.ctx, w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
+	_, err = store.AnswerChatPersonalFunding(w.ctx, w.repo.ORM(), w.chatID, w.member, core.PersonalFundingUsePersonal, time.Now())
 	require.NoError(t, err)
 	out, err := w.step()
 	require.NoError(t, err)
