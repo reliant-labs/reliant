@@ -77,7 +77,7 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 **Move to Forge** (`forge-migrate`) migrates an existing codebase into a Forge project, with an approval checkpoint before it starts porting components one at a time.
 
-**Fix a flaky test** (`fix-flaky-test`) and **Raise test coverage** (`raise-coverage`) work on a Forge project's Go tests and open a PR. The first makes one flaky test deterministic, verifies it 50 times under `-race`, and removes its quarantine entry; deleting a test it judges worthless waits for your approval. The second writes tests for one package until it reaches a coverage target, and an independent reviewer rejects tests that only execute lines. Both run only when you start them, and need a Forge release with `forge test`.
+**Fix a flaky test** (`fix-flaky-test`) and **Raise test coverage** (`raise-coverage`) work on a Forge project's Go tests and open a PR. The first makes one flaky test deterministic, verifies it 50 times under `-race`, and removes its quarantine entry; deleting a test it judges worthless waits for your approval. The second writes tests for one package until it reaches a coverage target, and an independent reviewer rejects tests that only execute lines. Both run only when you start them, and need a project whose pinned Forge has `forge test`.
 
 **Landing Page** (`landing-page`) and **Pitch Deck** (`pitch-deck`) are content pipelines: a short scoping conversation, a content review loop, a visual review loop, then a handoff that serves the result at a preview URL. When they finish, the chat switches to a plain agent so you can keep iterating.
 

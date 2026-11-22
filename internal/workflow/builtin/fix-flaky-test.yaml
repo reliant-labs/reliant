@@ -11,7 +11,7 @@ description: |
   A green one removes the test's quarantine entry (`reliant forge test quarantine remove`) in the same
   change and opens a PR. If the agent concludes the test is worthless, deleting it waits for your
   approval; once approved, the deletion is published with a `flake:removed` issue carrying the test's body
-  and failure signature. Started by you, never by itself. Needs a forge release with `forge test`.
+  and failure signature. Started by you, never by itself. Needs the project to pin a forge that has `forge test`.
 
 inputs:
   test_id:
@@ -194,9 +194,8 @@ nodes:
       role: assistant
       display_style: warning
       content: >-
-        `reliant forge test quarantine list` failed in {{ nodes.paths.module }}, so this project's forge has no
-        `forge test` commands yet (they ship in a forge release after v1 adds the Tests product), or this is
-        not a forge project: {{ untrustedText(nodes.quarantine.stderr, 600) }}
+        `reliant forge test quarantine list` failed in {{ nodes.paths.module }}: this is not a forge project, or
+        the forge its forge.yaml pins predates `forge test` (move forge_version forward to a forge that has it): {{ untrustedText(nodes.quarantine.stderr, 600) }}
 
   # What the local test record knows about the test: its state, events and failure signatures.
   # Best-effort: a project with no record yet prints nothing useful, and the agent works from the issue.
