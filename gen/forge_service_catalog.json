@@ -55963,6 +55963,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Marks",
+      "interface": "github.com/reliant-labs/reliant/internal/worktreesweep.MarkDecisionStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Members",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgMemberCounter",
       "methods": [],
@@ -55993,6 +56004,17 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Recoveries",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Recoveries",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57386,6 +57408,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Recoveries",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Recoveries",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",

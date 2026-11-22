@@ -22,7 +22,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if req.RecoveryId == "" || req.TargetDaemonId == "" || req.IdempotencyKey == "" {
 		return nil, svcerr.InvalidArgument("recovery_id, target_daemon_id and idempotency_key are required")
 	}
-	row, err := s.deps.Repo.GetWorktreeRecovery(ctx, userID, req.RecoveryId)
+	row, err := s.deps.Recoveries.GetWorktreeRecovery(ctx, userID, req.RecoveryId)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -61,7 +61,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if len(registered) != len(captures) {
 		return nil, svcerr.FailedPrecondition("Registered destination repository identities do not match the recovery")
 	}
-	if err := s.deps.Repo.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "restoring", req.IdempotencyKey, req.TargetDaemonId); err != nil {
+	if err := s.deps.Recoveries.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "restoring", req.IdempotencyKey, req.TargetDaemonId); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	// A stable key binds destination daemon too: retries never migrate a partially
@@ -125,11 +125,11 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 			return nil, svcerr.Wrap(err)
 		}
 		for _, c := range captures {
-			if err := s.deps.Repo.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, "held", detail); err != nil {
+			if err := s.deps.Recoveries.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, "held", detail); err != nil {
 				return nil, svcerr.Wrap(err)
 			}
 		}
-		row, err = s.deps.Repo.GetWorktreeRecovery(ctx, userID, row.ID)
+		row, err = s.deps.Recoveries.GetWorktreeRecovery(ctx, userID, row.ID)
 		if err != nil {
 			return nil, svcerr.Wrap(err)
 		}
@@ -157,11 +157,11 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 		return nil, svcerr.Wrap(err)
 	}
 	for _, c := range captures {
-		if err := s.deps.Repo.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, "restored", ""); err != nil {
+		if err := s.deps.Recoveries.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, "restored", ""); err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 	}
-	row, err = s.deps.Repo.GetWorktreeRecovery(ctx, userID, row.ID)
+	row, err = s.deps.Recoveries.GetWorktreeRecovery(ctx, userID, row.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

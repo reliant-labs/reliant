@@ -1059,6 +1059,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
 		Settler:        g.WorktreeSweep(),
@@ -1185,11 +1186,13 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.Database(),
-		Sweeper: g.WorktreeSweep(),
-		Orgs:    g.OrgResolver(),
+		Logger:     g.Log,
+		Config:     g.Cfg,
+		Repo:       g.Database(),
+		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Sweeper:    g.WorktreeSweep(),
+		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),

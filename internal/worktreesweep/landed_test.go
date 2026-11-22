@@ -32,7 +32,7 @@ func landedEnv(t *testing.T, mode AutoArchiveMode, answer func(w worktreereclaim
 		}
 	}
 	sender := &scriptSender{seen: map[string]worktreereclaim.Worktree{}, answer: answer}
-	s := New(store, sender).WithAutoArchive(mode, store, nil)
+	s := New(store, sender).WithAutoArchive(mode, store, nil).WithUseStore(store)
 	return store, sender, s
 }
 

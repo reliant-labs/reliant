@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -259,13 +260,13 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 		}
 		return "", false
 	}
-	if worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
+	if a.reviver == nil || worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
 		return "", false
 	}
-	if m := worktree.CleanupMetadata; m == nil || (m.ArchivedBecause != db.ArchivedBecauseLanded && m.ArchivedBecause != db.ArchivedBecauseRecoverableIdle) || len(m.SnapshotRefs) > 0 {
+	if m := worktree.CleanupMetadata; m == nil || (m.ArchivedBecause != core.ArchivedBecauseLanded && m.ArchivedBecause != core.ArchivedBecauseRecoverableIdle) || len(m.SnapshotRefs) > 0 {
 		return "", false
 	}
-	fence, err := a.repo.ReviveArchivedWorktree(ctx, worktree.ID)
+	fence, err := a.reviver.ReviveArchivedWorktree(ctx, worktree.ID)
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Could not bring back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "error", err)
 		return "", false
@@ -284,7 +285,7 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 func revivedWorkspaceNote(worktree *db.Worktree, recreated bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Workspace restored] This chat's workspace %s (branch `%s`) was archived while it sat idle", worktree.Path, worktree.Branch)
-	if m := worktree.CleanupMetadata; m != nil && m.ArchivedBecause == db.ArchivedBecauseLanded {
+	if m := worktree.CleanupMetadata; m != nil && m.ArchivedBecause == core.ArchivedBecauseLanded {
 		b.WriteString(" after its work landed in its base branch")
 	}
 	if recreated {

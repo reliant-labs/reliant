@@ -21,11 +21,12 @@ const (
 	CommandRecoveryFinalize = "worktree.recovery_finalize"
 )
 
-// RecoveryStore is a durable journal, not an in-memory cleanup flag. Every
+// RecoveryStore is a durable journal, not an in-memory cleanup flag.
+// store.WorktreeRecoveryExtStore satisfies it. Every
 // destructive authorization is checked by the DB under its source-parent lock.
 type RecoveryStore interface {
 	ArchiveWorktreeForRecovery(context.Context, string, string, int64) error
-	CreateWorktreeRecovery(context.Context, *core.WorktreeRecovery) error
+	InsertWorktreeRecovery(context.Context, *core.WorktreeRecovery) error
 	GetWorktreeRecovery(context.Context, string, string) (*core.WorktreeRecovery, error)
 	ListWorktreeRecoveries(context.Context, string, string) ([]*core.WorktreeRecovery, error)
 	ClaimWorktreeRecovery(context.Context, string, string, int64) error
@@ -174,7 +175,7 @@ func (s *Sweeper) recoverHeld(ctx context.Context, t target, cand *core.ReclaimC
 		raw, _ := json.Marshal(c)
 		journal.Checkouts = append(journal.Checkouts, core.RecoveryCheckout{RepoID: c.RepoID, Rel: c.Rel, RemoteURL: c.RemoteURL, RecoveryRef: c.RecoveryRef, CommitOID: c.CommitOID, ManifestDigest: c.ManifestDigest, DescriptorJSON: string(raw)})
 	}
-	if err := e.store.CreateWorktreeRecovery(ctx, journal); err != nil {
+	if err := e.store.InsertWorktreeRecovery(ctx, journal); err != nil {
 		return true
 	}
 	cancel := func(detail string) {
