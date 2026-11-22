@@ -68,17 +68,23 @@ log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 scripts/forge.sh test flakes gate --base "$base" -- scripts/go-test.sh 2>&1 | tee "$log"
 rc=${PIPESTATUS[0]}
-case "$rc" in
-  0) ;;
-  1) status=1 ;;
-  2)
-    if grep -q '^flake gate: could not run' "$log"; then
-      status=1 # the test command did not start: a failure, as it always was
-    elif grep -q '^flake gate: could not identify' "$log"; then
-      exit 2 # the diff could not be read: as tools/test-affected failing was
-    fi ;; # otherwise no new or edited tests in the root module
-  *) echo "test-flake: forge test flakes gate exited $rc" >&2; status=1 ;;
-esac
+# The gate's exit 2 has three meanings, told apart by the line it prints.
+# The lines are read whatever the exit status: a wrapper between here and
+# forge can turn forge's 2 into a 1 (`go run` did, before scripts/forge.sh
+# built the pin instead; reliant#3243's merge-queue regression), and "no new
+# or edited tests" is a pass however it arrives.
+if [ "$rc" -ne 0 ]; then
+  if grep -q '^flake gate: could not run' "$log"; then
+    status=1 # the test command did not start: a failure, as it always was
+  elif grep -q '^flake gate: could not identify' "$log"; then
+    exit 2 # the diff could not be read: as tools/test-affected failing was
+  elif grep -q '^flake gate: no new or edited tests' "$log"; then
+    : # no new or edited tests in the root module
+  else
+    [ "$rc" -eq 1 ] || echo "test-flake: forge test flakes gate exited $rc" >&2
+    status=1
+  fi
+fi
 # A nested module's tests (sdk/go), from that module.
 if git diff --name-only "$base" -- 'sdk/go/*_test.go' | grep -q . || git ls-files --others --exclude-standard -- 'sdk/go/*_test.go' | grep -q .; then
   targets=$(changed_tests) || exit 2
