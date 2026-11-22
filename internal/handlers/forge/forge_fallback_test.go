@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,14 +74,7 @@ func fallbackRepo(projects ...fallbackProject) *MockRepository {
 	for _, p := range projects {
 		byID[p.id] = p
 	}
-	return &MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-			p, ok := byID[id]
-			if !ok {
-				return nil, svcerr.NotFound("project not found")
-			}
-			return row(p), nil
-		},
+	return projectaccesstest.Bound(&MockRepository{
 		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) { return false, nil },
 		ListProjectsFunc: func(_ context.Context, filters db.ProjectFilters) ([]*db.Project, error) {
 			if filters.UserID != "test-user" {
@@ -107,7 +102,13 @@ func fallbackRepo(projects ...fallbackProject) *MockRepository {
 			}
 			return &db.Daemon{ID: id, UserID: owner}, nil
 		},
-	}
+	}, func(_ context.Context, id, _ string) (*db.Project, error) {
+		p, ok := byID[id]
+		if !ok {
+			return nil, svcerr.NotFound("project not found")
+		}
+		return row(p), nil
+	})
 }
 
 func asleep(ids ...string) map[string]error {

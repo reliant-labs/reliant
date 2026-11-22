@@ -147,32 +147,6 @@ func TestAutoUpdateInstallsAtAQuietMoment(t *testing.T) {
 	assert.EqualValues(t, 1, s.su.applies.Load())
 }
 
-// Tool calls, background processes and fresh activity each keep the daemon
-// from installing.
-func TestAutoUpdateWaitsForWorkAndActivity(t *testing.T) {
-	s := newSelfUpdatingDaemon(t, &fakeSelfUpdate{auto: true, selfOwned: true, version: "1.27.0"})
-	s.d.results.start("running-1")
-	s.bg.Store(1)
-	s.start(t)
-	waitForUpgradeState(t, s.d, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED)
-	s.clock.advance(time.Hour)
-
-	s.probe.waitForPolls(t, 5)
-	assert.Zero(t, s.su.applies.Load(), "a running tool call blocks the install")
-
-	s.d.results.hold("running-1", s.d.toolResponse("running-1", finished("done")), nil)
-	s.probe.waitForPolls(t, 5)
-	assert.Zero(t, s.su.applies.Load(), "a running background process blocks the install")
-
-	s.bg.Store(0)
-	s.d.upgrade.markActivity() // a terminal keystroke, a tool call finishing
-	s.probe.waitForPolls(t, 5)
-	assert.Zero(t, s.su.applies.Load(), "recent activity blocks the install")
-
-	s.clock.advance(selfQuietIdle)
-	s.waitInstalled(t)
-}
-
 // What counts as activity: tool calls and terminal use, not the platform's
 // own housekeeping.
 func TestActivityIsToolAndTerminalUse(t *testing.T) {

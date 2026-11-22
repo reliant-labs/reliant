@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -33,11 +35,10 @@ func TestPackageCommands_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &package_commands.MockRepository{
-				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
-				GetWorktreeFunc:             func(context.Context, string) (*db.Worktree, error) { return nil, tc.err },
-			}
-			_, client := package_commands.NewTestPackageCommandsServer(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: repo}))
+			repo := projectaccesstest.Bound(&package_commands.MockRepository{
+				GetWorktreeFunc: func(context.Context, string) (*db.Worktree, error) { return nil, tc.err },
+			}, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
+			_, client := package_commands.NewTestPackageCommandsServer(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 			_, err := client.GetCommandFavorites(context.Background(), connect.NewRequest(&pb.GetCommandFavoritesRequest{ProjectId: "p1"}))
 			assertWire(t, err, tc.want)
 			_, err = client.SetCommandFavorite(context.Background(), connect.NewRequest(&pb.SetCommandFavoriteRequest{ProjectId: "p1", CommandKey: "npm:test", IsFavorite: true}))
