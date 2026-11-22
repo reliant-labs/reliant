@@ -15,13 +15,14 @@ import (
 // gitWall bounds one git command.
 const gitWall = 30 * time.Second
 
-// git runs one git command in dir and returns its trimmed stdout.
+// git runs one git command in dir and returns its trimmed stdout. None of
+// these commands reaches a remote, and each output read is git's porcelain or
+// an object id, so the inherited environment is used as it is.
 func git(ctx context.Context, dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitWall)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C") //nolint:forbidigo // passes this process environment to a child process; not configuration
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

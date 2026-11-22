@@ -59,6 +59,8 @@ type Deps struct {
 }
 
 // Reclaimer runs the idle reclaim over one scratch root and one worktree root.
+//
+//forge:contract
 type Reclaimer struct {
 	Config       Config
 	ScratchRoot  string
@@ -225,8 +227,8 @@ func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep 
 // know. Every removal is a line.
 func logEntry(ctx context.Context, kind string, e Entry) {
 	attrs := []any{"kind", kind, "path", e.Path, "idle_hours", e.IdleHours, "bytes", e.Bytes, "freed", HumanBytes(e.Bytes), "removed", e.Removed}
-	switch {
-	case e.Action == ActionRemoved || e.Action == ActionStripped:
+	switch e.Action {
+	case ActionRemoved, ActionStripped:
 		if e.DryRun {
 			logging.InfoContext(ctx, "[idlereclaim] would remove", attrs...)
 		} else {
@@ -235,7 +237,7 @@ func logEntry(ctx context.Context, kind string, e Entry) {
 		if len(e.Held) > 0 {
 			logging.InfoContext(ctx, "[idlereclaim] kept part of it", "kind", kind, "path", e.Path, "held", e.Held)
 		}
-	case e.Action == ActionHeld:
+	case ActionHeld:
 		logging.InfoContext(ctx, "[idlereclaim] held", "kind", kind, "path", e.Path, "idle_hours", e.IdleHours, "reason", e.Reason)
 	}
 }
