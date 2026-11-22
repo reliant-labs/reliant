@@ -52,13 +52,15 @@ func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
 			}
 			return nil, svcerr.ErrNotFound
 		},
-		ProjectOrgMoveBlockersFunc: func(context.Context, string) (*core.ProjectOrgMoveBlockers, error) {
-			b := f.blockers
-			return &b, nil
-		},
 		AssignUnassignedOrgFunc: func(_ context.Context, userID, orgID string) error {
 			f.stamped = append(f.stamped, userID+"→"+orgID)
 			return nil
+		},
+	}
+	repoLedger := &project.MockMoveLedger{
+		ProjectOrgMoveBlockersFunc: func(context.Context, string) (*core.ProjectOrgMoveBlockers, error) {
+			b := f.blockers
+			return &b, nil
 		},
 		FindProjectOrgMoveByRequestFunc: func(_ context.Context, actor, key string) (*core.ProjectOrgMove, error) {
 			for _, m := range f.moves {
@@ -98,7 +100,7 @@ func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
 		return nil
 	}}
 	gates := &configv1.OrgsConfig{ProjectMovesEnabled: gateOn}
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: repo, OrgRollout: gates, Moves: starter}))
+	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: repo, Ledger: repoLedger, OrgRollout: gates, Moves: starter}))
 }
 
 func personIn(t *testing.T, m authz.Membership) context.Context {

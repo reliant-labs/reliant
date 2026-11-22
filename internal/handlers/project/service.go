@@ -55,6 +55,12 @@ type Deps struct {
 	// every gate off.
 	// forge:optional-dep
 	OrgRollout *configv1.OrgsConfig
+	// Ledger is a move's ledger and preview (MoveLedger). Required: every
+	// project move rpc reads it.
+	Ledger MoveLedger
+	// Shared lists what others shared with the caller's org for
+	// ListProjectsWithApps (SharedProjects).
+	Shared SharedProjects
 	// Moves starts a move's saga (orgmove.ProjectOrgMoveWorkflow). Nil — no
 	// Temporal — refuses MoveProjectToOrg.
 	// forge:optional-dep
@@ -89,6 +95,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("project: Deps.Repo is required")
+	}
+	if d.Ledger == nil {
+		return fmt.Errorf("project: Deps.Ledger is required")
+	}
+	if d.Shared == nil {
+		return fmt.Errorf("project: Deps.Shared is required")
 	}
 	return nil
 }
