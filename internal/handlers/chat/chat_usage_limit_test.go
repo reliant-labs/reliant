@@ -83,8 +83,9 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 
 	// Only a sub-agent waits now: the chat no longer reads as waiting, and the
 	// run is still woken — the agent's wait is what the click is for.
-	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, chatID, time.Now()))
-	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, time.Now().Add(time.Hour), time.Now()))
+	fixed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, chatID, fixed))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, fixed.Add(time.Hour), fixed))
 	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Woken, "a sub-agent's wait is woken from the chat")

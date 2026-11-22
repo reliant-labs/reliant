@@ -112,8 +112,9 @@ func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.NotContains(t, resp.Content, "waiting for usage limit", "a child that is not waiting reads as running")
 
-	resumeAt := time.Now().UTC().Add(90 * time.Minute).Truncate(time.Second)
-	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, childID, "Anthropic", false, resumeAt, time.Now()))
+	fixed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	resumeAt := fixed.Add(90 * time.Minute)
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, childID, "Anthropic", false, resumeAt, fixed))
 
 	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.False(t, resp.IsError, "response: %+v", resp)
@@ -121,7 +122,7 @@ func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
 	require.Contains(t, resp.Content, "Anthropic's usage limit until "+resumeAt.Format(time.RFC3339))
 	require.Contains(t, resp.Content, "not failed and continues by itself")
 
-	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, childID, time.Now()))
+	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, childID, fixed.Add(time.Minute)))
 	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.NotContains(t, resp.Content, "waiting for usage limit", "back to running once the wait is over")
 }

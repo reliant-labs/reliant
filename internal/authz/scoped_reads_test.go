@@ -122,6 +122,7 @@ var userScopedReads = map[string]string{
 
 	"CountTriggerCapacityHeldByMember": readBackground,
 	"HasEnabledTriggerOfKind":          readBackground,
+	"ListCapacityWakeTargets":          readBackground,
 	"ListChatsPausedForMachine":        readBackground,
 	"ListChatsQueuedForMachine":        readBackground,
 	"ListChatsWaitingForMachine":       readBackground,

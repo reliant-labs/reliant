@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -133,6 +134,11 @@ type Repo struct {
 	planningOnce sync.Once
 	planningSvc  planning.Service
 	planningErr  error
+
+	// backoffSvc is the providerbackoff package over this Repo, built on first use.
+	backoffOnce sync.Once
+	backoffSvc  providerbackoff.Service
+	backoffErr  error
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.
