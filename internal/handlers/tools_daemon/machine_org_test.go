@@ -443,7 +443,7 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
 
 		assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID), "the discovery recorded the machine's checkout")
-		record, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		record, synced, err := store.GetProjectMachineConfigRecord(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine)
 		require.NoError(t, err)
 		require.True(t, synced, "the snapshot was dropped until a reconnect")
 		assert.Equal(t, "from the machine", *record.UserConfigYAML)
@@ -459,7 +459,7 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
 
 		assert.Empty(t, f.machinesOf(t, f.globex.ID), "a detached project was recorded on the machine again")
-		_, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		_, synced, err := store.GetProjectMachineConfigRecord(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine)
 		require.NoError(t, err)
 		assert.False(t, synced, "a detached project's snapshot was stored")
 	})

@@ -5,6 +5,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
@@ -18,5 +19,6 @@ func TestScenarioServiceViewerMatrix(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	svc := NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())}))
 	viewertest.RunService(t, f, svc, "reliant.v1.ScenarioService", nil)
 }

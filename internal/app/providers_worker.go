@@ -306,8 +306,8 @@ type StoredConfigProviderDeps struct {
 // checks the record's version, so a daemon push is seen immediately on every
 // worker replica.
 func NewStoredConfigProvider(d StoredConfigProviderDeps) (*reliantconfig.StoredConfigProvider, error) {
-	repo := d.DB
-	return reliantconfig.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, reliantconfig.DefaultParsedConfigCacheBytes), nil
+	o := d.DB.ORM()
+	return reliantconfig.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(o)), store.NewProjectConfigExtStore(o), reliantconfig.DefaultParsedConfigCacheBytes), nil
 }
 
 // RunLifecycleDeps is what runs are recorded in and driven through.

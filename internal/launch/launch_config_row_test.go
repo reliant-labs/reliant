@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // wholeConfigRowCounter counts reads of the whole project config record. The
@@ -30,7 +31,7 @@ func (c *wholeConfigRowCounter) GetProjectConfigRecord(ctx context.Context, proj
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
-	return c.Repo.GetProjectConfigRecord(ctx, projectID)
+	return store.GetProjectConfigRecord(ctx, c.Repo.ORM(), projectID)
 }
 
 // A chat start resolves its workflow, validates the workflow tree and its
@@ -42,7 +43,7 @@ func TestLaunchChatStartReadsOnlyTheConfigColumnsItNeeds(t *testing.T) {
 
 	presets := `[{"name":"plan-first","yaml_content":"name: plan-first\ntag: agent\nparams:\n  mode: plan\n"}]`
 	skills := `[{"name":"a-skill","body":"` + strings.Repeat("x", 64<<10) + `"}]`
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: "daemon-1",
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))

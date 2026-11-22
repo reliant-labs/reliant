@@ -19,6 +19,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const admissionWorkflow = `name: triage
@@ -72,7 +73,7 @@ func TestLiveInvalidWorkflowIsBrokenBeforeFireAndCannotResume(t *testing.T) {
 		require.NoError(t, err)
 		stored := string(data)
 		now := time.Now().UTC()
-		require.NoError(t, env.repo.UpsertProjectConfigRecord(env.ctx, &db.ProjectConfigRecord{
+		require.NoError(t, store.UpsertProjectConfigRecord(env.ctx, env.repo.ORM(), &db.ProjectConfigRecord{
 			ID: uuid.NewString(), ProjectID: env.projectID, DaemonID: env.daemonID,
 			ProjectWorkflowsJSON: &stored, PushedAt: now, CreatedAt: now, UpdatedAt: now,
 		}))
