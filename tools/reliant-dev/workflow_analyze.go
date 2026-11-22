@@ -76,12 +76,12 @@ type runData struct {
 }
 
 func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, error) {
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	if err != nil || chat == nil {
 		return nil, fmt.Errorf("execution %q not found (looked up as chat id): %v", chatID, err)
 	}
 
-	workflows, err := repo.ListWorkflowsByChat(ctx, chatID)
+	workflows, err := store.ListChatWorkflows(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return nil, fmt.Errorf("listing workflow executions: %w", err)
 	}
@@ -100,13 +100,13 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		if wf.Thread != "" {
 			rd.byThread[wf.Thread] = wf
 		}
-		steps, serr := repo.GetStepExecutionsByWorkflow(ctx, wf.ID)
+		steps, serr := store.ListWorkflowStepExecutions(ctx, repo.ORM(), wf.ID)
 		if serr == nil {
 			rd.stepsByWF[wf.ID] = steps
 		}
 	}
 
-	msgs, err := repo.ListMessages(ctx, chatID, db.MessageListOptions{})
+	msgs, err := store.ListMessages(ctx, repo.ORM(), chatID, db.MessageListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing messages: %w", err)
 	}
@@ -117,7 +117,7 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		ids = append(ids, m.ID)
 	}
 	if len(ids) > 0 {
-		blocks, berr := repo.ListContentBlocksForMessages(ctx, ids)
+		blocks, berr := store.ListContentBlocksForMessages(ctx, repo.ORM(), ids)
 		if berr == nil {
 			for _, b := range blocks {
 				rd.blocksByMsg[b.MessageID] = append(rd.blocksByMsg[b.MessageID], b)
@@ -129,7 +129,7 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		rd.questions = qs
 	}
 
-	if backoff, berr := repo.ProviderBackoffByChat(ctx, chatID); berr == nil {
+	if backoff, berr := store.ListChatProviderBackoff(ctx, repo.ORM(), chatID); berr == nil {
 		rd.backoffByThread = backoff
 	}
 

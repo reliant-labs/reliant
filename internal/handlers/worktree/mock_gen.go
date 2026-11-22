@@ -72,8 +72,44 @@ func (m *MockRecoveries) CompleteWorktreeRecoveryCheckout(ctx context.Context, o
 // Compile-time check.
 var _ Recoveries = (*MockRecoveries)(nil)
 
+// forge:section MockRows
+// forge:hash=8e62f9c135fb24987cf3837df3b147c2d18db8b5e48ea52758cf5a0d6f201246
+
+// MockRows is a test mock for the Rows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRows.<Method>Func not set" error.
+type MockRows struct {
+	contractkit.Recorder
+	GetWorktreeByIdempotencyKeyFunc func(context.Context, string, string) (*core.Worktree, error)
+	RemoveWorktreeFunc              func(context.Context, string) error
+}
+
+// GetWorktreeByIdempotencyKey records the call and delegates to GetWorktreeByIdempotencyKeyFunc when set.
+func (m *MockRows) GetWorktreeByIdempotencyKey(ctx context.Context, projectID string, key string) (*core.Worktree, error) {
+	m.Recorder.Record("GetWorktreeByIdempotencyKey", ctx, projectID, key)
+	if m.GetWorktreeByIdempotencyKeyFunc != nil {
+		return m.GetWorktreeByIdempotencyKeyFunc(ctx, projectID, key)
+	}
+	return nil, contractkit.MockNotSet("MockRows", "GetWorktreeByIdempotencyKey")
+}
+
+// RemoveWorktree records the call and delegates to RemoveWorktreeFunc when set.
+func (m *MockRows) RemoveWorktree(ctx context.Context, id string) error {
+	m.Recorder.Record("RemoveWorktree", ctx, id)
+	if m.RemoveWorktreeFunc != nil {
+		return m.RemoveWorktreeFunc(ctx, id)
+	}
+	return contractkit.MockNotSet("MockRows", "RemoveWorktree")
+}
+
+// Compile-time check.
+var _ Rows = (*MockRows)(nil)
+
 // forge:section MockRepository
-// forge:hash=020fe496ee326a32e5715c9089eb6aead14fc71f5e96816b047877d44001c1ab
+// forge:hash=69953bcb401249d54c53889635ceba4371ad8e546ffe204cc0abf000765c8e72
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -84,11 +120,9 @@ var _ Recoveries = (*MockRecoveries)(nil)
 type MockRepository struct {
 	contractkit.Recorder
 	ListWorktreesFunc                 func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktreeByIdempotencyKeyFunc   func(context.Context, string, string) (*db.Worktree, error)
 	UnarchiveWorktreeFunc             func(context.Context, string) error
 	UpdateWorktreeCleanupMetadataFunc func(context.Context, string, *db.CleanupMetadata) error
 	MergeWorktreeCleanupMetadataFunc  func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
-	DeleteWorktreeFunc                func(context.Context, string) error
 	GetProjectFunc                    func(context.Context, string) (*db.Project, error)
 	GetProjectWithUserCheckFunc       func(context.Context, string, string) (*db.Project, error)
 	ListProjectDaemonsForProjectFunc  func(context.Context, string) ([]*db.ProjectDaemon, error)
@@ -120,15 +154,6 @@ func (m *MockRepository) ListWorktrees(ctx context.Context, filters db.WorktreeF
 	return nil, contractkit.MockNotSet("MockRepository", "ListWorktrees")
 }
 
-// GetWorktreeByIdempotencyKey records the call and delegates to GetWorktreeByIdempotencyKeyFunc when set.
-func (m *MockRepository) GetWorktreeByIdempotencyKey(ctx context.Context, projectID string, key string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktreeByIdempotencyKey", ctx, projectID, key)
-	if m.GetWorktreeByIdempotencyKeyFunc != nil {
-		return m.GetWorktreeByIdempotencyKeyFunc(ctx, projectID, key)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorktreeByIdempotencyKey")
-}
-
 // UnarchiveWorktree records the call and delegates to UnarchiveWorktreeFunc when set.
 func (m *MockRepository) UnarchiveWorktree(ctx context.Context, id string) error {
 	m.Recorder.Record("UnarchiveWorktree", ctx, id)
@@ -154,15 +179,6 @@ func (m *MockRepository) MergeWorktreeCleanupMetadata(ctx context.Context, id st
 		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
 	}
 	return contractkit.MockNotSet("MockRepository", "MergeWorktreeCleanupMetadata")
-}
-
-// DeleteWorktree records the call and delegates to DeleteWorktreeFunc when set.
-func (m *MockRepository) DeleteWorktree(ctx context.Context, id string) error {
-	m.Recorder.Record("DeleteWorktree", ctx, id)
-	if m.DeleteWorktreeFunc != nil {
-		return m.DeleteWorktreeFunc(ctx, id)
-	}
-	return contractkit.MockNotSet("MockRepository", "DeleteWorktree")
 }
 
 // GetProject records the call and delegates to GetProjectFunc when set.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -247,7 +248,7 @@ func TestDaemonAttachmentQueries(t *testing.T) {
 	if created, err := store.RenewDaemonAttachment(ctx, env.ORM, &core.DaemonAttachment{DaemonID: "b1", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now}); err != nil || created {
 		t.Fatalf("RenewDaemonAttachment(not the user's daemon) = %v, %v", created, err)
 	}
-	if created, err := env.Repo.RenewDaemonAttachment(ctx, &core.DaemonAttachment{DaemonID: "a2", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now.Add(time.Second)}); err != nil || created {
+	if created, err := store.RenewDaemonAttachment(ctx, env.Repo.ORM(), &core.DaemonAttachment{DaemonID: "a2", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now.Add(time.Second)}); err != nil || created {
 		t.Fatalf("Repo.RenewDaemonAttachment = %v, %v", created, err)
 	}
 	all, err := store.ListAllDaemonAttachments(ctx, env.ORM)

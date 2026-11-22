@@ -194,6 +194,15 @@ type CallLLMActivity struct {
 	// firstTokenNow is the first-token guard's clock; nil is time.Now. Tests
 	// set it to decide exactly when the deadline passes.
 	firstTokenNow func() time.Time
+	// usage records each model request in the usage ledger; nil records
+	// nothing.
+	usage LLMUsageRecorder
+}
+
+// WithUsageRecorder wires the usage ledger into the turn's requests.
+func (a *CallLLMActivity) WithUsageRecorder(r LLMUsageRecorder) *CallLLMActivity {
+	a.usage = r
+	return a
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's

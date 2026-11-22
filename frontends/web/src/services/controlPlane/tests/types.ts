@@ -252,13 +252,28 @@ export interface TestSummary {
   lowCoverage: PackageCoverage[];
   /** Failures classified "host" in 30 days: host health, never scored against a test. */
   hostFailures30d: number;
+  /** Those failures by host signature (network, disk, port, registry, …), most events first as the server orders them. */
+  hostHealth: HostHealth[];
   /** The state the project acts at. "flaky" while the server does not say (control-plane#3331 item 5). */
   flakePolicy: TestsFlakePolicy;
+}
+
+/** One host signature's failures in the summary's window: never scored against a test. */
+export interface HostHealth {
+  /** The host rule's name: "network", "disk", "port", "registry", … */
+  signature: string;
+  events: number;
+  /** The runs they happened in, first seen first. */
+  runs: string[];
+  /** The tests that failed this way (TestKey.id). */
+  tests: string[];
 }
 
 export interface TestRunPage {
   runs: TestRun[];
   nextPageToken: string;
+  /** Runs matching the filters across every page; null when the server did not count them. */
+  totalCount: number | null;
 }
 
 export interface TestFailure {
@@ -270,6 +285,8 @@ export interface TestFailure {
   failureSignature: string;
   attempts: number;
   verdict: TestFlakeVerdict;
+  /** When verdict is "correlated": the infra event it belongs to, shared by the co-failing tests. "" otherwise. */
+  infraGroup: string;
 }
 
 export interface TestTiming {
@@ -298,6 +315,8 @@ export interface CoverageNode {
   lanes: Record<string, StatementCoverage>;
   diff: DiffCoverage | null;
   changed: boolean;
+  /** A file whose blob came from an uncommitted tree: no source to fetch ("uncommitted", not "gone"). False for packages and directories. */
+  dirty: boolean;
 }
 
 /** GetCoverage: one path's totals and its children (packages or directories first, then files). */
@@ -331,6 +350,8 @@ export interface FileCoverage {
   lanes: string[];
   coverage: Coverage | null;
   lines: LineCoverage[];
+  /** The blob came from an uncommitted working tree: it is in no commit, so there is no source to fetch. */
+  dirty: boolean;
 }
 
 /** GetReleaseTests: a release commit's report, and what changed since the previous release. */

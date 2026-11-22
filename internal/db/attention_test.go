@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func attentionChat(t *testing.T, r *Repo, id string) {
@@ -50,7 +53,7 @@ func TestAttentionEpisodesAndDurableReplay(t *testing.T) {
 	episode := items[0].EpisodeID
 	require.NotEmpty(t, episode)
 	require.Equal(t, "unsuccessful", items[0].FailureClass)
-	require.NoError(t, r.DismissInboxItems(context.Background(), "test-user", []string{"automation_failing:incident:" + episode}, time.Now().UTC()))
+	require.NoError(t, store.DismissInboxItems(context.Background(), r.ORM(), "test-user", []string{"automation_failing:incident:" + episode}, time.Now().UTC()))
 	require.False(t, attentionApply(t, r, u).Notify, "finish replay is idempotent")
 	// Newer observer's success does not resolve, but fences the old actor.
 	observer := core.AttentionUpdate{ChatID: u.ChatID, RunID: "run-b", StartedAt: start.Add(time.Second), Phase: "finish", Key: u.Key}
@@ -73,7 +76,7 @@ func TestAttentionEpisodesAndDurableReplay(t *testing.T) {
 	items = attentionList(t, r)
 	require.Len(t, items, 1)
 	require.NotEqual(t, episode, items[0].EpisodeID)
-	dismissed, err := r.ListDismissedInboxItemIDs(context.Background(), "test-user", []string{"automation_failing:incident:" + episode, "automation_failing:incident:" + items[0].EpisodeID})
+	dismissed, err := store.ListDismissedInboxItemIDs(context.Background(), r.ORM(), "test-user", []string{"automation_failing:incident:" + episode, "automation_failing:incident:" + items[0].EpisodeID})
 	require.NoError(t, err)
 	require.True(t, dismissed["automation_failing:incident:"+episode])
 	require.False(t, dismissed["automation_failing:incident:"+items[0].EpisodeID])

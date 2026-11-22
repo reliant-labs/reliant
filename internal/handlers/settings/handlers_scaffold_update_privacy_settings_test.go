@@ -19,13 +19,14 @@ func TestUpdatePrivacySettings_Generated(t *testing.T) {
 
 	t.Run("only the choices set change", func(t *testing.T) {
 		analytics, crash := true, true
-		repo := memorySettings{}.repo()
-		repo.GetPrivacySettingsFunc = func(context.Context, string) (bool, bool, error) { return analytics, crash, nil }
-		repo.SetPrivacySettingsFunc = func(_ context.Context, _ string, a, c bool) error {
-			analytics, crash = a, c
-			return nil
+		privacy := &settings.MockPrivacy{
+			GetPrivacySettingsFunc: func(context.Context, string) (bool, bool, error) { return analytics, crash, nil },
+			SetPrivacySettingsFunc: func(_ context.Context, _ string, a, c bool) error {
+				analytics, crash = a, c
+				return nil
+			},
 		}
-		resp, err := newSettingsService(t, repo).UpdatePrivacySettings(settings.AuthedContext(t),
+		resp, err := newSettingsServiceWith(t, memorySettings{}.repo(), privacy).UpdatePrivacySettings(settings.AuthedContext(t),
 			connect.NewRequest(&pb.UpdatePrivacySettingsRequest{AnalyticsEnabled: ptr.Of(false)}))
 		require.NoError(t, err)
 		require.False(t, resp.Msg.GetAnalyticsEnabled())
@@ -35,9 +36,8 @@ func TestUpdatePrivacySettings_Generated(t *testing.T) {
 	})
 
 	t.Run("a failed read is internal", func(t *testing.T) {
-		repo := memorySettings{}.repo()
-		repo.GetPrivacySettingsFunc = func(context.Context, string) (bool, bool, error) { return false, false, errors.New("db down") }
-		_, err := newSettingsService(t, repo).UpdatePrivacySettings(settings.AuthedContext(t),
+		privacy := &settings.MockPrivacy{GetPrivacySettingsFunc: func(context.Context, string) (bool, bool, error) { return false, false, errors.New("db down") }}
+		_, err := newSettingsServiceWith(t, memorySettings{}.repo(), privacy).UpdatePrivacySettings(settings.AuthedContext(t),
 			connect.NewRequest(&pb.UpdatePrivacySettingsRequest{AnalyticsEnabled: ptr.Of(false)}))
 		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	})

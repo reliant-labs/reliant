@@ -87,7 +87,7 @@ func (s *Service) DeleteWorktree(
 				deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), checkout, worktree.Branch)
 			}
 		}
-		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
+		if err := s.deps.Rows.RemoveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete worktree"))
 		}
 

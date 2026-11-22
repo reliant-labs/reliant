@@ -201,8 +201,8 @@ func TestTokenChainNeverConfusesItsIssuers(t *testing.T) {
 		{name: "identity issuer, expired", token: ti.sign(t, map[string]any{"exp": expiredAt})},
 		{name: "identity issuer, a key the issuer never published", token: signRS256(t, otherRSA, "identity-1", identityClaimsFor(nil))},
 		{name: "identity issuer, no subject", token: ti.sign(t, map[string]any{"sub": nil})},
-		// A token with no expiry would be valid forever: refused, as is exp 0
-		// (which decodes as no expiry) and a non-numeric one.
+		// A token with no expiry would be valid forever: refused (forge's
+		// RequireExpiry for the identity), as is exp 0 and a non-numeric one.
 		{name: "identity issuer, no exp", token: ti.sign(t, map[string]any{"exp": nil})},
 		{name: "identity issuer, exp 0", token: ti.sign(t, map[string]any{"exp": 0})},
 		{name: "identity issuer, non-numeric exp", token: ti.sign(t, map[string]any{"exp": "2100-01-01"})},

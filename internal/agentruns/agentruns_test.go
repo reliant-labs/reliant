@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/store"
-
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -367,7 +366,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	assert.Len(t, starter.calls, 1, "a retried start must not start Temporal twice")
 
 	// The new run counts toward the live cap until it finishes.
-	live, err := repo.CountLiveLaunchedRuns(ctx, owner, core.TriggerEventKindAgentStartRun)
+	live, err := store.CountLiveLaunchedRuns(ctx, repo.ORM(), owner, core.TriggerEventKindAgentStartRun)
 	require.NoError(t, err)
 	assert.Equal(t, 1, live)
 }

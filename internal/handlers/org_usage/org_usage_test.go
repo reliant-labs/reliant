@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -137,7 +138,7 @@ func (e *env) record(c call) {
 	if c.funding == "org_seat" {
 		mode = store.LLMAuthModeSubscription
 	}
-	_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+	_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 		ID: fmt.Sprintf("act-%d", e.seq), UserID: c.user, OrgID: c.org, ChatID: "chat", Provider: c.provider, Model: c.model,
 		AuthMode: mode, Purpose: store.LLMPurposeChat, InputTokens: c.in, OutputTokens: c.out, Outcome: store.LLMOutcomeSuccess,
 		Attempt: 1, CreatedAt: c.at, AccountID: c.account, Funding: c.funding, FundingOrgID: c.fundingOrg,

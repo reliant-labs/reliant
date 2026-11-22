@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -27,7 +29,7 @@ func (runNoWorktreeRepo) GetWorktree(context.Context, string) (*db.Worktree, err
 func TestRunCommand_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: runNoWorktreeRepo{}}))
+	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: runNoWorktreeRepo{}, Projects: projectaccesstest.For(runNoWorktreeRepo{})}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RunPackageCommandRequest, pb.RunPackageCommandResponse]{
 		{

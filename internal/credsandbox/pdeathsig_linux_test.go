@@ -157,7 +157,11 @@ func TestSandbox_InitRunsItsCommandWhileItsStarterLives(t *testing.T) {
 	requireSandbox(t)
 	out, code := run(t, Plan{}, `sleep 1; echo done; ls /proc/self/fd | tr '\n' ' '; echo; env | grep -c RELIANT_CRED_SANDBOX || true`)
 	require.Equal(t, 0, code, out)
-	lines := strings.Split(strings.TrimSpace(out), "\n")
+	// run combines stdout and stderr. A coverage-instrumented sandbox helper
+	// emits this runtime diagnostic on exit because its isolated environment
+	// deliberately does not inherit GOCOVERDIR. It is not command output.
+	commandOutput := strings.TrimSuffix(out, "warning: GOCOVERDIR not set, no coverage data emitted\n")
+	lines := strings.Split(strings.TrimSpace(commandOutput), "\n")
 	require.Len(t, lines, 3, out)
 	assert.Equal(t, "done", lines[0])
 	assert.Equal(t, "0 1 2 3", strings.TrimSpace(lines[1]), "the command inherited a descriptor of the sandbox's (3 is ls's own)")

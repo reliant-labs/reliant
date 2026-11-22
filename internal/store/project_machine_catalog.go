@@ -3,11 +3,14 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/config"
 )
 
 // project_machine_catalogs holds each machine's own synced project config
@@ -314,4 +317,77 @@ func SetProjectConfigCatalogUnion(ctx context.Context, db orm.Context, projectID
 		return fmt.Errorf("failed to store the workflow catalog of project %s: %w", projectID, err)
 	}
 	return nil
+}
+
+// ProjectFilesUnion is the union of every machine's skills, repo memories and
+// scenarios of a project (config.UnionSkills).
+func ProjectFilesUnion(ctx context.Context, db orm.Context, projectID string) (ProjectConfigUnion, error) {
+	rows, err := ListProjectMachineFiles(ctx, db, projectID)
+	if err != nil {
+		return ProjectConfigUnion{}, err
+	}
+	machines := make([]config.MachineFiles, 0, len(rows))
+	for _, row := range rows {
+		m := config.MachineFiles{DaemonID: row.DaemonID, PushedAt: row.PushedAt}
+		if m.Skills, err = config.ParseStoredSkills(row.SkillsJSON); err != nil {
+			return ProjectConfigUnion{}, err
+		}
+		if m.RepoMemories, err = config.ParseRepoMemories(row.RepoMemoriesJSON); err != nil {
+			return ProjectConfigUnion{}, err
+		}
+		if m.Scenarios, err = config.ParseStoredScenarios(row.ScenariosJSON); err != nil {
+			return ProjectConfigUnion{}, err
+		}
+		machines = append(machines, m)
+	}
+	var union ProjectConfigUnion
+	if union.SkillsJSON, err = config.EncodeCatalogJSON(config.UnionSkills(machines)); err != nil {
+		return union, err
+	}
+	if union.ScenariosJSON, err = config.EncodeCatalogJSON(config.UnionScenarios(machines)); err != nil {
+		return union, err
+	}
+	if memories := config.UnionRepoMemories(machines); len(memories) > 0 {
+		encoded, err := json.Marshal(memories)
+		if err != nil {
+			return union, err
+		}
+		s := string(encoded)
+		union.RepoMemoriesJSON = &s
+	}
+	return union, nil
+}
+
+// ProjectMachineCatalogs is every machine's catalog of a project.
+func ProjectMachineCatalogs(ctx context.Context, db orm.Context, projectID string) ([]config.MachineCatalog, error) {
+	rows, err := ListProjectMachineCatalogs(ctx, db, projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]config.MachineCatalog, 0, len(rows))
+	for _, row := range rows {
+		c, _, err := MachineCatalogFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// MachineCatalogFromRow decodes one machine's catalog row and its removal history.
+func MachineCatalogFromRow(row *ProjectMachineCatalog) (config.MachineCatalog, []config.RemovedCatalogFile, error) {
+	if row == nil {
+		return config.MachineCatalog{}, nil, nil
+	}
+	c := config.MachineCatalog{DaemonID: row.DaemonID, PushedAt: row.PushedAt}
+	var err error
+	if c.Workflows, err = config.ParseStoredWorkflows(row.WorkflowsJSON); err != nil {
+		return c, nil, err
+	}
+	if c.Presets, err = config.ParseStoredPresets(row.PresetsJSON); err != nil {
+		return c, nil, err
+	}
+	removed, err := config.ParseRemovedCatalogFiles(row.RemovedJSON)
+	return c, removed, err
 }

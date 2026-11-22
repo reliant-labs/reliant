@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -106,7 +108,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Syncer: backend, Fires: backend,
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	}))
 

@@ -849,9 +849,6 @@ func ListInheritedSpawnChildren(ctx context.Context, db orm.Context, threadID st
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
 
 	var inherited []*core.InheritedSpawnChild
 	current := threadID
@@ -932,9 +929,6 @@ const resumeSlotSeparator = "#resume-"
 // died, or a chat whose agent stopped before the run kept such a record at
 // all.
 func GetStoppedSpawnAgent(ctx context.Context, db orm.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error) {
-	if chatID == "" || threadID == "" {
-		return nil, fmt.Errorf("chat ID and thread ID are required")
-	}
 	if chatID == "" || threadID == "" {
 		return nil, fmt.Errorf("chat ID and thread ID are required")
 	}

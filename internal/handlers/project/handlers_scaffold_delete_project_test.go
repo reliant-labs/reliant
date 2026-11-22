@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -38,7 +40,7 @@ func TestDeleteProject_Generated(t *testing.T) {
 	store := ownedProjectRepo(t)
 	scheduled := scheduling(store)
 	now := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Now: func() time.Time { return now }}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Now: func() time.Time { return now }}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
 		{

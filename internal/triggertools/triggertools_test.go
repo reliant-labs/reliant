@@ -25,7 +25,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggertools"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -116,8 +118,8 @@ func setup(t *testing.T, publicURL string) *env {
 		CreatedAt: now, UpdatedAt: now}))
 
 	svc, err := trigger.New(trigger.Deps{
-		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
-		Syncer: e.backend, Fires: e.backend,
+		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Projects: projectaccesstest.For(repo), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
