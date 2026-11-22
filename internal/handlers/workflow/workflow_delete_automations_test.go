@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
-
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

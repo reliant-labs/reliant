@@ -3,8 +3,6 @@ package workflow_test
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
-
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
