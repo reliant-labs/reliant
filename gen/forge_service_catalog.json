@@ -43493,7 +43493,8 @@
             "DAEMON_UPGRADE_STATE_UPDATING",
             "DAEMON_UPGRADE_STATE_DRAINED",
             "DAEMON_UPGRADE_STATE_AWAITING_OWNER",
-            "DAEMON_UPGRADE_STATE_FAILED"
+            "DAEMON_UPGRADE_STATE_FAILED",
+            "DAEMON_UPGRADE_STATE_STAGED"
           ],
           "reliant.v1.DiskGuardState": [
             "DISK_GUARD_STATE_UNSPECIFIED",
@@ -43532,7 +43533,8 @@
             2,
             3,
             4,
-            5
+            5,
+            6
           ],
           "reliant.v1.DiskGuardState": [
             0,

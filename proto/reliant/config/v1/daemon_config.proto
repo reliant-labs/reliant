@@ -341,6 +341,17 @@ message DaemonConfig {
     env_var: "RELIANT_DAEMON_LABELS"
     description: "Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)"
   }];
+  // Install new releases by itself (opt-in, owner decision D7): the daemon
+  // stages the newest signed release of its channel and installs it at a
+  // quiet moment, restarting in place. Only a reliant nothing else owns does
+  // (a release archive unpacked into a directory this user can write); the
+  // desktop app's, Homebrew's, a system package's and a cloud machine's are
+  // left to their owners, and the daemon says so. Not on Windows yet.
+  bool auto_update = 32 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_AUTO_UPDATE"
+    flag: "auto-update"
+    description: "Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
