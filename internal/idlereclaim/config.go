@@ -23,6 +23,8 @@
 // live process with its cwd, executable, open or mapped files inside, the
 // daemon's admission lease for the path, and the regenerable-output
 // inventory's holds (worktreereclaim.InspectRegenerable).
+//
+//forge:exclude-contract: daemon-side filesystem and git passes with one implementation; what only the daemon has (lease, process inspection, use logs) is injected as funcs in Deps, and tests run against real temp directories and git repos
 package idlereclaim
 
 import (

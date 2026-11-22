@@ -59,8 +59,6 @@ type Deps struct {
 }
 
 // Reclaimer runs the idle reclaim over one scratch root and one worktree root.
-//
-//forge:contract
 type Reclaimer struct {
 	Config       Config
 	ScratchRoot  string
