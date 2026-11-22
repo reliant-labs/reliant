@@ -135,6 +135,11 @@ func (a *WorkflowStatusActivity) Name() string {
 
 // Execute writes workflow status to chat_updates table, updates chat state, and tracks workflow hierarchy
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
+	// A worker built without a database cannot record a run's outcome: say so
+	// (Temporal retries the activity) rather than dereference a missing store.
+	if a.repo == nil || a.runs == nil {
+		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
+	}
 	// How the run ended, judged before the status write it lands with.
 	input.resolved = a.resolveRunOutcome(ctx, input)
 
