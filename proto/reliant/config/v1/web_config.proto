@@ -155,6 +155,16 @@ message ReliantWebConfig {
     ]
   }];
 
+  string auth_provider = 33 [(forge.v1.config) = {
+    env_var: "AUTH_PROVIDER"
+    default_value: "supabase"
+    description: "Who signs people in. \"supabase\" (the default): Supabase sessions, sent to both APIs as a bearer token. \"forge\": the managed identity's login broker on reliant-api (/auth/*); the browser holds only its session cookie, every RPC goes same-origin through /_api/@reliant and /_api/@cp with credentials included and no Authorization header, and the sign-in screens are the native ones. The desktop app reads the same key from config.js. Turning it back to \"supabase\" is the rollback."
+    allowed_values: [
+      "supabase",
+      "forge"
+    ]
+  }];
+
   string supabase_url = 7 [(forge.v1.config) = {
     env_var: "SUPABASE_URL"
     required_when: [
