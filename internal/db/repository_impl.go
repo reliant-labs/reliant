@@ -2806,34 +2806,8 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 	})
 }
 
-// SetWorkflowOutcome records the run's verdict — the outcome declared by the
-// terminal node it reached. Distinct from UpdateWorkflowStatus: status is the
-// Temporal-owned lifecycle and gets reconciled back from Temporal, so it cannot
-// carry "the work did not pass". No chat-activity emit: the outcome does not
-// change whether the chat is busy, only what the finished run means.
-func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
-}
-
-// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
-func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
-}
-
 // HandledNodeFailure is a node of an ended run whose last attempt failed.
 type HandledNodeFailure = store.HandledNodeFailure
-
-// FirstHandledNodeFailure returns a node of the run, or of a run under it,
-// whose last attempt in run runID (since since, for an attempt that names no
-// run) failed, or nil (store.FirstHandledNodeFailure).
-func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
-	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
-}
-
-// SetWorkflowFailureDetail records why a run failed, on the run.
-func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
-	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
-}
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
@@ -3250,29 +3224,6 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
-// SetLaunchEventRunFailureDetail records why the launch run failed.
-func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
-	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
-}
-
-// SetLaunchEventRunStatus records how the run a trigger fired ended, on
-// the chat's launch event (core.TriggerEvent.RunStatus).
-func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
-}
-
-// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
-// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
-func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
-}
-
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3523,12 +3474,6 @@ func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, lim
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
 }
 
-// MarkDeclaredFailureNode records that a run's top-level node declared the
-// run's outcome: failure (store.MarkDeclaredFailureNode).
-func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
-	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
-}
-
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
@@ -3546,13 +3491,6 @@ func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus)
 // ==================== Workflow Checkpoints ====================
 // Position truth for resume-at-position: last top-level node entered (and
 // loop iteration for loop nodes) per workflow ID.
-
-func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error {
-	if checkpoint == nil {
-		return fmt.Errorf("checkpoint cannot be nil")
-	}
-	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
-}
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.

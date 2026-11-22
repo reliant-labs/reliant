@@ -37,7 +37,7 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 	if detail == "" {
 		detail = "Workflow declared failure without a recorded node error."
 	}
-	if err := a.repo.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
+	if err := a.runs.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
 		logging.WarnContext(ctx, "Could not record automation failure detail", "chat_id", input.ChatID, "error", err)
 	}
 	if automationTrigger(chat) == "" {
