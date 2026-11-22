@@ -3059,7 +3059,7 @@ func (m *MockEnqueueAgentMessageStore) EnqueueSpawnReport(ctx context.Context, m
 var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 
 // forge:section MockExecuteRunStepStore
-// forge:hash=91bbf281b1abf76503a83153508be5659a4f958b2a5d67a3a45541eea62a1cf2
+// forge:hash=661e32a635c288b6e74e4f5f3adab0cdecc720dfa3fe89d97165607f9b960cac
 
 // MockExecuteRunStepStore is a test mock for the ExecuteRunStepStore interface.
 //
@@ -3070,10 +3070,10 @@ var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 type MockExecuteRunStepStore struct {
 	contractkit.Recorder
 	CreateChatUpdateFunc             func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
 	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
-	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
 
@@ -3084,6 +3084,15 @@ func (m *MockExecuteRunStepStore) CreateChatUpdate(ctx context.Context, chatID s
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockExecuteRunStepStore", "CreateChatUpdate")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -3111,15 +3120,6 @@ func (m *MockExecuteRunStepStore) GetWorktree(ctx context.Context, id string) (*
 		return m.GetWorktreeFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetWorktree")
-}
-
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
 }
 
 // ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.

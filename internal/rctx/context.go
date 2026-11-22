@@ -92,6 +92,13 @@ type ToolContext struct {
 	// RunStep, from the request's server-built context, never tool input.
 	RunWorkDir string
 
+	// RunStepEnv is a run step's own environment (an LLM gateway step key,
+	// daemon.StepEnv): the shell tool applies it to the step's command and
+	// redacts its secrets from the output. Set only with RunStep, from the
+	// request's server-built context (toolexec.ToolRequest.RunStepEnv), never
+	// tool input.
+	RunStepEnv *daemon.StepEnv
+
 	// BoundParams names the tool's parameters that the run's configuration
 	// (the workflow's tool_params, a preset, a global setting) bound for this
 	// call. Their values are in the tool input, merged there by

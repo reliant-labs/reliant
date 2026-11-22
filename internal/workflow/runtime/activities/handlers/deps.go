@@ -264,6 +264,10 @@ type EnqueueAgentMessageStore interface {
 // ExecuteRunStepStore is what ExecuteRunStepActivity reads and writes.
 type ExecuteRunStepStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
+	// GetDaemon reads the command machine's registration: a run node with
+	// llm_gateway runs only on one that registered
+	// daemon.CapabilityRunStepEnv.
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	RunExecutorContextStore
 }
 
