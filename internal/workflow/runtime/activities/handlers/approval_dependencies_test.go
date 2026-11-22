@@ -17,7 +17,7 @@ func TestApprovalActivitiesRequireCloser(t *testing.T) {
 		require.False(t, out.Success)
 	})
 	t.Run("cleanup", func(t *testing.T) {
-		out, err := NewCleanupActivity(nil, nil).Execute(context.Background(), CleanupInput{ChatID: "chat"})
+		out, err := NewCleanupActivity(nil, nil, nil).Execute(context.Background(), CleanupInput{ChatID: "chat"})
 		require.EqualError(t, err, "approval resolution store is not configured")
 		require.Zero(t, out.ApprovalsCancelled)
 	})
