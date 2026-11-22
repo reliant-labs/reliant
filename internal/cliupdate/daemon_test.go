@@ -145,10 +145,13 @@ func TestDaemonApplyDrainsThenShutsDown(t *testing.T) {
 	_, err := d.Stage(context.Background())
 	require.NoError(t, err)
 
+	// A fixed deadline: the fake drains never read it, and no test reads
+	// the wall clock.
+	deadline := time.Unix(1_800_000_060, 0)
 	var shutdowns atomic.Int64
 	declined := errors.New("still running")
 	err = d.Apply(context.Background(), ApplyRequest{
-		Deadline: time.Now().Add(time.Minute),
+		Deadline: deadline,
 		Drain:    func(context.Context, time.Time) (int, error) { return 1, declined },
 		Shutdown: func() { shutdowns.Add(1) },
 	})
@@ -159,7 +162,7 @@ func TestDaemonApplyDrainsThenShutsDown(t *testing.T) {
 	var drained atomic.Int64
 	require.NoError(t, d.Apply(context.Background(), ApplyRequest{
 		Urgency:  selfupdate.Routine,
-		Deadline: time.Now().Add(time.Minute),
+		Deadline: deadline,
 		Drain:    func(context.Context, time.Time) (int, error) { drained.Add(1); return 0, nil },
 		Shutdown: func() { shutdowns.Add(1) },
 	}))

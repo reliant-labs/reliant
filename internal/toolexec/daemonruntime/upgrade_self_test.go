@@ -61,13 +61,17 @@ func (f *fakeSelfUpdate) Apply(ctx context.Context, req cliupdate.ApplyRequest) 
 	return nil
 }
 
+// selfEpoch is where every test's self-update clock starts: a fixed instant,
+// never the wall clock.
+var selfEpoch = time.Unix(1_800_000_000, 0)
+
 // selfClock is the self-update's clock: it moves only when a test says.
 type selfClock struct {
 	mu sync.Mutex
 	t  time.Time
 }
 
-func (c *selfClock) now() time.Time {
+func (c *selfClock) read() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
@@ -93,11 +97,11 @@ type selfUpdatingDaemon struct {
 
 func newSelfUpdatingDaemon(t *testing.T, su *fakeSelfUpdate) *selfUpdatingDaemon {
 	t.Helper()
-	s := &selfUpdatingDaemon{su: su, clock: &selfClock{t: time.Unix(1_800_000_000, 0)}}
+	s := &selfUpdatingDaemon{su: su, clock: &selfClock{t: selfEpoch}}
 	d := newTestDaemonClient("d-self", "u-self")
 	d.selfUpdate = su
 	d.upgrade.poll = time.Millisecond
-	d.upgrade.now = s.clock.now
+	d.upgrade.now = s.clock.read
 	d.upgrade.backgroundCount = func() int { return int(s.bg.Load()) }
 	d.upgrade.stageEvery, d.upgrade.selfRetry = time.Hour, time.Hour
 	d.upgrade.backstop = time.Hour
@@ -198,7 +202,7 @@ func TestAutoUpdateSecurityDeadlineForcesTheInstall(t *testing.T) {
 	s.start(t)
 	waitForUpgradeState(t, s.d, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED)
 
-	req := restartRequest(s.clock.now().Add(time.Minute)).GetRestartRequested()
+	req := restartRequest(selfEpoch.Add(time.Minute)).GetRestartRequested()
 	req.Urgency = reliantv1.RestartUrgency_RESTART_URGENCY_SECURITY
 	s.d.handleRestartRequested(context.Background(), req)
 	s.probe.waitForPolls(t, 5)
@@ -218,7 +222,7 @@ func TestAutoUpdateNormalRequestDoesNotForce(t *testing.T) {
 	s.bg.Store(1)
 	s.start(t)
 	waitForUpgradeState(t, s.d, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED)
-	s.d.handleRestartRequested(context.Background(), restartRequest(s.clock.now()).GetRestartRequested())
+	s.d.handleRestartRequested(context.Background(), restartRequest(selfEpoch).GetRestartRequested())
 	s.clock.advance(time.Hour)
 	s.probe.waitForPolls(t, 5)
 	assert.Zero(t, s.su.applies.Load())
