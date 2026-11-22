@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 )
 
@@ -168,4 +169,29 @@ func TestCallsThatNameNoOrgInstallationAreUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "bot", cred.ConnectionID(), "the personal bot, as before")
 	assert.Empty(t, broker.orgActed)
+}
+
+// RunOrgOf names the org a run belongs to, for the span of an integration call
+// made in it (httpaction.RunOrgSource): the run's org, "" for a run of none.
+// A source with no resolver, or no run, knows none and is not an error.
+func TestRunOrgOf(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	var _ httpaction.RunOrgSource = e.source
+
+	org, err := e.source.RunOrgOf(ctx, e.newOrgRun("alice", "org-1"))
+	require.NoError(t, err)
+	assert.Equal(t, "org-1", org)
+
+	org, err = e.source.RunOrgOf(ctx, e.newOrgRun("alice", ""))
+	require.NoError(t, err)
+	assert.Empty(t, org)
+
+	org, err = e.source.RunOrgOf(ctx, "")
+	require.NoError(t, err)
+	assert.Empty(t, org)
+
+	org, err = connauth.New(connauth.Deps{}).RunOrgOf(ctx, "run-1")
+	require.NoError(t, err)
+	assert.Empty(t, org)
 }
