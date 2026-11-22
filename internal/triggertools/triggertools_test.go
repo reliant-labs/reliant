@@ -119,7 +119,7 @@ func setup(t *testing.T, publicURL string) *env {
 
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Projects: projectaccesstest.For(repo), Syncer: e.backend, Fires: e.backend,
+		Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)

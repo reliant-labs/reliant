@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package orgaccounts_test
 
 import (
 	"context"
@@ -17,8 +17,7 @@ import (
 // the releases, so binding again starts afresh.
 func TestWorkspaceSeatAttribution(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	attribution := func(id string) (org, source string) {
 		t.Helper()
@@ -36,7 +35,7 @@ func TestWorkspaceSeatAttribution(t *testing.T) {
 	dana := mustUpsert(t, repo, claudeUpsert("dana", "dana", "ws-a", "t", "r"))
 	eve := mustUpsert(t, repo, claudeUpsert("eve", "eve", "ws-a", "t", "r"))
 	fayElsewhere := mustUpsert(t, repo, claudeUpsert("fay", "fay", "ws-b", "t", "r"))
-	key, _, err := TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
+	key, _, err := repo.accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: "gus", Provider: "claude", AuthKind: core.AuthKindAPIKey, IdentityKey: "apikey:gus",
 		Secrets: core.AccountSecrets{Secret: "sk-ant-gus-0001"},
 	})
@@ -123,8 +122,7 @@ func TestWorkspaceSeatAttribution(t *testing.T) {
 // the same clear goes through.
 func TestWorkspaceSeatClearIsDecidedAtomically(t *testing.T) {
 	t.Parallel()
-	repo, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
+	repo, raw := newEnv(t)
 	ctx := context.Background()
 	orgOf := func(id string) string {
 		t.Helper()

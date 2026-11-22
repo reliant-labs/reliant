@@ -23,6 +23,5 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)
 	}
-	repo.EnableCredentialSealing(v)
 	return v, nil
 }

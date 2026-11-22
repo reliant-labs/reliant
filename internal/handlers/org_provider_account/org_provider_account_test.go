@@ -126,10 +126,11 @@ func newEnvWith(t *testing.T, rollout *configv1.OrgsConfig) *env {
 		MatchWorkspaceFunc: func(context.Context, core.OrgProviderWorkspace) (int, error) { return 0, nil },
 	}, woken: &wakes{}}
 	e.svc = org_provider_account.NewTestOrgProviderAccount(t, org_provider_account.WithOrgProviderAccountDeps(org_provider_account.Deps{
-		Store:      orgStore{e.accounts, repo},
-		OrgRollout: rollout,
-		Seats:      e.seats,
-		ChatWaker:  e.woken,
+		Accounts:    e.accounts,
+		OrgAccounts: db.TestOrgAccounts(t, repo),
+		OrgRollout:  rollout,
+		Seats:       e.seats,
+		ChatWaker:   e.woken,
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {
@@ -176,7 +177,7 @@ func (e *env) seed() fixture {
 	f := fixture{account: add(orgKey, "Acme prod"), second: add("sk-ant-org-second-key-e5f6", "Acme batch")}
 	f.ownTeam = e.claudeSignIn(adminID, "ws-new", "team")
 	f.seat = e.claudeSignIn(memberID, "ws-1", "team")
-	_, _, err := e.repo.BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
+	_, _, err := db.TestOrgAccounts(e.t, e.repo).BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
 		OrgID: org, Provider: "claude", ExternalOrgID: "ws-1", DisplayName: "Acme Inc.", BoundByUserID: adminID,
 	})
 	require.NoError(e.t, err)
@@ -675,7 +676,7 @@ func TestGrantsNameLiveMembersOnly(t *testing.T) {
 		OrgId: org, AccountId: f.account, UserIds: []string{memberID, strayID},
 	}))
 	requireRefused(t, err, connect.CodeInvalidArgument, "")
-	grants, err := e.repo.ListOrgAccountGrants(context.Background(), org)
+	grants, err := db.TestOrgAccounts(e.t, e.repo).ListOrgAccountGrants(context.Background(), org)
 	require.NoError(t, err)
 	assert.Empty(t, grants)
 
@@ -737,10 +738,4 @@ func TestOrgAccountChangesWakeTheOrgsBlockedChats(t *testing.T) {
 	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{org}, e.woken.take(), "its key replaced")
-}
-
-// orgStore is the accounts joined with the org administration the facade still holds.
-type orgStore struct {
-	provideraccounts.Service
-	*db.Repo
 }

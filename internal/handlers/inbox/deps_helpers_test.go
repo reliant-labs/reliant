@@ -26,6 +26,7 @@ func realDeps(repo *db.Repo) Deps {
 		Notices:    store.NewTriggerExtStore(repo.ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:      store.NewWorktreeExtStore(repo.ORM()),
+		OrgKeys:    &MockOrgKeys{},
 	}
 }
 
@@ -65,6 +66,9 @@ func withDeps(d Deps) TestOption {
 	}
 	if d.Marks == nil {
 		d.Marks = fill.Marks
+	}
+	if d.OrgKeys == nil {
+		d.OrgKeys = &MockOrgKeys{}
 	}
 	if d.Items == nil {
 		d.Items = fill.Items

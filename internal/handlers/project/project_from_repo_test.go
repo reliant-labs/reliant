@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -378,6 +379,7 @@ func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *conn
 		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
 		LocalModels: store.NewDaemonExtStore(repo.ORM()),
 		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),
+		Pools:       poolsOfRepo(repo),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)
@@ -452,4 +454,8 @@ func TestRepoNameFromCloneURL(t *testing.T) {
 	} {
 		assert.Equal(t, want, repoNameFromCloneURL(url), "clone url %q", url)
 	}
+}
+
+func poolsOfRepo(repo tools_daemon.Repository) tools_daemon.MachinePools {
+	return store.NewMachinePoolExtStore(repo.(interface{ ORM() *orm.Client }).ORM())
 }
