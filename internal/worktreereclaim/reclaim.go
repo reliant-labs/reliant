@@ -1128,12 +1128,14 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 	}
 	r.applyMark(ctx, w, checkouts, &res)
 	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
-		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
-			res.RecoverableIdle = true
-		}
+		ok, why := r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second)
+		res.RecoverableIdle, res.NotReclaimable = ok, why
 	}
 	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
 		r.probeLanded(ctx, w, &res)
+	}
+	if res.Landed || res.RecoverableIdle {
+		res.NotReclaimable = ""
 	}
 	r.reportUse(ctx, w, checkouts, &res)
 	// A landed or recoverable row is about to be retired whole; shedding it
