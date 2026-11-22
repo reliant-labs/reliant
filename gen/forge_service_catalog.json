@@ -55481,12 +55481,10 @@
     },
     {
       "consumer": "Attachment",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.Repository",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.AttachmentStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -56276,16 +56274,67 @@
     },
     {
       "consumer": "Plan",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.PlanStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatRefetcher",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TaskStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Plan",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Preset",
@@ -56800,16 +56849,67 @@
     },
     {
       "consumer": "Task",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.Repository",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatStore",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Plans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.PlanStore",
+      "methods": [],
+      "candidates": [
         "Database"
       ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatRefetcher",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tasks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TaskStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ThreadStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Task",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/task.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "TemporalClient",
@@ -57471,6 +57571,54 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Plan.Chats",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Plans",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Refetch",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tasks",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Threads",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Plan.Tx",
+      "source": {
+        "path": "internal/handlers/plan/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Apps",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -57506,6 +57654,54 @@
       "component": "Settings.ControlPlane",
       "source": {
         "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Chats",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Plans",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Refetch",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tasks",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Threads",
+      "source": {
+        "path": "internal/handlers/task/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Task.Tx",
+      "source": {
+        "path": "internal/handlers/task/service.go",
         "symbol": "New"
       }
     },

@@ -102,7 +102,7 @@ type APIHTTPRoutesDeps struct {
 // working-directory classification to the terminal websocket, and the daemon
 // attachments to the connector endpoint's workspace waker.
 type APIHTTPRoutesStore interface {
-	attachment.Repository
+	attachment.ContentReader
 	mcpserver.AttachmentReader
 	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

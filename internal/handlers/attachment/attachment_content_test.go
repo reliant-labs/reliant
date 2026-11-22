@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func newContentHandler(t *testing.T, userID string) (http.Handler, []byte) {
@@ -21,11 +21,11 @@ func newContentHandler(t *testing.T, userID string) (http.Handler, []byte) {
 	for i := range body {
 		body[i] = byte(i % 251)
 	}
-	atts := map[string]*db.Attachment{
+	atts := map[string]*core.Attachment{
 		"vid-1": {ID: "vid-1", UserID: "owner", Filename: "generated-1.mp4", MimeType: "video/mp4", Content: body, UpdatedAt: time.Unix(1700000000, 0)},
 	}
 	// Only GetAttachment is programmed: the content handler reads, never writes.
-	repo := &MockRepository{GetAttachmentFunc: func(_ context.Context, id string) (*db.Attachment, error) {
+	repo := &MockContentReader{GetAttachmentFunc: func(_ context.Context, id string) (*core.Attachment, error) {
 		return atts[id], nil
 	}}
 	auth := func(r *http.Request) (string, error) {
