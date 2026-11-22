@@ -2,7 +2,6 @@ package project_test
 
 import (
 	"context"
-	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 func TestRecloneProjectOnDaemon_Generated(t *testing.T) {
