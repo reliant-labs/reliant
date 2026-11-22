@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -102,16 +104,9 @@ func TestCallLLM_RetryAfterDroppedConnection_SendsIdenticalPrompts(t *testing.T)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	driver := &flakyConnectionDriver{}
-	callLLM := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		nil,
-		&staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
-			return driver, nil
-		},
-		nil,
-	)
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	}, MCPBinder: nil})
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()

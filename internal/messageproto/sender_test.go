@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type fakeReader struct {
@@ -29,7 +30,7 @@ func (f *fakeReader) ListToolCallsByIDs(context.Context, []string) ([]*db.ToolCa
 	return nil, nil
 }
 
-func (f *fakeReader) SenderTitles(_ context.Context, ids []string) (map[string]string, error) {
+func (f *fakeReader) SenderTitlesByThreadIDs(_ context.Context, ids []string) (map[string]string, error) {
 	f.listCalls++
 	f.askedIDs = ids
 	if f.err != nil {

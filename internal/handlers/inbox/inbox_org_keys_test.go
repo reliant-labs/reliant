@@ -178,7 +178,7 @@ func TestListInbox_ConcurrentSessionReadIsNotSharedWithSoftware(t *testing.T) {
 	// gives up after a while.
 	var reads atomic.Int32
 	sessionInFlight, secondRead := make(chan struct{}), make(chan struct{})
-	repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+	repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
 		switch reads.Add(1) {
 		case 1:
 			close(sessionInFlight)

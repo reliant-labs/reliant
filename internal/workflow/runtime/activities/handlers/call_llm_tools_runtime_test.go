@@ -6,8 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -18,8 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type toolCaptureMockDriver struct {
@@ -89,14 +92,7 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	activityInstance := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		&staticConfigProvider{},
-		driverResolver,
-		nil,
-	)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	tests := []struct {
 		name                 string
@@ -207,14 +203,7 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 		return mockDriver, nil
 	}
 
-	activityInstance := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		&staticConfigProvider{},
-		driverResolver,
-		nil,
-	)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	// With ToolsConfig, filter and spawn are separate fields.
 	// filter contains tag-based tools, spawn contains spawn entries.
@@ -271,14 +260,7 @@ func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	activityInstance := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		&staticConfigProvider{},
-		driverResolver,
-		nil,
-	)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 	resolvedToolFilter := []string{"tag:coding:default", "spawn:builtin://agent(general,researcher)"}
 	for _, filter := range resolvedToolFilter {
@@ -363,14 +345,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	resolver := &recordingProjectResolver{}
 	mcpManager.SetProjectConfigResolver(resolver.ResolveProjectConfig)
 
-	activityInstance := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		resolver,
-		driverResolver,
-		toolexec.NewLocalMCPContextBinder(mcpManager),
-	)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: resolver, DriverResolver: driverResolver, MCPBinder: toolexec.NewLocalMCPContextBinder(mcpManager)})
 
 	input := ActivityInput{
 		Runtime: RuntimeContext{
@@ -482,14 +457,7 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 				return mockDriver, nil
 			}
 
-			activityInstance := NewCallLLMActivity(
-				h.Repo(),
-				nil,
-				tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-				&staticConfigProvider{},
-				driverResolver,
-				nil,
-			)
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 			toolsConfig := &reliantv1.ToolsConfig{
 				PreloadedTools: celStringListLiteral([]string{"view"}),
@@ -617,14 +585,7 @@ func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *test
 			driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
 				return mockDriver, nil
 			}
-			activityInstance := NewCallLLMActivity(
-				h.Repo(),
-				nil,
-				tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-				&staticConfigProvider{},
-				driverResolver,
-				nil,
-			)
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: driverResolver, MCPBinder: nil})
 
 			toolsConfig := &reliantv1.ToolsConfig{
 				PreloadedTools: celStringListLiteral([]string{"view"}),

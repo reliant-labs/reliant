@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -54,7 +57,7 @@ func newOrgFireFixture(t *testing.T, projectOrg, triggerOrg *string) *fireFixtur
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &flakyStarter{}
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	firer := NewFirer(repo, launcher).WithAutoPause(NewAutoPause(repo, nil))
 	return &fireFixture{repo: repo, starter: starter, firer: firer, trigger: trigger}
 }

@@ -20,8 +20,34 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
+// forge:section MockWorkflowLoader
+// forge:hash=60756489beb2435ec1ddffb9cf2d149a46dc6073488aaf3b0fd20f4146acc6ae
+
+// MockWorkflowLoader is a test mock for the WorkflowLoader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowLoader.<Method>Func not set" error.
+type MockWorkflowLoader struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*core.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
+
 // forge:section MockRunOwnerReader
-// forge:hash=cc722d49e435ff597e2e6dc623e87c64d601b6fb8ff6b6f4b3730fc96ec331de
+// forge:hash=4755ec99bf28d4775a4554d9bd51fb3a53d49a2b86f548f279685bd071d610c0
 
 // MockRunOwnerReader is a test mock for the RunOwnerReader interface.
 //
@@ -31,17 +57,7 @@ import (
 // "MockRunOwnerReader.<Method>Func not set" error.
 type MockRunOwnerReader struct {
 	contractkit.Recorder
-	GetWorkflowFunc func(context.Context, string) (*db.Workflow, error)
-	GetChatFunc     func(context.Context, string) (*db.Chat, error)
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockRunOwnerReader) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRunOwnerReader", "GetWorkflow")
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -55,6 +71,88 @@ func (m *MockRunOwnerReader) GetChat(ctx context.Context, id string) (*db.Chat, 
 
 // Compile-time check.
 var _ RunOwnerReader = (*MockRunOwnerReader)(nil)
+
+// forge:section MockWorkflowRuns
+// forge:hash=3bc0dea11cad0330d68769330faa6ae5e23da5f3c99b24066b78148917e721c2
+
+// MockWorkflowRuns is a test mock for the WorkflowRuns interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowRuns.<Method>Func not set" error.
+type MockWorkflowRuns struct {
+	contractkit.Recorder
+	CascadeTerminalStatusToDescendantsFunc func(context.Context, string, core.WorkflowStopReason) error
+	ClearWorkflowCheckpointFunc            func(context.Context, string) error
+	ListRunNodeExecutionsFunc              func(context.Context, string, int) ([]*core.StepExecution, error)
+	LoadWorkflowFunc                       func(context.Context, string) (*core.Workflow, error)
+}
+
+// CascadeTerminalStatusToDescendants records the call and delegates to CascadeTerminalStatusToDescendantsFunc when set.
+func (m *MockWorkflowRuns) CascadeTerminalStatusToDescendants(ctx context.Context, parentID string, reason core.WorkflowStopReason) error {
+	m.Recorder.Record("CascadeTerminalStatusToDescendants", ctx, parentID, reason)
+	if m.CascadeTerminalStatusToDescendantsFunc != nil {
+		return m.CascadeTerminalStatusToDescendantsFunc(ctx, parentID, reason)
+	}
+	return contractkit.MockNotSet("MockWorkflowRuns", "CascadeTerminalStatusToDescendants")
+}
+
+// ClearWorkflowCheckpoint records the call and delegates to ClearWorkflowCheckpointFunc when set.
+func (m *MockWorkflowRuns) ClearWorkflowCheckpoint(ctx context.Context, workflowID string) error {
+	m.Recorder.Record("ClearWorkflowCheckpoint", ctx, workflowID)
+	if m.ClearWorkflowCheckpointFunc != nil {
+		return m.ClearWorkflowCheckpointFunc(ctx, workflowID)
+	}
+	return contractkit.MockNotSet("MockWorkflowRuns", "ClearWorkflowCheckpoint")
+}
+
+// ListRunNodeExecutions records the call and delegates to ListRunNodeExecutionsFunc when set.
+func (m *MockWorkflowRuns) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*core.StepExecution, error) {
+	m.Recorder.Record("ListRunNodeExecutions", ctx, workflowID, limit)
+	if m.ListRunNodeExecutionsFunc != nil {
+		return m.ListRunNodeExecutionsFunc(ctx, workflowID, limit)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowRuns", "ListRunNodeExecutions")
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowRuns) LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowRuns", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowRuns = (*MockWorkflowRuns)(nil)
+
+// forge:section MockQuestionsByStep
+// forge:hash=c9b38f464efb3c2f2f0729a6cd657f95c9bf27cc4a8e82c4ce20c92d1b8188bc
+
+// MockQuestionsByStep is a test mock for the QuestionsByStep interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestionsByStep.<Method>Func not set" error.
+type MockQuestionsByStep struct {
+	contractkit.Recorder
+	ListQuestionsByWorkflowStepIterationFunc func(context.Context, string, string, int) ([]*core.Question, error)
+}
+
+// ListQuestionsByWorkflowStepIteration records the call and delegates to ListQuestionsByWorkflowStepIterationFunc when set.
+func (m *MockQuestionsByStep) ListQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*core.Question, error) {
+	m.Recorder.Record("ListQuestionsByWorkflowStepIteration", ctx, workflowID, stepID, iteration)
+	if m.ListQuestionsByWorkflowStepIterationFunc != nil {
+		return m.ListQuestionsByWorkflowStepIterationFunc(ctx, workflowID, stepID, iteration)
+	}
+	return nil, contractkit.MockNotSet("MockQuestionsByStep", "ListQuestionsByWorkflowStepIteration")
+}
+
+// Compile-time check.
+var _ QuestionsByStep = (*MockQuestionsByStep)(nil)
 
 // forge:section MockWorktreeOwnerReader
 // forge:hash=33fbcd5b290add46fe61cd6404db83e95c2de20bcd5316b3280e02f47a85b84c
@@ -947,7 +1045,7 @@ func (m *MockChatTransitioner) PinProjectCatalog(ctx context.Context, scope db.C
 var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 
 // forge:section MockApprovalCreateStore
-// forge:hash=10de3e87f1d39663634d2f25ca02bee6f3afbf3c8dc21e0705123a3c38d63ed0
+// forge:hash=0ee9093a624e3d4c0564cf34ea504f4489261b31800ce846d0350e65ebce4551
 
 // MockApprovalCreateStore is a test mock for the ApprovalCreateStore interface.
 //
@@ -957,7 +1055,6 @@ var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 // "MockApprovalCreateStore.<Method>Func not set" error.
 type MockApprovalCreateStore struct {
 	contractkit.Recorder
-	GetApprovalByEntityIDFunc     func(context.Context, string) (*db.Approval, error)
 	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	CreateApprovalFunc            func(context.Context, *db.Approval) error
 	UpdateChatUnreadFunc          func(context.Context, string, bool, string) error
@@ -967,15 +1064,6 @@ type MockApprovalCreateStore struct {
 	CreateRunEventFunc            func(context.Context, *core.RunEvent) (bool, error)
 	LockChatForRunEventFunc       func(context.Context, string) error
 	CountOtherPendingBlockersFunc func(context.Context, string, string) (int, error)
-}
-
-// GetApprovalByEntityID records the call and delegates to GetApprovalByEntityIDFunc when set.
-func (m *MockApprovalCreateStore) GetApprovalByEntityID(ctx context.Context, entityID string) (*db.Approval, error) {
-	m.Recorder.Record("GetApprovalByEntityID", ctx, entityID)
-	if m.GetApprovalByEntityIDFunc != nil {
-		return m.GetApprovalByEntityIDFunc(ctx, entityID)
-	}
-	return nil, contractkit.MockNotSet("MockApprovalCreateStore", "GetApprovalByEntityID")
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -1062,6 +1150,58 @@ func (m *MockApprovalCreateStore) CountOtherPendingBlockers(ctx context.Context,
 // Compile-time check.
 var _ ApprovalCreateStore = (*MockApprovalCreateStore)(nil)
 
+// forge:section MockApprovalLookup
+// forge:hash=3a9b5797a1986454d77e9b7af8aee8ece815b74c89895e8cf84a7a3055788b15
+
+// MockApprovalLookup is a test mock for the ApprovalLookup interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockApprovalLookup.<Method>Func not set" error.
+type MockApprovalLookup struct {
+	contractkit.Recorder
+	GetApprovalByEntityIDFunc func(context.Context, string) (*core.Approval, error)
+}
+
+// GetApprovalByEntityID records the call and delegates to GetApprovalByEntityIDFunc when set.
+func (m *MockApprovalLookup) GetApprovalByEntityID(ctx context.Context, entityID string) (*core.Approval, error) {
+	m.Recorder.Record("GetApprovalByEntityID", ctx, entityID)
+	if m.GetApprovalByEntityIDFunc != nil {
+		return m.GetApprovalByEntityIDFunc(ctx, entityID)
+	}
+	return nil, contractkit.MockNotSet("MockApprovalLookup", "GetApprovalByEntityID")
+}
+
+// Compile-time check.
+var _ ApprovalLookup = (*MockApprovalLookup)(nil)
+
+// forge:section MockToolCallResults
+// forge:hash=3546453336979169fd44b556275801bb7d3843bca0c9681e6618112e190d1daf
+
+// MockToolCallResults is a test mock for the ToolCallResults interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolCallResults.<Method>Func not set" error.
+type MockToolCallResults struct {
+	contractkit.Recorder
+	FindToolCallResultFunc func(context.Context, string) (*core.ToolCallResult, error)
+}
+
+// FindToolCallResult records the call and delegates to FindToolCallResultFunc when set.
+func (m *MockToolCallResults) FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
+	m.Recorder.Record("FindToolCallResult", ctx, toolCallID)
+	if m.FindToolCallResultFunc != nil {
+		return m.FindToolCallResultFunc(ctx, toolCallID)
+	}
+	return nil, contractkit.MockNotSet("MockToolCallResults", "FindToolCallResult")
+}
+
+// Compile-time check.
+var _ ToolCallResults = (*MockToolCallResults)(nil)
+
 // forge:section MockApprovalResolveStore
 // forge:hash=63c72dedc81d6360d817c1ffc03475929670181a182e6089b4ee007f50e7690c
 
@@ -1089,7 +1229,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=5ce8ccf5cf09a5e1c8b06958829d22c7b5e7e1a0923ed6bf7a2d34d558b40e8e
+// forge:hash=e6a0c1b5df65bf07f23aca0f5fb58ab8726fc7c431d36ed3416ba6180ba9b7c1
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1110,8 +1250,6 @@ type MockCallLLMStore struct {
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	EmitToolCallUpdateFunc                                   func(context.Context, string, db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThreadFunc                     func(context.Context, string) ([]*db.AgentMessage, error)
-	ListSpawnChildrenFunc                                    func(context.Context, string) ([]*db.SpawnChild, error)
-	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
 	RecordProviderBackoffFunc                                func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
 	ClearProviderBackoffFunc                                 func(context.Context, string, time.Time) error
 	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
@@ -1167,10 +1305,8 @@ type MockCallLLMStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc                                   func(context.Context, db.LLMCallUsage) (bool, error)
 	MarkAgentMessagesDeliveredFunc                           func(context.Context, []string, time.Time, string) ([]string, error)
 	SetAgentMessagesDeliveredMessageIDFunc                   func(context.Context, []string, string) error
-	EmitAgentMessagesDrainedUpdateFunc                       func(context.Context, string, db.AgentMessagesDrainedUpdate) error
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
@@ -1272,24 +1408,6 @@ func (m *MockCallLLMStore) ListQueuedAgentMessagesForThread(ctx context.Context,
 		return m.ListQueuedAgentMessagesForThreadFunc(ctx, toThreadID)
 	}
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListQueuedAgentMessagesForThread")
-}
-
-// ListSpawnChildren records the call and delegates to ListSpawnChildrenFunc when set.
-func (m *MockCallLLMStore) ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error) {
-	m.Recorder.Record("ListSpawnChildren", ctx, threadID)
-	if m.ListSpawnChildrenFunc != nil {
-		return m.ListSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListSpawnChildren")
-}
-
-// ListInheritedSpawnChildren records the call and delegates to ListInheritedSpawnChildrenFunc when set.
-func (m *MockCallLLMStore) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error) {
-	m.Recorder.Record("ListInheritedSpawnChildren", ctx, threadID)
-	if m.ListInheritedSpawnChildrenFunc != nil {
-		return m.ListInheritedSpawnChildrenFunc(ctx, threadID)
-	}
-	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListInheritedSpawnChildren")
 }
 
 // RecordProviderBackoff records the call and delegates to RecordProviderBackoffFunc when set.
@@ -1787,15 +1905,6 @@ func (m *MockCallLLMStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "GetTrigger")
 }
 
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockCallLLMStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockCallLLMStore", "RecordLLMCallUsage")
-}
-
 // MarkAgentMessagesDelivered records the call and delegates to MarkAgentMessagesDeliveredFunc when set.
 func (m *MockCallLLMStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
 	m.Recorder.Record("MarkAgentMessagesDelivered", ctx, ids, deliveredAt, deliveredMessageID)
@@ -1812,15 +1921,6 @@ func (m *MockCallLLMStore) SetAgentMessagesDeliveredMessageID(ctx context.Contex
 		return m.SetAgentMessagesDeliveredMessageIDFunc(ctx, ids, deliveredMessageID)
 	}
 	return contractkit.MockNotSet("MockCallLLMStore", "SetAgentMessagesDeliveredMessageID")
-}
-
-// EmitAgentMessagesDrainedUpdate records the call and delegates to EmitAgentMessagesDrainedUpdateFunc when set.
-func (m *MockCallLLMStore) EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update db.AgentMessagesDrainedUpdate) error {
-	m.Recorder.Record("EmitAgentMessagesDrainedUpdate", ctx, chatID, update)
-	if m.EmitAgentMessagesDrainedUpdateFunc != nil {
-		return m.EmitAgentMessagesDrainedUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockCallLLMStore", "EmitAgentMessagesDrainedUpdate")
 }
 
 // ListContentBlocksForMessages records the call and delegates to ListContentBlocksForMessagesFunc when set.
@@ -1844,8 +1944,34 @@ func (m *MockCallLLMStore) GetToolCallResultForMessage(ctx context.Context, tool
 // Compile-time check.
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
+// forge:section MockToolResultFinder
+// forge:hash=9a10b2d67e055f95ee581571b9f1d6441b0897bf7413527f3481c29f2cf47908
+
+// MockToolResultFinder is a test mock for the ToolResultFinder interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolResultFinder.<Method>Func not set" error.
+type MockToolResultFinder struct {
+	contractkit.Recorder
+	FindToolBlockFunc func(context.Context, string, reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+}
+
+// FindToolBlock records the call and delegates to FindToolBlockFunc when set.
+func (m *MockToolResultFinder) FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error) {
+	m.Recorder.Record("FindToolBlock", ctx, toolCallID, blockType)
+	if m.FindToolBlockFunc != nil {
+		return m.FindToolBlockFunc(ctx, toolCallID, blockType)
+	}
+	return nil, contractkit.MockNotSet("MockToolResultFinder", "FindToolBlock")
+}
+
+// Compile-time check.
+var _ ToolResultFinder = (*MockToolResultFinder)(nil)
+
 // forge:section MockCleanupStore
-// forge:hash=b48e07579223d2d954610c02d29053c15ec51033c99d5c1ed2a2549f46425d55
+// forge:hash=faae8bc4fa4c95e35aa1bf298fef090cdfe34213085618e2370a0534484d4115
 
 // MockCleanupStore is a test mock for the CleanupStore interface.
 //
@@ -1856,13 +1982,10 @@ var _ CallLLMStore = (*MockCallLLMStore)(nil)
 type MockCleanupStore struct {
 	contractkit.Recorder
 	RunTxFunc                       func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	GetWorkflowFunc                 func(context.Context, string) (*db.Workflow, error)
 	ListPendingApprovalsByChatFunc  func(context.Context, string) ([]*db.Approval, error)
-	ResolvePendingApprovalFunc      func(context.Context, string, int32, string, string) (bool, error)
 	CreateChatUpdateFunc            func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	ListMessagesFunc                func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksFunc           func(context.Context, string) ([]*db.MessageContentBlock, error)
-	GetToolResultBlockFunc          func(context.Context, string) (*db.MessageContentBlock, error)
 	ListToolCallsByIDsFunc          func(context.Context, []string) ([]*db.ToolCall, error)
 	CreateNumberedMessageFunc       func(context.Context, *db.Message) error
 	CreateContentBlockFunc          func(context.Context, *db.MessageContentBlock) error
@@ -1881,15 +2004,6 @@ func (m *MockCleanupStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func
 	return contractkit.MockNotSet("MockCleanupStore", "RunTx")
 }
 
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockCleanupStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockCleanupStore", "GetWorkflow")
-}
-
 // ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.
 func (m *MockCleanupStore) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error) {
 	m.Recorder.Record("ListPendingApprovalsByChat", ctx, chatID)
@@ -1897,15 +2011,6 @@ func (m *MockCleanupStore) ListPendingApprovalsByChat(ctx context.Context, chatI
 		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockCleanupStore", "ListPendingApprovalsByChat")
-}
-
-// ResolvePendingApproval records the call and delegates to ResolvePendingApprovalFunc when set.
-func (m *MockCleanupStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason string, actionTaken string) (bool, error) {
-	m.Recorder.Record("ResolvePendingApproval", ctx, id, status, reason, actionTaken)
-	if m.ResolvePendingApprovalFunc != nil {
-		return m.ResolvePendingApprovalFunc(ctx, id, status, reason, actionTaken)
-	}
-	return false, contractkit.MockNotSet("MockCleanupStore", "ResolvePendingApproval")
 }
 
 // CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
@@ -1933,15 +2038,6 @@ func (m *MockCleanupStore) ListContentBlocks(ctx context.Context, messageID stri
 		return m.ListContentBlocksFunc(ctx, messageID)
 	}
 	return nil, contractkit.MockNotSet("MockCleanupStore", "ListContentBlocks")
-}
-
-// GetToolResultBlock records the call and delegates to GetToolResultBlockFunc when set.
-func (m *MockCleanupStore) GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error) {
-	m.Recorder.Record("GetToolResultBlock", ctx, toolCallID)
-	if m.GetToolResultBlockFunc != nil {
-		return m.GetToolResultBlockFunc(ctx, toolCallID)
-	}
-	return nil, contractkit.MockNotSet("MockCleanupStore", "GetToolResultBlock")
 }
 
 // ListToolCallsByIDs records the call and delegates to ListToolCallsByIDsFunc when set.
@@ -2011,7 +2107,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=0b3d2e113b65fc568fe67d18d8ec8c8f5321ed0917cec57cd1ccfecb529d1930
+// forge:hash=141f004593c6de69f2e01aff12da50965bdd8cebdfb8632b2a07c1b7cbbbe2ff
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -2069,7 +2165,6 @@ type MockCompactStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc                                   func(context.Context, db.LLMCallUsage) (bool, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
@@ -2506,15 +2601,6 @@ func (m *MockCompactStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 	return nil, contractkit.MockNotSet("MockCompactStore", "GetTrigger")
 }
 
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockCompactStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockCompactStore", "RecordLLMCallUsage")
-}
-
 // ListContentBlocksForMessages records the call and delegates to ListContentBlocksForMessagesFunc when set.
 func (m *MockCompactStore) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error) {
 	m.Recorder.Record("ListContentBlocksForMessages", ctx, messageIDs)
@@ -2537,7 +2623,7 @@ func (m *MockCompactStore) GetToolCallResultForMessage(ctx context.Context, tool
 var _ CompactStore = (*MockCompactStore)(nil)
 
 // forge:section MockCreateWorkflowWithThreadStore
-// forge:hash=85072cbd1b27909cb8ac12b89cadc09d17be0ca7b25f4ac3098439226316a869
+// forge:hash=c0bdbfe0b410d32c54fd0d5e4963d65d00e0b24577b3eebc41d58a3560e986a7
 
 // MockCreateWorkflowWithThreadStore is a test mock for the CreateWorkflowWithThreadStore interface.
 //
@@ -2552,7 +2638,6 @@ type MockCreateWorkflowWithThreadStore struct {
 	GetWorktreeFunc      func(context.Context, string) (*db.Worktree, error)
 	ListWorktreesFunc    func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	CreateChatUpdateFunc func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	GetWorkflowFunc      func(context.Context, string) (*db.Workflow, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -2598,15 +2683,6 @@ func (m *MockCreateWorkflowWithThreadStore) CreateChatUpdate(ctx context.Context
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockCreateWorkflowWithThreadStore", "CreateChatUpdate")
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockCreateWorkflowWithThreadStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockCreateWorkflowWithThreadStore", "GetWorkflow")
 }
 
 // Compile-time check.
@@ -2875,7 +2951,7 @@ func (m *MockDeleteWorktreeStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ DeleteWorktreeStore = (*MockDeleteWorktreeStore)(nil)
 
 // forge:section MockDrainAgentMessagesStore
-// forge:hash=f224f37ce37981ca30bde2bc94906bbd2bf8aa1dd9b93025f7c069109a326b49
+// forge:hash=d0a5628772cf76ee35ac0a8c352b5c44183b098b118727f7d7b00e71f952cf74
 
 // MockDrainAgentMessagesStore is a test mock for the DrainAgentMessagesStore interface.
 //
@@ -2890,7 +2966,7 @@ type MockDrainAgentMessagesStore struct {
 	ListQueuedAgentMessagesForThreadFunc   func(context.Context, string) ([]*db.AgentMessage, error)
 	MarkAgentMessagesDeliveredFunc         func(context.Context, []string, time.Time, string) ([]string, error)
 	SetAgentMessagesDeliveredMessageIDFunc func(context.Context, []string, string) error
-	EmitAgentMessagesDrainedUpdateFunc     func(context.Context, string, db.AgentMessagesDrainedUpdate) error
+	CreateChatUpdateFunc                   func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -2938,20 +3014,20 @@ func (m *MockDrainAgentMessagesStore) SetAgentMessagesDeliveredMessageID(ctx con
 	return contractkit.MockNotSet("MockDrainAgentMessagesStore", "SetAgentMessagesDeliveredMessageID")
 }
 
-// EmitAgentMessagesDrainedUpdate records the call and delegates to EmitAgentMessagesDrainedUpdateFunc when set.
-func (m *MockDrainAgentMessagesStore) EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update db.AgentMessagesDrainedUpdate) error {
-	m.Recorder.Record("EmitAgentMessagesDrainedUpdate", ctx, chatID, update)
-	if m.EmitAgentMessagesDrainedUpdateFunc != nil {
-		return m.EmitAgentMessagesDrainedUpdateFunc(ctx, chatID, update)
+// CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
+func (m *MockDrainAgentMessagesStore) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
+	m.Recorder.Record("CreateChatUpdate", ctx, chatID, updateType, entityID, data)
+	if m.CreateChatUpdateFunc != nil {
+		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
-	return contractkit.MockNotSet("MockDrainAgentMessagesStore", "EmitAgentMessagesDrainedUpdate")
+	return contractkit.MockNotSet("MockDrainAgentMessagesStore", "CreateChatUpdate")
 }
 
 // Compile-time check.
 var _ DrainAgentMessagesStore = (*MockDrainAgentMessagesStore)(nil)
 
 // forge:section MockEmitStreamFinalizedStore
-// forge:hash=daa2454916be041644787bee2170b01e63daf7e46c8862242fdb87b11807b7a6
+// forge:hash=c8abb535a226a682a8d26835f8b461f8f97f3bff324214d50764b0ca35320466
 
 // MockEmitStreamFinalizedStore is a test mock for the EmitStreamFinalizedStore interface.
 //
@@ -2961,16 +3037,16 @@ var _ DrainAgentMessagesStore = (*MockDrainAgentMessagesStore)(nil)
 // "MockEmitStreamFinalizedStore.<Method>Func not set" error.
 type MockEmitStreamFinalizedStore struct {
 	contractkit.Recorder
-	EmitStreamFinalizedUpdateFunc func(context.Context, string, db.StreamFinalizedUpdate) error
+	CreateChatUpdateFunc func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 }
 
-// EmitStreamFinalizedUpdate records the call and delegates to EmitStreamFinalizedUpdateFunc when set.
-func (m *MockEmitStreamFinalizedStore) EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update db.StreamFinalizedUpdate) error {
-	m.Recorder.Record("EmitStreamFinalizedUpdate", ctx, chatID, update)
-	if m.EmitStreamFinalizedUpdateFunc != nil {
-		return m.EmitStreamFinalizedUpdateFunc(ctx, chatID, update)
+// CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
+func (m *MockEmitStreamFinalizedStore) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
+	m.Recorder.Record("CreateChatUpdate", ctx, chatID, updateType, entityID, data)
+	if m.CreateChatUpdateFunc != nil {
+		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
-	return contractkit.MockNotSet("MockEmitStreamFinalizedStore", "EmitStreamFinalizedUpdate")
+	return contractkit.MockNotSet("MockEmitStreamFinalizedStore", "CreateChatUpdate")
 }
 
 // Compile-time check.
@@ -3079,7 +3155,7 @@ func (m *MockEnqueueAgentMessageStore) EnqueueSpawnReport(ctx context.Context, m
 var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 
 // forge:section MockExecuteRunStepStore
-// forge:hash=91bbf281b1abf76503a83153508be5659a4f958b2a5d67a3a45541eea62a1cf2
+// forge:hash=661e32a635c288b6e74e4f5f3adab0cdecc720dfa3fe89d97165607f9b960cac
 
 // MockExecuteRunStepStore is a test mock for the ExecuteRunStepStore interface.
 //
@@ -3090,10 +3166,10 @@ var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 type MockExecuteRunStepStore struct {
 	contractkit.Recorder
 	CreateChatUpdateFunc             func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
 	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
-	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
 
@@ -3104,6 +3180,15 @@ func (m *MockExecuteRunStepStore) CreateChatUpdate(ctx context.Context, chatID s
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockExecuteRunStepStore", "CreateChatUpdate")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -3131,15 +3216,6 @@ func (m *MockExecuteRunStepStore) GetWorktree(ctx context.Context, id string) (*
 		return m.GetWorktreeFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetWorktree")
-}
-
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
 }
 
 // ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
@@ -3181,7 +3257,7 @@ func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id str
 var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=b9971ba8635931a983cd9588bf849112db6714feff786ec4f70f45ea61ef5aea
+// forge:hash=25678128990b21701c6a92a52646c053108db7e7356861f3b74fa40c4ca2f2cc
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3198,7 +3274,6 @@ type MockExecuteToolsStore struct {
 	ListReposByProjectFunc                func(context.Context, string) ([]*core.Repo, error)
 	GetContextUsageFunc                   func(context.Context, string, string) (*db.ContextUsage, error)
 	GetToolCallFunc                       func(context.Context, string) (*db.ToolCall, error)
-	GetToolCallResultFunc                 func(context.Context, string) (*db.ToolCallResult, error)
 	UpsertToolCallResultFunc              func(context.Context, string, *db.ToolCallResult) error
 	SetChatDaemonBlockedFunc              func(context.Context, string, bool) error
 	CreateAttachmentFunc                  func(context.Context, *db.Attachment) error
@@ -3279,15 +3354,6 @@ func (m *MockExecuteToolsStore) GetToolCall(ctx context.Context, id string) (*db
 		return m.GetToolCallFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetToolCall")
-}
-
-// GetToolCallResult records the call and delegates to GetToolCallResultFunc when set.
-func (m *MockExecuteToolsStore) GetToolCallResult(ctx context.Context, toolCallID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResult", ctx, toolCallID)
-	if m.GetToolCallResultFunc != nil {
-		return m.GetToolCallResultFunc(ctx, toolCallID)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetToolCallResult")
 }
 
 // UpsertToolCallResult records the call and delegates to UpsertToolCallResultFunc when set.
@@ -3483,7 +3549,7 @@ func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID strin
 var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
-// forge:hash=f5b2e587dbfed3b015fd146dcd22ab7102f5a4c418100f3e5704afef17111b01
+// forge:hash=1a0958c5135d364a5649f6f7386ff8d21f4bc00e583a7146e6450856f7a7de5f
 
 // MockGenerateTitleStore is a test mock for the GenerateTitleStore interface.
 //
@@ -3500,7 +3566,6 @@ type MockGenerateTitleStore struct {
 	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc      func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc            func(context.Context, string) (*core.Trigger, error)
-	RecordLLMCallUsageFunc    func(context.Context, db.LLMCallUsage) (bool, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3564,15 +3629,6 @@ func (m *MockGenerateTitleStore) GetTrigger(ctx context.Context, id string) (*co
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockGenerateTitleStore", "GetTrigger")
-}
-
-// RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
-func (m *MockGenerateTitleStore) RecordLLMCallUsage(ctx context.Context, rec db.LLMCallUsage) (bool, error) {
-	m.Recorder.Record("RecordLLMCallUsage", ctx, rec)
-	if m.RecordLLMCallUsageFunc != nil {
-		return m.RecordLLMCallUsageFunc(ctx, rec)
-	}
-	return false, contractkit.MockNotSet("MockGenerateTitleStore", "RecordLLMCallUsage")
 }
 
 // Compile-time check.
@@ -3969,7 +4025,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=77851a843a2c2d40696bd712c7ed6b0bc808e82842401ed29a3c4e00a6c1edb7
+// forge:hash=ce49993e24f7a78e14a0f74c682cf9619edf507c872a888efdd63ae5487bb236
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -3979,17 +4035,16 @@ var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 // "MockQuestionCreateStore.<Method>Func not set" error.
 type MockQuestionCreateStore struct {
 	contractkit.Recorder
-	RunTxFunc                               func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	GetQuestionsByWorkflowStepIterationFunc func(context.Context, string, string, int) ([]*db.Question, error)
-	CreateQuestionFunc                      func(context.Context, *db.Question) error
-	UpdateChatUnreadFunc                    func(context.Context, string, bool, string) error
-	EmitQuestionUpdateFunc                  func(context.Context, string, db.QuestionUpdate) error
-	EmitUserRefetchFunc                     func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	GetChatFunc                             func(context.Context, string) (*core.Chat, error)
-	HasEnabledTriggerOfKindFunc             func(context.Context, string, core.TriggerKind) (bool, error)
-	CreateRunEventFunc                      func(context.Context, *core.RunEvent) (bool, error)
-	LockChatForRunEventFunc                 func(context.Context, string) error
-	CountOtherPendingBlockersFunc           func(context.Context, string, string) (int, error)
+	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	CreateQuestionFunc            func(context.Context, *db.Question) error
+	UpdateChatUnreadFunc          func(context.Context, string, bool, string) error
+	EmitQuestionUpdateFunc        func(context.Context, string, db.QuestionUpdate) error
+	EmitUserRefetchFunc           func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	GetChatFunc                   func(context.Context, string) (*core.Chat, error)
+	HasEnabledTriggerOfKindFunc   func(context.Context, string, core.TriggerKind) (bool, error)
+	CreateRunEventFunc            func(context.Context, *core.RunEvent) (bool, error)
+	LockChatForRunEventFunc       func(context.Context, string) error
+	CountOtherPendingBlockersFunc func(context.Context, string, string) (int, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3999,15 +4054,6 @@ func (m *MockQuestionCreateStore) RunTx(p0 context.Context, policy orm.TxPolicy,
 		return m.RunTxFunc(p0, policy, f)
 	}
 	return contractkit.MockNotSet("MockQuestionCreateStore", "RunTx")
-}
-
-// GetQuestionsByWorkflowStepIteration records the call and delegates to GetQuestionsByWorkflowStepIterationFunc when set.
-func (m *MockQuestionCreateStore) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*db.Question, error) {
-	m.Recorder.Record("GetQuestionsByWorkflowStepIteration", ctx, workflowID, stepID, iteration)
-	if m.GetQuestionsByWorkflowStepIterationFunc != nil {
-		return m.GetQuestionsByWorkflowStepIterationFunc(ctx, workflowID, stepID, iteration)
-	}
-	return nil, contractkit.MockNotSet("MockQuestionCreateStore", "GetQuestionsByWorkflowStepIteration")
 }
 
 // CreateQuestion records the call and delegates to CreateQuestionFunc when set.
@@ -5171,7 +5217,7 @@ func (m *MockValidateThreadOwnershipStore) GetThread(ctx context.Context, id str
 var _ ValidateThreadOwnershipStore = (*MockValidateThreadOwnershipStore)(nil)
 
 // forge:section MockWorkflowCheckpointStore
-// forge:hash=57c0eee4397f9968c867946efd263f0077a421bbb7ff78c86319e6d77f55ac2f
+// forge:hash=1ef00db17011b2cf732b97dfa6cd7578f0f88af4a545271bc3e928b2eea6a87e
 
 // MockWorkflowCheckpointStore is a test mock for the WorkflowCheckpointStore interface.
 //
@@ -5181,23 +5227,155 @@ var _ ValidateThreadOwnershipStore = (*MockValidateThreadOwnershipStore)(nil)
 // "MockWorkflowCheckpointStore.<Method>Func not set" error.
 type MockWorkflowCheckpointStore struct {
 	contractkit.Recorder
-	UpsertWorkflowCheckpointFunc func(context.Context, *db.WorkflowCheckpoint) error
+	SaveWorkflowCheckpointFunc func(context.Context, *core.WorkflowCheckpoint) error
 }
 
-// UpsertWorkflowCheckpoint records the call and delegates to UpsertWorkflowCheckpointFunc when set.
-func (m *MockWorkflowCheckpointStore) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *db.WorkflowCheckpoint) error {
-	m.Recorder.Record("UpsertWorkflowCheckpoint", ctx, checkpoint)
-	if m.UpsertWorkflowCheckpointFunc != nil {
-		return m.UpsertWorkflowCheckpointFunc(ctx, checkpoint)
+// SaveWorkflowCheckpoint records the call and delegates to SaveWorkflowCheckpointFunc when set.
+func (m *MockWorkflowCheckpointStore) SaveWorkflowCheckpoint(ctx context.Context, cp *core.WorkflowCheckpoint) error {
+	m.Recorder.Record("SaveWorkflowCheckpoint", ctx, cp)
+	if m.SaveWorkflowCheckpointFunc != nil {
+		return m.SaveWorkflowCheckpointFunc(ctx, cp)
 	}
-	return contractkit.MockNotSet("MockWorkflowCheckpointStore", "UpsertWorkflowCheckpoint")
+	return contractkit.MockNotSet("MockWorkflowCheckpointStore", "SaveWorkflowCheckpoint")
 }
 
 // Compile-time check.
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
+// forge:section MockRunRecords
+// forge:hash=778239d471fed6e7dc55cb464d4fac6253b7c54e3361c89a2318cbe798b09532
+
+// MockRunRecords is a test mock for the RunRecords interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunRecords.<Method>Func not set" error.
+type MockRunRecords struct {
+	contractkit.Recorder
+	SetWorkflowOutcomeFunc             func(context.Context, string, string) error
+	SetWorkflowRunOutcomeFunc          func(context.Context, string, string) error
+	SetWorkflowFailureDetailFunc       func(context.Context, string, string) error
+	FirstHandledNodeFailureFunc        func(context.Context, string, string, time.Time) (*store.HandledNodeFailure, error)
+	MarkDeclaredFailureNodeFunc        func(context.Context, string, string) (bool, error)
+	SetLaunchEventRunStatusFunc        func(context.Context, string, string) error
+	SetLaunchEventRunOutcomeFunc       func(context.Context, string, string) error
+	SetLaunchEventRunFailureDetailFunc func(context.Context, string, string) error
+	SetChatRunIDFunc                   func(context.Context, string, string, string) (bool, error)
+}
+
+// SetWorkflowOutcome records the call and delegates to SetWorkflowOutcomeFunc when set.
+func (m *MockRunRecords) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
+	m.Recorder.Record("SetWorkflowOutcome", ctx, id, outcome)
+	if m.SetWorkflowOutcomeFunc != nil {
+		return m.SetWorkflowOutcomeFunc(ctx, id, outcome)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetWorkflowOutcome")
+}
+
+// SetWorkflowRunOutcome records the call and delegates to SetWorkflowRunOutcomeFunc when set.
+func (m *MockRunRecords) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
+	m.Recorder.Record("SetWorkflowRunOutcome", ctx, id, outcome)
+	if m.SetWorkflowRunOutcomeFunc != nil {
+		return m.SetWorkflowRunOutcomeFunc(ctx, id, outcome)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetWorkflowRunOutcome")
+}
+
+// SetWorkflowFailureDetail records the call and delegates to SetWorkflowFailureDetailFunc when set.
+func (m *MockRunRecords) SetWorkflowFailureDetail(ctx context.Context, id string, detail string) error {
+	m.Recorder.Record("SetWorkflowFailureDetail", ctx, id, detail)
+	if m.SetWorkflowFailureDetailFunc != nil {
+		return m.SetWorkflowFailureDetailFunc(ctx, id, detail)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetWorkflowFailureDetail")
+}
+
+// FirstHandledNodeFailure records the call and delegates to FirstHandledNodeFailureFunc when set.
+func (m *MockRunRecords) FirstHandledNodeFailure(ctx context.Context, workflowID string, runID string, since time.Time) (*store.HandledNodeFailure, error) {
+	m.Recorder.Record("FirstHandledNodeFailure", ctx, workflowID, runID, since)
+	if m.FirstHandledNodeFailureFunc != nil {
+		return m.FirstHandledNodeFailureFunc(ctx, workflowID, runID, since)
+	}
+	return nil, contractkit.MockNotSet("MockRunRecords", "FirstHandledNodeFailure")
+}
+
+// MarkDeclaredFailureNode records the call and delegates to MarkDeclaredFailureNodeFunc when set.
+func (m *MockRunRecords) MarkDeclaredFailureNode(ctx context.Context, workflowID string, nodeID string) (bool, error) {
+	m.Recorder.Record("MarkDeclaredFailureNode", ctx, workflowID, nodeID)
+	if m.MarkDeclaredFailureNodeFunc != nil {
+		return m.MarkDeclaredFailureNodeFunc(ctx, workflowID, nodeID)
+	}
+	return false, contractkit.MockNotSet("MockRunRecords", "MarkDeclaredFailureNode")
+}
+
+// SetLaunchEventRunStatus records the call and delegates to SetLaunchEventRunStatusFunc when set.
+func (m *MockRunRecords) SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error {
+	m.Recorder.Record("SetLaunchEventRunStatus", ctx, chatID, status)
+	if m.SetLaunchEventRunStatusFunc != nil {
+		return m.SetLaunchEventRunStatusFunc(ctx, chatID, status)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetLaunchEventRunStatus")
+}
+
+// SetLaunchEventRunOutcome records the call and delegates to SetLaunchEventRunOutcomeFunc when set.
+func (m *MockRunRecords) SetLaunchEventRunOutcome(ctx context.Context, chatID string, outcome string) error {
+	m.Recorder.Record("SetLaunchEventRunOutcome", ctx, chatID, outcome)
+	if m.SetLaunchEventRunOutcomeFunc != nil {
+		return m.SetLaunchEventRunOutcomeFunc(ctx, chatID, outcome)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetLaunchEventRunOutcome")
+}
+
+// SetLaunchEventRunFailureDetail records the call and delegates to SetLaunchEventRunFailureDetailFunc when set.
+func (m *MockRunRecords) SetLaunchEventRunFailureDetail(ctx context.Context, chatID string, detail string) error {
+	m.Recorder.Record("SetLaunchEventRunFailureDetail", ctx, chatID, detail)
+	if m.SetLaunchEventRunFailureDetailFunc != nil {
+		return m.SetLaunchEventRunFailureDetailFunc(ctx, chatID, detail)
+	}
+	return contractkit.MockNotSet("MockRunRecords", "SetLaunchEventRunFailureDetail")
+}
+
+// SetChatRunID records the call and delegates to SetChatRunIDFunc when set.
+func (m *MockRunRecords) SetChatRunID(ctx context.Context, chatID string, workflowID string, runID string) (bool, error) {
+	m.Recorder.Record("SetChatRunID", ctx, chatID, workflowID, runID)
+	if m.SetChatRunIDFunc != nil {
+		return m.SetChatRunIDFunc(ctx, chatID, workflowID, runID)
+	}
+	return false, contractkit.MockNotSet("MockRunRecords", "SetChatRunID")
+}
+
+// Compile-time check.
+var _ RunRecords = (*MockRunRecords)(nil)
+
+// forge:section MockAttentionRecorder
+// forge:hash=989412c3da871c68df854bc421f30f6d83fc1926dc81062c63b8570d9220f92f
+
+// MockAttentionRecorder is a test mock for the AttentionRecorder interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAttentionRecorder.<Method>Func not set" error.
+type MockAttentionRecorder struct {
+	contractkit.Recorder
+	ApplyAttentionUpdateFunc func(context.Context, core.AttentionUpdate) (core.AttentionResult, error)
+}
+
+// ApplyAttentionUpdate records the call and delegates to ApplyAttentionUpdateFunc when set.
+func (m *MockAttentionRecorder) ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error) {
+	m.Recorder.Record("ApplyAttentionUpdate", ctx, update)
+	if m.ApplyAttentionUpdateFunc != nil {
+		return m.ApplyAttentionUpdateFunc(ctx, update)
+	}
+	return *new(core.AttentionResult), contractkit.MockNotSet("MockAttentionRecorder", "ApplyAttentionUpdate")
+}
+
+// Compile-time check.
+var _ AttentionRecorder = (*MockAttentionRecorder)(nil)
+
 // forge:section MockWorkflowStatusStore
-// forge:hash=43cbf90642ccee3f75fc6e940f815b1944b57b011b3ad164582499539caadd61
+// forge:hash=e2188abe2bb2743ea54c224da324574a694947547107afaae063b2f52257915a
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -5207,25 +5385,13 @@ var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 // "MockWorkflowStatusStore.<Method>Func not set" error.
 type MockWorkflowStatusStore struct {
 	contractkit.Recorder
-	ApplyAttentionUpdateFunc                                 func(context.Context, core.AttentionUpdate) (core.AttentionResult, error)
-	ListRunNodeExecutionsFunc                                func(context.Context, string, int) ([]*db.StepExecution, error)
-	MarkDeclaredFailureNodeFunc                              func(context.Context, string, string) (bool, error)
-	SetLaunchEventRunFailureDetailFunc                       func(context.Context, string, string) error
 	SaveMessageToThreadOnceFunc                              func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
 	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
-	SetWorkflowOutcomeFunc                                   func(context.Context, string, string) error
-	SetWorkflowRunOutcomeFunc                                func(context.Context, string, string) error
-	FirstHandledNodeFailureFunc                              func(context.Context, string, string, time.Time) (*db.HandledNodeFailure, error)
-	SetLaunchEventRunOutcomeFunc                             func(context.Context, string, string) error
-	SetWorkflowFailureDetailFunc                             func(context.Context, string, string) error
-	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
-	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
 	PauseRunningWorkflowsByChatFunc                          func(context.Context, string) error
 	ResumeWorkflowsByChatFunc                                func(context.Context, string) error
@@ -5234,11 +5400,9 @@ type MockWorkflowStatusStore struct {
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
-	SetChatRunIDFunc                                         func(context.Context, string, string, string) (bool, error)
 	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	EmitChatRefetchFunc                                      func(context.Context, string, db.RefetchType) error
 	FiringsSinceLastSuccessFunc                              func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	SetLaunchEventRunStatusFunc                              func(context.Context, string, string) error
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
@@ -5295,42 +5459,6 @@ type MockWorkflowStatusStore struct {
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
 
-// ApplyAttentionUpdate records the call and delegates to ApplyAttentionUpdateFunc when set.
-func (m *MockWorkflowStatusStore) ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error) {
-	m.Recorder.Record("ApplyAttentionUpdate", ctx, update)
-	if m.ApplyAttentionUpdateFunc != nil {
-		return m.ApplyAttentionUpdateFunc(ctx, update)
-	}
-	return *new(core.AttentionResult), contractkit.MockNotSet("MockWorkflowStatusStore", "ApplyAttentionUpdate")
-}
-
-// ListRunNodeExecutions records the call and delegates to ListRunNodeExecutionsFunc when set.
-func (m *MockWorkflowStatusStore) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error) {
-	m.Recorder.Record("ListRunNodeExecutions", ctx, workflowID, limit)
-	if m.ListRunNodeExecutionsFunc != nil {
-		return m.ListRunNodeExecutionsFunc(ctx, workflowID, limit)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "ListRunNodeExecutions")
-}
-
-// MarkDeclaredFailureNode records the call and delegates to MarkDeclaredFailureNodeFunc when set.
-func (m *MockWorkflowStatusStore) MarkDeclaredFailureNode(ctx context.Context, workflowID string, nodeID string) (bool, error) {
-	m.Recorder.Record("MarkDeclaredFailureNode", ctx, workflowID, nodeID)
-	if m.MarkDeclaredFailureNodeFunc != nil {
-		return m.MarkDeclaredFailureNodeFunc(ctx, workflowID, nodeID)
-	}
-	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "MarkDeclaredFailureNode")
-}
-
-// SetLaunchEventRunFailureDetail records the call and delegates to SetLaunchEventRunFailureDetailFunc when set.
-func (m *MockWorkflowStatusStore) SetLaunchEventRunFailureDetail(ctx context.Context, chatID string, detail string) error {
-	m.Recorder.Record("SetLaunchEventRunFailureDetail", ctx, chatID, detail)
-	if m.SetLaunchEventRunFailureDetailFunc != nil {
-		return m.SetLaunchEventRunFailureDetailFunc(ctx, chatID, detail)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetLaunchEventRunFailureDetail")
-}
-
 // SaveMessageToThreadOnce records the call and delegates to SaveMessageToThreadOnceFunc when set.
 func (m *MockWorkflowStatusStore) SaveMessageToThreadOnce(ctx context.Context, chatID string, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error) {
 	m.Recorder.Record("SaveMessageToThreadOnce", ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle, messageID)
@@ -5367,15 +5495,6 @@ func (m *MockWorkflowStatusStore) GetThread(ctx context.Context, id string) (*db
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetThread")
 }
 
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockWorkflowStatusStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetWorkflow")
-}
-
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
 func (m *MockWorkflowStatusStore) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	m.Recorder.Record("GetTrigger", ctx, id)
@@ -5401,69 +5520,6 @@ func (m *MockWorkflowStatusStore) UpdateWorkflowStatus(ctx context.Context, id s
 		return m.UpdateWorkflowStatusFunc(ctx, id, status)
 	}
 	return contractkit.MockNotSet("MockWorkflowStatusStore", "UpdateWorkflowStatus")
-}
-
-// SetWorkflowOutcome records the call and delegates to SetWorkflowOutcomeFunc when set.
-func (m *MockWorkflowStatusStore) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	m.Recorder.Record("SetWorkflowOutcome", ctx, id, outcome)
-	if m.SetWorkflowOutcomeFunc != nil {
-		return m.SetWorkflowOutcomeFunc(ctx, id, outcome)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetWorkflowOutcome")
-}
-
-// SetWorkflowRunOutcome records the call and delegates to SetWorkflowRunOutcomeFunc when set.
-func (m *MockWorkflowStatusStore) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
-	m.Recorder.Record("SetWorkflowRunOutcome", ctx, id, outcome)
-	if m.SetWorkflowRunOutcomeFunc != nil {
-		return m.SetWorkflowRunOutcomeFunc(ctx, id, outcome)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetWorkflowRunOutcome")
-}
-
-// FirstHandledNodeFailure records the call and delegates to FirstHandledNodeFailureFunc when set.
-func (m *MockWorkflowStatusStore) FirstHandledNodeFailure(ctx context.Context, workflowID string, runID string, since time.Time) (*db.HandledNodeFailure, error) {
-	m.Recorder.Record("FirstHandledNodeFailure", ctx, workflowID, runID, since)
-	if m.FirstHandledNodeFailureFunc != nil {
-		return m.FirstHandledNodeFailureFunc(ctx, workflowID, runID, since)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "FirstHandledNodeFailure")
-}
-
-// SetLaunchEventRunOutcome records the call and delegates to SetLaunchEventRunOutcomeFunc when set.
-func (m *MockWorkflowStatusStore) SetLaunchEventRunOutcome(ctx context.Context, chatID string, outcome string) error {
-	m.Recorder.Record("SetLaunchEventRunOutcome", ctx, chatID, outcome)
-	if m.SetLaunchEventRunOutcomeFunc != nil {
-		return m.SetLaunchEventRunOutcomeFunc(ctx, chatID, outcome)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetLaunchEventRunOutcome")
-}
-
-// SetWorkflowFailureDetail records the call and delegates to SetWorkflowFailureDetailFunc when set.
-func (m *MockWorkflowStatusStore) SetWorkflowFailureDetail(ctx context.Context, id string, detail string) error {
-	m.Recorder.Record("SetWorkflowFailureDetail", ctx, id, detail)
-	if m.SetWorkflowFailureDetailFunc != nil {
-		return m.SetWorkflowFailureDetailFunc(ctx, id, detail)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetWorkflowFailureDetail")
-}
-
-// DeleteWorkflowCheckpoint records the call and delegates to DeleteWorkflowCheckpointFunc when set.
-func (m *MockWorkflowStatusStore) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
-	m.Recorder.Record("DeleteWorkflowCheckpoint", ctx, workflowID)
-	if m.DeleteWorkflowCheckpointFunc != nil {
-		return m.DeleteWorkflowCheckpointFunc(ctx, workflowID)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "DeleteWorkflowCheckpoint")
-}
-
-// CascadeTerminalStatusToDescendants records the call and delegates to CascadeTerminalStatusToDescendantsFunc when set.
-func (m *MockWorkflowStatusStore) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error {
-	m.Recorder.Record("CascadeTerminalStatusToDescendants", ctx, parentWorkflowID, reason)
-	if m.CascadeTerminalStatusToDescendantsFunc != nil {
-		return m.CascadeTerminalStatusToDescendantsFunc(ctx, parentWorkflowID, reason)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "CascadeTerminalStatusToDescendants")
 }
 
 // CascadeTerminalStatusToThreadSubtree records the call and delegates to CascadeTerminalStatusToThreadSubtreeFunc when set.
@@ -5538,15 +5594,6 @@ func (m *MockWorkflowStatusStore) SetChatPausedForMachine(ctx context.Context, c
 	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "SetChatPausedForMachine")
 }
 
-// SetChatRunID records the call and delegates to SetChatRunIDFunc when set.
-func (m *MockWorkflowStatusStore) SetChatRunID(ctx context.Context, chatID string, workflowID string, runID string) (bool, error) {
-	m.Recorder.Record("SetChatRunID", ctx, chatID, workflowID, runID)
-	if m.SetChatRunIDFunc != nil {
-		return m.SetChatRunIDFunc(ctx, chatID, workflowID, runID)
-	}
-	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "SetChatRunID")
-}
-
 // CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
 func (m *MockWorkflowStatusStore) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
 	m.Recorder.Record("CreateChatUpdate", ctx, chatID, updateType, entityID, data)
@@ -5572,15 +5619,6 @@ func (m *MockWorkflowStatusStore) FiringsSinceLastSuccess(ctx context.Context, u
 		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "FiringsSinceLastSuccess")
-}
-
-// SetLaunchEventRunStatus records the call and delegates to SetLaunchEventRunStatusFunc when set.
-func (m *MockWorkflowStatusStore) SetLaunchEventRunStatus(ctx context.Context, chatID string, status string) error {
-	m.Recorder.Record("SetLaunchEventRunStatus", ctx, chatID, status)
-	if m.SetLaunchEventRunStatusFunc != nil {
-		return m.SetLaunchEventRunStatusFunc(ctx, chatID, status)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "SetLaunchEventRunStatus")
 }
 
 // GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.

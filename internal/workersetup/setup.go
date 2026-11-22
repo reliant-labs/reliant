@@ -9,6 +9,7 @@ package workersetup
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -137,6 +139,10 @@ type Config struct {
 	// SecretResolver resolves declared secrets for the step activities (a
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
+
+	// StepKeys mints and revokes the LLM gateway step key a run node with
+	// llm_gateway runs with (the control plane); nil refuses every such node.
+	StepKeys handlers.StepKeyIssuer
 
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
@@ -285,8 +291,16 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
+	activityDeps.StepKeys = cfg.StepKeys
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
+	if cfg.Database != nil {
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
+		}
+		activityDeps.LLMUsage = usage
+	}
 	if cfg.ProviderAccounts != nil && cfg.Database != nil {
 		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
 	}

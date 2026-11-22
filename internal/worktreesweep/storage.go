@@ -29,7 +29,6 @@ var ErrOffline = errors.New("machine is offline")
 type StorageStore interface {
 	Store
 	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
-	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
 	// MergeUnownedWorktreeCleanupMetadata is MergeWorktreeCleanupMetadata for
 	// an archived row that still has no machine on record, under the same row
 	// lock a machine claiming it takes; false when the row has a machine, is

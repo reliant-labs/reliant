@@ -33,7 +33,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.NewService(f.repo), f.repo),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.NewService(f.repo), f.repo, workflowRunsOf(f.repo)),
 	}
 }
 
@@ -264,7 +264,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(f.repo, exec)
+		act := NewExecuteToolsActivity(f.repo, exec).WithToolCallResults(testToolCallResults(f.repo))
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -392,7 +392,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(f.repo, executor)
+	a := NewExecuteToolsActivity(f.repo, executor).WithToolCallResults(testToolCallResults(f.repo))
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

@@ -76,7 +76,7 @@ func TestWakeUserChats_FansOutToTheUsersBlockedChats(t *testing.T) {
 	require.NoError(t, repo.RecordUsageLimitWait(otherCtx, othersChat, othersChat, "Anthropic", false, now.Add(time.Hour), now))
 
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}}
 
 	woken := svc.WakeUserChats(ctx, user, "an account was added")
 	assert.Equal(t, 3, woken)
@@ -100,7 +100,7 @@ func TestResumeChat_LiveRunIsWokenNotResumed(t *testing.T) {
 	chatID := seedWaitingRun(t, repo, ctx)
 
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 
 	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestResumeChat_PausedRunResumesThenWakesEveryThread(t *testing.T) {
 	chatID := seedChatRun(t, repo, ctx, "test-user", db.Paused())
 
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}})}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}})}
 
 	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
 	require.NoError(t, err)

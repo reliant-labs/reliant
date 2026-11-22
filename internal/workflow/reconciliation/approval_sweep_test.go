@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-func (m *mockRepo) ListStaleApprovals(_ context.Context, limit int) ([]db.StaleApproval, error) {
+func (m *mockRepo) ListStaleApprovals(_ context.Context, limit int) ([]store.StaleApproval, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.staleApprovals) > limit {
@@ -62,12 +63,12 @@ func (m *mockRepo) AnnounceApprovalResolution(_ context.Context, a *db.Approval)
 func TestResolveStaleApprovals_ClosesWithReason(t *testing.T) {
 	before := anomalyCount(anomalyStaleApprovalClosed)
 	repo := newMockRepo()
-	repo.staleApprovals = []db.StaleApproval{
+	repo.staleApprovals = []store.StaleApproval{
 		{ID: "a1", ChatID: "c1", Why: "the run waiting on it was cancelled"},
 		{ID: "a2", ChatID: "c1", Why: "its chat was archived"},
 	}
 	repo.approvalAlreadyClosed = map[string]bool{"a2": true}
-	r := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r := newApprovalReconciler(repo)
 
 	closed, err := r.resolveStaleApprovals(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestAnnounceApprovalResolutions_RunsToCompletionOnce(t *testing.T) {
 	for i := 0; i < staleApprovalBatch+3; i++ {
 		repo.unannounced = append(repo.unannounced, &db.Approval{ID: fmt.Sprintf("a%d", i), ChatID: "c1"})
 	}
-	r := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r := newApprovalReconciler(repo)
 
 	require.NoError(t, r.announceApprovalResolutions(context.Background(), &passStats{}))
 	assert.Len(t, repo.announcedApprovals, staleApprovalBatch+3)
@@ -93,4 +94,10 @@ func TestAnnounceApprovalResolutions_RunsToCompletionOnce(t *testing.T) {
 	repo.unannounced = append(repo.unannounced, &db.Approval{ID: "late", ChatID: "c1"})
 	require.NoError(t, r.announceApprovalResolutions(context.Background(), &passStats{}))
 	assert.NotContains(t, repo.announcedApprovals, "late", "the repair is a once-per-process backfill")
+}
+
+func newApprovalReconciler(repo *mockRepo) *Reconciler {
+	r := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r.SetApprovals(repo)
+	return r
 }

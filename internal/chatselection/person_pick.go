@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+
+package chatselection
 
 import "context"
 
@@ -9,12 +10,12 @@ type PersonPick struct{ UserID, OrgID string }
 
 type personPickKey struct{}
 
-// WithPersonPick marks ctx's selection writes as pick's own choice:
-// MutateChatSelection records the stored root model and provider switch as
-// their pick (chat_person_picks), bound to the version that write leaves, in
-// the same locked transaction. Only the chat handler and the launcher set it,
-// for a write made by the chat's owner as a person whose root model no
-// substitution moved.
+// WithPersonPick marks ctx's selection writes as pick's own choice: the write
+// records the stored root model and provider switch as their pick
+// (chat_person_picks), bound to the version that write leaves, in the same
+// locked transaction. Only the chat handler and the launcher set it, for a
+// write made by the chat's owner as a person whose root model no substitution
+// moved.
 func WithPersonPick(ctx context.Context, pick PersonPick) context.Context {
 	return context.WithValue(ctx, personPickKey{}, pick)
 }

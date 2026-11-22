@@ -48,7 +48,7 @@ func TestGetMessageToolBodies(t *testing.T) {
 		}
 		return nil
 	}
-	svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: repo}))
+	svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: repo, Senders: &message.MockSenders{}}))
 	stub := reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()
 
 	unset := get(t, svc, nil)
@@ -65,6 +65,6 @@ func TestGetMessageToolBodies(t *testing.T) {
 	assert.Equal(t, f.RunningInput, block(stubbed, f.RunningCallBlockID).GetInput(), "an in-flight call is whole")
 	assert.True(t, block(stubbed, f.ThinkingBlockID).GetBodyElided())
 
-	off := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: repo, Config: &config.Config{Transcript: &configv1.TranscriptConfig{ToolBodyStubs: "off"}}}))
+	off := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: repo, Senders: &message.MockSenders{}, Config: &config.Config{Transcript: &configv1.TranscriptConfig{ToolBodyStubs: "off"}}}))
 	assert.Equal(t, marshal(t, unset), marshal(t, get(t, off, stub)))
 }

@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // =============================================================================

@@ -192,8 +192,8 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err != nil || got == nil || got.Content != "out '?' tr-c" || fmt.Sprint(got.GrantedTools) != "[shell view]" || *got.MessageID != m4 {
 		t.Fatalf("FindToolCallResult(tr-c) = %+v, %v", got, err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.GrantedTools != nil {
-		t.Fatalf("Repo.GetToolCallResult(tr-b) = %+v; want no grants", got)
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-b"); got == nil || got.GrantedTools != nil {
+		t.Fatalf("store.FindToolCallResult(tr-b, Repo.ORM()) = %+v; want no grants", got)
 	}
 	if got, err := store.FindToolCallResult(ctx, o, "absent"); err != nil || got != nil {
 		t.Fatalf("FindToolCallResult(absent) = %v, %v", got, err)
@@ -205,7 +205,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, rewrite); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-a"); !got.IsError || got.Content != "error" || got.GrantedTools != nil || !got.CreatedAt.Equal(t0.Add(time.Second)) {
 		t.Fatalf("after rewrite: %+v", got)
 	}
 
@@ -217,7 +217,7 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 	if err := store.UpsertToolCallResult(ctx, o, f.chat, broken); err != nil {
 		t.Fatalf("upsert invalid UTF-8 result: %v", err)
 	}
-	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.Content != "line \uFFFD..." {
+	if got, _ := store.FindToolCallResult(ctx, f.env.Repo.ORM(), "tr-b"); got == nil || got.Content != "line \uFFFD..." {
 		t.Fatalf("after invalid UTF-8 write: %+v", got)
 	}
 
@@ -324,11 +324,6 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 	if children[1].IssuingMessageOrdinal != nil {
 		t.Fatalf("sp-2 has no issuing message, got ordinal %v", *children[1].IssuingMessageOrdinal)
 	}
-	twin, err := f.env.Repo.ListSpawnChildren(ctx, f.main)
-	if err != nil || len(twin) != 2 || twin[0].ToolCallID != "sp-1" || *twin[0].ThreadTitle != "title child-1" {
-		t.Fatalf("Repo.ListSpawnChildren = %+v, %v", twin, err)
-	}
-
 	byThread, err := store.SpawnToolCallIDsByChildThread(ctx, o, f.chat)
 	if err != nil || fmt.Sprint(byThread) != "map[child-1:sp-1 child-2:sp-2 grandchild:sp-3]" {
 		t.Fatalf("SpawnToolCallIDsByChildThread = %v, %v", byThread, err)
@@ -338,9 +333,6 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 	if err != nil || len(live) != 2 || live[0].ToolCallID != "sp-1" || live[0].Depth != 0 || live[1].ToolCallID != "sp-3" ||
 		live[1].Depth != 1 || live[1].IssuingWorkflowID != "child-1" || live[1].ParentThreadID != "child-1" {
 		t.Fatalf("ListLiveBackgroundSpawns = %+v, %v", live, err)
-	}
-	if twin, _ := f.env.Repo.ListLiveBackgroundSpawns(ctx, f.main); len(twin) != 2 {
-		t.Fatalf("Repo.ListLiveBackgroundSpawns = %+v", twin)
 	}
 
 	// sp-2 is stranded (child completed, call executing, no result); sp-1
@@ -367,7 +359,7 @@ func TestSpawnReads_AgreeWithRepository(t *testing.T) {
 	if run, err := store.LatestSpawnRunForThread(ctx, o, f.chat, f.main); err != nil || run != nil {
 		t.Fatalf("LatestSpawnRunForThread(root) = %+v, %v; want nil", run, err)
 	}
-	stopped, err := f.env.Repo.GetStoppedSpawnAgent(ctx, f.chat, "child-1")
+	stopped, err := store.GetStoppedSpawnAgent(ctx, o, f.chat, "child-1")
 	if err != nil || stopped == nil || stopped.ToolCallID != "sp-1" || stopped.Resumes != 0 {
 		t.Fatalf("Repo.GetStoppedSpawnAgent = %+v, %v", stopped, err)
 	}

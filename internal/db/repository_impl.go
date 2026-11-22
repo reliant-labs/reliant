@@ -3,10 +3,10 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,13 +15,16 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -598,23 +601,6 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
-// ListRecentTranscriptSiblingMessages returns, ascending, the newest
-// `limit` messages with seq >= fromSeq on threads other than mainThreadID
-// that are not spawn threads, bounded in SQL. The chat snapshot reads its
-// sibling rows through this: node and fork threads render inline in the
-// transcript, while a spawn renders as a tool-call card that fetches its
-// own thread (ListMessages with thread_id) when expanded.
-func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if mainThreadID == "" {
-		return nil, fmt.Errorf("main thread ID cannot be empty")
-	}
-
-	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
-}
-
 // CountMessagesInChat returns the true message count for a chat, read from
 // the trigger-maintained chat_thread_message_counts rather than counted.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
@@ -913,11 +899,6 @@ func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
 	return store.GetApproval(ctx, r.ORM(), id)
 }
 
-// GetApprovalByEntityID retrieves an approval by its entity_id
-func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
-}
-
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
 	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
@@ -1006,58 +987,8 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
-// GetProjectByPathAndUserInScope is the user's project at path in scope (an
-// org, with its unassigned rows when it is the user's default); nil scope is
-// every org's. Projects are unique per (org, user, path).
-func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
-	if path == "" {
-		return nil, fmt.Errorf("project path cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
-}
-
-// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
-// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
-// user, remote_url).
-func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
-	if remoteURL == "" {
-		return nil, fmt.Errorf("remote URL cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
-}
-
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
-	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	// The store read filters on the owner; authz confirms the row it returns,
-	// as GetChatRowWithUserCheck does.
-	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
-	case denial == nil:
-		return project, nil
-	case errors.Is(denial, authz.ErrDenied):
-		return nil, core.ErrProjectNotFound
-	default:
-		// Still NotFound to every caller, with why as the withheld cause:
-		// the launcher tells a creator who left the project's org
-		// (authz.ErrNotOrgMember) from a membership outage, which must not
-		// be mistaken for an answer.
-		return nil, svcerr.WithCause(core.ErrProjectNotFound, denial)
-	}
+	return projectaccess.NewFromORM(r.ORM()).GetProjectWithUserCheck(ctx, id, userID)
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet
@@ -1214,14 +1145,6 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 	})
 }
 
-// ResolveQueuedProjectDaemon applies the outcome the daemon reported.
-func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error {
-	if requestID == "" {
-		return fmt.Errorf("request ID cannot be empty")
-	}
-	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
-}
-
 // MarkProjectDaemonInstalledInScope settles the machine's clone of the
 // project as installed, from evidence the machine gave (its filesystem
 // announcement, or a directory at the row's own path for a clone whose outcome
@@ -1279,15 +1202,6 @@ func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *
 		return false, err
 	}
 	return scope.Includes(org), nil
-}
-
-// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
-// daemon's clones queued while it was away, now that it has connected.
-func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
 // FailProjectDaemonInstallInScope settles the machine's clone of the project
@@ -1365,13 +1279,6 @@ func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID strin
 // projects.
 func (r *Repo) ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
 	return store.ListProjectDaemonsForProjects(ctx, r.ORM(), projectIDs)
-}
-
-func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	if daemonID == "" {
-		return nil, fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.ListProjectDaemonsForDaemon(ctx, r.ORM(), daemonID)
 }
 
 func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
@@ -1526,111 +1433,6 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	return nil
 }
 
-// RenewDaemonAttachment renews the lease of a stream the caller is holding
-// RIGHT NOW — the gateway calls it on every heartbeat its receive loop reads
-// — re-creating the row if it is gone, and reports whether it had to.
-//
-// Re-creating it is the point. The lease used to be renewed with an UPDATE,
-// which matches nothing once the row is gone, so a lease lost while its stream
-// lived stayed lost for the rest of the session: the TTL reaper
-// (daemonstate.AttachmentTTL) expiring it during a 15-minute inbound stall, or
-// a connect-time upsert that never landed. Prod 2026-10-11: a daemon serving
-// terminal commands for six hours read DISCONNECTED to every chat because its
-// lease was reaped at 12:11 and nothing could write it back short of a
-// reconnect. Routing does not read the lease, which is why the machine kept
-// working while every chat said it was gone.
-//
-// The row only moves forward. last_stream_activity and attached_at each keep
-// the later of the stored and renewed values, so an out-of-order renewal is a
-// no-op, and a renewal from a session NEWER than the row's (its own connect
-// upsert never replaced an older session's row) adopts the row: that older
-// session's release (ReleaseDaemonAttachment, attached_at <= its own) can then
-// no longer delete the lease the live session is renewing. Memory telemetry
-// and detected ports are left alone — they belong to the registered session,
-// and the gateway rewrites them on its next heartbeat.
-//
-// The insert is fenced on the daemons row still belonging to the user, the
-// same ownership rule UpsertDaemonAttachment enforces: a daemon the control
-// plane deleted while its stream was up is not resurrected by a heartbeat, and
-// another user's lease is never touched. Either refusal leaves nothing of the
-// caller's to renew, so it is not an error: created is false.
-//
-// created reports that the row was inserted: the lease was missing while its
-// stream was live, and every reader had been reporting the daemon detached.
-func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) (created bool, err error) {
-	if att == nil || att.DaemonID == "" || att.UserID == "" || att.Source == "" {
-		return false, fmt.Errorf("renewing daemon attachment requires daemon_id, user_id and source")
-	}
-	// A renewal names its session (attached_at). Defaulting it would make a
-	// renewal look like a newer session and adopt — and so outlive — a lease
-	// its real session can then no longer release.
-	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
-		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
-	}
-	created, err = store.RenewDaemonAttachment(ctx, r.ORM(), att)
-	if err != nil {
-		return false, fmt.Errorf("renewing daemon attachment: %w", err)
-	}
-	return created, nil
-}
-
-// UpdateDaemonAttachmentMemory records the workspace memory telemetry carried
-// by a daemon heartbeat on the attachment (liveness) record. A no-op when the
-// attachment row doesn't exist — telemetry is only meaningful for a live
-// stream. It deliberately does NOT touch last_stream_activity; the lease
-// renewal stays with RenewDaemonAttachment.
-func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentMemory(ctx, r.ORM(), daemonID, usedBytes, limitBytes, pressure); err != nil {
-		return fmt.Errorf("updating daemon attachment memory: %w", err)
-	}
-	return nil
-}
-
-// UpdateDaemonAttachmentPorts records the heartbeat-reported detected
-// listener ports on the attachment (liveness) record. Mirrors
-// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't
-// exist, and it deliberately does NOT touch last_stream_activity — the lease
-// renewal stays with RenewDaemonAttachment.
-func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentPorts(ctx, r.ORM(), daemonID, ports); err != nil {
-		return fmt.Errorf("updating daemon attachment ports: %w", err)
-	}
-	return nil
-}
-
-// UpdateDaemonAttachmentHealth records the machine health a daemon heartbeat
-// reported on the attachment (liveness) record. Mirrors
-// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't exist,
-// and it does NOT touch last_stream_activity.
-func (r *Repo) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health MachineHealth) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentHealth(ctx, r.ORM(), daemonID, health); err != nil {
-		return fmt.Errorf("updating daemon attachment health: %w", err)
-	}
-	return nil
-}
-
-// SetDaemonLocalModels stores the daemon's last-published local model
-// inventory (protojson of reliant.v1.LocalModelInventory). The value replaces
-// the previous one wholesale: the daemon always publishes its complete view.
-func (r *Repo) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonLocalModels(ctx, r.ORM(), daemonID, inventoryJSON); err != nil {
-		return fmt.Errorf("updating daemon local models: %w", err)
-	}
-	return nil
-}
-
 // ListDaemonLocalModels returns the stored local model inventory of every
 // daemon the user owns that has published one, keyed by daemon ID. Liveness is
 // NOT considered here; callers gate on the daemon being online before offering
@@ -1655,35 +1457,24 @@ func (r *Repo) GetSettingValue(ctx context.Context, userID, key string) (string,
 	return setting.Value, true
 }
 
-// TryAdvisoryLock takes a session-level advisory lock on a dedicated
-// connection, so exactly one replica at a time holds it. The lock dies with the
-// connection, so a crashed holder never strands it.
+// TryAdvisoryLock takes dblock's session-level lock on key from the session
+// pool (SessionPool).
 //
-// Session-level locks need a connection that stays the same backend for the
-// whole session. That holds on direct Postgres and with session-pooled
-// pgbouncer; it does NOT hold behind transaction-pooling pgbouncer, where the
-// lock can be taken on one backend and released (or silently re-entered by
-// another replica) on another. So the connection comes from sessionPool: the
-// DatabaseConfig.DirectURL pool when the main pool is transaction-pooled.
+// Only worktreesweep still reaches it through the repository, as its Store's
+// leader election; every other job takes its lock from a dblock.Locker. It goes
+// when the sweeper takes a Locker of its own.
 func (r *Repo) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	conn, err := r.sessionPool().Conn(ctx)
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: r.sessionPool()})
 	if err != nil {
 		return nil, false, err
 	}
-	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
-		_ = conn.Close()
-		return nil, false, err
-	}
-	if !got {
-		_ = conn.Close()
-		return func() {}, false, nil
-	}
-	return func() {
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, key)
-		_ = conn.Close()
-	}, true, nil
+	return locker.TryLock(ctx, dblock.Key(key))
 }
+
+// SessionPool is the pool a caller that needs a Postgres session to itself
+// takes its connection from: DatabaseConfig.DirectURL's pool when the main pool
+// is transaction-pooled, the main pool otherwise.
+func (r *Repo) SessionPool() *sql.DB { return r.sessionPool() }
 
 // SetDaemonStorageState stores the daemon's last-reported disk state, replacing
 // the previous value.
@@ -1721,42 +1512,6 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 		return nil, fmt.Errorf("listing daemon storage state for user %s: %w", userID, err)
 	}
 	return states, nil
-}
-
-// ReleaseDaemonAttachment deletes the lease a stream session created when
-// that session ends: the row for daemonID whose attached_at is at or before
-// the session's own attachedAt.
-//
-// The bound is what keeps a stale teardown from deleting a newer session's
-// lease. A daemon id is held by one stream at a time, but not by one PROCESS:
-// a daemon that loses its gateway reconnects to another replica, while the old
-// replica may only notice its half of the stream died a sweep later — and an
-// unconditional delete by daemon_id then removed the lease the NEW session had
-// just written. Rows older than the session (one its connect-time upsert
-// failed to replace) are released with it; rows newer than it are not its to
-// delete.
-//
-// attached_at comes from the clock of the gateway that wrote it. One daemon's
-// sessions are strictly sequential (a session ends before the daemon redials),
-// so ordering them only needs the replicas' clocks to agree to within one
-// reconnect.
-//
-// The released lease's last_stream_activity moves onto daemons.last_seen_at in
-// the same statement: deleting the lease is otherwise the moment the registry
-// forgets the daemon was ever there, and a tool call deciding whether to wait
-// for a daemon that just dropped (DaemonLastSeenAt) needs exactly that fact.
-// It only moves forward, so a stale session's release cannot rewind it.
-func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if attachedAt.IsZero() {
-		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
-	}
-	if err := store.ReleaseDaemonAttachment(ctx, r.ORM(), daemonID, attachedAt); err != nil {
-		return fmt.Errorf("releasing daemon attachment: %w", err)
-	}
-	return nil
 }
 
 // DaemonLastSeenAt reports the last time a gateway heard from the user's
@@ -1948,17 +1703,6 @@ func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
-// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
-// key, or (nil, nil) when there is none.
-func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
-	// An empty key means the caller opted out of idempotency, not that it is
-	// asking about the rows that happen to have no key.
-	if projectID == "" || key == "" {
-		return nil, nil
-	}
-	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
-}
-
 // GetLiveWorktreeByName returns the project's unarchived worktree called
 // name, or (nil, nil). At most one exists.
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
@@ -2021,17 +1765,6 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
-func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return store.ListWorktreesForReclaim(ctx, r.ORM())
-}
-
-func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
-}
-
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
 // cleanup_metadata under SELECT ... FOR UPDATE.
 func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error {
@@ -2041,34 +1774,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
-// archived row that still has no machine on record.
-func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
-}
-
+// AdoptWorktreeDaemon records the daemon that found a workspace's directory.
+//
+// Deprecated: use store.WorktreeExtStore.AdoptWorktreeDaemon; the sweep reads
+// it there, and only a test of the activities still calls this.
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
 		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
-}
-
-func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
@@ -2240,28 +1954,8 @@ func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 
 // ==================== Settings Helper Methods ====================
 
-func (r *Repo) getBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return false, err
-	}
-	val, err := strconv.ParseBool(setting.Value)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse bool value: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repo) SetString(ctx context.Context, userID string, projectID *string, key, value string) error {
 	return r.upsertSetting(ctx, userID, projectID, key, value, "string")
-}
-
-func (r *Repo) setBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatBool(value), "bool")
 }
 
 func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *string, key, value, valueType string) error {
@@ -2973,34 +2667,8 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 	})
 }
 
-// SetWorkflowOutcome records the run's verdict — the outcome declared by the
-// terminal node it reached. Distinct from UpdateWorkflowStatus: status is the
-// Temporal-owned lifecycle and gets reconciled back from Temporal, so it cannot
-// carry "the work did not pass". No chat-activity emit: the outcome does not
-// change whether the chat is busy, only what the finished run means.
-func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
-}
-
-// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
-func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
-}
-
 // HandledNodeFailure is a node of an ended run whose last attempt failed.
 type HandledNodeFailure = store.HandledNodeFailure
-
-// FirstHandledNodeFailure returns a node of the run, or of a run under it,
-// whose last attempt in run runID (since since, for an attempt that names no
-// run) failed, or nil (store.FirstHandledNodeFailure).
-func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
-	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
-}
-
-// SetWorkflowFailureDetail records why a run failed, on the run.
-func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
-	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
-}
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
@@ -3417,29 +3085,6 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
-// SetLaunchEventRunFailureDetail records why the launch run failed.
-func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
-	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
-}
-
-// SetLaunchEventRunStatus records how the run a trigger fired ended, on
-// the chat's launch event (core.TriggerEvent.RunStatus).
-func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
-}
-
-// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
-// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
-func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
-}
-
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3457,36 +3102,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
-// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
-// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
-func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListInboxPending(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
-}
-
-func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
-}
-
-func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
 // CreateRunEvent inserts the event, doing nothing when its DedupeKey
@@ -3568,15 +3183,6 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies
-// (payload, sender, origin), for health that is judged but never shown.
-func (r *Repo) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerOutcomes(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
@@ -3591,9 +3197,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 // Attention-managed actors are excluded before the success boundary and cap;
 // callers needing diagnostic health continue to use the unfiltered reads.
 func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
 	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
@@ -3690,20 +3293,10 @@ func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, lim
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
 }
 
-// MarkDeclaredFailureNode records that a run's top-level node declared the
-// run's outcome: failure (store.MarkDeclaredFailureNode).
-func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
-	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
-}
-
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
-}
-
-func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
@@ -3713,13 +3306,6 @@ func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus)
 // ==================== Workflow Checkpoints ====================
 // Position truth for resume-at-position: last top-level node entered (and
 // loop iteration for loop nodes) per workflow ID.
-
-func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error {
-	if checkpoint == nil {
-		return fmt.Errorf("checkpoint cannot be nil")
-	}
-	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
-}
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.
@@ -4460,10 +4046,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
-}
-
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
@@ -4488,18 +4070,6 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
-// (store.HasNoOrgAccountPauses).
-func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
-	return store.HasNoOrgAccountPauses(ctx, r.ORM())
-}
-
-// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
-// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
-func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
-	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
-}
-
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
 // moving each one's next attempt lease on (store.ClaimDuePauseNotices).
 func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
@@ -4515,10 +4085,4 @@ func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt
 // ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
 func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
 	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
-// accounts (store.ListPersonallyFundedTriggers).
-func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
-	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

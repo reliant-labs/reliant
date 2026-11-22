@@ -96,8 +96,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -196,6 +199,11 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
+		Projects:        store.NewProjectExtStore(g.Database().ORM()),
+		Installs:        store.NewProjectDaemonExtStore(g.Database().ORM()),
+		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
+		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
+		Checkouts:       store.NewProjectDaemonDetachmentExtStore(g.Database().ORM()),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
@@ -394,6 +402,7 @@ func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 		Analytics:        g.ServerProcessConfig.GetAnalytics(),
 		DB:               g.Database(),
 		ProviderAccounts: g.ProviderAccounts(),
+		Privacy:          g.Privacy(),
 	})
 }
 
@@ -745,6 +754,7 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:       g.TokenAuthority(),
 		Integrations: g.IntegrationSettings(),
 		OAuthIssuers: g.ApiServerConfig.GetMcpOauthIssuers(),
+		OAuthScopes:  g.ApiServerConfig.GetMcpOauthScopes(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
 		Membership:   g.OrgResolver(),
@@ -965,7 +975,7 @@ func (g *Graph) newReliantKeySweep() (*ReliantKeySweep, error) {
 
 func (g *Graph) newLLMUsageRetention() (*LLMUsageRetention, error) {
 	return NewLLMUsageRetention(LLMUsageRetentionDeps{
-		DB: g.Database(),
+		Ledger: g.Llmusage(),
 	})
 }
 
@@ -1106,6 +1116,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
 		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
@@ -1120,6 +1131,11 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Config:      g.Cfg,
 		Repo:        g.Database(),
 		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
+		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
+		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
+		Messages:    store.NewMessageExtStore(g.Database().ORM()),
+		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
@@ -1156,6 +1172,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		return nil, err
 	}
 	return trigger.New(trigger.Deps{
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
@@ -1226,10 +1243,11 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 // option (apiMountOptions).
 func (g *Graph) newForge() (*forge.Service, error) {
 	return forge.New(forge.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1240,8 +1258,12 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Config:     g.Cfg,
 		Repo:       g.Database(),
 		OrgKeys:    g.OrgAccounts(),
+		Items:      store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:    store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:    worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
 		Sweeper:    g.WorktreeSweep(),
 		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
@@ -1256,19 +1278,21 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
 // newMessage constructs the message handler (internal/handlers/message).
 func (g *Graph) newMessage() (*message.Service, error) {
 	return message.New(message.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Repo:    g.Database(),
+		Senders: store.NewThreadExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1295,10 +1319,11 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1335,9 +1360,10 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 // newPreset constructs the preset handler (internal/handlers/preset).
 func (g *Graph) newPreset() (*preset.Service, error) {
 	return preset.New(preset.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1347,9 +1373,13 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
+		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Lookups:      store.NewProjectExtStore(o),
+		Installs:     store.NewProjectDaemonExtStore(o),
+		Detachments:  store.NewProjectDaemonDetachmentExtStore(o),
 		Ledger:       store.NewProjectOrgMoveExtStore(o),
 		Shared:       store.NewShareEventExtStore(o),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
@@ -1410,20 +1440,22 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 // newRepo constructs the repo handler (internal/handlers/repo).
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1434,6 +1466,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),
 		Accounts:                g.ProviderAccounts(),
+		Privacy:                 g.Privacy(),
 		ControlPlane:            controlPlaneClient(g.ServerProcessConfig.GetControlPlane()),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
@@ -1455,6 +1488,12 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
+		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
@@ -1509,6 +1548,7 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 // workflow.
 func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 	return workflowhandler.New(workflowhandler.Deps{
+		Projects:    projectaccess.NewFromORM(g.Database().ORM()),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
@@ -1597,6 +1637,35 @@ func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
 		OrgAccounts: g.OrgAccounts(),
 		Authority:   g.TokenAuthority(),
 	})
+}
+
+// newPrivacy constructs the privacy package (internal/privacy): each user's
+// analytics and crash-reporting choices, kept as user-level settings.
+func (g *Graph) newPrivacy() (privacy.Service, error) {
+	svc, err := privacy.New(privacy.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Settings: store.NewSettingExtStore(g.Database().ORM()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return privacy.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newLlmusage constructs the llmusage package (internal/llmusage): the
+// per-call usage ledger and its retention.
+func (g *Graph) newLlmusage() (llmusage.Service, error) {
+	svc, err := llmusage.New(llmusage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Ledger: store.NewLlmCallUsageExtStore(g.Database().ORM()),
+		Tx:     g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return llmusage.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newSeatmatch constructs the seatmatch package (internal/seatmatch).

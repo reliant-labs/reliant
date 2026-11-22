@@ -25,12 +25,14 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -53,6 +55,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -254,6 +257,9 @@ type HTTPRoutesDeps struct {
 	Tokens       tokenauthority.Authority
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
+	// OAuthScopes are the scopes the connector endpoints advertise
+	// (MCP_OAUTH_SCOPES); empty advertises "openid".
+	OAuthScopes  []string
 	ControlPlane *configv1.ControlPlaneConfig
 	// Membership checks the user control-plane names on an internal
 	// ensure-for-app call; nil on a deployment with no orgs.
@@ -280,10 +286,11 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:              d.Tokens,
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
+		OAuthScopes:         d.OAuthScopes,
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
-		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
+		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(store.NewLlmOrgUsageDailyExtStore(d.DB.ORM()), cp.InternalServiceSecret),
 		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
 }
@@ -425,6 +432,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -818,31 +826,35 @@ type TriggerAlertingDeps struct {
 //
 //forge:root-only api
 func NewTriggerAlerting(d TriggerAlertingDeps) (*triggers.Alerting, error) {
-	return wireTriggerAlerting(d.DB, d.ControlPlane, d.Integrations.PublicURL), nil
+	return wireTriggerAlerting(d.DB, d.ControlPlane, d.Integrations.PublicURL)
 }
 
 // wireTriggerAlerting is NewTriggerAlerting over its parts.
-func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, publicURL string) *triggers.Alerting {
+func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, publicURL string) (*triggers.Alerting, error) {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {
-		return nil
+		return nil, nil
 	}
 	secret := cp.InternalServiceSecret
 	if secret == "" {
 		logging.Warn("on-call automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
-		return nil
+		return nil, nil
 	}
 	if strings.TrimSpace(publicURL) == "" {
 		// The control plane's Alertmanager needs an absolute URL to post to;
 		// a bare /hooks path would be refused at every enable.
 		logging.Warn("on-call automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
-		return nil
+		return nil, nil
 	}
 	receivers := controlplane.NewInstrumented(controlplane.Deps{
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
-	return triggers.NewAlerting(receivers, repo, publicURL)
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: repo.SessionPool()})
+	if err != nil {
+		return nil, err
+	}
+	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: repo, Locker: locker, PublicURL: publicURL}), nil
 }
 
 // TriggerInboundDeps is what the inbound receivers record events in, start
@@ -1059,7 +1071,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	o := database.ORM()
 	worktrees := store.NewWorktreeExtStore(o)
 	chats := store.NewChatExtStore(o)
-	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+	return worktreesweep.New(worktreesweep.NewStores(database, worktrees), d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
 		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
@@ -1219,7 +1231,7 @@ type backgroundProcessDaemons struct {
 
 // attachedDaemons is the attachment-lease read backgroundProcessDaemons makes.
 type attachedDaemons interface {
-	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, cutoff time.Time) ([]string, error)
 }
 
 func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -1227,7 +1239,10 @@ func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context,
 }
 
 func (d backgroundProcessDaemons) ConnectedDaemonIDs(ctx context.Context, userID string) ([]string, error) {
-	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, backgroundProcessLeaseWindow)
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, time.Now().UTC().Add(-backgroundProcessLeaseWindow))
 }
 
 // WorkflowReconciler is background workflow reconciliation: stuck-task
@@ -1247,6 +1262,29 @@ type WorkflowReconcilerDeps struct {
 	Activity *daemonstate.Publisher
 }
 
+// approvalSweepStore is what the reconciler's approval sweep reads (the ext
+// store) and closes through (the closer, which announces on the chat feed).
+type approvalSweepStore struct {
+	reads  store.ApprovalExtStore
+	closer *approvalclose.Closer
+}
+
+func (s approvalSweepStore) ListStaleApprovals(ctx context.Context, limit int) ([]store.StaleApproval, error) {
+	return s.reads.ListStaleApprovals(ctx, limit)
+}
+
+func (s approvalSweepStore) ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error) {
+	return s.reads.ListUnannouncedApprovalResolutions(ctx, limit)
+}
+
+func (s approvalSweepStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error) {
+	return s.closer.ResolvePendingApproval(ctx, id, status, reason, actionTaken)
+}
+
+func (s approvalSweepStore) AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error {
+	return s.closer.AnnounceApprovalResolution(ctx, a)
+}
+
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
 // Temporal client's so reset (stuck-task recovery) requests land in the right
 // namespace; the task queue defaults to the shared worker queue. Backgrounded
@@ -1264,8 +1302,9 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 		Config:    cfg,
 	})
 	r.SetResetGuard(d.ResetGuard)
+	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
 	r.SetQueuedDelivery(d.Queued)
-	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
 		r.SetHeldRunActivity(d.Activity)
 	}
@@ -1342,10 +1381,9 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 // keeps it to one replica at a time ("reliant\x03"). A pass over chats that
 // are all complete is one indexed walk of update_stream_counters.
 const (
-	chatUpdateHeadsBackfillInterval       = 10 * time.Minute
-	chatUpdateHeadsBackfillBatch          = 200
-	chatUpdateHeadsBackfillPause          = 25 * time.Millisecond
-	chatUpdateHeadsBackfillLockKey  int64 = 0x7265_6c69_616e_7403
+	chatUpdateHeadsBackfillInterval = 10 * time.Minute
+	chatUpdateHeadsBackfillBatch    = 200
+	chatUpdateHeadsBackfillPause    = 25 * time.Millisecond
 )
 
 // ChatUpdateHeadsBackfill brings every chat's materialized snapshot heads up
@@ -1355,7 +1393,10 @@ const (
 // chat-update-heads.md). Until a chat is backfilled its snapshot reads the
 // log, as before, so this only makes opens faster; nothing waits on it. One
 // replica runs a pass at a time; the others skip theirs.
-type ChatUpdateHeadsBackfill struct{ repo *db.Repo }
+type ChatUpdateHeadsBackfill struct {
+	repo   *db.Repo
+	locker dblock.Service
+}
 
 // ChatUpdateHeadsBackfillDeps is the repository whose heads are backfilled.
 type ChatUpdateHeadsBackfillDeps struct {
@@ -1366,7 +1407,11 @@ type ChatUpdateHeadsBackfillDeps struct {
 //
 //forge:root-only api
 func NewChatUpdateHeadsBackfill(d ChatUpdateHeadsBackfillDeps) (*ChatUpdateHeadsBackfill, error) {
-	return &ChatUpdateHeadsBackfill{repo: d.DB}, nil
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: d.DB.SessionPool()})
+	if err != nil {
+		return nil, err
+	}
+	return &ChatUpdateHeadsBackfill{repo: d.DB, locker: locker}, nil
 }
 
 // Run backfills until ctx ends.
@@ -1384,7 +1429,7 @@ func (b *ChatUpdateHeadsBackfill) Run(ctx context.Context) error {
 }
 
 func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
-	release, ok, err := b.repo.TryAdvisoryLock(ctx, chatUpdateHeadsBackfillLockKey)
+	release, ok, err := b.locker.TryLock(ctx, dblock.ChatUpdateHeads)
 	if err != nil {
 		logging.WarnContext(ctx, "chat snapshot heads backfill: taking the lock failed", "error", err)
 		return
@@ -1410,20 +1455,20 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 const llmUsageRetentionInterval = time.Hour
 
 // LLMUsageRetention deletes per-call LLM usage rows older than
-// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// llmusage.Retention. The daily rollup is kept. Every replica runs it;
 // the delete is idempotent and skips rows another replica is deleting.
-type LLMUsageRetention struct{ repo *db.Repo }
+type LLMUsageRetention struct{ ledger llmusage.Service }
 
-// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+// LLMUsageRetentionDeps is the ledger that is pruned.
 type LLMUsageRetentionDeps struct {
-	DB *db.Repo
+	Ledger llmusage.Service
 }
 
 // NewLLMUsageRetention is the retention loop.
 //
 //forge:root-only api
 func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
-	return &LLMUsageRetention{repo: d.DB}, nil
+	return &LLMUsageRetention{ledger: d.Ledger}, nil
 }
 
 // Run prunes until ctx ends.
@@ -1431,12 +1476,12 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 	ticker := time.NewTicker(llmUsageRetentionInterval)
 	defer ticker.Stop()
 	for {
-		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+		if n, err := l.ledger.PruneLLMCallUsage(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
 		}
-		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
 		}
 		select {

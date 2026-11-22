@@ -43,7 +43,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 	ctx = auth.WithUser(ctx, t.UserID, "", "")
 	// The same read SetTriggerEnabled's requireProjectWritable makes: the
 	// owner, a live member of the project's (new) org.
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, t.ProjectID, t.UserID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, t.ProjectID, t.UserID); err != nil {
 		if errors.Is(err, authz.ErrMembershipUnavailable) {
 			return false, "", fmt.Errorf("check the owner's organization: %w", err)
 		}

@@ -213,7 +213,7 @@ func runWorkflowPs(cmd *cobra.Command, jsonOut bool, dbURL string) error {
 	// completely.
 	var workflows []*db.Workflow
 	for _, status := range []db.WorkflowStatus{db.Active(), db.Paused()} {
-		batch, listErr := repo.ListWorkflowsByStatus(ctx, status)
+		batch, listErr := store.ListWorkflowsByStatus(ctx, repo.ORM(), status)
 		if listErr != nil {
 			return fmt.Errorf("listing %s workflows: %w", wfaWorkflowStatus(status), listErr)
 		}
@@ -263,7 +263,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 	}
 	m.questionByThread = questions
 
-	approvals, err := repo.ListPendingApprovalsByChat(ctx, chatID)
+	approvals, err := store.ListPendingApprovalsByChat(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return m, fmt.Errorf("reading approvals for chat %s: %w", chatID, err)
 	}
@@ -271,13 +271,13 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 		m.approvalsByExec[a.TemporalWorkflowID] = append(m.approvalsByExec[a.TemporalWorkflowID], a)
 	}
 
-	activity, err := repo.LastThreadActivityByChat(ctx, chatID)
+	activity, err := store.LastThreadActivityByChat(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return m, fmt.Errorf("reading thread activity for chat %s: %w", chatID, err)
 	}
 	m.lastActivity = activity
 
-	backoff, err := repo.ProviderBackoffByChat(ctx, chatID)
+	backoff, err := store.ListChatProviderBackoff(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return m, fmt.Errorf("reading provider backoff for chat %s: %w", chatID, err)
 	}
@@ -285,7 +285,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 
 	// threads.parent_thread_id is the spawn tree. workflows.parent_id is NOT:
 	// see psThreadChildren.
-	threadRows, err := repo.ListThreadsByConversation(ctx, chatID)
+	threadRows, err := store.ListThreadsByConversation(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return m, fmt.Errorf("reading threads for chat %s: %w", chatID, err)
 	}
@@ -706,7 +706,7 @@ func resolvePsSubtreeState(id string, own map[string]psOwnState, children map[st
 // loop nodes. Empty when no checkpoint exists yet (run hasn't entered a node, or
 // it is a spawned child — checkpoints are written for the root run only).
 func psNode(ctx context.Context, repo *db.Repo, wf *db.Workflow) string {
-	cp, err := repo.GetWorkflowCheckpoint(ctx, wf.ID)
+	cp, err := store.LoadWorkflowCheckpoint(ctx, repo.ORM(), wf.ID)
 	if err != nil || cp == nil || cp.NodeID == "" {
 		return ""
 	}

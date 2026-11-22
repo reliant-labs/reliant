@@ -18,8 +18,148 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// forge:section MockSpawnCalls
+// forge:hash=d0e567b9679626a20755bd2d96d27aed7f78f4c713af0207e32575ba0e04ab6a
+
+// MockSpawnCalls is a test mock for the SpawnCalls interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawnCalls.<Method>Func not set" error.
+type MockSpawnCalls struct {
+	contractkit.Recorder
+	SpawnToolCallIDsByChildThreadFunc func(context.Context, string) (map[string]string, error)
+}
+
+// SpawnToolCallIDsByChildThread records the call and delegates to SpawnToolCallIDsByChildThreadFunc when set.
+func (m *MockSpawnCalls) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error) {
+	m.Recorder.Record("SpawnToolCallIDsByChildThread", ctx, chatID)
+	if m.SpawnToolCallIDsByChildThreadFunc != nil {
+		return m.SpawnToolCallIDsByChildThreadFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockSpawnCalls", "SpawnToolCallIDsByChildThread")
+}
+
+// Compile-time check.
+var _ SpawnCalls = (*MockSpawnCalls)(nil)
+
+// forge:section MockHeads
+// forge:hash=5402e814f03f0749ac0ad3d6cb5daea37c07e2d22c6e05c9ed7e17a2d3b74578
+
+// MockHeads is a test mock for the Heads interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockHeads.<Method>Func not set" error.
+type MockHeads struct {
+	contractkit.Recorder
+	SnapshotUpdateHeadsFunc func(context.Context, string) ([]core.ChatUpdate, string, error)
+}
+
+// SnapshotUpdateHeads records the call and delegates to SnapshotUpdateHeadsFunc when set.
+func (m *MockHeads) SnapshotUpdateHeads(ctx context.Context, chatID string) ([]core.ChatUpdate, string, error) {
+	m.Recorder.Record("SnapshotUpdateHeads", ctx, chatID)
+	if m.SnapshotUpdateHeadsFunc != nil {
+		return m.SnapshotUpdateHeadsFunc(ctx, chatID)
+	}
+	return nil, "", contractkit.MockNotSet("MockHeads", "SnapshotUpdateHeads")
+}
+
+// Compile-time check.
+var _ Heads = (*MockHeads)(nil)
+
+// forge:section MockUserLog
+// forge:hash=333437d1db72b4bc2e3414ce9b242823feebbcf5540406f752fb9e780e6bb178
+
+// MockUserLog is a test mock for the UserLog interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockUserLog.<Method>Func not set" error.
+type MockUserLog struct {
+	contractkit.Recorder
+	UserUpdatesSinceFunc func(context.Context, string, int64, int) ([]core.UserUpdate, error)
+}
+
+// UserUpdatesSince records the call and delegates to UserUpdatesSinceFunc when set.
+func (m *MockUserLog) UserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]core.UserUpdate, error) {
+	m.Recorder.Record("UserUpdatesSince", ctx, userID, sinceSeq, limit)
+	if m.UserUpdatesSinceFunc != nil {
+		return m.UserUpdatesSinceFunc(ctx, userID, sinceSeq, limit)
+	}
+	return nil, contractkit.MockNotSet("MockUserLog", "UserUpdatesSince")
+}
+
+// Compile-time check.
+var _ UserLog = (*MockUserLog)(nil)
+
+// forge:section MockOrgFeed
+// forge:hash=b59685c5582ca3edb8a489816de0a30f3ac346d3f7df4da0c7aaa981d36b426f
+
+// MockOrgFeed is a test mock for the OrgFeed interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgFeed.<Method>Func not set" error.
+type MockOrgFeed struct {
+	contractkit.Recorder
+	LatestOrgUpdateSequenceFunc func(context.Context, string) (int64, error)
+	OrgUpdatesSinceFunc         func(context.Context, string, int64, int) ([]core.OrgUpdate, error)
+}
+
+// LatestOrgUpdateSequence records the call and delegates to LatestOrgUpdateSequenceFunc when set.
+func (m *MockOrgFeed) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
+	m.Recorder.Record("LatestOrgUpdateSequence", ctx, orgID)
+	if m.LatestOrgUpdateSequenceFunc != nil {
+		return m.LatestOrgUpdateSequenceFunc(ctx, orgID)
+	}
+	return 0, contractkit.MockNotSet("MockOrgFeed", "LatestOrgUpdateSequence")
+}
+
+// OrgUpdatesSince records the call and delegates to OrgUpdatesSinceFunc when set.
+func (m *MockOrgFeed) OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error) {
+	m.Recorder.Record("OrgUpdatesSince", ctx, orgID, sinceSeq, limit)
+	if m.OrgUpdatesSinceFunc != nil {
+		return m.OrgUpdatesSinceFunc(ctx, orgID, sinceSeq, limit)
+	}
+	return nil, contractkit.MockNotSet("MockOrgFeed", "OrgUpdatesSince")
+}
+
+// Compile-time check.
+var _ OrgFeed = (*MockOrgFeed)(nil)
+
+// forge:section MockSiblings
+// forge:hash=33bd87c56cec00be3364bfa293b6a36e01ed793329a264c19c574c959de2141d
+
+// MockSiblings is a test mock for the Siblings interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSiblings.<Method>Func not set" error.
+type MockSiblings struct {
+	contractkit.Recorder
+	ListRecentTranscriptSiblingMessagesFunc func(context.Context, string, string, int64, int) ([]*core.Message, error)
+}
+
+// ListRecentTranscriptSiblingMessages records the call and delegates to ListRecentTranscriptSiblingMessagesFunc when set.
+func (m *MockSiblings) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID string, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
+	m.Recorder.Record("ListRecentTranscriptSiblingMessages", ctx, chatID, mainThreadID, fromSeq, limit)
+	if m.ListRecentTranscriptSiblingMessagesFunc != nil {
+		return m.ListRecentTranscriptSiblingMessagesFunc(ctx, chatID, mainThreadID, fromSeq, limit)
+	}
+	return nil, contractkit.MockNotSet("MockSiblings", "ListRecentTranscriptSiblingMessages")
+}
+
+// Compile-time check.
+var _ Siblings = (*MockSiblings)(nil)
+
 // forge:section MockRepository
-// forge:hash=e790b285fedc4c733da1440343862c209ace454893531e5e1416b34e85c2866e
+// forge:hash=3730031d9e6c1c7463b1a3138bfc52155b7555f709fd51230e98b22e120aa62d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -34,19 +174,13 @@ type MockRepository struct {
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
 	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
-	GetLatestNonMessageUpdatesPerEntityFunc                  func(context.Context, string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
-	GetUserUpdatesSinceFunc                                  func(context.Context, string, int64, int) ([]db.UserUpdate, error)
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorkflowDraftFunc                                     func(context.Context, string) (*db.WorkflowDraft, error)
-	LatestOrgUpdateSequenceFunc                              func(context.Context, string) (int64, error)
-	OrgUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]core.OrgUpdate, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
-	ListRecentTranscriptSiblingMessagesFunc                  func(context.Context, string, string, int64, int) ([]*db.Message, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
-	SpawnToolCallIDsByChildThreadFunc                        func(context.Context, string) (map[string]string, error)
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
@@ -90,7 +224,6 @@ type MockRepository struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
-	SenderTitlesFunc                                         func(context.Context, []string) (map[string]string, error)
 }
 
 // GetChatRow records the call and delegates to GetChatRowFunc when set.
@@ -138,15 +271,6 @@ func (m *MockRepository) GetUpdatesSince(ctx context.Context, chatID string, sin
 	return nil, contractkit.MockNotSet("MockRepository", "GetUpdatesSince")
 }
 
-// GetLatestNonMessageUpdatesPerEntity records the call and delegates to GetLatestNonMessageUpdatesPerEntityFunc when set.
-func (m *MockRepository) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error) {
-	m.Recorder.Record("GetLatestNonMessageUpdatesPerEntity", ctx, chatID)
-	if m.GetLatestNonMessageUpdatesPerEntityFunc != nil {
-		return m.GetLatestNonMessageUpdatesPerEntityFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetLatestNonMessageUpdatesPerEntity")
-}
-
 // GetLatestUserUpdateSequence records the call and delegates to GetLatestUserUpdateSequenceFunc when set.
 func (m *MockRepository) GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error) {
 	m.Recorder.Record("GetLatestUserUpdateSequence", ctx, userID)
@@ -154,15 +278,6 @@ func (m *MockRepository) GetLatestUserUpdateSequence(ctx context.Context, userID
 		return m.GetLatestUserUpdateSequenceFunc(ctx, userID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "GetLatestUserUpdateSequence")
-}
-
-// GetUserUpdatesSince records the call and delegates to GetUserUpdatesSinceFunc when set.
-func (m *MockRepository) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]db.UserUpdate, error) {
-	m.Recorder.Record("GetUserUpdatesSince", ctx, userID, sinceSeq, limit)
-	if m.GetUserUpdatesSinceFunc != nil {
-		return m.GetUserUpdatesSinceFunc(ctx, userID, sinceSeq, limit)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetUserUpdatesSince")
 }
 
 // GetProject records the call and delegates to GetProjectFunc when set.
@@ -183,24 +298,6 @@ func (m *MockRepository) GetWorkflowDraft(ctx context.Context, id string) (*db.W
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraft")
 }
 
-// LatestOrgUpdateSequence records the call and delegates to LatestOrgUpdateSequenceFunc when set.
-func (m *MockRepository) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
-	m.Recorder.Record("LatestOrgUpdateSequence", ctx, orgID)
-	if m.LatestOrgUpdateSequenceFunc != nil {
-		return m.LatestOrgUpdateSequenceFunc(ctx, orgID)
-	}
-	return 0, contractkit.MockNotSet("MockRepository", "LatestOrgUpdateSequence")
-}
-
-// OrgUpdatesSince records the call and delegates to OrgUpdatesSinceFunc when set.
-func (m *MockRepository) OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error) {
-	m.Recorder.Record("OrgUpdatesSince", ctx, orgID, sinceSeq, limit)
-	if m.OrgUpdatesSinceFunc != nil {
-		return m.OrgUpdatesSinceFunc(ctx, orgID, sinceSeq, limit)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "OrgUpdatesSince")
-}
-
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.
 func (m *MockRepository) ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error) {
 	m.Recorder.Record("ListThreadsByConversation", ctx, chatID)
@@ -219,15 +316,6 @@ func (m *MockRepository) CountMessagesInChat(ctx context.Context, chatID string)
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInChat")
 }
 
-// ListRecentTranscriptSiblingMessages records the call and delegates to ListRecentTranscriptSiblingMessagesFunc when set.
-func (m *MockRepository) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID string, mainThreadID string, fromSeq int64, limit int) ([]*db.Message, error) {
-	m.Recorder.Record("ListRecentTranscriptSiblingMessages", ctx, chatID, mainThreadID, fromSeq, limit)
-	if m.ListRecentTranscriptSiblingMessagesFunc != nil {
-		return m.ListRecentTranscriptSiblingMessagesFunc(ctx, chatID, mainThreadID, fromSeq, limit)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListRecentTranscriptSiblingMessages")
-}
-
 // ListContentBlocksForMessages records the call and delegates to ListContentBlocksForMessagesFunc when set.
 func (m *MockRepository) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error) {
 	m.Recorder.Record("ListContentBlocksForMessages", ctx, messageIDs)
@@ -244,15 +332,6 @@ func (m *MockRepository) ListLiveToolCallsByChat(ctx context.Context, chatID str
 		return m.ListLiveToolCallsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListLiveToolCallsByChat")
-}
-
-// SpawnToolCallIDsByChildThread records the call and delegates to SpawnToolCallIDsByChildThreadFunc when set.
-func (m *MockRepository) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error) {
-	m.Recorder.Record("SpawnToolCallIDsByChildThread", ctx, chatID)
-	if m.SpawnToolCallIDsByChildThreadFunc != nil {
-		return m.SpawnToolCallIDsByChildThreadFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SpawnToolCallIDsByChildThread")
 }
 
 // GetChatRowWithUserCheck records the call and delegates to GetChatRowWithUserCheckFunc when set.
@@ -642,14 +721,31 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByIDs")
 }
 
-// SenderTitles records the call and delegates to SenderTitlesFunc when set.
-func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
-	m.Recorder.Record("SenderTitles", ctx, threadIDs)
-	if m.SenderTitlesFunc != nil {
-		return m.SenderTitlesFunc(ctx, threadIDs)
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockSenders
+// forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9
+
+// MockSenders is a test mock for the Senders interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSenders.<Method>Func not set" error.
+type MockSenders struct {
+	contractkit.Recorder
+	SenderTitlesByThreadIDsFunc func(context.Context, []string) (map[string]string, error)
+}
+
+// SenderTitlesByThreadIDs records the call and delegates to SenderTitlesByThreadIDsFunc when set.
+func (m *MockSenders) SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitlesByThreadIDs", ctx, threadIDs)
+	if m.SenderTitlesByThreadIDsFunc != nil {
+		return m.SenderTitlesByThreadIDsFunc(ctx, threadIDs)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
+	return nil, contractkit.MockNotSet("MockSenders", "SenderTitlesByThreadIDs")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Senders = (*MockSenders)(nil)

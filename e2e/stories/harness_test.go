@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -357,8 +358,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
-		runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), taskQueue)
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.NewService(s.Repo), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -406,6 +406,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:    store.NewToolCallExtStore(s.Repo.ORM()),
 		Temporal:  s.Temporal,
 		Pause:     pause,
 	})
@@ -431,6 +432,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:   slog.Default(),
 		Config:   &typedconfig.Config{},
 		Repo:     s.Repo,
+		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
 		Syncer:   triggerSyncer,
 		Fires:    triggerFires,

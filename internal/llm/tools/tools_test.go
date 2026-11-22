@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/invopop/jsonschema"
+
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 

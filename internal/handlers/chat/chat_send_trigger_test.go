@@ -74,8 +74,8 @@ func TestSendMessage_RestartOfCompletedChatCarriesLaunchTrigger(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
@@ -111,7 +111,7 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 
 	ctx, quiet := setupAbsorbFixture(t, repo, "test-user", db.Completed())
 	projectID := mustChatProject(t, ctx, repo, quiet.chatID)
@@ -211,7 +211,7 @@ func TestSendMessage_AdoptedScheduleChatStartsAttendedRootRun(t *testing.T) {
 			temporal := &inputCapturingTemporalClient{
 				absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
 			}
-			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+			service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 
 			if adopt {
 				_, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
@@ -234,7 +234,7 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
 	seedScheduledChat(t, ctx, repo, fx.chatID)
-	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	service := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
 	_, err := service.AdoptChat(otherCtx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))

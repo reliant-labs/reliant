@@ -27,11 +27,17 @@ type Deps struct {
 	Repo Repository
 	// OrgKeys lists the org keys a provider rejected (credentials/orgaccounts).
 	OrgKeys OrgKeys
+	// Items, Firings and Notices are the Inbox's own reads (deps.go).
+	Items   Items
+	Firings Firings
+	Notices Notices
 	// Recoveries lists the caller's worktree recoveries.
 	Recoveries Recoveries
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
 	// reclaim now. store.WorktreeExtStore satisfies it.
 	Marks worktreesweep.MarkDecisionStore
+	// Storage is the machines' storage view, forget and clean-up (deps.go).
+	Storage Storage
 	// Sweeper runs the confirmed storage clean-up on a machine's daemon.
 	// nil when no daemon router is wired; CleanupStorage then reports
 	// unavailable.
@@ -68,11 +74,17 @@ func (d Deps) validateDeps() error {
 	if d.OrgKeys == nil {
 		return fmt.Errorf("inbox: Deps.OrgKeys is required")
 	}
+	if d.Items == nil || d.Firings == nil || d.Notices == nil {
+		return fmt.Errorf("inbox: Deps.Items, Firings and Notices are required")
+	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("inbox: Deps.Recoveries is required")
 	}
 	if d.Marks == nil {
 		return fmt.Errorf("inbox: Deps.Marks is required")
+	}
+	if d.Storage == nil {
+		return fmt.Errorf("inbox: Deps.Storage is required")
 	}
 	return nil
 }

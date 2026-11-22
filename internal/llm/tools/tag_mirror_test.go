@@ -5,8 +5,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 )
 
 // names.AllToolTags is a hand-maintained mirror of the tags this registry

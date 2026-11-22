@@ -302,7 +302,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		}
 
 		// Query all steps for workflow
-		steps, err := repo.GetStepExecutionsByWorkflow(ctx, workflowID)
+		steps, err := store.ListWorkflowStepExecutions(ctx, repo.ORM(), workflowID)
 		require.NoError(t, err)
 
 		// Find the iteration test steps

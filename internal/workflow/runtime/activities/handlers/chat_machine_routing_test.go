@@ -51,7 +51,7 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 		t.Helper()
 		executor.requests, executor.selectors = nil, nil
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(NewExecuteToolsActivity(h.Repo(), executor).Execute, ExecuteToolsInput{
+		err := h.ExecuteActivity(NewExecuteToolsActivity(h.Repo(), executor).WithToolCallResults(testToolCallResults(h.Repo())).Execute, ExecuteToolsInput{
 			ChatID: chat, Thread: chat, ProjectPath: dir,
 			ToolCalls: []message.ToolCall{bashCall("pwd")},
 			// Deliberately no DaemonSelector: this is an already-running workflow.

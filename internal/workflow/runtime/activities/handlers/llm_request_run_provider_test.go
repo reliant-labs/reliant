@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // The provider a person chose for a run (RuntimeContext.ProviderPreference →

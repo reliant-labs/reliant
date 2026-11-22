@@ -33,7 +33,6 @@ type Repository interface {
 	daemonplacement.Installs
 	// ListDaemonsByUserID lists the user's machines for ListProcesses.
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)
 	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error

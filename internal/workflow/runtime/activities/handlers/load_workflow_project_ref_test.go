@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // Issue #623, app half of bug 1: a run resolves project://X by the workflow's

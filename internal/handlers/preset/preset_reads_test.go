@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +50,7 @@ func (r *presetReadRepo) ListPresetsByTag(context.Context, string, string, strin
 func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 	ctx, wr := workflowlisttest.NewFixture(t, 12)
 	repo := &presetReadRepo{wr}
-	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 
 	names := []string{"builtin://agent", "team-flow-0", "team-flow-1", "no-such-flow"}
 	for i := 0; i < 12; i++ {
@@ -73,7 +75,7 @@ func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 func TestListPresetsForWorkflow_ReadsRunConcurrently(t *testing.T) {
 	ctx, wr := workflowlisttest.NewFixture(t, 1)
 	repo := &presetReadRepo{wr}
-	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 	req := connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
 		ProjectId: repo.Project.ID, WorkflowName: "builtin://agent", IncludeHidden: true,
 	})
