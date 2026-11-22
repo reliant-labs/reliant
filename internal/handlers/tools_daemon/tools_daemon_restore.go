@@ -59,6 +59,15 @@ type RestorePools interface {
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
 }
 
+// MachinePools is the machine pools and durable labels the gateway reads and
+// writes. store.MachinePoolExtStore satisfies it.
+type MachinePools interface {
+	RestorePools
+	// MergeDeclaredDaemonLabels merges the durable labels a daemon declared
+	// at registration into its row's labels; false when it wrote nothing.
+	MergeDeclaredDaemonLabels(ctx context.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error)
+}
+
 // CheckoutRestoreStore is what restoring a pool member's checkouts reads and
 // writes: the repository's part and the machine's checkout rows.
 type CheckoutRestoreStore interface {

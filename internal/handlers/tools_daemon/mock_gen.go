@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=4067dafef1a7363a7b0dc3cac8eda2fc438ffb7aa0fda491e683a85d0b4648b6
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -244,7 +244,7 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockMachineCheckouts
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=a281261f2ee0d7a1a0308a97bd7b6af4438146d7d1fd1d6b60735b1809e4ad04
 
 // MockMachineCheckouts is a test mock for the MachineCheckouts interface.
 //
@@ -290,7 +290,7 @@ func (m *MockMachineCheckouts) ListProjectDaemonDetachmentsForDaemon(ctx context
 var _ MachineCheckouts = (*MockMachineCheckouts)(nil)
 
 // forge:section MockMachineDetachments
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=ca0f4be9fdd1190071c7e73e67e69cf36e4156c73cdf6f80fab1f7ca29b978b4
 
 // MockMachineDetachments is a test mock for the MachineDetachments interface.
 //
@@ -326,7 +326,7 @@ func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemon(ctx conte
 var _ MachineDetachments = (*MockMachineDetachments)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=9644154d3dae81cb1041c66be0a83af9db2e27067cf016d990e78ce5c4555f3a
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -482,7 +482,7 @@ func (m *MockProjectReconcileStore) ResolveQueuedProjectDaemon(ctx context.Conte
 var _ ProjectReconcileStore = (*MockProjectReconcileStore)(nil)
 
 // forge:section MockProjectReconcileRepo
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=2f39f34e7070e0ed39d5e5b09d3d7559453c592ba5a8be9ff3fc8bb9ee92b47d
 
 // MockProjectReconcileRepo is a test mock for the ProjectReconcileRepo interface.
 //
@@ -568,7 +568,7 @@ func (m *MockProjectReconcileRepo) SetRepoForgeApps(ctx context.Context, repoID 
 var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
 
 // forge:section MockAttachments
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=d8c7a3681cf19751cdd2cf89f7f14fb7d7bfec32e75b729d5186f3b8427942ed
 
 // MockAttachments is a test mock for the Attachments interface.
 //
@@ -634,7 +634,7 @@ func (m *MockAttachments) SetDaemonAttachmentHealth(ctx context.Context, daemonI
 var _ Attachments = (*MockAttachments)(nil)
 
 // forge:section MockLocalModels
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=ea7b082aeb1a64b216939993a028e51fa329ff11d3a1f0854a434cab81f89742
 
 // MockLocalModels is a test mock for the LocalModels interface.
 //
@@ -660,7 +660,7 @@ func (m *MockLocalModels) SetDaemonLocalModels(ctx context.Context, daemonID str
 var _ LocalModels = (*MockLocalModels)(nil)
 
 // forge:section MockProjectLookups
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=624ff5345ed34ed2fcdcd1cd2dd963fa7f8e089638a49198c71b8cab231ae16b
 
 // MockProjectLookups is a test mock for the ProjectLookups interface.
 //
@@ -696,7 +696,7 @@ func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScope(ctx context.Con
 var _ ProjectLookups = (*MockProjectLookups)(nil)
 
 // forge:section MockProjectDaemons
-// forge:hash=96b25c9fe1ba776d75441e0904e26eb5fd5c3857ef0b20d3ac333e220f895181
+// forge:hash=e6c9a8fda58562efce5718241539c4cbc519b2dac45d2225b193694b507e84d7
 
 // MockProjectDaemons is a test mock for the ProjectDaemons interface.
 //

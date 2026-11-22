@@ -117,12 +117,11 @@ var userScopedReads = map[string]string{
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
-	"CountTriggerCapacityHeldByMember": readBackground,
-	"HasEnabledTriggerOfKind":          readBackground,
-	"ListCapacityWakeTargets":          readBackground,
-	"ListChatsPausedForMachine":        readBackground,
-	"ListChatsQueuedForMachine":        readBackground,
-	"ListChatsWaitingForMachine":       readBackground,
+	"HasEnabledTriggerOfKind":    readBackground,
+	"ListCapacityWakeTargets":    readBackground,
+	"ListChatsPausedForMachine":  readBackground,
+	"ListChatsQueuedForMachine":  readBackground,
+	"ListChatsWaitingForMachine": readBackground,
 }
 
 var (
