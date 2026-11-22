@@ -142,3 +142,55 @@ describe('authStore with forge sign-in', () => {
     expect(supabaseAuth.signInAnonymously).not.toHaveBeenCalled()
   })
 })
+
+describe('authStore forge rechecks', () => {
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((r) => { resolve = r })
+    return { promise, resolve }
+  }
+
+  it('keeps the session when the broker cannot answer', async () => {
+    broker.fetchIdentity.mockResolvedValueOnce(ALICE).mockRejectedValueOnce(new Error('503 store unavailable'))
+    const { useAuthStore } = await loadStore()
+    await useAuthStore.getState().initialize()
+    resetMock.mockClear()
+    await useAuthStore.getState().refreshSession()
+    expect(useAuthStore.getState().identity?.id).toBe(ALICE.subject)
+    expect(resetMock).not.toHaveBeenCalled()
+  })
+
+  it('restores nobody, without throwing, when the broker cannot answer at load', async () => {
+    broker.fetchIdentity.mockRejectedValueOnce(new Error('unreachable'))
+    const { useAuthStore } = await loadStore()
+    await useAuthStore.getState().initialize()
+    expect(useAuthStore.getState().identity).toBeNull()
+    expect(useAuthStore.getState().initialized).toBe(true)
+  })
+
+  it('does not reinstall an identity a recheck read before sign-out', async () => {
+    const late = deferred<typeof ALICE>()
+    broker.fetchIdentity.mockResolvedValueOnce(ALICE).mockReturnValueOnce(late.promise)
+    broker.signOut.mockResolvedValue({ authenticated: false })
+    const { useAuthStore } = await loadStore()
+    await useAuthStore.getState().initialize()
+    const recheck = useAuthStore.getState().refreshSession()
+    await useAuthStore.getState().signOut()
+    late.resolve(ALICE)
+    await recheck
+    expect(useAuthStore.getState().identity).toBeNull()
+  })
+
+  it('does not reinstall an identity a recheck read before the cookie changed hands', async () => {
+    const older = deferred<typeof ALICE>()
+    broker.fetchIdentity.mockResolvedValueOnce(ALICE).mockReturnValueOnce(older.promise).mockResolvedValueOnce(BOB)
+    const { useAuthStore } = await loadStore()
+    await useAuthStore.getState().initialize()
+    const first = useAuthStore.getState().refreshSession()
+    await useAuthStore.getState().refreshSession()
+    expect(useAuthStore.getState().identity?.id).toBe(BOB.subject)
+    older.resolve(ALICE)
+    await first
+    expect(useAuthStore.getState().identity?.id).toBe(BOB.subject)
+  })
+})

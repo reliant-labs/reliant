@@ -152,22 +152,39 @@ export async function signOut(): Promise<Identity> {
  * This is how the app learns its own auth state at load: the cookie is
  * unreadable to scripts, so the server is the only thing that can answer.
  * One cheap same-origin request, and no provider round trip.
+ *
+ * Resolves only with a DEFINITIVE answer: the broker's identity (a 2xx whose
+ * body says `authenticated`), or signed out for a 401. Anything else — the
+ * broker unreachable, a 5xx (the broker answers 503 when its session store is,
+ * and keeps the cookie), any other status, a body that is not an identity —
+ * says nothing about the session, so it rejects with an AuthError (status 0
+ * for a transport failure) and the caller keeps what it holds. Signing someone
+ * out because a request failed would discard a session that is still live.
  */
 export async function fetchIdentity(): Promise<Identity> {
+  let response: Response;
   try {
-    const response = await fetch(`${apiOrigin()}/auth/session`, {
+    response = await fetch(`${apiOrigin()}/auth/session`, {
       // See the note in post(): the cookie only travels to an API on
       // another origin with "include".
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    if (!response.ok) return { authenticated: false };
-    return (await response.json()) as Identity;
   } catch {
-    // A transport failure is not a signed-out user, but it is the safe
-    // answer to render: closed rather than open.
-    return { authenticated: false };
+    throw new AuthError("Could not reach the sign-in service.", 0);
   }
+  if (response.status === 401) return { authenticated: false };
+  if (!response.ok) throw await rejection(response);
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new AuthError("The sign-in service gave an unreadable answer.", response.status);
+  }
+  if (typeof body !== "object" || body === null || typeof (body as Identity).authenticated !== "boolean") {
+    throw new AuthError("The sign-in service gave an unreadable answer.", response.status);
+  }
+  return body as Identity;
 }
 
 async function post(path: string, body: unknown): Promise<Identity> {

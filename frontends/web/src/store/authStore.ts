@@ -547,6 +547,19 @@ const adoptForgeIdentity = (set: SetAuthState, identity: ForgeIdentity, forceCle
   return adoptIdentity(set, user, user ? forgeSessionOf(user) : null, forceClear)
 }
 
+// forge mode: every identity action this page starts (restore, refresh, sign
+// in, sign out, an identity answered elsewhere) takes the next number. A
+// /auth/session answer is adopted only while its read is still the newest
+// action: a refresh that started before a sign-out, or before a newer
+// refresh, answers about a cookie that has since moved on, and installing it
+// would put back an identity the page no longer holds. adoptIdentity
+// serializes installs, not reads, so it cannot see this on its own.
+// Actions whose answer moves the cookie (sign-in, sign-out) take a number
+// again once that answer is in, so a read that began before it is stale too.
+let forgeActions = 0
+const beginForgeAction = (): number => ++forgeActions
+const isLatestForgeAction = (action: number): boolean => action === forgeActions
+
 // forge mode: another tab or host signing in or out reaches this page only
 // through the cookie, so the session is re-read when the page is shown again.
 let forgeRecheckInstalled = false
@@ -580,6 +593,7 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
     })
 
     if (isForgeAuth()) {
+      beginForgeAction()
       let identity: ForgeIdentity
       try {
         identity = await forgeSignIn({ email, password })
@@ -591,6 +605,8 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
         })
         throw error
       }
+      // A recheck that read the cookie before this answer set it is stale.
+      beginForgeAction()
       if (!(await adoptForgeIdentity(set, identity))) {
         throw new Error(CLEANUP_FAILED_MESSAGE)
       }
@@ -826,9 +842,13 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
       localStorage.removeItem('reliant-api-key')
 
       if (isForgeAuth()) {
+        beginForgeAction()
         // The broker ends the server-side session and expires the cookie.
         // A failure leaves the cookie live, so it is thrown like Supabase's.
         await forgeSignOut()
+        // Taken again once the cookie is gone: a recheck that started
+        // while the logout was in flight read the cookie before it went.
+        beginForgeAction()
       } else {
         const { error } = await supabase.auth.signOut()
         if (error) throw error
@@ -1245,6 +1265,7 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
 
   installForgeIdentity: async (identity: ForgeIdentity) => {
     if (!identity.authenticated) return false
+    beginForgeAction()
     const installed = await adoptForgeIdentity(set, identity)
     if (installed) set({ loading: false, initialized: true })
     return installed
@@ -1325,10 +1346,17 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
 
       if (isForgeAuth()) {
         // The broker's session is the cookie: nothing in browser storage to
-        // restore, and no Supabase client is touched. A broker that cannot be
-        // reached answers "not signed in" (native-login fetchIdentity), so the
-        // page fails closed to the sign-in screen.
-        await adoptForgeIdentity(set, await fetchForgeIdentity())
+        // restore, and no Supabase client is touched. A broker that cannot
+        // answer (native-login fetchIdentity rejects) installs nobody, so the
+        // page fails closed to the sign-in screen; the cookie is untouched,
+        // and the next recheck restores the session once the broker answers.
+        const action = beginForgeAction()
+        try {
+          const identity = await fetchForgeIdentity()
+          if (isLatestForgeAction(action)) await adoptForgeIdentity(set, identity)
+        } catch (error) {
+          logger.warn('[AuthStore] The sign-in service could not say who is signed in:', error)
+        }
         set({ loading: false, initialized: true })
         installForgeRecheck(() => {
           if (get().initialized) void get().refreshSession()
@@ -1406,7 +1434,20 @@ export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
       // whether the cookie still names a session, and whose. An API-key
       // session is not the broker's and stays as it is.
       if (get().identity?.isApiKey) return
-      await adoptForgeIdentity(set, await fetchForgeIdentity())
+      const action = beginForgeAction()
+      let identity: ForgeIdentity
+      try {
+        identity = await fetchForgeIdentity()
+      } catch (error) {
+        // Not an answer about the session (the broker unreachable, or its
+        // store): the session may well be live, so the page keeps it. Only
+        // a definitive signed-out answer signs anyone out.
+        logger.warn('[AuthStore] Session recheck failed; keeping the current session:', error)
+        return
+      }
+      // Superseded by a sign-in, sign-out or newer recheck while in flight.
+      if (!isLatestForgeAction(action)) return
+      await adoptForgeIdentity(set, identity)
       return
     }
     try {
