@@ -1,0 +1,69 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "users",
+      "title": "Users",
+      "description": "Calls without a user.id are left out."
+    },
+    {
+      "id": "orgs",
+      "title": "Orgs",
+      "description": "Calls without an org.id are left out."
+    }
+  ],
+  "id": "ai-users",
+  "title": "shop: AI by user",
+  "description": "Who the model calls were made for: the users and orgs with the most calls and tokens, by their opaque ids (user.id, org.id; genai.WithScope stamps them). From the GenAI spans in the environment's traces, so the range is bounded by their retention.",
+  "group": "ai",
+  "tags": [
+    "ai"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "panels": [
+    {
+      "section": "users",
+      "id": "users-by-day",
+      "title": "Users with model calls",
+      "description": "Distinct users with a model call each UTC day.",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day, uniqExact(SpanAttributes['user.id']) AS \"Users\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AND SpanAttributes['user.id'] != ''\nGROUP BY day ORDER BY day",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "colors": {
+          "Users": "blue"
+        }
+      },
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "users",
+      "id": "top-users",
+      "title": "Top users",
+      "description": "Users by tokens in the range: their runs, model calls, tokens, reported cost and when they last made a call.",
+      "kind": "sql",
+      "sql": "SELECT SpanAttributes['user.id'] AS \"User\", uniqExactIf(SpanAttributes['forge.ai.run.id'], SpanAttributes['forge.ai.run.id'] != '') AS \"Runs\", count() AS \"Calls\",\n       sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])) AS \"Input tokens\", sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Output tokens\",\n       round(sum(toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd']))), 4) AS \"Reported cost (USD)\", max(Timestamp) AS \"Last call\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AND SpanAttributes['user.id'] != ''\nGROUP BY \"User\" ORDER BY \"Input tokens\" + \"Output tokens\" DESC, \"User\" LIMIT 50",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "orgs",
+      "id": "top-orgs",
+      "title": "Top orgs",
+      "description": "Orgs by tokens in the range, measured as the users.",
+      "kind": "sql",
+      "sql": "SELECT SpanAttributes['org.id'] AS \"Org\", uniqExactIf(SpanAttributes['forge.ai.run.id'], SpanAttributes['forge.ai.run.id'] != '') AS \"Runs\", count() AS \"Calls\",\n       sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])) AS \"Input tokens\", sum(toUInt64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])) AS \"Output tokens\",\n       round(sum(toFloat64OrNull(if(SpanAttributes['forge.ai.cost.usd'] != '', SpanAttributes['forge.ai.cost.usd'], SpanAttributes['reliant.cost_usd']))), 4) AS \"Reported cost (USD)\", max(Timestamp) AS \"Last call\"\nFROM otel_traces WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND SpanAttributes['gen_ai.operation.name'] IN ['chat', 'text_completion', 'generate_content', 'embeddings'] AND SpanAttributes['org.id'] != ''\nGROUP BY \"Org\" ORDER BY \"Input tokens\" + \"Output tokens\" DESC, \"Org\" LIMIT 50",
+      "width": 24,
+      "height": 9
+    }
+  ]
+}

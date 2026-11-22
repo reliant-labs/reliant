@@ -1,0 +1,8 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file.
+// ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
+// tested in handlers_crud_test.go.
+// Chat is a BIDIRECTIONAL stream, so no case is scaffolded: connect-go carries it only over HTTP/2.
+// Register svc.RegisterV2 on a connect.NewServer, connecthttp.Mount it on httptest.NewUnstartedServer with
+// EnableHTTP2 and StartTLS, dial its Client(), and
+// build svc with items.NewTestItems(t) (helpers_gen_test.go). Depth: `forge skill load testing/patterns`.
+package items_test

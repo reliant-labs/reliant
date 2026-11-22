@@ -1,0 +1,14 @@
+{{- /*
+CODEOWNERS is emitted with a sensible default owner inferred from the
+project's module path (e.g. `github.com/example/demo` -> `@example`).
+Review this file before enabling branch protection — the default is a
+starting point, not a finished policy.
+
+When the module path is not on github.com (so no owner can be inferred),
+the generator skips writing this file entirely.
+*/ -}}
+# yours: scaffolded once, never touched again — forge will not overwrite this file
+# Starter CODEOWNERS; canonical pattern in `forge skill load deploy`.
+# Default owner for everything in this repo. Override with more specific
+# rules below — later rules take precedence in GitHub's CODEOWNERS format.
+* @{{.GitHubOwner}}

@@ -1,0 +1,58 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Each method delegates to github.com/reliant-labs/forge/pkg/crud (error mapping, cursor
+// pagination, page-size clamping, ordering, total counts, update masks); the per-entity wiring is
+// regenerated in handlers_crud_ops_gen.go.
+// pkg/crud never reads the caller on its own. The interceptor already turned away anyone without a
+// valid token (unless the rpc declares auth_required: false; pkg/middleware/procedures_gen.go).
+// For a table whose migration declares `forge:owner=`, the generated op asks your
+// crud.OwnerResolver (Deps.Owners) who the caller is and scopes every read and write to their
+// rows. For every other table, WHO MAY DO WHAT and WHICH ROWS THEY MAY SEE are yours: import
+// "example.com/test/pkg/middleware", resolve the caller with middleware.GetUser(ctx), and wrap the
+// op's Filters in a WHERE on those claims. See `forge skill load auth`.
+// EACH METHOD'S `Auth:` LINE says which case it is, read from its rpc's auth_required and its
+// table's forge:owner declaration:
+// PUBLIC — auth_required: false lets a credential-less caller through. If that is wrong, the fix
+// is the annotation on the rpc, not a middleware.GetUser(ctx) call here, which would reject
+// callers the proto (and `forge project graph`) advertise as welcome.
+// Customize an RPC by replacing its delegation here; CRUD RPCs added later are appended by `forge
+// generate`, and your content is never modified.
+package patients
+
+import (
+	"context"
+
+	"connectrpc.com/connect"
+	pb "example.com/test/gen/proto/services/patients/v1"
+	"example.com/test/internal/metrics"
+	"github.com/reliant-labs/forge/pkg/crud"
+)
+
+// CreatePatient delegates CRUD create to pkg/crud.
+// Auth: PUBLIC (auth_required: false) — no middleware.GetUser(ctx) here; if that is wrong, fix the annotation.
+func (s *Service) CreatePatient(
+	ctx context.Context,
+	req *connect.Request[pb.CreatePatientRequest],
+) (*connect.Response[pb.CreatePatientResponse], error) {
+	resp, err := crud.HandleCreate(s.crudCreatePatientOp())(ctx, req)
+	metrics.RecordCreated(ctx, "Patient", err)
+	return resp, err
+}
+
+// GetPatient delegates CRUD get to pkg/crud.
+// Auth: PUBLIC (auth_required: false) — no middleware.GetUser(ctx) here; if that is wrong, fix the annotation.
+func (s *Service) GetPatient(
+	ctx context.Context,
+	req *connect.Request[pb.GetPatientRequest],
+) (*connect.Response[pb.GetPatientResponse], error) {
+	return crud.HandleGet(s.crudGetPatientOp())(ctx, req)
+}
+
+// UpdatePatient delegates CRUD update to pkg/crud.
+// Auth: PUBLIC (auth_required: false) — no middleware.GetUser(ctx) here; if that is wrong, fix the annotation.
+// AIP-134: req.Msg.UpdateMask is honored (empty or "*" = full replace); op.ReadOnly columns are refused in it and kept on a full replace.
+func (s *Service) UpdatePatient(
+	ctx context.Context,
+	req *connect.Request[pb.UpdatePatientRequest],
+) (*connect.Response[pb.UpdatePatientResponse], error) {
+	return crud.HandleUpdate(s.crudUpdatePatientOp())(ctx, req)
+}
