@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -316,7 +317,7 @@ func TestListAnswerablePendingQuestionsByChat(t *testing.T) {
 	c.setStatus("spawn-failed", Failed())
 	c.setStatus("spawn-paused", Paused())
 
-	got, err := c.repo.ListAnswerablePendingQuestionsByChat(context.Background(), c.chatID)
+	got, err := store.NewQuestionExtStore(c.repo.ORM()).ListAnswerablePendingQuestionsByChat(context.Background(), c.chatID)
 	if err != nil {
 		t.Fatalf("ListAnswerablePendingQuestionsByChat: %v", err)
 	}
@@ -336,7 +337,7 @@ func TestListAnswerablePendingQuestionsByChat(t *testing.T) {
 
 	// Every pending row is still there for the callers that must see them
 	// all (terminating a run voids each one).
-	all, err := c.repo.ListPendingQuestionsByChat(context.Background(), c.chatID)
+	all, err := store.NewQuestionExtStore(c.repo.ORM()).ListPendingQuestionsByChat(context.Background(), c.chatID)
 	if err != nil {
 		t.Fatalf("ListPendingQuestionsByChat: %v", err)
 	}

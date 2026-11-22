@@ -52,14 +52,13 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
-	"ListAnswerablePendingQuestionsByUser": readCallersFilter,
-	"ListArchivedChats":                    readCallersFilter,
-	"ListChats":                            readCallersFilter,
-	"ListInboxPending":                     readCallersFilter,
-	"ListMainWorktreesForUser":             readCallersFilter,
-	"ListProjects":                         readCallersFilter,
-	"ListRuns":                             readCallersFilter,
-	"ListTriggers":                         readCallersFilter,
+	"ListArchivedChats":        readCallersFilter,
+	"ListChats":                readCallersFilter,
+	"ListInboxPending":         readCallersFilter,
+	"ListMainWorktreesForUser": readCallersFilter,
+	"ListProjects":             readCallersFilter,
+	"ListRuns":                 readCallersFilter,
+	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	"ListPendingTriggerOffers": readCallersFilter,

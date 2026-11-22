@@ -11,12 +11,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const moveUser = "move-user"
@@ -38,7 +40,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 		t:       t,
 		ctx:     context.WithValue(context.Background(), auth.UserIDContextKey, moveUser),
 		repo:    repo,
-		service: &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)},
+		service: &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}, threads: threads.NewService(repo)},
 		now:     time.Now().UTC(),
 	}
 }

@@ -14,11 +14,13 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -48,9 +50,10 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 		repo: repo, ctx: ctx, projectID: projectID,
 		service: &Service{
 			deps: Deps{
-				Repo:     repo,
-				Temporal: temporal,
-			}, threads: threads.NewService(repo), runs: runs.NewService(repo, temporal, nil),
+				Repo:      repo,
+				Questions: store.NewQuestionExtStore(repo.ORM()),
+				Temporal:  temporal,
+			}, threads: threads.NewService(repo), runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
@@ -101,8 +102,8 @@ func setupPausedAgentMessageFixture(t *testing.T) pausedAgentMessageFixture {
 	}
 	pause := &orderedPauseController{log: &log}
 	service := &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, pause),
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}
 	return pausedAgentMessageFixture{
 		sendAgentMessageFixture: fx,

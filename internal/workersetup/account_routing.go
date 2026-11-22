@@ -89,7 +89,7 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 		DriverFor:             accountDriverFor,
 		Recorder:              recorder,
 		Credentials:           marker,
-		Funding:               repo,
+		Funding:               handlers.NewPersonalFundingStore(repo.ORM(), repo),
 	}
 }
 

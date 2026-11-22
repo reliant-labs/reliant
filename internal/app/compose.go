@@ -1072,6 +1072,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
@@ -1330,6 +1331,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{
 			Store:  g.Database(),
@@ -1346,11 +1348,12 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Signals:  g.PauseService(),
-		Messages: g.Chat(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Signals:   g.PauseService(),
+		Messages:  g.Chat(),
 	})
 }
 

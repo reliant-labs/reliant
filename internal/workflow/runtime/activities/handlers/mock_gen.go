@@ -3181,7 +3181,7 @@ func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id str
 var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=96df78698e45010af9a09cd4acbe2692bfe27b038ff3a70e15a5060d26cdf89f
+// forge:hash=b9971ba8635931a983cd9588bf849112db6714feff786ec4f70f45ea61ef5aea
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3216,8 +3216,6 @@ type MockExecuteToolsStore struct {
 	GetTriggerEventByChatFunc             func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                  func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                        func(context.Context, string) (*core.Trigger, error)
-	GetSettingValueFunc                   func(context.Context, string, string) (string, bool)
-	ChatFundingOrderFunc                  func(context.Context, string) (string, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3443,24 +3441,6 @@ func (m *MockExecuteToolsStore) GetTrigger(ctx context.Context, id string) (*cor
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetTrigger")
-}
-
-// GetSettingValue records the call and delegates to GetSettingValueFunc when set.
-func (m *MockExecuteToolsStore) GetSettingValue(ctx context.Context, userID string, key string) (string, bool) {
-	m.Recorder.Record("GetSettingValue", ctx, userID, key)
-	if m.GetSettingValueFunc != nil {
-		return m.GetSettingValueFunc(ctx, userID, key)
-	}
-	return "", false
-}
-
-// ChatFundingOrder records the call and delegates to ChatFundingOrderFunc when set.
-func (m *MockExecuteToolsStore) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
-	m.Recorder.Record("ChatFundingOrder", ctx, chatID)
-	if m.ChatFundingOrderFunc != nil {
-		return m.ChatFundingOrderFunc(ctx, chatID)
-	}
-	return "", contractkit.MockNotSet("MockExecuteToolsStore", "ChatFundingOrder")
 }
 
 // Compile-time check.

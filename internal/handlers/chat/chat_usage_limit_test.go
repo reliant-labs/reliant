@@ -12,10 +12,12 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -71,7 +73,7 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 
 	chatID := seedWaitingRun(t, repo, ctx)
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}}
 
 	resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -118,8 +120,8 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, nil),
+		deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 	_, err = svc.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -145,7 +147,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 	chatID := seedWaitingRun(t, repo, ctx)
 
 	temporal := &usageLimitPayloadClient{}
-	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal}}
 
 	t.Run("a plain retry carries no model", func(t *testing.T) {
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))

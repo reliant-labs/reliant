@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -55,11 +56,12 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo:     repo,
-			Temporal: temporal,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Temporal:  temporal,
 		},
 		threads: threads.NewService(repo),
-		runs:    runs.NewService(repo, temporal, nil),
+		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
@@ -91,7 +93,8 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 
 	service := &Service{
 		deps: Deps{
-			Repo: repo,
+			Repo:      repo,
+			Questions: store.NewQuestionExtStore(repo.ORM()),
 		},
 		threads: threads.NewService(repo),
 	}
