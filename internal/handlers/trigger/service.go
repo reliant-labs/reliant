@@ -34,6 +34,9 @@ type Deps struct {
 	// (deps.go).
 	Repo Repository
 
+	// OrgMoves turns the triggers a project move paused back on.
+	OrgMoves OrgMoveResumer
+
 	// Syncer converges a trigger's Temporal Schedule, and Fires starts a
 	// manual fire. TemporalBackend builds both over a Temporal client.
 	// Without them (a deployment with no Temporal) a schedule trigger is
@@ -180,6 +183,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
+	}
+	if d.OrgMoves == nil {
+		return fmt.Errorf("trigger: Deps.OrgMoves is required")
 	}
 	return nil
 }

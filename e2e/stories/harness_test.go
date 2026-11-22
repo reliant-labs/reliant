@@ -427,11 +427,12 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   s.Repo,
-		Syncer: triggerSyncer,
-		Fires:  triggerFires,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Syncer:   triggerSyncer,
+		Fires:    triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 

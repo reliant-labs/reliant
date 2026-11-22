@@ -60,6 +60,8 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			}
 			return nil, svcerr.ErrNotFound
 		},
+	}
+	storeLedger := &project.MockMoveLedger{
 		ProjectOrgMoveBlockersFunc: func(context.Context, string) (*core.ProjectOrgMoveBlockers, error) {
 			return &core.ProjectOrgMoveBlockers{
 				Chats:      []core.ProjectOrgMoveBlockedChat{{ChatID: "c-1", Title: "release v2", Activity: int32(pb.ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT)}},
@@ -75,7 +77,7 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Ledger: storeLedger}))
 	person := func(m authz.Membership) context.Context {
 		return authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), m), authz.CredentialKindPerson)
 	}
