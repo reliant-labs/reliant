@@ -203,18 +203,75 @@ func hasSessionCookie(r *http.Request) bool {
 // API's own origin. A browser always sends Origin on a handshake and, when it
 // can, Sec-Fetch-Site; a request with no Origin is no browser's, so it carries
 // no victim's cookie. Same-origin is the browser's own verdict (the web app's
-// /_api/@reliant proxy, where Host is the upstream's), or Origin naming this
-// Host. A same-site sibling host is not this origin.
+// /_api/@reliant proxy, where Host is the upstream's); any other verdict it
+// gives (same-site, cross-site) is final. A browser that sends no verdict is
+// judged by its Origin, which must be this request's whole origin: scheme,
+// host and port. A same-site sibling host is not this origin, and neither is
+// http://<this host> on an https API: a page served over plain HTTP must not
+// ride the secure session cookie. When the request's scheme cannot be
+// established, the upgrade is refused.
 func sameOriginUpgrade(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
 	}
-	if r.Header.Get("Sec-Fetch-Site") == "same-origin" {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin":
 		return true
+	case "":
+	default:
+		return false
 	}
 	u, err := url.Parse(origin)
-	return err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	scheme, ok := requestScheme(r)
+	if !ok || u.Scheme != scheme {
+		return false
+	}
+	// The browser sends the Secure (__Host-) cookie only over a secure
+	// connection, so an insecure origin presenting it is never this API's,
+	// whatever the request's scheme was taken to be.
+	if c, err := r.Cookie(auth.SecureSessionCookieName); err == nil && c.Value != "" && u.Scheme != "https" {
+		return false
+	}
+	return canonicalHostPort(scheme, u.Host) == canonicalHostPort(scheme, r.Host)
+}
+
+// requestScheme is the scheme the client reached this API on: https when
+// this process terminated TLS, else the X-Forwarded-Proto the ingress that
+// terminated it set (a page cannot set that header on a WebSocket
+// handshake), else http. ok is false when the forwarded scheme is neither.
+func requestScheme(r *http.Request) (scheme string, ok bool) {
+	if r.TLS != nil {
+		return "https", true
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		return "http", true
+	}
+	// A chain of proxies appends; the first is the client-facing one.
+	proto, _, _ = strings.Cut(proto, ",")
+	switch proto = strings.ToLower(strings.TrimSpace(proto)); proto {
+	case "http", "https":
+		return proto, true
+	}
+	return "", false
+}
+
+// canonicalHostPort is hostport lowercased with the scheme's default port
+// made explicit, so https://h and Host h:443 name the same origin.
+func canonicalHostPort(scheme, hostport string) string {
+	u := url.URL{Host: hostport}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if scheme == "https" {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(strings.ToLower(u.Hostname()), port)
 }
 
 // withTerminalTelemetry sends the handler's spans and metrics to p instead of
