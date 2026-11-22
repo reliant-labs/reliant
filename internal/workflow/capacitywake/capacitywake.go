@@ -86,7 +86,7 @@ func WakeUser(ctx context.Context, targets TargetLister, signals Signaler, userI
 }
 
 // OrgTargetLister lists the root workflow ids of an org's chats a capacity
-// wake can matter to (db.Repo.ListOrgCapacityWakeTargets).
+// wake can matter to (providerbackoff.Service satisfies it).
 type OrgTargetLister interface {
 	ListOrgCapacityWakeTargets(ctx context.Context, orgID string) ([]string, error)
 }

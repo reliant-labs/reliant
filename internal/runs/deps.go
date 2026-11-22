@@ -26,4 +26,7 @@ type Deps struct {
 	// Pause signals, resets and resumes runs. May be nil where nothing
 	// resumes or pauses (a test that only reads state).
 	Pause PauseController
+	// Waits releases a stopped run's usage-limit wait markers. nil releases
+	// none. providerbackoff.Service satisfies it.
+	Waits UsageLimitWaits
 }

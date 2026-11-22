@@ -344,7 +344,7 @@ func TestReconcile_HeldRunBackgroundWorkKeepsItsMachineAwake(t *testing.T) {
 		activity := &fakeActivity{}
 		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 		reconciler.SetBackgroundProcessDaemons(daemons)
-		reconciler.SetHeldRunActivity(activity)
+		reconciler.SetHeldRunActivity(activity, repo)
 		_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 		require.Empty(t, errs)
 		for _, since := range repo.heldSince {

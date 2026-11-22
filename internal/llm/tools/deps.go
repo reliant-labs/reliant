@@ -302,7 +302,12 @@ type spawnStatusStore interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	LastThreadActivityByChat(ctx context.Context, chatID string) (map[string]time.Time, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]db.ProviderBackoff, error)
+}
+
+// providerBackoffReader reads a chat's provider backoff markers.
+// providerbackoff.Service satisfies it.
+type providerBackoffReader interface {
+	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]core.ProviderBackoff, error)
 }
 
 // SpawnQuestions is what spawn_status reads to say which agents are waiting on
@@ -320,6 +325,8 @@ type SpawnStatusDeps struct {
 	Questions SpawnQuestions
 	// Tree reads the caller's own and inherited sub-agents.
 	Tree SpawnTree
+	// Backoff reads the provider backoff markers agents are parked on.
+	Backoff providerBackoffReader
 }
 
 // SpawnSendDeps is what the spawn_send tool is built from.

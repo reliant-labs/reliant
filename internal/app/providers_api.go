@@ -1299,7 +1299,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
-		r.SetHeldRunActivity(d.Activity)
+		r.SetHeldRunActivity(d.Activity, store.NewProviderBackoffExtStore(d.DB.ORM()))
 	}
 	return &WorkflowReconciler{r}, nil
 }
