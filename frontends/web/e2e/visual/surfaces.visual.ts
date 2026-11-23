@@ -546,6 +546,26 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
   },
+  // The nav footer: the Setup Guide docked and open in place, and the Help menu (Onboarding/OnboardingChecklist.tsx, sidebar/HelpMenu.tsx).
+  {
+    name: 'shell-setup-guide',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('group', { name: 'Setup guide' }),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-help-menu',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
+    act: async (page) => {
+      // The composer takes focus as the chat home settles, and a menu closes when focus leaves it: open it after.
+      await page.waitForFunction(() => document.activeElement?.tagName === 'TEXTAREA')
+      await page.getByTestId('nav-help').click()
+      await page.getByRole('menuitem', { name: 'Keyboard shortcuts' }).waitFor()
+    },
+  },
   {
     name: 'shell-inbox',
     path: '/inbox',
