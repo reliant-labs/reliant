@@ -55702,6 +55702,15 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "Account",
+      "field": "Purger",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/account.Purger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "AccountRecorder",
       "field": "Accounts",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
@@ -56604,6 +56613,17 @@
     },
     {
       "consumer": "MCP",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -56888,6 +56908,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -57180,6 +57213,15 @@
         "OrgResolver"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Project",
@@ -57569,6 +57611,17 @@
       ],
       "providers": [
         "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -58511,6 +58564,19 @@
     },
     {
       "consumer": "Usage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Usage",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
       "methods": [],
@@ -58968,6 +59034,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Account.Purger",
+      "source": {
+        "path": "internal/handlers/account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Connection.OrgGitHubApps",
       "source": {
         "path": "internal/handlers/connection/service.go",
@@ -59145,6 +59219,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.ProjectConfigs",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

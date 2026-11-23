@@ -153,6 +153,9 @@ type CallLLMDeps struct {
 	// Mailbox is the thread's queued mail: the turn peeks at it for late
 	// arrivals and drains it at its boundary.
 	Mailbox MailboxQueue
+	// ToolResults recovers the tool results the history lost
+	// (recoverPersistedToolResults).
+	ToolResults ToolResultRecoveryStore
 	// Hub carries the turn's streaming deltas.
 	Hub streaming.StreamingHub
 	// ToolsFactory builds the turn's tool set.
@@ -172,6 +175,7 @@ type CallLLMActivity struct {
 	spawns         SpawnTree
 	threads        MessageSaver
 	mailbox        MailboxQueue
+	toolResults    ToolResultRecoveryStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -281,6 +285,7 @@ func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 		spawns:         deps.Spawns,
 		threads:        deps.Threads,
 		mailbox:        deps.Mailbox,
+		toolResults:    deps.ToolResults,
 		hub:            deps.Hub,
 		toolsFactory:   deps.ToolsFactory,
 		configProvider: deps.ConfigProvider,
@@ -1300,7 +1305,7 @@ func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread 
 //   - DB-level orphan repair (Layer 2)
 //   - In-memory orphan repair (Layer 3)
 func (a *CallLLMActivity) loadConversationHistory(ctx context.Context, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
-	return LoadMessagesForLLM(ctx, a.repo, chatID, thread, explicitContextSeq)
+	return LoadMessagesForLLM(ctx, a.repo, a.toolResults, chatID, thread, explicitContextSeq)
 }
 
 // drainAgentMailbox folds any queued agent_messages for thread into its

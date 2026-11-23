@@ -88,7 +88,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: c.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(c.h.Repo())).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(c.h.Repo()), Store: c.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},
@@ -286,11 +286,11 @@ func TestToolCallIDIsolation_HistoryRecoveryUsesOnlyThisCallsResult(t *testing.T
 		ToolCallID: "call_0", Content: "chat A's private output", CreatedAt: now, UpdatedAt: now,
 	}))
 	historyB := []message.Message{userWithText("u-b", "go"), assistantWithToolCall(c.assistantMessage(t, chatB, chatB), "call_0", "bash")}
-	out := recoverPersistedToolResults(ctx, c.h.Repo(), historyB)
+	out := recoverPersistedToolResults(ctx, toolCallsOf(c.h.Repo()), historyB)
 	require.Len(t, out, len(historyB), "chat B's history must not be given chat A's result: %+v", out)
 
 	historyA := []message.Message{userWithText("u-a", "go"), assistantWithToolCall(msgA, "call_0", "bash")}
-	out = recoverPersistedToolResults(ctx, c.h.Repo(), historyA)
+	out = recoverPersistedToolResults(ctx, toolCallsOf(c.h.Repo()), historyA)
 	require.Len(t, out, len(historyA)+1, "chat A's own result must still be recovered")
 	require.Equal(t, "chat A's private output", out[len(out)-1].ToolResults()[0].Content)
 }

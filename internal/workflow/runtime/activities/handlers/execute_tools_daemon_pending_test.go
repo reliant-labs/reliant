@@ -92,7 +92,7 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 	defer f.h.Cleanup()
 	ctx := context.Background()
 	f.h.CreateTestWorkflow(ctx, f.chatID, f.chatID)
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(f.h.Repo()), Store: f.h.Repo(), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 	observe := a.daemonWaitObserver(ctx, f.chatID)
 	require.NotNil(t, observe)
 

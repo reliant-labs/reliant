@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -58,14 +59,28 @@ func (r *Repo) UpsertToolCallResult(ctx context.Context, chatID string, result *
 	return store.UpsertToolCallResult(ctx, r.ORM(), chatID, result)
 }
 
-// GetToolCallResultForMessage reads the result of the call that assistant
-// message messageID carries, or nil. The id alone can name another chat's
-// call; the message cannot.
+// GetToolCallResultForMessage reads the result belonging to an assistant message.
+//
+// Deprecated: use store.FindToolCallResultForMessage with Repo.ORM().
 func (r *Repo) GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error) {
 	if toolCallID == "" || messageID == "" {
 		return nil, fmt.Errorf("tool call ID and message ID are required")
 	}
 	return store.FindToolCallResultForMessage(ctx, r.ORM(), toolCallID, messageID)
+}
+
+// GetToolCallResult reads the recorded result for a call, or nil if absent.
+//
+// Deprecated: use store.FindToolCallResult with Repo.ORM().
+func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error) {
+	if toolCallID == "" {
+		return nil, fmt.Errorf("tool call ID cannot be empty")
+	}
+	result, err := store.FindToolCallResult(ctx, r.ORM(), toolCallID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tool call result: %w", err)
+	}
+	return result, nil
 }
 
 func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {

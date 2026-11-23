@@ -99,16 +99,18 @@ func TestOwnerOfPrecedenceAndFailureModes(t *testing.T) {
 		stale.subjects["u"] = fakeSubject{id: "old", refreshedAt: time.Now().Add(-2 * core.IntegrationAccessFreshness)}
 		assert.Empty(t, OwnerOf(ctx, stale, &core.Trigger{UserID: "u"}).GitHubID)
 	})
-	t.Run("a repository that cannot say yields no id", func(t *testing.T) {
-		assert.Empty(t, OwnerOf(ctx, struct{}{}, &core.Trigger{UserID: "u"}).GitHubID)
-		assert.Empty(t, OwnerOf(ctx, nil, &core.Trigger{UserID: "u"}).GitHubID)
-	})
+	// A store with no owner reads no longer exists as a value: OwnerSource is a
+	// required parameter, so this is a compile-time guarantee, not a runtime one.
 	t.Run("a read error never widens", func(t *testing.T) {
 		assert.Empty(t, OwnerOf(ctx, failingSubjects{}, &core.Trigger{UserID: "u"}).GitHubID)
 	})
 }
 
 type failingSubjects struct{}
+
+func (failingSubjects) GetConnection(context.Context, string, string) (*core.Connection, error) {
+	return nil, errors.New("db down")
+}
 
 func (failingSubjects) GetIntegrationAccessSubject(context.Context, string, string, time.Time) (string, error) {
 	return "", errors.New("db down")

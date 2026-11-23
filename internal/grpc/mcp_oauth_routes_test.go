@@ -60,11 +60,12 @@ func (noGrants) ListGrantsByUser(context.Context, string) ([]*connectorgrant.Gra
 
 // mcpOAuthRoutes is the API's plain-HTTP routes as internal/app wires them,
 // with the given MCP_OAUTH_ISSUERS and MCP_OAUTH_SCOPES and the control plane
-// as RELIANT_AUTHORIZATION_SERVER.
+// as RELIANT_AUTHORIZATION_SERVER and CONTROL_PLANE_URL (so the Reliant Forge
+// connector is mounted too).
 func mcpOAuthRoutes(t *testing.T, issuers, scopes []string, authority mcpOAuthAuthority) *httptest.Server {
 	t.Helper()
 	routes, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{
-		Auth:                testUserAuth(t),
+		Auth:                supabaseUserAuth(t),
 		Repo:                drainTestRoutesStore{},
 		Router:              testRouter{},
 		OAuth:               connections.NewOAuthHTTP(nil),
@@ -75,6 +76,7 @@ func mcpOAuthRoutes(t *testing.T, issuers, scopes []string, authority mcpOAuthAu
 		OAuthIssuers:        issuers,
 		OAuthScopes:         scopes,
 		AuthorizationServer: mcpRoutesCP + "/",
+		ControlPlaneURL:     mcpRoutesCP,
 	})
 	require.NoError(t, err)
 	mux := http.NewServeMux()
@@ -82,6 +84,22 @@ func mcpOAuthRoutes(t *testing.T, issuers, scopes []string, authority mcpOAuthAu
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// supabaseUserAuth authenticates users with a Supabase JWT, as a hosted
+// deployment does: the Reliant Forge connector is mounted only beside a JWT
+// validator.
+func supabaseUserAuth(t *testing.T) *UserAuth {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	a, err := NewUserAuth(auth.Settings{
+		Mode: auth.ModeSupabase, PublicKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})),
+	}, drainTestAuthority{})
+	require.NoError(t, err)
+	return a
 }
 
 func mcpRoutesToken() string {
@@ -95,9 +113,23 @@ func mcpRoutesPrincipal(audience string) *fat.Principal {
 	}
 }
 
+// mcpRoutesForgePrincipal is the Reliant Forge connector's token (mcp:forge)
+// for audience, holding scope (mcp:forge, or another to prove it refused).
+func mcpRoutesForgePrincipal(scope fat.Scope, audience string) *fat.Principal {
+	return &fat.Principal{
+		OrgID: "org-1", ActingUserID: "user-1", Scopes: fat.SetOf(scope),
+		ClientID: "mcp_abc", Audience: audience,
+	}
+}
+
 func postMCP(t *testing.T, base, token string) int {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, base+mcpserver.MountPath, nil)
+	return postMCPPath(t, base, mcpserver.MountPath, token)
+}
+
+func postMCPPath(t *testing.T, base, path, token string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+path, nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
@@ -127,6 +159,41 @@ func TestAPIRoutesAcceptMCPOAuthTokensOnlyWhenTheControlPlaneIsListed(t *testing
 		t.Run(name, func(t *testing.T) {
 			srv := mcpOAuthRoutes(t, tc.issuers, nil, mcpOAuthAuthority{token: token, p: mcpRoutesPrincipal(tc.audience)})
 			require.Equal(t, tc.want, postMCP(t, srv.URL, token))
+		})
+	}
+}
+
+// The same switch accepts the Reliant Forge connector's own token at
+// /forge/mcp, issued for exactly that resource URI (403: authenticated,
+// consent needed), and nothing else: not at /mcp, not for another audience,
+// and not the workspace connector's mcp:oauth.
+func TestAPIRoutesAcceptMCPForgeTokensOnlyAtTheForgeConnector(t *testing.T) {
+	token := mcpRoutesToken()
+	forge := mcpRoutesPublicURL + mcpserver.ForgeMountPath
+	workspace := mcpRoutesPublicURL + mcpserver.MountPath
+	listed := []string{"https://project.supabase.co", mcpRoutesCP}
+	for name, tc := range map[string]struct {
+		issuers  []string
+		path     string
+		scope    fat.Scope
+		audience string
+		want     int
+	}{
+		"listed second":          {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: forge, want: http.StatusForbidden},
+		"not listed":             {issuers: []string{"https://project.supabase.co"}, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: forge, want: http.StatusUnauthorized},
+		"workspace audience":     {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: workspace, want: http.StatusUnauthorized},
+		"another host":           {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: "https://other.example.com/forge/mcp", want: http.StatusUnauthorized},
+		"trailing slash":         {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: forge + "/", want: http.StatusUnauthorized},
+		"no audience":            {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPForge, audience: "", want: http.StatusUnauthorized},
+		"mcp:oauth at forge":     {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPOAuth, audience: forge, want: http.StatusUnauthorized},
+		"mcp:forge at /mcp":      {issuers: listed, path: mcpserver.MountPath, scope: fat.ScopeMCPForge, audience: forge, want: http.StatusUnauthorized},
+		"mcp:forge for /mcp":     {issuers: listed, path: mcpserver.MountPath, scope: fat.ScopeMCPForge, audience: workspace, want: http.StatusUnauthorized},
+		"reliant:api at forge":   {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeReliantAPI, audience: forge, want: http.StatusUnauthorized},
+		"mcp:connector at forge": {issuers: listed, path: mcpserver.ForgeMountPath, scope: fat.ScopeMCPConnector, audience: forge, want: http.StatusUnauthorized},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := mcpOAuthRoutes(t, tc.issuers, nil, mcpOAuthAuthority{token: token, p: mcpRoutesForgePrincipal(tc.scope, tc.audience)})
+			require.Equal(t, tc.want, postMCPPath(t, srv.URL, tc.path, token))
 		})
 	}
 }

@@ -502,7 +502,7 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	require.NoError(t, err)
 	require.NotNil(t, project)
 
-	record, err := repo.GetProjectConfigRecord(context.Background(), project.ID)
+	record, err := store.GetProjectConfigRecord(context.Background(), repo.ORM(), project.ID)
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 	require.NotNil(t, record.UserConfigYAML)
@@ -688,7 +688,7 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 		},
 	}))
 
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := store.GetProjectConfigRecord(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 

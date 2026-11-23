@@ -189,6 +189,13 @@ func (o AccountOwner) Key() string {
 	return o.ID
 }
 
+// ProviderAccountName is what a usage view shows for an account it has an id of: never a secret,
+// a hint or a sign-in's email.
+type ProviderAccountName struct {
+	ID, Provider, Label string
+	AuthKind            string
+}
+
 // ProviderAccount is one connected LLM credential. It carries no secrets.
 type ProviderAccount struct {
 	// UserID is the stored owner key (AccountOwner.Key). Read Owner() instead: for an org-owned

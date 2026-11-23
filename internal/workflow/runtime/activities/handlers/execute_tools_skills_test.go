@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The skill tool reads the project's skills through the worker's config
@@ -43,17 +44,17 @@ func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
 	})
 	require.NoError(t, err)
 	skillsJSON := string(skills)
-	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, h.Repo().ORM(), &db.ProjectConfigRecord{
 		ProjectID: project.ID, DaemonID: "daemon-1", ProjectSkillsJSON: &skillsJSON,
 	}))
 
 	repo := h.Repo()
 	spy := &fullConfigRowReads{Repo: repo}
-	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), repo, cfgpkg.DefaultParsedConfigCacheBytes)
+	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	// The tools factory is composition and takes the concrete *db.Repo, so the
 	// spy watches the activity's and the provider's reads; no tool reads the
 	// config row itself (the skill tool asks the provider).
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: spy, ToolExecutor: serverToolExecutor(repo)}).WithToolCallResults(testToolCallResults(spy)).WithConfigProvider(provider)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(spy), Store: spy, ToolExecutor: serverToolExecutor(repo)}).WithConfigProvider(provider)
 
 	for i := 0; i < 3; i++ {
 		callID := fmt.Sprintf("call-skill-%d", i)

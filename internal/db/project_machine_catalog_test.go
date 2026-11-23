@@ -98,7 +98,7 @@ func TestSyncProjectConfigSnapshot_AnotherMachineCannotEraseWorkflows(t *testing
 	require.NoError(t, err)
 	require.Len(t, presets, 1)
 
-	record, err := p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err := store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	assert.Equal(t, "from "+p.cicdID, *record.UserConfigYAML, "the rest of the record is still the last pusher's")
 
@@ -147,7 +147,7 @@ func TestSyncProjectConfigSnapshot_StalenessIsPerMachine(t *testing.T) {
 	require.True(t, p.push(t, p.cicdID, 5000, nil, nil))
 	require.True(t, p.push(t, p.defaultID, 1000, []config.StoredWorkflow{release}, nil), "default's clock is behind cicd's push")
 	require.Len(t, p.unionWorkflows(t), 1)
-	record, err := p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err := store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	assert.Equal(t, "from "+p.cicdID, *record.UserConfigYAML, "the older snapshot does not replace the newer record")
 	assert.Equal(t, int64(5000), record.PushedAt.UnixMilli())

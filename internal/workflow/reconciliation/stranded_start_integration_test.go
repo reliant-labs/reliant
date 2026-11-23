@@ -107,7 +107,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &switchableStarter{}
-	firer := triggers.NewFirer(repo, launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
+	firer := triggers.NewFirer(triggers.NewStores(repo), launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
 	fireAt := func(day int) triggers.FireRequest {
 		scheduled := time.Date(2026, 1, day, 9, 0, 0, 0, time.UTC)
 		return triggers.FireRequest{

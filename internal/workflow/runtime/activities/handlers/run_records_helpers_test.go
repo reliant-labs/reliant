@@ -25,8 +25,7 @@ func workflowRunsOf(repo interface{ ORM() *orm.Client }) WorkflowRuns {
 	return NewWorkflowRuns(repo.ORM())
 }
 
-// approvalCreateDeps is the ApprovalCreateActivity's deps over a store: the
-// approval lookup comes from the generated ext store when the store has an ORM.
+// approvalCreateDeps wires the approval lookup through the generated store.
 func approvalCreateDeps(repo ApprovalCreateStore) ApprovalCreateDeps {
 	d := ApprovalCreateDeps{Repo: repo}
 	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
@@ -35,11 +34,12 @@ func approvalCreateDeps(repo ApprovalCreateStore) ApprovalCreateDeps {
 	return d
 }
 
-// testToolCallResults is the durable tool-result reader over a store with an ORM
-// handle (nil for a mock store, whose tests do not read results).
-func testToolCallResults(repo any) ToolCallResults {
+// toolCallsOf is the tool-call roles over repo's ORM handle: a *db.Repo, or a
+// fake embedding one. Anything else (a mock store, nil) has no database, so
+// there are no tool-call rows to read.
+func toolCallsOf(repo any) ToolCalls {
 	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
-		return store.NewToolCallResultExtStore(o.ORM())
+		return NewToolCalls(o.ORM())
 	}
 	return nil
 }

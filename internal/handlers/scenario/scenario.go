@@ -12,22 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 )
-
-// projectScenariosReader reads the synced project scenarios column of a
-// project's config record, and nothing else from it
-// (db.Repo.GetProjectScenariosJSON). It returns svcerr.NotFound when the
-// project has no record.
-type projectScenariosReader interface {
-	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
-}
-
-// The repository every server wires in must answer it, checked at build time.
-var _ projectScenariosReader = (*db.Repo)(nil)
 
 // storedProjectScenarios returns the project's synced scenarios. A project
 // with no config record returns svcerr.NotFound.
@@ -35,15 +25,8 @@ var _ projectScenariosReader = (*db.Repo)(nil)
 // It reads the one column the scenario RPCs need. The whole config record
 // carries every skill body and repo memory the daemon indexed — 18 MB in
 // prod — for a column that is empty or a few KB.
-func storedProjectScenarios(ctx context.Context, repo Repository, projectID string) ([]cfg.StoredScenario, error) {
-	// The method lives on *db.Repo, not on Repository; every production
-	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
-	// fault, reported rather than papered over with the full-record read.
-	reader, ok := repo.(projectScenariosReader)
-	if !ok {
-		return nil, fmt.Errorf("stored project scenarios: %T cannot read the scenarios column (GetProjectScenariosJSON)", repo)
-	}
-	scenariosJSON, err := reader.GetProjectScenariosJSON(ctx, projectID)
+func storedProjectScenarios(ctx context.Context, configs ProjectConfigs, projectID string) ([]cfg.StoredScenario, error) {
+	scenariosJSON, err := configs.GetProjectScenariosJSON(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}

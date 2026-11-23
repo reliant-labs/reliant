@@ -34,7 +34,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
 	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
-	return f, NewEventFirer(f.repo, launcher), NewIntake(f.repo, starter, "test-queue"), starter
+	return f, NewEventFirer(NewStores(f.repo), launcher), NewIntake(NewStores(f.repo), starter, "test-queue"), starter
 }
 
 func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
@@ -97,9 +97,9 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f.trigger.Config = json.RawMessage(`{}`)
 			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 			runs := &recordingStarter{}
-			firer := NewEventFirer(f.repo, launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
+			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}
-			intake := NewIntake(f.repo, fires, "test-queue")
+			intake := NewIntake(NewStores(f.repo), fires, "test-queue")
 
 			ev := inbound(f.trigger, "delivery-1", map[string]any{"body": map[string]any{"ref": "main"}})
 			ev.Kind = kind.EventKind()

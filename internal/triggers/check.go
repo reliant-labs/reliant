@@ -21,7 +21,7 @@ type CheckOpener interface {
 // A workflow without `check:` (or a firer without checks) opens nothing. A
 // failure to read the workflow or record the check is returned, so the fire
 // retries; a check that cannot be addressed is the opener's to log.
-func openCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolver, repo any, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
+func openCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolver, repo OwnerSource, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
 	if checks == nil || workflows == nil {
 		return nil
 	}
@@ -43,7 +43,7 @@ func openCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolv
 // cannot be read (a deleted machine takes its catalog with it) declares no
 // check to open. A failure to READ it, or to record the check, is still
 // returned, so the fire retries before it settles anything.
-func openRefusedCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolver, repo any, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
+func openRefusedCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolver, repo OwnerSource, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
 	if checks == nil || workflows == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func openRefusedCheck(ctx context.Context, checks CheckOpener, workflows Workflo
 }
 
 // openWorkflowCheck opens ev's check of wf, when wf declares one.
-func openWorkflowCheck(ctx context.Context, checks CheckOpener, wf *reliantv1.Workflow, repo any, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
+func openWorkflowCheck(ctx context.Context, checks CheckOpener, wf *reliantv1.Workflow, repo OwnerSource, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
 	if wf.GetCheck() == nil {
 		return nil
 	}

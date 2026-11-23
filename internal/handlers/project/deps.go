@@ -98,11 +98,15 @@ type Repository interface {
 	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
 	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 
-	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
-
 	CreateSetting(ctx context.Context, setting *db.Setting) error
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 	UpdateSetting(ctx context.Context, setting *db.Setting) error
+}
+
+// ProjectConfigs seeds a new project's config record. store.ProjectConfigExtStore
+// satisfies it.
+type ProjectConfigs interface {
+	UpsertProjectConfigRecord(ctx context.Context, rec *core.ProjectConfigRecord) error
 }
 
 // ProjectPurges is a project's deletion with a restore window

@@ -153,9 +153,9 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	repo := h.Repo()
-	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
+	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(repo.ORM())), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	executor := &shellOutputExecutor{echo: "Preparing worktree (new branch 'x')\n"}
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).WithToolCallResults(testToolCallResults(h.Repo())).WithConfigProvider(provider)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(h.Repo()), Store: h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).WithConfigProvider(provider)
 
 	run := func(command string) *message.ToolResult {
 		t.Helper()
@@ -186,7 +186,7 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	assert.Contains(t, out.Suggestion, "worktree tool")
 
 	memory := worktreeRootMemory
-	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, h.Repo().ORM(), &db.ProjectConfigRecord{
 		ProjectID: project.ID, DaemonID: "daemon-1", GlobalMemoryMD: &memory,
 	}))
 	got = run("git worktree add ~/src/rl-agent-worktrees/reliant-x -b x origin/main")
