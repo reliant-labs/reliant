@@ -141,7 +141,7 @@ events dedupe by delivery id, so the retry fires nothing twice). Only repositori
 
 The seam is one small interface declared at the inbox (consumer side):
 `ConsumeDelivery(ctx, provider, deliveryKey string, events []webhook.Event) error`. Until the
-inbox merged, the projector shipped unwired; it is now the worker relay's consumer (`webhook.Relay.WithDeliveryConsumer`), built only when `RELIANT_PR_RECORD_REPOSITORIES` is set. **No second
+inbox merged, the projector shipped unwired; it is now the worker relay's consumer (`webhook.Relay.WithDeliveryConsumer(webhook.PRRecordConsumer(…))`), built only when `RELIANT_PR_RECORD_REPOSITORIES` is set. **No second
 intake.**
 
 ### 2.2 Ordering and idempotence

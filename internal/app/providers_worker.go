@@ -979,8 +979,8 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	}
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil))
 	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
-		relay.WithDeliveryConsumer(prRecordConsumer{prrecords.NewInstrumented(prrecords.Deps{
-			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})})
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
+			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
 	}
 	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }

@@ -1,7 +1,6 @@
 package webhook
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -12,23 +11,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// prRecordFeed is internal/app's prRecordConsumer: the projector as the
-// relay's delivery consumer.
-type prRecordFeed struct{ p prrecords.Service }
-
-func (c prRecordFeed) ConsumeDelivery(ctx context.Context, provider, key string, at time.Time, events []Event) error {
-	d := prrecords.Delivery{Provider: provider, Key: key, ReceivedAt: at}
-	for _, ev := range events {
-		d.Events = append(d.Events, prrecords.Event{Type: ev.Type, AccountKey: ev.AccountKey, ResourceKey: ev.ResourceKey,
-			Attributes: ev.Attributes, Data: ev.Data})
-	}
-	return c.p.Apply(ctx, d)
-}
-
 func TestDeliveryInboxFeedsPRRecordsOnce(t *testing.T) {
 	f := newReceiptFixture(t)
-	f.relay.WithDeliveryConsumer(prRecordFeed{prrecords.New(prrecords.Deps{
-		Store: store.NewPrRecordExtStore(f.Repo.ORM()), Scope: prrecords.NewScope([]string{"acme/app"})})})
+	f.relay.WithDeliveryConsumer(PRRecordConsumer(prrecords.New(prrecords.Deps{
+		Store: store.NewPrRecordExtStore(f.Repo.ORM()), Scope: prrecords.NewScope([]string{"acme/app"})})))
 	body := gitHubFixture(t, "pull_request.labeled")
 
 	require.Equal(t, http.StatusOK, f.github("pull_request", "pr-delivery-1", body).Code)
