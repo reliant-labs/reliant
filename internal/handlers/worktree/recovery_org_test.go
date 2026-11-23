@@ -40,7 +40,7 @@ func TestListWorktreeRecoveries_LeavesOutAnOrgTheCallerMayNotRead(t *testing.T) 
 			}, nil
 		},
 	}
-	repo := &MockRepository{
+	projects := &MockProjectReader{
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == "p-gone" {
 				return nil, core.ErrProjectNotFound
@@ -48,7 +48,7 @@ func TestListWorktreeRecoveries_LeavesOutAnOrgTheCallerMayNotRead(t *testing.T) 
 			return &db.Project{ID: id, UserID: "test-user", OrgID: projectOrgs[id]}, nil
 		},
 	}
-	svc := NewTestWorktree(t, WithWorktreeDeps(Deps{Repo: repo, Recoveries: recoveries}))
+	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: &MockRepository{}, ProjectRows: projects, Recoveries: recoveries})))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
 		resp, err := svc.ListWorktreeRecoveries(ctx, connect.NewRequest(&reliantv1.ListWorktreeRecoveriesRequest{}))

@@ -57588,6 +57588,19 @@
     },
     {
       "consumer": "Repo",
+      "field": "Repos",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.RepoLister",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Repo",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.Sender",
       "methods": [],
@@ -59031,12 +59044,51 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.DaemonReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
       "field": "GitCredentials",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.GitCredentialProvider",
       "methods": [],
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "ProjectRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.ProjectReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",
@@ -59053,6 +59105,19 @@
       "consumer": "Worktree",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Repos",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.RepoLister",
       "methods": [],
       "candidates": [
         "Database"
