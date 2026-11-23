@@ -42,7 +42,7 @@ func (s *Service) ListScenarios(
 	dbScenarioNames := make(map[string]bool)
 
 	// Get the workflow draft ID from the slug
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+	draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}

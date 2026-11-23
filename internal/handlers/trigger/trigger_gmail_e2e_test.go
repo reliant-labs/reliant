@@ -40,6 +40,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
@@ -107,7 +108,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(env))
 	require.NoError(t, err)
 	doer := google.client()
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, sealer, providers, doer)
 	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
@@ -328,7 +329,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 // gmailPollRepo adds the owner-scoped connection read, as the worker does.
 type gmailPollRepo struct {
 	*db.Repo
-	conns db.ConnectionStore
+	conns connectionvault.Service
 }
 
 func (r gmailPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

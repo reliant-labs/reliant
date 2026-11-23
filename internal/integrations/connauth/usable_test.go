@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -90,7 +91,7 @@ func TestUsableIntegrations_RecordsNoUse(t *testing.T) {
 	pat := e.githubPAT("alice")
 	ctx := context.Background()
 	uses := func() int {
-		events, err := e.repo.Connections().ListConnectionEvents(ctx, "alice", pat, 100, 0)
+		events, err := db.TestConnections(e.t, e.repo).ListConnectionEvents(ctx, "alice", pat, 100, 0)
 		require.NoError(t, err)
 		n := 0
 		for _, ev := range events {
@@ -101,7 +102,7 @@ func TestUsableIntegrations_RecordsNoUse(t *testing.T) {
 		return n
 	}
 	lastUsed := func() any {
-		conn, err := e.repo.Connections().GetConnection(ctx, "alice", pat)
+		conn, err := db.TestConnections(e.t, e.repo).GetConnection(ctx, "alice", pat)
 		require.NoError(t, err)
 		return conn.LastUsedAt
 	}
@@ -120,7 +121,7 @@ func TestUsableIntegrations_RecordsNoUse(t *testing.T) {
 func TestUsableIntegrations_NeedsReauthIsNotUsableAndDoesNotFallBack(t *testing.T) {
 	e := newEnv(t)
 	pat := e.githubPAT("alice")
-	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx *db.SecretsTx) error {
+	require.NoError(t, db.TestConnections(e.t, e.repo).WithSecretsLock(context.Background(), "alice", pat, func(tx *connectionvault.SecretsTx) error {
 		return tx.MarkStatus(context.Background(), core.ConnectionStatusNeedsReauth, "invalid_grant")
 	}))
 	broker := &ownerBroker{connected: map[string]bool{"alice": true}}

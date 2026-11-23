@@ -20,7 +20,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -39,10 +38,10 @@ type triggerConnections interface {
 	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
 }
 
-// connections returns the connection store, when the repository has one.
+// connections returns the connection reader, when the repository has one.
 func (s *Service) connections() triggerConnections {
-	if repo, ok := s.deps.Repo.(interface{ Connections() db.ConnectionStore }); ok {
-		return repo.Connections()
+	if repo, ok := s.deps.Repo.(triggerConnections); ok {
+		return repo
 	}
 	return nil
 }

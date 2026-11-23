@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
+
 	"github.com/reliant-labs/reliant/internal/authz"
 
 	"connectrpc.com/connect"
@@ -95,7 +97,7 @@ func (s *Service) RunScenario(
 			simScenario = parsed
 
 			// Get the workflow - try DB first, then stored project config
-			draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, workflowSlug)
+			draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, workflowSlug)
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 			}
@@ -126,9 +128,14 @@ func (s *Service) RunScenario(
 
 			// Get the workflow
 			if dbScenario.WorkflowDraftID != nil {
-				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *dbScenario.WorkflowDraftID)
+				draft, err := s.deps.Drafts.GetWorkflowDraft(ctx, *dbScenario.WorkflowDraftID)
 				if err != nil {
 					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
+				}
+				// The ID lookup is unscoped. Owning a retained scenario does
+				// not grant access to its workflow after org membership ends.
+				if !authz.CanReadWorkflow(ctx, userID, draft) {
+					return nil, svcerr.WithMessage(svcerr.ErrNotFound, "workflow not found")
 				}
 				workflowYAML = draft.Definition
 			} else {
@@ -142,7 +149,7 @@ func (s *Service) RunScenario(
 		}
 	} else if req.Msg.Scenario != nil && req.Msg.WorkflowSlug != "" {
 		// Run an ad-hoc scenario
-		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+		draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 		}
@@ -161,7 +168,7 @@ func (s *Service) RunScenario(
 		return nil, svcerr.InvalidArgument("failed to parse workflow: " + err.Error())
 	}
 
-	workflowLoader := createScenarioWorkflowLoader(s.deps.Repo, ctx, userID, projectID)
+	workflowLoader := createScenarioWorkflowLoader(workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), ctx, userID, projectID)
 	result := runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 
 	// Update last run result if this was a saved DB scenario (not project scenarios)
