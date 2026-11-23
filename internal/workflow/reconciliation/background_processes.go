@@ -148,7 +148,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
-	row, err := r.repo.GetDaemon(ctx, daemonID)
+	row, err := r.daemons.GetDaemon(ctx, daemonID)
 	if svcerr.IsNotFound(err) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0

@@ -126,7 +126,7 @@ func TestResumeInterruptedWorkflow_ReplayDiverged_FallsBackWithoutReset(t *testi
 		historyEvents: replayDivergedThenTerminatedHistory(),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrReplayDiverged)
