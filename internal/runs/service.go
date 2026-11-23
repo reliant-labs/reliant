@@ -25,6 +25,9 @@ type Service struct {
 	questions Questions
 	temporal  TemporalClient
 	pause     PauseController
+	// waits releases a stopped run's usage-limit wait markers; nil releases
+	// none (Deps.Waits unset).
+	waits UsageLimitWaits
 
 	// cancelGrace, cancelSettle and cancelPoll override cancelGrace,
 	// cancelSettleTimeout and cancelPollInterval when positive; tests shrink
@@ -37,10 +40,11 @@ type Service struct {
 }
 
 // New builds a run-lifecycle service over the chat store, its question store,
-// Temporal, and the pause/reset controller. Plain Deps, not a forge contract
-// package: it is built by hand in the worker and the chat handler.
+// Temporal, the pause/reset controller and the usage-limit wait markers. Plain
+// Deps, not a forge contract package: it is built by hand in the worker and the
+// chat handler.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause}
+	return &Service{repo: deps.Repo, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -343,7 +347,10 @@ func (s *Service) settleClosedRun(ctx context.Context, workflowID string) {
 // terminated run executes no code, so the workflow cannot clear its own; left
 // behind, the marker would read as a wait nobody is in.
 func (s *Service) clearUsageLimitWait(ctx context.Context, chatID string) {
-	if err := s.repo.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
+	if s.waits == nil {
+		return
+	}
+	if err := s.waits.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to clear the usage-limit wait marker of a stopped run",
 			"chatID", chatID, "error", err)
 	}

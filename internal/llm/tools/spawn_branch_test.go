@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -45,7 +46,7 @@ func saveFixtureMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID
 		})
 		require.NoError(t, cwErr)
 	}
-	result, err := threads.NewService(repo).SaveMessage(ctx, threads.SaveMessageOpts{
+	result, err := threads.New(threads.Deps{Repo: repo}).SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  threadID,
 		Role:    int32(role),
@@ -108,7 +109,7 @@ func seedBranchedSpawnFixture(t *testing.T, repo *db.Repo, ctx context.Context) 
 	branchChatID := uuid.New().String()
 	createTestChat(t, repo, branchChatID)
 	f.branchThreadID = branchChatID
-	_, _, _, err = threads.NewService(repo).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err = threads.New(threads.Deps{Repo: repo}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: branchChatID, ChatID: branchChatID, WorkflowName: "builtin://agent",
 			Thread: branchChatID, Status: db.Pending(), CreatedAt: time.Now(),
@@ -137,7 +138,7 @@ func TestSpawnStatus_BranchedChat_SeesInheritedChildrenReadOnly(t *testing.T) {
 	ctx := context.Background()
 	f := seedBranchedSpawnFixture(t, repo, ctx)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
 	branchRC := rctx.NewToolContext(ctx, f.branchThreadID, f.branchThreadID, nil, nil)
 
 	listing, _ := runSpawnStatus(t, tool, branchRC, SpawnStatusParams{})
@@ -195,7 +196,7 @@ func TestSpawnSendAndStop_BranchedChat_RefuseInheritedChildWithOwnerNamed(t *tes
 	// Waiting is how an orchestrator collects a result to act on, so it is
 	// control too — and it must be refused fast, not after parking a budget.
 	start := time.Now()
-	wait, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), branchRC, SpawnStatusParams{AgentID: f.inheritedChildID, Wait: true, TimeoutSeconds: 60})
+	wait, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), branchRC, SpawnStatusParams{AgentID: f.inheritedChildID, Wait: true, TimeoutSeconds: 60})
 	require.True(t, wait.IsError, "a branch must not wait on the original conversation's agent; response: %+v", wait)
 	require.Contains(t, wait.Content, "branched")
 	require.Contains(t, wait.Content, f.sourceThreadID)

@@ -422,7 +422,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	g := new(errgroup.Group)
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.main_window", func(ctx context.Context) error {
-			threadsSvc := threads.NewService(s.deps.Repo)
+			threadsSvc := threads.New(threads.Deps{Repo: s.deps.Repo})
 			// One row past the window answers "is there older history?"
 			// exactly, without a second query.
 			recent, err := threadsSvc.LoadRecentDisplayMessages(ctx, mainThread, snapshotMessageLimit+1)

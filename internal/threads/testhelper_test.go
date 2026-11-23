@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -41,7 +42,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	// ID would collide (chats_pkey) across every test function that builds a helper.
 	h.chatID = h.createChat("")
 
-	h.svc = NewService(repo)
+	h.svc = New(Deps{Repo: repo})
 	return h
 }
 

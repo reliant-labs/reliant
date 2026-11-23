@@ -52,6 +52,13 @@ func NewInvokeToolActivity(repo ExecuteToolsStore, toolCalls ToolCalls, toolExec
 	}
 }
 
+// WithToolCallResults gives the tool-execution path the durable-result reader;
+// see ExecuteToolsActivity.WithToolCallResults.
+func (a *InvokeToolActivity) WithToolCallResults(r ToolCallResults) *InvokeToolActivity {
+	a.executeTools.WithToolCallResults(r)
+	return a
+}
+
 // WithRunFunding gives the tool-execution path the run's funding reader; see
 // ExecuteToolsActivity.WithRunFunding.
 func (a *InvokeToolActivity) WithRunFunding(s RunFundingStore) *InvokeToolActivity {

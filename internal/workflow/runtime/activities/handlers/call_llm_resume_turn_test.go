@@ -106,7 +106,7 @@ func TestCallLLM_ResumeTurnContinuesACutOffTurn(t *testing.T) {
 			saveTextOnlyAssistantMessage(t, h, chatID, chatID, "I'll run the migration and then")
 		}},
 		{"reasoning only", func(t *testing.T, h *IdempotencyTestHelper, chatID string) {
-			_, err := threads.NewService(h.Repo()).SaveMessage(context.Background(), threads.SaveMessageOpts{
+			_, err := threads.New(threads.Deps{Repo: h.Repo()}).SaveMessage(context.Background(), threads.SaveMessageOpts{
 				ChatID:   chatID,
 				Thread:   chatID,
 				Role:     int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),

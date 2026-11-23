@@ -58,7 +58,7 @@ func (a *ExecuteToolsActivity) settleInterruptedCall(ctx context.Context, rtx Ru
 			return a.buildToolResult(call.ID, call.Name, content, "", true, nil, nil)
 		}
 		if existing.Status == core.ToolCallStatusBackgrounded {
-			if recorded, err := a.toolCalls.FindToolCallResult(ctx, call.ID); err == nil && recorded != nil {
+			if recorded, err := a.findToolCallResult(ctx, call.ID); err == nil && recorded != nil {
 				return a.buildToolResult(call.ID, call.Name, recorded.Content, "", recorded.IsError, nil, nil)
 			}
 			return a.buildToolResult(call.ID, call.Name, InterruptedToolResultContent, "", true, nil, nil)

@@ -97,7 +97,7 @@ func NewCompactActivity(repo CompactStore, toolResults ToolResultRecoveryStore, 
 	return &CompactActivity{
 		repo:           repo,
 		toolResults:    toolResults,
-		threads:        threads.NewService(repo),
+		threads:        threads.New(threads.Deps{Repo: repo}),
 		driverResolver: resolver,
 		skips:          compactionSkips,
 	}

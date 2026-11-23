@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -84,7 +86,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	taskQueue := "trigger-activation-e2e-" + uuid.NewString()
 
 	declarations := triggers.LaunchWorkflows{Repo: repo}
-	launcher := launch.New(launch.Deps{Store: repo, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.NewService(repo), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).WithWorkflows(declarations).Fire,
@@ -165,7 +167,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, conn, nil,
+	require.NoError(t, db.TestConnections(t, repo).CreateConnection(ctx, conn, nil,
 		core.ConnectionEvent{ConnectionID: conn.ID, UserID: userID, Kind: core.ConnectionEventCreated, Actor: "user:" + userID}))
 	issue := activate("my new issue", "new-issue", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID })
 	assert.Equal(t, conn.ID, issue.GetConnectionId())
@@ -197,7 +199,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	draft, err := repo.GetWorkflowDraftBySlug(ctx, userID, "triage")
 	require.NoError(t, err)
 	renamed := strings.Replace(activatedWorkflowYAML, "- name: new-issue", "- name: issue-opened", 1)
-	require.NoError(t, repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, "triage", "triage", renamed, db.WorkflowDraftStatusComplete))
+	require.NoError(t, workflowdraftstest.New(t, repo).UpdateWorkflowDraftDefinition(ctx, draft.ID, "triage", "triage", renamed, db.WorkflowDraftStatusComplete))
 
 	list, err := svc.ListTriggers(authCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)

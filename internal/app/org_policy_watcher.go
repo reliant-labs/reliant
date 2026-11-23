@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 )
 
@@ -21,6 +22,7 @@ type OrgPolicyWatcher struct{ w *orgpolicy.Watcher }
 type OrgPolicyWatcherDeps struct {
 	Policies *orgpolicy.Resolver
 	DB       *db.Repo
+	Backoff  providerbackoff.Service
 	Temporal *TemporalClient
 }
 
@@ -34,7 +36,7 @@ func NewOrgPolicyWatcher(d OrgPolicyWatcherDeps) (*OrgPolicyWatcher, error) {
 		orgpolicy.SetProcessWatcher(nil)
 		return nil, nil
 	}
-	w := orgpolicy.NewWatcher(d.Policies, orgChatWaker{repo: d.DB, temporal: d.Temporal})
+	w := orgpolicy.NewWatcher(d.Policies, orgChatWaker{targets: d.Backoff, temporal: d.Temporal})
 	orgpolicy.SetProcessWatcher(w)
 	return &OrgPolicyWatcher{w: w}, nil
 }
@@ -47,12 +49,12 @@ func (o *OrgPolicyWatcher) Run(ctx context.Context) error {
 
 // orgChatWaker sends a capacity wake to an org's blocked chats.
 type orgChatWaker struct {
-	repo     *db.Repo
+	targets  capacitywake.OrgTargetLister
 	temporal *TemporalClient
 }
 
 func (o orgChatWaker) WakeOrgChats(ctx context.Context, orgID, why string) ([]string, error) {
-	return capacitywake.WakeOrg(ctx, o.repo, o.temporal.Client, orgID, why)
+	return capacitywake.WakeOrg(ctx, o.targets, o.temporal.Client, orgID, why)
 }
 
 func (o orgChatWaker) WakeRuns(ctx context.Context, workflowIDs []string, why string) []string {
@@ -61,9 +63,9 @@ func (o orgChatWaker) WakeRuns(ctx context.Context, workflowIDs []string, why st
 
 // orgAccountChatWaker is the org's chat waker for an org account change, nil
 // without Temporal (a nil *TemporalClient in one would be a non-nil waker).
-func orgAccountChatWaker(repo *db.Repo, temporal *TemporalClient) org_provider_account.OrgChatWaker {
-	if repo == nil || temporal == nil || temporal.Client == nil {
+func orgAccountChatWaker(targets capacitywake.OrgTargetLister, temporal *TemporalClient) org_provider_account.OrgChatWaker {
+	if targets == nil || temporal == nil || temporal.Client == nil {
 		return nil
 	}
-	return orgChatWaker{repo: repo, temporal: temporal}
+	return orgChatWaker{targets: targets, temporal: temporal}
 }

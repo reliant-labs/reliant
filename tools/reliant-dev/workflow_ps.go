@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
 )
@@ -196,7 +197,7 @@ type psChatMarkers struct {
 	// backoffByThread is the provider-backoff marker per thread: waiting_since is
 	// set while the thread is asleep in a provider retry ladder, and the
 	// cumulative counters persist after it wakes.
-	backoffByThread map[string]db.ProviderBackoff
+	backoffByThread map[string]core.ProviderBackoff
 }
 
 func runWorkflowPs(cmd *cobra.Command, jsonOut bool, dbURL string) error {
@@ -254,7 +255,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 		lastActivity:     map[string]time.Time{},
 		parentThread:     map[string]string{},
 		originByThread:   map[string]string{},
-		backoffByThread:  map[string]db.ProviderBackoff{},
+		backoffByThread:  map[string]core.ProviderBackoff{},
 	}
 
 	questions, err := store.NewQuestionExtStore(repo.ORM()).PendingQuestionsByThread(ctx, chatID)
@@ -454,7 +455,7 @@ func buildPsRows(workflows []*db.Workflow, markers map[string]psChatMarkers, nod
 				if b.IsUsageLimit() {
 					row.UsageLimitResumeAt = b.ResumeAt.UTC().Format(time.RFC3339)
 					row.UsageLimitProvider = b.Provider
-					row.UsageLimitProbing = b.Reason == db.ReasonUsageLimitProbe
+					row.UsageLimitProbing = b.Reason == core.ReasonUsageLimitProbe
 				}
 			}
 		}
@@ -556,7 +557,7 @@ func psGroupNode(g psThreadGroup, nodes map[string]string) string {
 // something a supervisor can do about it, and a thread parked on a question is
 // not issuing LLM calls anyway — a backoff marker alongside a pending question
 // is a leftover, not a live wait.
-func derivePsState(wait *psWait, backoff db.ProviderBackoff, lastProgress, now time.Time, stallAfter time.Duration) (psState, time.Time) {
+func derivePsState(wait *psWait, backoff core.ProviderBackoff, lastProgress, now time.Time, stallAfter time.Duration) (psState, time.Time) {
 	if wait != nil {
 		if !wait.since.IsZero() {
 			return psStateGated, wait.since
@@ -583,7 +584,7 @@ func derivePsState(wait *psWait, backoff db.ProviderBackoff, lastProgress, now t
 // would report a dead thread as parked forever. Past resume_at the request is
 // back in flight (or the thread is gone) and the normal progress derivation is
 // the honest answer again.
-func psInBackoff(b db.ProviderBackoff, now time.Time) bool {
+func psInBackoff(b core.ProviderBackoff, now time.Time) bool {
 	return b.Waiting() && !b.ResumeAt.IsZero() && !now.After(b.ResumeAt)
 }
 

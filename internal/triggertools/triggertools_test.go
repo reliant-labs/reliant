@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -119,7 +121,7 @@ func setup(t *testing.T, publicURL string) *env {
 
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Projects: projectaccesstest.For(repo), Syncer: e.backend, Fires: e.backend,
+		Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
@@ -176,7 +178,7 @@ func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	draft, err := e.repo.GetWorkflowDraftBySlug(context.Background(), e.userID, "triage")
 	require.NoError(t, err)
 	trimmed := toolWorkflowYAML[:strings.Index(toolWorkflowYAML, "  - name: hook")] + toolWorkflowYAML[strings.Index(toolWorkflowYAML, "entry:"):]
-	require.NoError(t, e.repo.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, "triage", "triage", trimmed, db.WorkflowDraftStatusComplete))
+	require.NoError(t, workflowdraftstest.New(t, e.repo).UpdateWorkflowDraftDefinition(context.Background(), draft.ID, "triage", "triage", trimmed, db.WorkflowDraftStatusComplete))
 
 	resp = e.call(t, e.list, tools.ListTriggersParams{Workflow: "triage"})
 	require.False(t, resp.IsError, resp.Content)

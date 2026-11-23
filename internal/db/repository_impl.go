@@ -4,7 +4,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
 // ==================== Chats ====================
@@ -897,11 +897,6 @@ func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
 // GetApproval retrieves an approval by ID
 func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
 	return store.GetApproval(ctx, r.ORM(), id)
-}
-
-// GetApprovalByEntityID retrieves an approval by its entity_id
-func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
 }
 
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
@@ -3123,14 +3118,6 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 	return store.InsertRunEvent(ctx, r.ORM(), ev)
 }
 
-// GetRunEvent returns ErrRunEventNotFound on a miss.
-func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
-	if id == "" {
-		return nil, fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.LoadRunEvent(ctx, r.ORM(), id)
-}
-
 // HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
 // of the kind.
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
@@ -3158,25 +3145,14 @@ func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID 
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
+//
+// Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
+// there, and only tests still call this.
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
 	}
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
-}
-
-// MarkRunEventDispatched records that the event's dispatch has started.
-func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
-	if id == "" {
-		return fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
-}
-
-// DeleteDispatchedRunEventsBefore prunes dispatched events older than
-// cutoff, returning how many were removed.
-func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
 }
 
 // RecentTriggerFirings returns each trigger's newest perTrigger firings in
@@ -3569,394 +3545,114 @@ func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID 
 }
 
 // ==================== Workflow Drafts ==
-// User-owned workflows available across all projects
+// User-owned workflows available across all projects. Every write and every
+// scoped read lives in internal/workflowdrafts; the methods below are the few
+// that code outside this package's migration still calls through the Repo.
 
 // ErrWorkflowSlugTaken reports that the owner already has a workflow with the
-// slug. It is deliberately not retryable: the conflict is permanent, not a race.
-var ErrWorkflowSlugTaken = svcerr.AlreadyExists("workflow slug already taken")
+// slug (workflowdrafts.ErrSlugTaken).
+var ErrWorkflowSlugTaken = workflowdrafts.ErrSlugTaken
 
-// runWorkflowDraftTx: each draft write is one single-row write plus the
-// user_updates insert, which allocates from the per-user counter row and so
-// needs READ COMMITTED (see CreateUserUpdate). Under SERIALIZABLE it would
-// abort against any concurrent update for the same user. The Repository's
-// ladder still re-runs it on the failures it retries.
-func (r *Repo) runWorkflowDraftTx(ctx context.Context, f func(txCtx context.Context) error) error {
-	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), f)
-}
+// ErrWorkflowDraftVersionConflict reports that a draft was written since the
+// version the caller read (workflowdrafts.ErrVersionConflict).
+var ErrWorkflowDraftVersionConflict = workflowdrafts.ErrVersionConflict
 
-// mapWorkflowSlugConflict turns a unique violation on workflow_drafts into
-// ErrWorkflowSlugTaken. The PgError is not wrapped (%w) so isRetryableError
-// does not see 23505 and walk the retry ladder for a permanent conflict.
-func mapWorkflowSlugConflict(err error, slug string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "workflow_drafts_user_id_slug_key" {
-		return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, slug)
-	}
-	return err
+// WorkflowDraftsBySlug is one user's drafts of a set of slugs
+// (workflowdrafts.DraftsBySlug).
+type WorkflowDraftsBySlug = workflowdrafts.DraftsBySlug
+
+// workflowDrafts is the drafts package over this Repo's database and
+// transactions: the Repo is its TxRunner, OrgLocks and UserUpdates.
+func (r *Repo) workflowDrafts() (workflowdrafts.Service, error) {
+	r.draftsOnce.Do(func() {
+		r.drafts, r.draftsErr = workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+			Tx:      r,
+			Locks:   r,
+			Updates: r,
+			Drafts:  store.NewWorkflowDraftExtStore(r.ORM()),
+		})
+	})
+	return r.drafts, r.draftsErr
 }
 
 func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
-	if draft == nil {
-		return fmt.Errorf("draft cannot be nil")
-	}
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Every draft write takes its owner's org lock first, so inserts
-		// and upserts of one user's slugs serialize (store/org_lock.go).
-		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
-			return err
-		}
-		if err := store.InsertWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
-	})
-}
-
-func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*WorkflowDraft, error) {
-	if draft == nil {
-		return nil, fmt.Errorf("draft cannot be nil")
-	}
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Under the owner's org lock nothing stamps or inserts this user's
-		// drafts; the slug's row is locked and decided on as it is now. A
-		// denied draft's slug is taken: the upsert never overwrites it.
-		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
-			return err
-		}
-		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), draft.UserID, draft.Slug)
-		if err != nil {
-			return err
-		}
-		over := ""
-		if existing != nil {
-			if !authz.CanWriteWorkflow(txCtx, draft.UserID, existing) {
-				return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, draft.Slug)
-			}
-			over = existing.ID
-		}
-		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft, over)
-		if err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
-}
-
-// publishWorkflowDraftUpdated announces a draft write to the owner's open
-// editors. Every draft writer funnels through the Repo methods that call this,
-// so no tool or RPC can forget. It must run inside the write's transaction: a
-// rolled-back write then never announces itself. deleted marks the draft's
-// removal (data_json {"deleted": true}); the version is then the last one.
-func (r *Repo) publishWorkflowDraftUpdated(ctx context.Context, draft *WorkflowDraft, deleted bool) error {
-	if draft == nil {
-		return nil
-	}
-	payload := map[string]any{
-		"draft_id": draft.ID,
-		"slug":     draft.Slug,
-		"version":  draft.Version,
-	}
-	if deleted {
-		payload["deleted"] = true
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal workflow draft update: %w", err)
-	}
-	return r.CreateUserUpdate(ctx, &UserUpdate{
-		UserID:     draft.UserID,
-		UpdateType: UserUpdateWorkflowDraftUpdated,
-		EntityType: EntityTypeWorkflowDraft,
-		EntityID:   draft.ID,
-		Data:       data,
-	})
-}
-
-func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) error {
-	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
+	svc, err := r.workflowDrafts()
 	if err != nil {
 		return err
 	}
-	return r.publishWorkflowDraftUpdated(ctx, row, false)
-}
-
-func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
-	if err != nil {
-		if svcerr.IsNotFound(err) {
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow draft"), id)
-		}
-		return nil, err
-	}
-	return row, nil
-}
-
-// visibleWorkflowDraft confirms a draft an owner-filtered read returned
-// through authz: a draft of an org its owner has left reads as no draft, so
-// no lookup by slug or name (the handlers', the tools', the launch path's)
-// can reach what the lookup by id refuses.
-func visibleWorkflowDraft(ctx context.Context, userID string, draft *WorkflowDraft, err error) (*WorkflowDraft, error) {
-	if err != nil || draft == nil {
-		return draft, err
-	}
-	if !authz.CanReadWorkflow(ctx, userID, draft) {
-		return nil, nil
-	}
-	return draft, nil
-}
-
-// lockWritableDraft takes the draft's owner's org lock, then its row, and
-// decides on the locked row: it may be written only while its owner may
-// still change it (authz.CanWriteWorkflow). Saved workflows are owner-only,
-// so every caller of a by-id write has already shown it is the owner; this
-// is the decision made again where no backfill can stamp the row under it.
-// A denied draft is NotFound, as a missing one.
-func (r *Repo) lockWritableDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	owner, err := store.WorkflowDraftOwner(ctx, r.ORM(), id)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.LockUserOrgs(ctx, r.ORM(), owner); err != nil {
-		return nil, err
-	}
-	row, err := store.LockWorkflowDraft(ctx, r.ORM(), id)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteWorkflow(ctx, owner, row) {
-		return nil, svcerr.NotFound("workflow draft")
-	}
-	return row, nil
-}
-
-func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
-	return visibleWorkflowDraft(ctx, userID, draft, err)
-}
-
-func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	draft, err := store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
-	return visibleWorkflowDraft(ctx, userID, draft, err)
-}
-
-// GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
-// with this slug, or (nil, nil) when there is none. A visible DRAFT with the
-// slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
-// "not found": the workflow exists, and the fix is to mark it complete.
-func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
-	if err != nil {
-		return nil, err
-	}
-	if usable != nil {
-		// A runnable draft the caller may no longer see is no workflow:
-		// nil, nil, the same as a slug nobody has.
-		return visibleWorkflowDraft(ctx, userID, usable, nil)
-	}
-	draft, err := r.GetWorkflowDraftBySlug(ctx, userID, slug)
-	if err != nil {
-		return nil, err
-	}
-	return nil, notRunnableWorkflow(slug, draft)
-}
-
-// notRunnableWorkflow is GetUsableWorkflowBySlug's answer when no usable
-// workflow has the slug and draft (visible to the caller, or nil) does: a
-// visible draft that is not complete is reported, anything else is nothing.
-func notRunnableWorkflow(slug string, draft *WorkflowDraft) error {
-	if draft != nil && !draft.IsHidden && draft.Status != WorkflowDraftStatusComplete {
-		return &WorkflowDraftNotRunnableError{Slug: slug}
-	}
-	return nil
-}
-
-// WorkflowDraftsBySlug is one user's drafts of a set of slugs, read in one
-// query (GetWorkflowDraftsBySlugs). For each slug it was read for, it gives
-// exactly what GetWorkflowDraftBySlug and GetUsableWorkflowBySlug give, so a
-// reader that resolves many workflows (ListInbox: 32 lookups a call in prod,
-// trace ed2301a0…) asks once instead of twice per name.
-type WorkflowDraftsBySlug struct {
-	userID string
-	bySlug map[string]*WorkflowDraft
-}
-
-// GetWorkflowDraftsBySlugs reads userID's drafts of slugs in one query.
-func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
-	rows, err := store.ListWorkflowDraftsBySlugs(ctx, r.ORM(), userID, slugs)
-	if err != nil {
-		return nil, err
-	}
-	out := &WorkflowDraftsBySlug{userID: userID, bySlug: make(map[string]*WorkflowDraft, len(rows))}
-	for _, row := range rows {
-		out.bySlug[row.Slug] = row
-	}
-	return out, nil
-}
-
-// Draft is GetWorkflowDraftBySlug's answer for slug, which must be one of the
-// slugs b was read for.
-func (b *WorkflowDraftsBySlug) Draft(ctx context.Context, slug string) (*WorkflowDraft, error) {
-	return visibleWorkflowDraft(ctx, b.userID, b.bySlug[slug], nil)
-}
-
-// Usable is GetUsableWorkflowBySlug's answer for slug, which must be one of
-// the slugs b was read for. The usable row is the slug's one row when it is
-// complete and not hidden (store.FindUsableWorkflowBySlug's predicate).
-func (b *WorkflowDraftsBySlug) Usable(ctx context.Context, slug string) (*WorkflowDraft, error) {
-	row := b.bySlug[slug]
-	if row != nil && row.Status == WorkflowDraftStatusComplete && !row.IsHidden {
-		return visibleWorkflowDraft(ctx, b.userID, row, nil)
-	}
-	draft, err := b.Draft(ctx, slug)
-	if err != nil {
-		return nil, err
-	}
-	return nil, notRunnableWorkflow(slug, draft)
-}
-
-// ListWorkflowDraftsByUser is the drafts userID owns and may still see: a
-// draft of an org they have left is not listed (authz decides each row).
-func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	drafts, err := store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
-	if err != nil {
-		return nil, err
-	}
-	return authz.Visible(ctx, userID, drafts, authz.CanReadWorkflow), nil
+	return svc.CreateWorkflowDraft(ctx, draft)
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
-	if draft == nil {
-		return fmt.Errorf("draft cannot be nil")
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
 	}
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, draft.ID); err != nil {
-			return err
-		}
-		if err := store.ReplaceWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
-	})
+	return svc.UpdateWorkflowDraft(ctx, draft)
+}
+
+func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraft(ctx, id)
+}
+
+func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftBySlug(ctx, userID, slug)
+}
+
+func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetUsableWorkflowBySlug(ctx, userID, slug)
+}
+
+func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
+}
+
+func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftByName(ctx, userID, name)
+}
+
+func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListWorkflowDraftsByUser(ctx, userID)
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.updateWorkflowDraftDefinition(ctx, id, nil, name, slug, definition, status)
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
+	}
+	return svc.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
 }
 
-// ErrWorkflowDraftVersionConflict reports that a draft was written since the
-// version the caller read: its write was computed from content that is no
-// longer current, so it was not applied.
-var ErrWorkflowDraftVersionConflict = svcerr.Aborted("workflow draft changed since it was read")
-
-// UpdateWorkflowDraftDefinitionAtVersion is UpdateWorkflowDraftDefinition
-// applied only while the draft is still at version: a compare-and-swap under
-// the draft's row lock. A draft written since returns
-// ErrWorkflowDraftVersionConflict and is left as it is, so two edits computed
-// from the same read cannot both report success while one is lost.
 func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.updateWorkflowDraftDefinition(ctx, id, &version, name, slug, definition, status)
-}
-
-func (r *Repo) updateWorkflowDraftDefinition(ctx context.Context, id string, version *int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.lockWritableDraft(txCtx, id)
-		if err != nil {
-			return err
-		}
-		if version != nil && row.Version != *version {
-			return ErrWorkflowDraftVersionConflict
-		}
-		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
-			return mapWorkflowSlugConflict(err, slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, id)
-	})
-}
-
-func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftStatus(txCtx, r.ORM(), id, status)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
+	svc, err := r.workflowDrafts()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return saved, nil
-}
-
-func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftHidden(txCtx, r.ORM(), id, isHidden)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
-}
-
-func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Under the owner's org lock, the slug's row is locked and decided
-		// on as it is now. A denied draft is deleted like a missing one: not
-		// at all.
-		if err := store.LockUserOrgs(txCtx, r.ORM(), userID); err != nil {
-			return err
-		}
-		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
-		if err != nil || existing == nil || !authz.CanWriteWorkflow(txCtx, userID, existing) {
-			return err
-		}
-		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), existing.ID)
-		if svcerr.IsNotFound(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return r.publishWorkflowDraftUpdated(txCtx, deleted, true)
-	})
-}
-
-func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, draftID); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftForkedFrom(txCtx, r.ORM(), draftID, forkedFrom)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
+	return svc.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
 }
 
 // ==================== Preset Repository ====================
@@ -4073,19 +3769,6 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-// EnableCredentialSealing gives the provider_accounts store its vault; without
-// one, provider credentials cannot be read or written. Call once at boot,
-// before serving.
-func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
-	r.accounts.SetSealer(sealer)
-}
-
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
-// opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
 
 // ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,

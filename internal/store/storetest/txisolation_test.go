@@ -47,7 +47,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	// Warm the probe vault's DEK for the seed user, so the account rows below
 	// begin only their own transaction: a tenant's first seal adds the
 	// vault's detached ones (pinned by their own subtest at the end).
-	if _, _, err := p.Repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	if _, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 		IdentityKey: "iso-warm", Secrets: core.AccountSecrets{Secret: "sk-warm"},
 	}); err != nil {
@@ -143,14 +143,14 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// provider), then read-then-write; never retried, since it seals
 		// with fresh randomness under the locks it took.
 		{"Repo.UpsertProviderAccount (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+			_, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 				UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 				IdentityKey: "iso-key", Secrets: core.AccountSecrets{Secret: "sk-iso"},
 			})
 			return err
 		}},
 		{"Repo.ReorderProviderAccounts (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			return p.Repo.ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
+			return db.TestAccounts(t, p.Repo).ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
 		}},
 		// The self-hosted token store's rotation (LocalStore.MintForUser with
 		// Rotate): READ COMMITTED as database/sql's BeginTx(nil) was, never

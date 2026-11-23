@@ -38,7 +38,7 @@ func (s *Service) BindOrgProviderWorkspace(
 		return nil, err
 	}
 	// Only the caller's own accounts: another person's id is NotFound, as everywhere.
-	mine, err := s.deps.Store.ListProviderAccounts(ctx, userID)
+	mine, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -65,7 +65,7 @@ func (s *Service) BindOrgProviderWorkspace(
 	if name == "" {
 		name = accountlimits.PlanDisplay(seat.Plan) + " workspace"
 	}
-	w, created, err := s.deps.Store.BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
+	w, created, err := s.deps.OrgAccounts.BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
 		OrgID: orgID, Provider: seat.Provider, ExternalOrgID: external, DisplayName: name, BoundByUserID: userID,
 	})
 	if err != nil {

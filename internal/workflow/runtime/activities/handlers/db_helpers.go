@@ -88,7 +88,7 @@ func LoadMessagesForLLM(ctx context.Context, repo LLMHistoryStore, results ToolR
 	// Use threads.Service.LoadCurrentMessages for proper fork chain and compaction handling.
 	// This fixes the bug where forked threads inherit sequence numbers but don't have
 	// compaction summaries, causing incorrect parent traversal skipping.
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo})
 	dbMessages, err := svc.LoadCurrentMessages(ctx, thread)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load current messages: %w", err)

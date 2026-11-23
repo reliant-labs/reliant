@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
+
 	"connectrpc.com/connect"
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
@@ -470,11 +472,12 @@ type APIConnections struct {
 // OAuth clients this deployment has, and the origins a browser OAuth flow is
 // relayed back to.
 type APIConnectionsDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	Integrations *IntegrationSettings
-	AppOrigins   []string
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	Integrations    *IntegrationSettings
+	AppOrigins      []string
+	ControlPlane    *configv1.ControlPlaneConfig
 	// OrgConnections lets org owners and admins create org-owned connections
 	// (ApiServerConfig orgs.connections_enabled; off by default).
 	OrgConnections bool
@@ -494,7 +497,7 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	store := d.DB.Connections()
+	store := d.ConnectionVault
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
@@ -517,8 +520,9 @@ type APICatalogSearch struct{ *catalogindex.Service }
 // APICatalogSearchDeps is the connections it reports on, and whether a
 // control plane hosts this deployment.
 type APICatalogSearchDeps struct {
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewAPICatalogSearch builds the search: the embedded catalog's index (built
@@ -532,7 +536,7 @@ func NewAPICatalogSearch(d APICatalogSearchDeps) (*APICatalogSearch, error) {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
 	delegated := delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())
-	return &APICatalogSearch{catalogindex.NewService(idx, d.DB.Connections(), catalogindex.DelegatedAvailable(delegated))}, nil
+	return &APICatalogSearch{catalogindex.NewService(idx, d.ConnectionVault, catalogindex.DelegatedAvailable(delegated))}, nil
 }
 
 // delegatedAvailable reports which delegated brokers the worker registers.
@@ -555,9 +559,10 @@ func delegatedAvailable(hosted bool) connections.DelegatedAvailable {
 // connection is opened with, and the control plane credentials are delegated
 // to.
 type InputOptionsDeps struct {
-	DB           *db.Repo
-	Connections  *APIConnections
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Connections     *APIConnections
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewInputOptions builds the service behind CatalogService.ListInputOptions
@@ -576,7 +581,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
 	repo := d.DB
-	creds, err := credwire.New(connections.NewResolver(repo, repo.Connections(), d.Connections.Tokens), d.ControlPlane)
+	creds, err := credwire.New(connections.NewResolver(repo, d.ConnectionVault, d.Connections.Tokens), d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -643,10 +648,11 @@ func NewConnectorGrants(d ConnectorGrantsDeps) (connectorgrant.Store, error) {
 // GitHubAccessDeps is where an owner's GitHub token comes from: the control
 // plane when hosted, the owner's saved connection otherwise.
 type GitHubAccessDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	ControlPlane *configv1.ControlPlaneConfig
-	Integrations *IntegrationSettings
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	ControlPlane    *configv1.ControlPlaneConfig
+	Integrations    *IntegrationSettings
 }
 
 // NewGitHubAccess builds the refresher that keeps GitHub trigger owners'
@@ -663,7 +669,7 @@ type GitHubAccessDeps struct {
 //
 //forge:root-only api
 func NewGitHubAccess(d GitHubAccessDeps) (*ghaccess.Refresher, error) {
-	return wireGitHubAccess(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	return wireGitHubAccess(d.DB, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubAccess adapts *ghaccess.Refresher to trigger.IntegrationAccess.
@@ -678,10 +684,11 @@ type TriggerSenders map[string]trigger.SenderDirectory
 // TriggerSendersDeps is where a caller's GitHub token comes from, as for
 // GitHubAccessDeps.
 type TriggerSendersDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	ControlPlane *configv1.ControlPlaneConfig
-	Integrations *IntegrationSettings
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	ControlPlane    *configv1.ControlPlaneConfig
+	Integrations    *IntegrationSettings
 }
 
 // NewTriggerSenders builds the GitHub people lookup, or none under the same
@@ -690,7 +697,7 @@ type TriggerSendersDeps struct {
 //
 //forge:root-only api
 func NewTriggerSenders(d TriggerSendersDeps) (TriggerSenders, error) {
-	return wireGitHubSenders(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	return wireGitHubSenders(d.DB, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubSenders adapts ghusers.Service to trigger.SenderDirectory. It
@@ -717,11 +724,11 @@ func (gitHubSenders) IsPermanent(err error) bool {
 func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.ErrTooManyQueries) }
 
 // wireGitHubSenders is NewTriggerSenders over its parts.
-func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (TriggerSenders, error) {
+func wireGitHubSenders(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (TriggerSenders, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
+	tokens, err := gitHubTokenSource(repo, conns, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -731,11 +738,11 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp *configv1.ControlPl
 }
 
 // wireGitHubAccess is NewGitHubAccess over its parts.
-func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
+func wireGitHubAccess(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
+	tokens, err := gitHubTokenSource(repo, conns, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -750,7 +757,7 @@ func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPla
 	}), nil
 }
 
-func gitHubTokenSource(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
+func gitHubTokenSource(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cfg *configv1.ControlPlaneConfig, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
 	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() {
 		secret := cp.InternalServiceSecret
 		if secret == "" {
@@ -769,7 +776,7 @@ func gitHubTokenSource(repo *db.Repo, keys vault.Service, cfg *configv1.ControlP
 	if err != nil {
 		return nil, fmt.Errorf("github triggers: %w", err)
 	}
-	store := repo.Connections()
+	store := conns
 	return ghaccess.NewSavedTokens(store, connections.NewTokenSource(store, keys, providers, nil)), nil
 }
 
@@ -877,7 +884,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(repo).
@@ -1299,7 +1306,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
-		r.SetHeldRunActivity(d.Activity)
+		r.SetHeldRunActivity(d.Activity, store.NewProviderBackoffExtStore(d.DB.ORM()))
 	}
 	return &WorkflowReconciler{r}, nil
 }
@@ -1671,7 +1678,7 @@ func CoverageSourceReports(cfg *configv1.ControlPlaneConfig) coverage_source.Rep
 // nil (and no error) on a hosted deployment without INTERNAL_SERVICE_SECRET,
 // which cannot fetch delegated tokens: every read is then NOT_YET_AVAILABLE,
 // as the org usage view shows no estimates (OrgUsageListPrices).
-func CoverageSourceBlobs(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, integrations *IntegrationSettings) (coverage_source.Blobs, error) {
+func CoverageSourceBlobs(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cfg *configv1.ControlPlaneConfig, integrations *IntegrationSettings) (coverage_source.Blobs, error) {
 	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() && cp.InternalServiceSecret == "" {
 		return nil, nil
 	}
@@ -1679,7 +1686,7 @@ func CoverageSourceBlobs(repo *db.Repo, keys vault.Service, cfg *configv1.Contro
 	if integrations != nil {
 		clients = integrations.Webhooks.OAuthClients
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cfg, clients)
+	tokens, err := gitHubTokenSource(repo, conns, keys, cfg, clients)
 	if err != nil {
 		return nil, fmt.Errorf("coverage source: %w", err)
 	}

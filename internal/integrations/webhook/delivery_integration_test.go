@@ -62,7 +62,7 @@ func newReceiptFixture(t *testing.T) *receiptFixture {
 		starts: &receiptStarts{ids: map[string]int{}}, mux: http.NewServeMux()}
 	f.catalog = &receiptCatalog{Repo: f.Repo}
 	f.intake = triggers.NewIntake(f.Repo, f.starts, "test-queue").WithWorkflows(triggers.LaunchWorkflows{Repo: f.catalog})
-	f.relay = NewRelay(f.Repo, f.intake, f.Repo.Connections(), nil)
+	f.relay = NewRelay(f.Repo, f.intake, db.TestConnections(t, f.Repo), nil)
 	f.relay.now = func() time.Time { return f.now }
 	registry := NewRegistry()
 	require.NoError(t, registry.Register(NewGitHubProvider(gitHubTestSecret)))

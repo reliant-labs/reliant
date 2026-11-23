@@ -27,6 +27,10 @@ type Deps struct {
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// Pools checks the machine pools a workflow names.
+	Pools Pools
+	// Drafts reads and writes the caller's saved workflows.
+	Drafts Drafts
 	// Router writes a saved workflow back to its project file on the
 	// caller's machine (SaveWorkflow with a source path). The API server
 	// always has one; without it that save answers Unavailable.
@@ -60,6 +64,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("workflow: Deps.Projects is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("workflow: Deps.Pools is required")
+	}
+	if d.Drafts == nil {
+		return fmt.Errorf("workflow: Deps.Drafts is required")
 	}
 	return nil
 }

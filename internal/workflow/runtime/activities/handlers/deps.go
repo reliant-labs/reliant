@@ -175,12 +175,34 @@ type ChatTransitioner interface {
 // ApprovalCreateStore is what ApprovalCreateActivity reads and writes; the
 // blocked run event goes through runevents.EmitBlocked.
 type ApprovalCreateStore interface {
-	GetApprovalByEntityID(ctx context.Context, entityID string) (*db.Approval, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	CreateApproval(ctx context.Context, approval *db.Approval) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	runevents.Store
+}
+
+// ApprovalLookup finds the approval raised for an entity (idempotent raising).
+// store.ApprovalExtStore satisfies it.
+type ApprovalLookup interface {
+	GetApprovalByEntityID(ctx context.Context, entityID string) (*core.Approval, error)
+}
+
+// ApprovalCreateDeps is what NewApprovalCreateActivity takes.
+type ApprovalCreateDeps struct {
+	Repo      ApprovalCreateStore
+	Approvals ApprovalLookup
+}
+
+// ToolCallResults reads the durable result recorded for a tool call.
+// store.ToolCallResultExtStore satisfies it.
+type ToolCallResults interface {
+	FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error)
+}
+
+// TriggerCapacitySlotDeps is what NewTriggerCapacitySlotActivity takes.
+type TriggerCapacitySlotDeps struct {
+	Slots TriggerCapacitySlotStore
 }
 
 // ApprovalResolveStore is what ApprovalResolveActivity writes, and what
@@ -208,8 +230,6 @@ type CallLLMStore interface {
 	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
-	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	// GetDaemon and ListDaemonsByUserID are daemonPlatformReader
 	// (resolveShellPlatform).
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -319,12 +339,12 @@ type DrainAgentMessagesStore interface {
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
-	EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update db.AgentMessagesDrainedUpdate) error
+	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
 // EmitStreamFinalizedStore is what EmitStreamFinalizedActivity writes.
 type EmitStreamFinalizedStore interface {
-	EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update db.StreamFinalizedUpdate) error
+	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 }
 
 // EmitToolCallStatusStore is what EmitToolCallStatusActivity writes.
@@ -500,9 +520,17 @@ type ThreadStatusStore interface {
 // UsageLimitWaitStore is what UsageLimitWaitActivity writes; its notice goes
 // through threads.Service (postNotice).
 type UsageLimitWaitStore interface {
+	threads.Repository
+}
+
+// ProviderBackoffMarkers writes the markers of a thread parked on a provider:
+// the driver's retry ladder and a usage-limit wait. providerbackoff.Service
+// satisfies it.
+type ProviderBackoffMarkers interface {
+	RecordProviderBackoff(ctx context.Context, chatID string, threadID string, attempt int, maxAttempts int, statusCode int, reason string, delay time.Duration, now time.Time) error
+	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error
-	threads.Repository
 }
 
 // TriggerCapacitySlotStore is what TriggerCapacitySlotActivity writes.
@@ -544,11 +572,18 @@ type RunRecords interface {
 	SetChatRunID(ctx context.Context, chatID string, workflowID string, runID string) (bool, error)
 }
 
+// AttentionRecorder applies an attention update to its incident in a READ
+// COMMITTED transaction (NewAttentionRecorder).
+type AttentionRecorder interface {
+	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
+}
+
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
 	Repo      WorkflowStatusStore
 	Runs      RunRecords
 	Workflows WorkflowRuns
+	Attention AttentionRecorder
 }
 
 type runRecords struct {
@@ -573,7 +608,6 @@ func NewRunRecords(db orm.Context) RunRecords {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
-	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

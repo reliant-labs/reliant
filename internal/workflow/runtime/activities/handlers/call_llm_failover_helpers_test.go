@@ -6,7 +6,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
-func newThreadsFor(h *IdempotencyTestHelper) *threads.Service { return threads.NewService(h.Repo()) }
+func newThreadsFor(h *IdempotencyTestHelper) *threads.Service {
+	return threads.New(threads.Deps{Repo: h.Repo()})
+}
 
 func threadsSaveOpts(chatID, text, sealedReasoning, accountID string) threads.SaveMessageOpts {
 	return threads.SaveMessageOpts{

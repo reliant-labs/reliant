@@ -115,7 +115,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.NewService(repo)
+	threadService := threads.New(threads.Deps{Repo: repo})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,
@@ -623,7 +623,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.NewService(repo)
+	threadService := threads.New(threads.Deps{Repo: repo})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,

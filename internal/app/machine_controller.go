@@ -31,7 +31,11 @@ type machineRegistry interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	// A pool-bound activation's run is on the member its chat is pinned to.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	// The owner's machine pools, to show each machine's pools.
+}
+
+// machinePoolReader reads the owner's machine pools, to show each machine's
+// pools. store.MachinePoolExtStore satisfies it.
+type machinePoolReader interface {
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 }
@@ -43,7 +47,6 @@ type machineStores struct {
 	store.TriggerEventExtStore
 	store.TriggerExtStore
 	store.ChatsWithActivityExtStore
-	store.MachinePoolExtStore
 }
 
 func newMachineRegistry(db orm.Context) machineRegistry {
@@ -52,7 +55,6 @@ func newMachineRegistry(db orm.Context) machineRegistry {
 		TriggerEventExtStore:      store.NewTriggerEventExtStore(db),
 		TriggerExtStore:           store.NewTriggerExtStore(db),
 		ChatsWithActivityExtStore: store.NewChatsWithActivityExtStore(db),
-		MachinePoolExtStore:       store.NewMachinePoolExtStore(db),
 	}
 }
 
@@ -92,19 +94,20 @@ type machineActions interface {
 // daemon:resume token bound to exactly the machine named, which only the
 // activation that targets it holds. manage_machine decides who may ask.
 type machineController struct {
-	repo    machineRegistry
-	waker   machineWaker
-	actions machineActions
-	pools   machinePoolAdmin
+	repo     machineRegistry
+	poolRows machinePoolReader
+	waker    machineWaker
+	actions  machineActions
+	pools    machinePoolAdmin
 }
 
 // newMachineController is nil when self-hosted: there is no control plane
 // to act on a machine with, and the tools say so.
-func newMachineController(repo machineRegistry, router *WorkerDaemonRouter, pools machinePoolAdmin) tools.MachineController {
+func newMachineController(repo machineRegistry, poolRows machinePoolReader, router *WorkerDaemonRouter, pools machinePoolAdmin) tools.MachineController {
 	if router == nil || router.NATSDaemonRouter == nil || router.ControlPlane == nil {
 		return nil
 	}
-	return &machineController{repo: repo, waker: router.NATSDaemonRouter, actions: router.ControlPlane, pools: pools}
+	return &machineController{repo: repo, poolRows: poolRows, waker: router.NATSDaemonRouter, actions: router.ControlPlane, pools: pools}
 }
 
 func (m *machineController) ListMachines(ctx context.Context, userID string) ([]tools.MachineSummary, error) {
@@ -130,12 +133,12 @@ func (m *machineController) ListMachines(ctx context.Context, userID string) ([]
 // pools rather than failing the listing.
 func (m *machineController) poolMembership(ctx context.Context, userID string) (map[string][]string, map[string]map[string]int) {
 	names, live := map[string][]string{}, map[string]map[string]int{}
-	pools, err := m.repo.ListMachinePoolsForUser(ctx, userID)
+	pools, err := m.poolRows.ListMachinePoolsForUser(ctx, userID)
 	if err != nil {
 		return names, live
 	}
 	for _, p := range pools {
-		members, err := m.repo.ListMachinePoolMembers(ctx, p, "")
+		members, err := m.poolRows.ListMachinePoolMembers(ctx, p, "")
 		if err != nil {
 			continue
 		}
