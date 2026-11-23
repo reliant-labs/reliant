@@ -12,7 +12,8 @@
  * The mobile chat screen does not render it at all (its top bar replaces it).
  */
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
 import {
   MoreHorizontal,
@@ -55,6 +56,12 @@ import { ShareChatDialog } from "../Sharing/ShareChatDialog";
 import { ChatAppTag } from "../Projects/ChatAppTag";
 import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 import { hasControlPlane } from "../../services/controlPlane/config";
+import { useTopBarSlot } from "../Layout/topBar";
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
+import { machineDisplayName } from "@/lib/machineName";
+import { useProjectStore } from "../../store/projectStore";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -102,7 +109,35 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
-  const machineName = useChatMachineName(isNewChat ? undefined : chat);
+  const chatMachineName = useChatMachineName(isNewChat ? undefined : chat);
+  // The app bar's machine chip is the machine's one home: this header names
+  // the chat's machine only when it is NOT the one that chip shows.
+  const { activeDaemon } = useDaemonStatus();
+  const activeMachineName = activeDaemon ? machineDisplayName(activeDaemon) : undefined;
+  const machineName = chatMachineName === activeMachineName ? undefined : chatMachineName;
+  // This header renders inside the app bar's chat slot when it holds it
+  // (Layout/topBar.ts); a second ChatHeader on screen waits for the slot
+  // and keeps its own row meanwhile.
+  const slotEl = useTopBarSlot((state) => state.el);
+  const slotOwner = useTopBarSlot((state) => state.owner);
+  const slotToken = useRef(Symbol("chat-header"));
+  useEffect(() => {
+    if (slotOwner === null) useTopBarSlot.getState().claim(slotToken.current);
+  }, [slotOwner]);
+  useEffect(() => {
+    const token = slotToken.current;
+    return () => useTopBarSlot.getState().release(token);
+  }, []);
+  const inAppBar = slotEl !== null && slotOwner === slotToken.current;
+  // In the app bar the scrolled-away prompt has room only from 2xl. Narrower,
+  // the slot is not mounted at all, so the timeline shows the prompt in its
+  // own strip instead of portalling it into a hidden element.
+  const wideBar = useMediaQuery("(min-width: 1536px)");
+  const showPromptSlot = !!pinnedPromptSlotRef && (!inAppBar || wideBar);
+  const { dragRegionStyle, noDragRegionStyle } = useTitleBarChrome();
+  // The app tag only when it says something the bar's project name does not.
+  const projectName = useProjectStore((state) => state.currentProject?.name);
+  const showAppTag = !!chat?.appName && chat.appName !== projectName;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
@@ -217,11 +252,13 @@ export function ChatHeader({
   // One bar above the transcript: the title, a couple of quiet indicators,
   // and everything else in the ⋯ menu. Threads are one switcher, not a row
   // of tabs; the prompt you scrolled away from is a line inside the bar.
-  return (
-    <header
-      className="flex h-[var(--shell-bar-h)] flex-shrink-0 items-center gap-1 border-b border-border-subtle px-3 sm:px-5"
-      data-testid="chat-top-bar"
-    >
+  const content = (
+    <>
+      {/* The title continues the bar's project / branch path. */}
+      {inAppBar && !hideTitle && (
+        <span aria-hidden="true" className="px-0.5 text-ui text-muted-foreground/50">/</span>
+      )}
+
       {/* Back to parent thread - only when viewing a spawned/child thread */}
       {showBackButton && (
         <Tooltip
@@ -256,6 +293,9 @@ export function ChatHeader({
           title={title}
           className={cn(
             "min-w-0 truncate rounded-md px-1 text-ui font-medium text-foreground transition-colors",
+            // In the bar the title is what gives way on a narrow window (it
+            // truncates, its tooltip has the rest); the controls after it never do.
+            inAppBar && "min-w-[3rem] xl:min-w-[8rem]",
             !(isNewChat || isViewer) && "cursor-text hover:text-foreground/80",
           )}
         >
@@ -273,7 +313,7 @@ export function ChatHeader({
       )}
 
       {/* The app the chat was started from (Chat.app_name, D4). */}
-      {!isNewChat && chat?.appName && <ChatAppTag name={chat.appName} />}
+      {!isNewChat && showAppTag && chat?.appName && <ChatAppTag name={chat.appName} />}
 
       {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
       {!isNewChat && (isShared || isViewer) && (
@@ -286,11 +326,15 @@ export function ChatHeader({
         </span>
       )}
 
-      <div className="min-w-2 flex-1" />
+      <div className="min-w-2 flex-1 self-stretch" style={inAppBar ? dragRegionStyle : undefined} />
 
       {/* The prompt scrolled out of view: the timeline renders it here. */}
-      {pinnedPromptSlotRef && (
-        <div ref={pinnedPromptSlotRef} className="flex min-w-0 max-w-[40%] shrink justify-end" data-testid="chat-pinned-prompt-slot" />
+      {showPromptSlot && (
+        <div
+          ref={pinnedPromptSlotRef}
+          className={cn("flex min-w-0 shrink justify-end", inAppBar ? "max-w-[30%]" : "max-w-[40%]")}
+          data-testid="chat-pinned-prompt-slot"
+        />
       )}
 
       {/* Threads: one switcher, only when there is more than one. */}
@@ -446,6 +490,30 @@ export function ChatHeader({
           )}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <>
+      {inAppBar && slotEl ? (
+        createPortal(
+          <div
+            className="flex h-full min-w-0 flex-1 items-center gap-1"
+            data-testid="chat-top-bar"
+            style={noDragRegionStyle as CSSProperties}
+          >
+            {content}
+          </div>,
+          slotEl,
+        )
+      ) : (
+        <header
+          className="flex h-[var(--shell-bar-h)] flex-shrink-0 items-center gap-1 border-b border-border-subtle px-3 sm:px-5"
+          data-testid="chat-top-bar"
+        >
+          {content}
+        </header>
+      )}
 
       {!isNewChat && chatId && !isViewer && (
         <MoveChatToProjectDialog chatId={chatId} open={isMoveOpen} onClose={() => setIsMoveOpen(false)} />
@@ -453,7 +521,7 @@ export function ChatHeader({
       {canShare && chatId && (
         <ShareChatDialog chatId={chatId} open={isShareOpen} onClose={() => setIsShareOpen(false)} />
       )}
-    </header>
+    </>
   );
 }
 
@@ -500,8 +568,10 @@ function ChildRunsLink({ chatId }: { chatId: string }) {
           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Bot className="size-4" aria-hidden="true" />
-          {label}
-          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+          {/* Narrower than xl it shares the app bar with the chat title: the count alone. */}
+          {count}
+          <span className="hidden xl:inline">{label.slice(count.length)}</span>
+          <ChevronDown className="hidden size-3.5 shrink-0 opacity-70 xl:block" aria-hidden="true" />
         </button>
       )}
     />
