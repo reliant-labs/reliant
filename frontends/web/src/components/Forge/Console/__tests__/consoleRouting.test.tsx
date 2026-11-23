@@ -451,7 +451,7 @@ describe("redirects from the retired URLs", () => {
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
     await landsOn(router, "/forge/p/barkshop/releases", { env: "e2e" });
     // The console selects the project that declares it, over the current one.
-    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" })));
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" }), { skipWorkspaceStateSave: true }));
     expect(screen.getByTestId("page")).toHaveAttribute("data-env", "e2e");
   });
 

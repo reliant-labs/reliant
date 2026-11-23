@@ -19,12 +19,33 @@ import { useWorktreeStore } from "../store/worktreeStore";
 import { useViewerStore } from "../store/viewerStore";
 import { useChatStore } from "../store/chatStore";
 import { resolveChat } from "../hooks/chat-queries";
-import { openChatInWorkspace } from "../lib/openChatInWorkspace";
-import { chatShellRouteOf, latestPathname, routeOwnsChat } from "../lib/chatRoute";
+import { beginWorkspaceOpen, openChatInWorkspace } from "../lib/openChatInWorkspace";
+import { chatShellRouteOf, latestPathname, routeProjectId } from "../lib/chatRoute";
+import { fetchProjects } from "./project-queries";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
 import { restoreLastWorktree } from "./worktree-actions";
 import { getCurrentWorktree } from "./worktree-queries";
+
+/**
+ * Select the project the URL names (`/project/<id>`, `/new?project=`), when
+ * it names one that is listed. Returns whether it did.
+ */
+async function selectRouteProject(): Promise<boolean> {
+  const projectId = routeProjectId();
+  if (!projectId) return false;
+  const isCurrent = beginWorkspaceOpen();
+  let project;
+  try {
+    project = (await fetchProjects()).find((candidate) => candidate.id === projectId);
+  } catch (error) {
+    logger.warn("[WorkspaceRestore] Could not load projects to open the URL's project", { projectId, error });
+    return false;
+  }
+  if (!project || !isCurrent()) return false;
+  await useProjectStore.getState().selectProject(project, { isCurrent });
+  return isCurrent();
+}
 
 export interface WorkspaceRestoreResult {
   /** Whether restoration is in progress */
@@ -164,10 +185,11 @@ export function useWorkspaceRestore(
         }
       }
 
-      // Step 1: Restore project (if not skipped)
+      // Step 1: Restore project (if not skipped). The URL's project when it
+      // names one (`/project/<id>`, `/new?project=`): a remembered project
+      // only fills a page that names none (a bare `/`).
       if (!skipProjectRestore && !openedRouteChat) {
-        // Attempt to restore last project (it loads the project list itself)
-        const restored = await projectStore.restoreLastProject();
+        const restored = (await selectRouteProject()) || (await projectStore.restoreLastProject());
         // Get fresh state after restoration (the original projectStore reference is stale)
         const freshProjectStore = useProjectStore.getState();
         if (restored && freshProjectStore.currentProject) {
@@ -254,38 +276,8 @@ export function useWorkspaceRestore(
         await useChatStore.getState().loadChats();
       }
 
-      // Restore active chat if one was saved, unless the URL names the chat (or the new-chat view)
-      if (worktreeState.activeChatId && !routeOwnsChat()) {
-        // Resolve, not just read the cache: an automation-launched chat is not
-        // in the project list loadChats seeded, but it still exists — clearing
-        // it as "no longer exists" would drop the user out of it on reload.
-        const chatToRestore = await resolveChat(worktreeState.activeChatId);
-
-        if (chatToRestore) {
-          logger.info("[WorkspaceRestore] Restoring active chat", {
-            chatId: chatToRestore.id,
-            title: chatToRestore.title,
-          });
-          await openChatInWorkspace(chatToRestore, { openEntry: "restore" });
-
-          // Step 8: Schedule scroll position restoration (after chat renders)
-          const scrollPosition = worktreeState.scrollPositions[chatToRestore.id];
-          if (scrollPosition) {
-            // Use requestAnimationFrame to wait for render
-            requestAnimationFrame(() => {
-              window.dispatchEvent(
-                new CustomEvent("restore-chat-scroll", {
-                  detail: { chatId: chatToRestore.id, position: scrollPosition },
-                })
-              );
-            });
-          }
-        } else {
-          warnings.push(`Active chat no longer exists: ${worktreeState.activeChatId}`);
-          // Clear the stale reference
-          workspaceState.setActiveChatId(currentProject.id, currentWorktreeId, null);
-        }
-      }
+      // Step 8: no remembered chat is reopened. Only a URL opens a chat
+      // (`/c/<id>`: Step 0); the home shows none.
 
       // Step 9: Restore terminal open state
       if (worktreeState.terminalOpen) {

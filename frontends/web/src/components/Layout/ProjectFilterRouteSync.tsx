@@ -54,7 +54,13 @@ export function ProjectFilterRouteSync() {
       return;
     }
     const target = pathname === "/" ? null : projectId ?? null;
-    if (filter !== target) void useProjectStore.getState().setProjectFilter(target);
+    if (filter === target) return;
+    void useProjectStore.getState().setProjectFilter(target).then(() => {
+      // The page names a project that is gone (the filter fell back to every
+      // project): the home is the page that shows them all.
+      if (!target || useWorkspaceStateStore.getState().projectFilterId === target) return;
+      if (previousPath.current === pathname) syncProjectFilterUrl(null);
+    });
   }, [pathname, projectId, namesSeveral]);
   return null;
 }

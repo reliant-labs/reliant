@@ -57,7 +57,9 @@ export function useConsoleReliantProject(forgeProject: string): ConsoleReliantPr
 
   const match = listed && !demo ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {
-    if (match && match.id !== currentProject?.id) void selectProject(match);
+    // Context, not the person's pick: it is not remembered as the last
+    // project (another tab's bare entry would open it).
+    if (match && match.id !== currentProject?.id) void selectProject(match, { skipWorkspaceStateSave: true });
   }, [match, currentProject?.id, selectProject]);
   return { listed, projectId: match?.id ?? null };
 }
