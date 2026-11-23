@@ -1079,6 +1079,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
 	})
@@ -1170,11 +1171,13 @@ func (g *Graph) newChat() (*chat.Service, error) {
 // anything, so mounting it adds surface without adding behavior.
 func (g *Graph) newRun() (*run.Service, error) {
 	return run.New(run.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Chats:  g.Chat(),
-		Orgs:   g.OrgResolver(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		Chats:     g.Chat(),
+		Orgs:      g.OrgResolver(),
 	})
 }
 
@@ -1316,6 +1319,7 @@ func (g *Graph) newMessage() (*message.Service, error) {
 		Logger:  g.Log,
 		Config:  g.Cfg,
 		Repo:    g.Database(),
+		Chats:   store.NewChatExtStore(g.Database().ORM()),
 		Senders: store.NewThreadExtStore(g.Database().ORM()),
 	})
 }
@@ -1567,6 +1571,7 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Chats:    store.NewChatExtStore(g.Database().ORM()),
 		Temporal: g.TemporalClient().Client,
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
@@ -1770,6 +1775,7 @@ func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Store:      g.Database(),
+		Chats:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Now:        nil, // optional — no provider
 		Attendance: g.OrgPolicyAttendance(),
 	})

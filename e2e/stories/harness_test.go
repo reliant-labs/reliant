@@ -431,6 +431,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:  slog.Default(),
 		Config:  &typedconfig.Config{},
 		Repo:    s.Repo,
+		Chats:   store.NewChatExtStore(s.Repo.ORM()),
 		Signals: pause,
 	})
 	require.NoError(t, err, "approval service")

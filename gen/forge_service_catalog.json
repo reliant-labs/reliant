@@ -55752,6 +55752,19 @@
     },
     {
       "consumer": "Approval",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Approval",
       "field": "Connections",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.ProposalConnections",
       "methods": [],
@@ -56655,6 +56668,19 @@
     },
     {
       "consumer": "Message",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Message",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Repository",
       "methods": [],
@@ -56782,6 +56808,19 @@
       ],
       "providers": [
         "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57515,6 +57554,32 @@
     },
     {
       "consumer": "Run",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Chat",
       "methods": [],
@@ -58140,6 +58205,19 @@
       ],
       "providers": [
         "JetStream"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolCall",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
