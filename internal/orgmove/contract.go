@@ -11,7 +11,12 @@
 // forward. Every step is idempotent by the move id, so Temporal may retry
 // any of them.
 //
-//forge:not-a-component: built by internal/app's workerOrgMoves (providers_worker.go), only on a worker that can reach control-plane — never a node of the composition graph
+// Built by hand, by internal/app's workerOrgMoves provider
+// (providers_worker.go), and nil on a worker without a control plane signed as
+// the internal service (or without the trigger service): never a node compose.go constructs from
+// Deps.
+//
+//forge:provided
 package orgmove
 
 import (

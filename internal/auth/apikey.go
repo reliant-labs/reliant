@@ -6,7 +6,7 @@
 // which is indirection without a seam.
 //
 //forge:lint-disable-next-line forge-exclude-contract-multi-impl: TokenValidator (JWT / API key / test) is already the strategy seam; moving it to contract.go is deferred with the rest of the auth split; tracked in H-RELIANT-CI-lint follow-ups
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: jwt.go fetches the JWKS over HTTP to verify tokens; splitting the fetcher into an adapter is deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: jwt.go fetches the JWKS over HTTP to verify tokens; the fetch is an outbound adapter inside the TokenValidator strategies, which the auth mode selects and middleware consumes per call
 //forge:exclude-contract: JWT/JWKS validation and credential types used by middleware; the validators are selected per auth mode
 package auth
 

@@ -218,7 +218,7 @@ func noticeSweeps(cfg *Config, q orgKeyNoticeQueue) []func(context.Context) {
 		sweeps = append(sweeps, func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) })
 	}
 	if cfg.Database != nil {
-		sweeps = append(sweeps, func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+		sweeps = append(sweeps, func(ctx context.Context) { sweepPauseNotices(ctx, newPauseStores(cfg.Database, cfg.Database.ORM()), q) })
 	}
 	return sweeps
 }

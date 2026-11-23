@@ -601,20 +601,21 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ConnectionVault: g.ConnectionVault(),
-		Network:         g.ServerProcessConfig.GetNetwork(),
-		Temporal:        g.TemporalClient(),
-		AgentRuns:       g.AgentRuns(),
-		Triggers:        g.WorkerTrigger(),
-		Credentials:     g.WorkerIntegrationCredentials(),
-		WriteLedger:     g.WriteLedger(),
-		CatalogSearch:   g.WorkerCatalogSearch(),
-		Router:          g.WorkerDaemonRouter(),
-		DB:              g.Database(),
-		Membership:      g.OrgResolver(),
-		Logger:          g.Log,
-		Config:          g.Cfg,
-		Backoff:         g.Providerbackoff(),
+		ConnectionVault:  g.ConnectionVault(),
+		Network:          g.ServerProcessConfig.GetNetwork(),
+		Temporal:         g.TemporalClient(),
+		AgentRuns:        g.AgentRuns(),
+		Triggers:         g.WorkerTrigger(),
+		Credentials:      g.WorkerIntegrationCredentials(),
+		WriteLedger:      g.WriteLedger(),
+		CatalogSearch:    g.WorkerCatalogSearch(),
+		Router:           g.WorkerDaemonRouter(),
+		DB:               g.Database(),
+		Membership:       g.OrgResolver(),
+		Logger:           g.Log,
+		Config:           g.Cfg,
+		Backoff:          g.Providerbackoff(),
+		ChangeController: g.ChangeController(),
 	})
 }
 
@@ -1827,4 +1828,12 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
 	})
+}
+
+// newChangeController constructs the ChangeController provider (NewChangeController, internal/app/providers_worker.go).
+func (g *Graph) newChangeController() (tools.ChangeController, error) {
+	return NewChangeController(ChangeControllerDeps{
+		DB:           g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	}), nil
 }

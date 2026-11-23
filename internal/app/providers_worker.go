@@ -19,8 +19,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/changetools"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/connectionproposer"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -534,6 +536,29 @@ type WorkerToolsFactoryDeps struct {
 	// and pool tools write through (machinePoolAdmin).
 	Logger *slog.Logger
 	Config *config.Config
+	// ChangeController runs Forge Changes for list_changes / get_change /
+	// manage_change; nil when self-hosted.
+	ChangeController tools.ChangeController
+}
+
+// ChangeControllerDeps are what NewChangeController reads.
+type ChangeControllerDeps struct {
+	DB           *db.Repo
+	ControlPlane *configv1.ControlPlaneConfig
+}
+
+// NewChangeController is nil when self-hosted: Changes live in the control
+// plane, and the tools say so.
+//
+//forge:root-only worker
+func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
+	if !ControlPlaneEndpoint(d.ControlPlane).Hosted() {
+		return nil
+	}
+	return changetools.NewInstrumented(changetools.Deps{
+		Projects:     store.NewProjectExtStore(d.DB.ORM()),
+		ControlPlane: d.ControlPlane,
+	})
 }
 
 // NewWorkerToolsFactory builds the factory.
@@ -600,13 +625,15 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(newMachineRegistry(repo.ORM()), store.NewMachinePoolExtStore(repo.ORM()), d.Router, registry),
+		MachineController: newMachineController(repo, d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
+		ChangeController: d.ChangeController,
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
-		ConnectionProposer: newConnectionProposer(repo, d.ConnectionVault, d.Membership),
+		ConnectionProposer: connectionproposer.New(connectionproposer.Deps{
+			Approvals: store.NewApprovalExtStore(repo.ORM()), Connections: d.ConnectionVault, Roles: d.Membership,
+		}),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -973,7 +1000,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
+	return &TriggerDeliveryRelay{relay: webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
 		membership: membership, policies: d.Policies}, nil
 }
 
