@@ -50352,6 +50352,11 @@
               "name": "repos",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "cli_login",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkflowTrigger": [
