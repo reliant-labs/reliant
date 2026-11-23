@@ -870,7 +870,7 @@ func (m *MockTransitionMessageWriter) SaveMessageToThread(ctx context.Context, c
 var _ TransitionMessageWriter = (*MockTransitionMessageWriter)(nil)
 
 // forge:section MockChatTransitioner
-// forge:hash=8c19159b8eb68de4122a568d2bd2317ec6ad9be8b2a299a75b228453840bfc43
+// forge:hash=03c806188478b1679aed22d67f19cbf473c631eec7e73c3fd0b22f21d3ecc689
 
 // MockChatTransitioner is a test mock for the ChatTransitioner interface.
 //
@@ -885,9 +885,9 @@ type MockChatTransitioner struct {
 	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
+	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
 	GetPinnedProjectCatalogFunc        func(context.Context, string) (*db.PinnedCatalog, bool, error)
@@ -939,6 +939,15 @@ func (m *MockChatTransitioner) GetProjectPresetsJSON(ctx context.Context, projec
 	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetProjectPresetsJSON")
 }
 
+// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
+func (m *MockChatTransitioner) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
+	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
+	if m.GetProjectWorkflowsJSONFunc != nil {
+		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetProjectWorkflowsJSON")
+}
+
 // GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
 func (m *MockChatTransitioner) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
 	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
@@ -955,15 +964,6 @@ func (m *MockChatTransitioner) GetWorkflowDraftBySlug(ctx context.Context, userI
 		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
 	}
 	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetWorkflowDraftBySlug")
-}
-
-// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
-func (m *MockChatTransitioner) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
-	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
-	if m.GetProjectWorkflowsJSONFunc != nil {
-		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetProjectWorkflowsJSON")
 }
 
 // GetProjectMachineWorkflowsJSON records the call and delegates to GetProjectMachineWorkflowsJSONFunc when set.
@@ -3608,7 +3608,7 @@ func (m *MockLoadPresetParamsStore) GetPinnedProjectCatalog(ctx context.Context,
 var _ LoadPresetParamsStore = (*MockLoadPresetParamsStore)(nil)
 
 // forge:section MockLoadWorkflowStore
-// forge:hash=a1868fb2b9c420d3fd85a7a24a1b194a5c238c0e169791980d1aec76429f1f60
+// forge:hash=cc2ea81130110fc4a545c3d3bba6eb3d205943df917dfda0a73445ea0e056b17
 
 // MockLoadWorkflowStore is a test mock for the LoadWorkflowStore interface.
 //
@@ -3622,9 +3622,9 @@ type MockLoadWorkflowStore struct {
 	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
+	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetProjectMachineWorkflowsJSONFunc func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
 	GetPinnedProjectCatalogFunc        func(context.Context, string) (*db.PinnedCatalog, bool, error)
@@ -3667,6 +3667,15 @@ func (m *MockLoadWorkflowStore) GetProjectPresetsJSON(ctx context.Context, proje
 	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetProjectPresetsJSON")
 }
 
+// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
+func (m *MockLoadWorkflowStore) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
+	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
+	if m.GetProjectWorkflowsJSONFunc != nil {
+		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetProjectWorkflowsJSON")
+}
+
 // GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
 func (m *MockLoadWorkflowStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
 	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
@@ -3683,15 +3692,6 @@ func (m *MockLoadWorkflowStore) GetWorkflowDraftBySlug(ctx context.Context, user
 		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
 	}
 	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetWorkflowDraftBySlug")
-}
-
-// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
-func (m *MockLoadWorkflowStore) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
-	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
-	if m.GetProjectWorkflowsJSONFunc != nil {
-		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetProjectWorkflowsJSON")
 }
 
 // GetProjectMachineWorkflowsJSON records the call and delegates to GetProjectMachineWorkflowsJSONFunc when set.
@@ -4802,7 +4802,7 @@ func (m *MockAttentionRecorder) ApplyAttentionUpdate(ctx context.Context, update
 var _ AttentionRecorder = (*MockAttentionRecorder)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=f694ca26c1f126cdf4df54dad222076de43a5b4894ff835ac52c2d8c5e439daf
+// forge:hash=fbbe6c3d03c3a1292243a8b869b7360e9dbb18b125e7a08300663394e38ac18c
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -4872,9 +4872,9 @@ type MockWorkflowStatusStore struct {
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
+	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc                              func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlugFunc                               func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetProjectMachineWorkflowsJSONFunc                       func(context.Context, string, string) (*string, bool, error)
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
@@ -5422,6 +5422,15 @@ func (m *MockWorkflowStatusStore) GetProjectPresetsJSON(ctx context.Context, pro
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetProjectPresetsJSON")
 }
 
+// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
+func (m *MockWorkflowStatusStore) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
+	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
+	if m.GetProjectWorkflowsJSONFunc != nil {
+		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetProjectWorkflowsJSON")
+}
+
 // GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
 func (m *MockWorkflowStatusStore) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
 	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
@@ -5438,15 +5447,6 @@ func (m *MockWorkflowStatusStore) GetWorkflowDraftBySlug(ctx context.Context, us
 		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetWorkflowDraftBySlug")
-}
-
-// GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
-func (m *MockWorkflowStatusStore) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
-	m.Recorder.Record("GetProjectWorkflowsJSON", ctx, projectID)
-	if m.GetProjectWorkflowsJSONFunc != nil {
-		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetProjectWorkflowsJSON")
 }
 
 // GetProjectMachineWorkflowsJSON records the call and delegates to GetProjectMachineWorkflowsJSONFunc when set.

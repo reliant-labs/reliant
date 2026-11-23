@@ -6,13 +6,15 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	fat "github.com/reliant-labs/forge/pkg/accesstoken"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -57,7 +59,7 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 		ID: projectID, UserID: userID, Name: "P", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Orgs: resolver}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: resolver}))
 	acme, home, globex := "acme", "home", "globex"
 	// Bound to home, the default: the project (no org yet) is home's too.
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: home, ActingUserID: userID})
@@ -85,7 +87,7 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	requireOrgRefusal(t, err, orgs.ReasonOrgMismatch)
 	requireOrgRefusal(t, save(ctx, "not-mine", &globex), orgs.ReasonNotOrgMember)
 	requireOrgRefusal(t, save(machine, "elsewhere", &acme), orgs.ReasonOrgMismatch)
-	stored, err := repo.ListWorkflowDraftsByUser(ctx, userID)
+	stored, err := workflowdraftstest.New(t, repo).ListWorkflowDraftsByUser(ctx, userID)
 	require.NoError(t, err)
 	require.Empty(t, stored, "a refused create stores no saved workflow")
 
@@ -94,7 +96,7 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	require.NoError(t, save(ctx, "home-flow", nil), "naming none acts in the default org")
 	_, err = create(machine, "Machine Flow", nil)
 	require.NoError(t, err, "a machine credential acts in its own org")
-	stored, err = repo.ListWorkflowDraftsByUser(ctx, userID)
+	stored, err = workflowdraftstest.New(t, repo).ListWorkflowDraftsByUser(ctx, userID)
 	require.NoError(t, err)
 	orgOf := map[string]string{}
 	for _, d := range stored {

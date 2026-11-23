@@ -8,13 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/stretchr/testify/require"
 )
 
 const securityRoot = `name: secure-parent
@@ -160,7 +163,7 @@ func TestAgentActivationAtomicDependencyMutation(t *testing.T) {
 	require.NoError(t, err)
 	editCtx, cancel := context.WithTimeout(e.ctx, 50*time.Millisecond)
 	defer cancel()
-	err = e.repo.UpdateWorkflowDraftDefinition(editCtx, draft.ID, "secure-child", "secure-child", strings.Replace(securityChild, "harmless", "edited", 1), db.WorkflowDraftStatusComplete)
+	err = workflowdraftstest.New(t, e.repo).UpdateWorkflowDraftDefinition(editCtx, draft.ID, "secure-child", "secure-child", strings.Replace(securityChild, "harmless", "edited", 1), db.WorkflowDraftStatusComplete)
 	require.Error(t, err, "child edit must block behind approved write transaction")
 	require.Zero(t, e.backend.syncCount(), "external sync must not see uncommitted activation")
 	close(barrier.release)
