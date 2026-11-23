@@ -97,7 +97,6 @@ var userScopedReads = map[string]string{
 	"GetConnection":               readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
-	"HasFreshIntegrationAccess":   readPersonal,
 	"GetLatestUserUpdateSequence": readPersonal,
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,

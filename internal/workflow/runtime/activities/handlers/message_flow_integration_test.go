@@ -331,7 +331,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(repo), Store: repo, ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		// Use tool_calls from SaveMessage output
@@ -696,7 +696,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(repo), Store: repo, ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{

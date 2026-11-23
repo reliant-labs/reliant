@@ -330,7 +330,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 			EndTime:   time.Now(),
 		})
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(h.Repo()), Store: h.Repo(), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{
@@ -566,7 +566,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 			EndTime:   time.Now(),
 		})
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(h.Repo()), Store: h.Repo(), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{
