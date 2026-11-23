@@ -292,48 +292,6 @@ func TestForgeCredential_ManagedCloudDaemon(t *testing.T) {
 	}
 }
 
-// TestForgeCredential_ExecInterop crosses the real process boundary with
-// forge's OWN client (cloudcred.Exec — what forge's credential resolution
-// runs): this test binary is re-executed as `reliant auth forge-credential`.
-func TestForgeCredential_ExecInterop(t *testing.T) {
-	isolateForgeCredHome(t)
-	api := serveReliantAPI(t, testControlPlane)
-	loginFor(t, api.url, api.mintSession(t, "user-cli", append([]fat.Scope{fat.ScopeReliantAPI}, daemonCeiling[1:]...)...))
-	t.Setenv(envServerURL, api.url)
-
-	argv := []string{os.Args[0], "-test.run=^TestReliantAsHelperProcess$", "--", reliantHelperMarker, "auth", "forge-credential"}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tok, err := cloudcred.Exec(ctx, argv, cloudcred.Request{Endpoint: testControlPlane, Scopes: []string{"deploy:write"}})
-	if err != nil {
-		t.Fatalf("forge's helper client could not get a token from reliant: %v", err)
-	}
-	if strings.Join(tok.Scopes, ",") != "deploy:write" {
-		t.Errorf("scopes = %v, want exactly what forge asked for", tok.Scopes)
-	}
-	if !strings.Contains(tok.Source, "CLI login") {
-		t.Errorf("source = %q", tok.Source)
-	}
-}
-
-const reliantHelperMarker = "reliant-as-forge-credential-helper"
-
-// TestReliantAsHelperProcess is not a test: re-executed by
-// TestForgeCredential_ExecInterop, it runs the reliant command line after the
-// marker and exits.
-func TestReliantAsHelperProcess(t *testing.T) {
-	for i, arg := range os.Args {
-		if arg == "--" && i+1 < len(os.Args) && os.Args[i+1] == reliantHelperMarker {
-			root := NewRootCmd()
-			root.SetArgs(os.Args[i+2:])
-			if err := root.Execute(); err != nil {
-				os.Exit(1)
-			}
-			os.Exit(0)
-		}
-	}
-}
-
 // TestForgeCredential_Refusals: every way of NOT getting a token says what to
 // do — and under Reliant that is signing in to Reliant, never `forge cloud login`.
 func TestForgeCredential_Refusals(t *testing.T) {

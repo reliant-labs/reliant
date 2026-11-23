@@ -3,7 +3,7 @@
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: nats.go IS the JetStream-backed StreamingHub; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: nats.go IS the JetStream-backed StreamingHub, an outbound I/O adapter behind the StreamingHub interface its consumers take
 //forge:exclude-contract: NATS-backed streaming hub for chat events
 package streaming
 

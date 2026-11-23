@@ -75,7 +75,7 @@ func (s *Service) resumePausedRun(
 	// Resume the run. The service signals a live execution, reset-replays a
 	// dead-but-replayable one, and refreshes the chat's run id when a reset
 	// minted a new one — and whichever run wakes gets the input update first.
-	before, known := workflow.StatusBeforeWake(ctx, s.deps.Repo, workflowID)
+	before, known := workflow.StatusBeforeWake(ctx, workflow.FacadeWorkflows{Repo: s.deps.Repo}, workflowID)
 	outcome, err := s.runs.Resume(ctx, chat.ID, inputUpdate)
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err

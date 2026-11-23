@@ -82,6 +82,13 @@ type Deps struct {
 	// lists ignore org_id.
 	// forge:optional-dep
 	Orgs OrgResolver
+
+	// Workflows, Worktrees and ProjectRows are the by-id reads the run
+	// lifecycle and the launcher make (store.WorkflowExtStore,
+	// WorktreeExtStore, ProjectExtStore).
+	Workflows   launch.WorkflowLoader
+	Worktrees   launch.WorktreeReader
+	ProjectRows launch.ProjectReader
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -192,7 +199,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -207,7 +214,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

@@ -62,8 +62,11 @@ type IntegrationsConfig struct {
 	// load. An integration with neither is not offered.
 	OauthClientIds     map[string]string `protobuf:"bytes,9,rep,name=oauth_client_ids,json=oauthClientIds,proto3" json:"oauth_client_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	OauthClientSecrets map[string]string `protobuf:"bytes,10,rep,name=oauth_client_secrets,json=oauthClientSecrets,proto3" json:"oauth_client_secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The owner/name GitHub repositories whose pull requests are mirrored into
+	// PR records (dev-docs/pr-records.md, §9 D1). Unset: none are.
+	PrRecordRepositories []string `protobuf:"bytes,11,rep,name=pr_record_repositories,json=prRecordRepositories,proto3" json:"pr_record_repositories,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *IntegrationsConfig) Reset() {
@@ -166,11 +169,18 @@ func (x *IntegrationsConfig) GetOauthClientSecrets() map[string]string {
 	return nil
 }
 
+func (x *IntegrationsConfig) GetPrRecordRepositories() []string {
+	if x != nil {
+		return x.PrRecordRepositories
+	}
+	return nil
+}
+
 var File_reliant_config_v1_integrations_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_integrations_config_proto_rawDesc = "" +
 	"\n" +
-	"+reliant/config/v1/integrations_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd1\f\n" +
+	"+reliant/config/v1/integrations_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8d\x0e\n" +
 	"\x12IntegrationsConfig\x12a\n" +
 	"\n" +
 	"public_url\x18\x01 \x01(\tBB\x82\xce\x18>\n" +
@@ -193,7 +203,9 @@ const file_reliant_config_v1_integrations_config_proto_rawDesc = "" +
 	"\x10oauth_client_ids\x18\t \x03(\v29.reliant.config.v1.IntegrationsConfig.OauthClientIdsEntryB\\\x82\xce\x18X*:Integration OAuth client ids, RELIANT_OAUTH_<ID>_CLIENT_IDb\x0eRELIANT_OAUTH_j\n" +
 	"_CLIENT_IDR\x0eoauthClientIds\x12\xdd\x01\n" +
 	"\x14oauth_client_secrets\x18\n" +
-	" \x03(\v2=.reliant.config.v1.IntegrationsConfig.OauthClientSecretsEntryBl\x82\xce\x18h*BIntegration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET0\x01P\x01b\x0eRELIANT_OAUTH_j\x0e_CLIENT_SECRETR\x12oauthClientSecrets\x1aA\n" +
+	" \x03(\v2=.reliant.config.v1.IntegrationsConfig.OauthClientSecretsEntryBl\x82\xce\x18h*BIntegration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET0\x01P\x01b\x0eRELIANT_OAUTH_j\x0e_CLIENT_SECRETR\x12oauthClientSecrets\x12\xb9\x01\n" +
+	"\x16pr_record_repositories\x18\v \x03(\tB\x82\x01\x82\xce\x18~\n" +
+	"\x1eRELIANT_PR_RECORD_REPOSITORIES*\\Comma-separated owner/name repositories whose pull requests are recorded (none records none)R\x14prRecordRepositories\x1aA\n" +
 	"\x13OauthClientIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aE\n" +

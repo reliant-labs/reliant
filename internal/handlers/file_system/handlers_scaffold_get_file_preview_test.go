@@ -17,7 +17,7 @@ import (
 
 // previewNoProjectRepo knows no project. The harness's stub would answer a
 // lookup with (nil, nil), which is not what a missing row looks like.
-type previewNoProjectRepo struct{ file_system.Repository }
+type previewNoProjectRepo struct{ file_system.Placement }
 
 func (previewNoProjectRepo) GetProject(context.Context, string) (*db.Project, error) {
 	return nil, core.ErrProjectNotFound
@@ -29,7 +29,7 @@ func (previewNoProjectRepo) GetProject(context.Context, string) (*db.Project, er
 func TestGetFilePreview_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{Repo: previewNoProjectRepo{}}))
+	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{Placement: previewNoProjectRepo{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetFilePreviewRequest, pb.GetFilePreviewResponse]{
 		{

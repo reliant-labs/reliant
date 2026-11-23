@@ -131,7 +131,7 @@ func TestFireReadsItsPinnedCatalogOncePerSide(t *testing.T) {
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 			repo := &fireReadCountingRepo{Repo: p.repo, pinned: map[string]int{}}
 			starter := &pinRecordingStarter{}
-			launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo, Messages: store.NewMessageExtStore(p.repo.ORM()), Senders: store.NewThreadExtStore(p.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
+			launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo, Messages: store.NewMessageExtStore(p.repo.ORM()), Senders: store.NewThreadExtStore(p.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
 			workflows := LaunchWorkflows{Repo: repo}
 			key := "reads-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule

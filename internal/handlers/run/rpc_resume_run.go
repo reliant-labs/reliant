@@ -35,7 +35,7 @@ func (s *Service) ResumeRun(
 		Message: resp.Msg.Message,
 	}
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		if current, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID); err == nil {
+		if current, err := s.deps.Workflows.LoadWorkflow(ctx, *chat.WorkflowID); err == nil {
 			out.Run = runToProto(current)
 		}
 	}

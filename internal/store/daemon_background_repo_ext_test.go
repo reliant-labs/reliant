@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -113,7 +114,7 @@ func TestDaemonQueries(t *testing.T) {
 		t.Fatalf("UpsertDaemonIdentity(unchanged) = %v, %v; want no-op", wrote, err)
 	}
 	ident.Name = "box-2"
-	if wrote, err := env.Repo.UpsertDaemonIdentity(ctx, ident); err != nil || !wrote {
+	if wrote, err := daemonmirrortest.New(t, env.Repo).UpsertDaemonIdentity(ctx, ident); err != nil || !wrote {
 		t.Fatalf("Repo.UpsertDaemonIdentity(renamed) = %v, %v", wrote, err)
 	}
 	if d, _ := store.GetDaemon(ctx, env.ORM, "d3"); d.Name != "box-2" || *d.DaemonType != "managed" {
