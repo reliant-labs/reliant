@@ -31,7 +31,7 @@ func (s *Service) CommitWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}

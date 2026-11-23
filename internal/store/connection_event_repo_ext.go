@@ -96,6 +96,16 @@ func listConnectionEvents(ctx context.Context, db orm.Context, id string, limit 
 	return out, nil
 }
 
+// DeleteUserConnectionEvents deletes the audit rows keyed to the person, and returns how many. The
+// rows are the person's data: a deleted account leaves none.
+func DeleteUserConnectionEvents(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*ConnectionEvent)(nil)).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ConnectionEventExtra carries fields on ConnectionEvent that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectionEvent is
 // embedded on ConnectionEventExtra (see connection_event_orm.go), so a field added here is a field on

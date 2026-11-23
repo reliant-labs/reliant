@@ -167,8 +167,8 @@ func providerReturnNotice(provider, model string) string {
 // postNotice saves text as a warning notice on thread. Best-effort, and
 // idempotent on key when one is given: a retried activity writes the notice
 // once.
-func postNotice(ctx context.Context, repo threads.Repository, chatID, thread, workflowID, key, text string) {
-	if repo == nil || chatID == "" || thread == "" || text == "" {
+func postNotice(ctx context.Context, saver MessageSaver, chatID, thread, workflowID, key, text string) {
+	if saver == nil || chatID == "" || thread == "" || text == "" {
 		return
 	}
 	var wf *string
@@ -187,7 +187,7 @@ func postNotice(ctx context.Context, repo threads.Repository, chatID, thread, wo
 		opts.ActivityID = &key
 		opts.AttemptNumber = 1
 	}
-	if _, err := threads.NewService(repo).SaveMessage(ctx, opts); err != nil {
+	if _, err := saver.SaveMessage(ctx, opts); err != nil {
 		logging.WarnContext(ctx, "[Failover] Could not save the provider notice; continuing",
 			"chatID", chatID, "thread", thread, "error", err)
 	}
@@ -206,12 +206,12 @@ func noticeStepKey(rtx types.RuntimeContext) string {
 func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
 	if resolved.Account != nil {
 		a.routing.announceAccountMove(ctx, func(text string) {
-			postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID,
+			postNotice(ctx, a.threads, chat.ID, thread, rtx.WorkflowID,
 				noticeStepKey(rtx)+"-account-"+resolved.Account.Config.AccountID, text)
 		}, chat.UserID, resolved.Account)
 	}
 	if resolved.FundingNotice != "" {
-		postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-funding", resolved.FundingNotice)
+		postNotice(ctx, a.threads, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-funding", resolved.FundingNotice)
 	}
 }
 
@@ -233,6 +233,6 @@ func (a *CallLLMActivity) announceReturn(ctx context.Context, chat *db.Chat, thr
 	if resolved.Definition != nil {
 		own = resolved.Definition.ID + "@" + resolved.ProviderDriver
 	}
-	postNotice(ctx, a.repo, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-return",
+	postNotice(ctx, a.threads, chat.ID, thread, rtx.WorkflowID, noticeStepKey(rtx)+"-return",
 		providerReturnNotice(ret.Provider, own))
 }

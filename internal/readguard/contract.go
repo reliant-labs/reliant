@@ -26,8 +26,9 @@
 // So one user holds at most PerUser of the pool's connections through these
 // reads, whatever their clients send.
 //
-// Built by hand, by internal/app's apiMountOptions (providers_api.go): never a
-// node compose.go constructs from Deps.
+// forge:provided because it is a connect interceptor configured with a
+// procedure list inside apiMountOptions (providers_api.go), a plain function
+// rather than a provider; nothing takes it as a Deps.
 //
 //forge:provided
 package readguard

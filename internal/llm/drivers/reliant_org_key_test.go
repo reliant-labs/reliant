@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -87,7 +88,7 @@ func (m *orgMinter) mints() []accesstokenclient.MintRequest {
 
 func reliantRows(t *testing.T, repo *db.Repo, user string) map[string]core.AccountWithSecrets {
 	t.Helper()
-	accounts, err := repo.ListProviderAccountsWithSecrets(context.Background(), user)
+	accounts, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(context.Background(), user)
 	require.NoError(t, err)
 	out := map[string]core.AccountWithSecrets{}
 	for _, a := range accounts {
@@ -102,7 +103,7 @@ func newOrgKeyFixture(t *testing.T, minter *orgMinter) (*db.Repo, *ReliantKeyHea
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	return repo, NewReliantKeyHealer(repo, minter).WithPerOrgKeys(true)
+	return repo, NewReliantKeyHealer(db.TestAccounts(t, repo), repo, minter).WithPerOrgKeys(true)
 }
 
 // A person in two orgs gets one managed key per org (P10): each minted once,
@@ -244,7 +245,7 @@ func TestUpsertProviderAccount_ManagedKeyShapes(t *testing.T) {
 		"org-less": managed(core.ManagedIdentityKey, "", ""),
 		"in org-a": managed(core.ManagedOrgIdentityKey("org-a"), "org-a", core.AttributionManaged),
 	} {
-		_, _, err := repo.UpsertProviderAccount(ctx, u)
+		_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, u)
 		assert.NoError(t, err, name)
 	}
 	for name, u := range map[string]core.AccountUpsert{
@@ -254,13 +255,14 @@ func TestUpsertProviderAccount_ManagedKeyShapes(t *testing.T) {
 		"per-org with a seat source":  managed(core.ManagedOrgIdentityKey("org-a"), "org-a", core.AttributionWorkspace),
 		"an API key with attribution": {UserID: "u1", Provider: "openai", AuthKind: core.AuthKindAPIKey, IdentityKey: "k", AttributedOrgID: "org-a", AttributionSource: core.AttributionManaged, Secrets: core.AccountSecrets{Secret: "sk-x"}},
 	} {
-		_, _, err := repo.UpsertProviderAccount(ctx, u)
+		_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, u)
 		assert.Error(t, err, name)
 	}
 }
 
 // failingUpserts is the repository with UpsertProviderAccount failing while fail is set.
 type failingUpserts struct {
+	provideraccounts.Service
 	*db.Repo
 	fail bool
 }
@@ -269,7 +271,7 @@ func (f *failingUpserts) UpsertProviderAccount(ctx context.Context, u core.Accou
 	if f.fail {
 		return core.ProviderAccount{}, false, errors.New("database unavailable")
 	}
-	return f.Repo.UpsertProviderAccount(ctx, u)
+	return f.Service.UpsertProviderAccount(ctx, u)
 }
 
 // B2: a rotation mints the new key, stores it, and only then revokes the old
@@ -280,8 +282,8 @@ func TestRotateOrgKeys_AFailedWriteLeavesTheStoredKeyServing(t *testing.T) {
 	minter := &orgMinter{created: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)}
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	store := &failingUpserts{Repo: repo}
-	h := NewReliantKeyHealer(store, minter).WithPerOrgKeys(true)
+	store := &failingUpserts{Service: db.TestAccounts(t, repo), Repo: repo}
+	h := NewReliantKeyHealer(store, store, minter).WithPerOrgKeys(true)
 	now := minter.created
 	h.now = func() time.Time { return now }
 	ctx := context.Background()
@@ -333,9 +335,9 @@ func TestEnsureOrgKey_MintsARejectedKeyAgain(t *testing.T) {
 			require.NoError(t, err)
 			row := reliantRows(t, repo, "u1")[core.ManagedOrgIdentityKey("org-a")]
 			reason := "the gateway rejected the org's managed Reliant key"
-			_, err = repo.PatchProviderAccount(ctx, "u1", row.ID, core.AccountPatch{NeedsReauth: &reason})
+			_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, "u1", row.ID, core.AccountPatch{NeedsReauth: &reason})
 			require.NoError(t, err)
-			accounts, err := repo.ListProviderAccountsWithSecrets(ctx, "u1")
+			accounts, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, "u1")
 			require.NoError(t, err)
 			require.Nil(t, usableOrgReliantKey(accounts, "org-a"), "a rejected key is not usable")
 
@@ -361,12 +363,12 @@ func TestLoader_ResolutionsRacingTheMintBothSpendTheOrgsKey(t *testing.T) {
 	members := &fakeMembers{ok: true, answer: map[string]accesstokenclient.OrgMembership{
 		"org-a": {OrgID: "org-a", Member: true, Role: "member", MemberSince: memberSince},
 	}}
-	before, err := repo.ListProviderAccountsWithSecrets(ctx, "u1")
+	before, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, "u1")
 	require.NoError(t, err)
 
 	// Two resolutions read the accounts before either mints.
-	first := &staleOnce{Repo: repo, snapshot: before}
-	second := &staleOnce{Repo: repo, snapshot: before}
+	first := &staleOnce{Service: db.TestAccounts(t, repo), snapshot: before}
+	second := &staleOnce{Service: db.TestAccounts(t, repo), snapshot: before}
 	scope := Scope{UserID: "u1", OrgID: "org-a", Attended: true}
 	for i, r := range []*staleOnce{first, second} {
 		avail, err := buildAvailableDriversFor(ctx, r, members, scope, noReportClients)
@@ -380,7 +382,7 @@ func TestLoader_ResolutionsRacingTheMintBothSpendTheOrgsKey(t *testing.T) {
 // staleOnce is the repository whose first read of the person's accounts is the
 // snapshot taken before a mint: a resolution that read before another won.
 type staleOnce struct {
-	*db.Repo
+	provideraccounts.Service
 	snapshot []core.AccountWithSecrets
 	read     bool
 }
@@ -390,5 +392,5 @@ func (s *staleOnce) ListProviderAccountsWithSecrets(ctx context.Context, userID 
 		s.read = true
 		return s.snapshot, nil
 	}
-	return s.Repo.ListProviderAccountsWithSecrets(ctx, userID)
+	return s.Service.ListProviderAccountsWithSecrets(ctx, userID)
 }

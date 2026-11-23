@@ -98,7 +98,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	registry := NewRegistry()
 	require.NoError(t, registry.Register(NewTwilioProvider()))
 	receiver := NewEventsReceiver(EventsOptions{
-		Store: f.Repo, Inbox: f.Repo, Intake: f.intake, Registry: registry, PublicURL: twPublic, ConnectionSecrets: secrets,
+		Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake, Registry: registry, PublicURL: twPublic, ConnectionSecrets: secrets,
 	})
 	receiver.now = f.relay.now
 	mux := http.NewServeMux()
@@ -111,7 +111,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	} {
 		if _, exists := secrets.tokens[tc.connection]; !exists {
 			account := twAccountA // same account and live route, different credential
-			require.NoError(t, f.Repo.Connections().CreateConnection(ctx, &core.Connection{
+			require.NoError(t, db.TestConnections(t, f.Repo).CreateConnection(ctx, &core.Connection{
 				ID: tc.connection, OwnerKind: core.ConnectionOwnerUser, UserID: tc.owner,
 				IntegrationID: TwilioProviderID, AuthKind: core.ConnectionAuthBasic, Name: tc.connection,
 				Status: core.ConnectionStatusActive, ExternalAccountID: &account,

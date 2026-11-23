@@ -11,7 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	core "github.com/reliant-labs/reliant/internal/db/core"
 	model_endpoint "github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 )
 
@@ -25,7 +25,7 @@ func TestModelEndpointStoreErrorCodes(t *testing.T) {
 		wantCode connect.Code
 		wantMsg  string
 	}{
-		"not found":         {db.ErrModelEndpointNotFound, connect.CodeNotFound, "model endpoint not found"},
+		"not found":         {core.ErrModelEndpointNotFound, connect.CodeNotFound, "model endpoint not found"},
 		"deadline":          {context.DeadlineExceeded, connect.CodeDeadlineExceeded, ""},
 		"canceled":          {context.Canceled, connect.CodeCanceled, ""},
 		"opaque store text": {errors.New("dsn=postgres://u:secret@h"), connect.CodeInternal, "model endpoint request failed"},
@@ -33,10 +33,10 @@ func TestModelEndpointStoreErrorCodes(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			repo := &model_endpoint.StubRepo{
-				ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, tc.err },
+			repo := &model_endpoint.StubEndpoints{
+				ListModelEndpointsFunc: func(context.Context, string) ([]*core.ModelEndpoint, error) { return nil, tc.err },
 			}
-			svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: repo}), model_endpoint.WithPlaceholderDeps())
+			svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Endpoints: repo}), model_endpoint.WithPlaceholderDeps())
 			_, err := svc.ListModelEndpoints(model_endpoint.AuthedContext(t), connect.NewRequest(&pb.ListModelEndpointsRequest{}))
 			require.Error(t, err)
 			assert.Equal(t, tc.wantCode, svcerr.Code(err))
@@ -54,12 +54,12 @@ func TestModelEndpointStoreErrorCodes(t *testing.T) {
 func TestModelEndpointErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
-	repo := &model_endpoint.StubRepo{
-		ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) {
+	repo := &model_endpoint.StubEndpoints{
+		ListModelEndpointsFunc: func(context.Context, string) ([]*core.ModelEndpoint, error) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
 		},
 	}
-	_, client := model_endpoint.NewTestModelEndpointServer(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: repo}), model_endpoint.WithPlaceholderDeps())
+	_, client := model_endpoint.NewTestModelEndpointServer(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Endpoints: repo}), model_endpoint.WithPlaceholderDeps())
 
 	_, err := client.ListModelEndpoints(context.Background(), connect.NewRequest(&pb.ListModelEndpointsRequest{}))
 	require.Error(t, err)

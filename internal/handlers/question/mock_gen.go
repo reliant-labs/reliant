@@ -17,8 +17,64 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
+// forge:section MockQuestions
+// forge:hash=ce0bbbe8d8247212e87802cde6ea7a5e231bbf009f482c59372fe245bf44ffcf
+
+// MockQuestions is a test mock for the Questions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestions.<Method>Func not set" error.
+type MockQuestions struct {
+	contractkit.Recorder
+	ListAnswerablePendingQuestionsByChatFunc func(context.Context, string) ([]*db.Question, error)
+	ListAnswerablePendingQuestionsByUserFunc func(context.Context, string) ([]*db.Question, error)
+	ListAsyncQuestionsByChatFunc             func(context.Context, string) ([]*db.Question, error)
+	PendingQuestionsByThreadFunc             func(context.Context, string) (map[string]*db.Question, error)
+}
+
+// ListAnswerablePendingQuestionsByChat records the call and delegates to ListAnswerablePendingQuestionsByChatFunc when set.
+func (m *MockQuestions) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
+	m.Recorder.Record("ListAnswerablePendingQuestionsByChat", ctx, chatID)
+	if m.ListAnswerablePendingQuestionsByChatFunc != nil {
+		return m.ListAnswerablePendingQuestionsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "ListAnswerablePendingQuestionsByChat")
+}
+
+// ListAnswerablePendingQuestionsByUser records the call and delegates to ListAnswerablePendingQuestionsByUserFunc when set.
+func (m *MockQuestions) ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error) {
+	m.Recorder.Record("ListAnswerablePendingQuestionsByUser", ctx, userID)
+	if m.ListAnswerablePendingQuestionsByUserFunc != nil {
+		return m.ListAnswerablePendingQuestionsByUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "ListAnswerablePendingQuestionsByUser")
+}
+
+// ListAsyncQuestionsByChat records the call and delegates to ListAsyncQuestionsByChatFunc when set.
+func (m *MockQuestions) ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
+	m.Recorder.Record("ListAsyncQuestionsByChat", ctx, chatID)
+	if m.ListAsyncQuestionsByChatFunc != nil {
+		return m.ListAsyncQuestionsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "ListAsyncQuestionsByChat")
+}
+
+// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
+func (m *MockQuestions) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
+	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
+	if m.PendingQuestionsByThreadFunc != nil {
+		return m.PendingQuestionsByThreadFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockQuestions", "PendingQuestionsByThread")
+}
+
+// Compile-time check.
+var _ Questions = (*MockQuestions)(nil)
+
 // forge:section MockRepository
-// forge:hash=48770552d6f7cb66fe0c226dd3a78160bf00012130b5a4cafd2d2d744a2fa9dd
+// forge:hash=5c94c8d9f0221729b1320310d9258b5532b30a025193dc98fa779e4d0f9d61fe
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -28,18 +84,14 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetChatFunc                              func(context.Context, string) (*db.Chat, error)
-	GetChatRowFunc                           func(context.Context, string) (*db.ChatRow, error)
-	GetQuestionByIDFunc                      func(context.Context, string) (*db.Question, error)
-	ListAnswerablePendingQuestionsByChatFunc func(context.Context, string) ([]*db.Question, error)
-	ListAnswerablePendingQuestionsByUserFunc func(context.Context, string) ([]*db.Question, error)
-	ListAsyncQuestionsByChatFunc             func(context.Context, string) ([]*db.Question, error)
-	PendingQuestionsByThreadFunc             func(context.Context, string) (map[string]*db.Question, error)
-	EnqueueAgentMessageOnceFunc              func(context.Context, *db.AgentMessage) (bool, error)
-	EmitUserRefetchFunc                      func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	ResolveQuestionFunc                      func(context.Context, string, *string) error
-	EmitQuestionUpdateFunc                   func(context.Context, string, db.QuestionUpdate) error
-	SaveMessageToThreadFunc                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
+	GetChatRowFunc              func(context.Context, string) (*db.ChatRow, error)
+	GetQuestionByIDFunc         func(context.Context, string) (*db.Question, error)
+	EnqueueAgentMessageOnceFunc func(context.Context, *db.AgentMessage) (bool, error)
+	EmitUserRefetchFunc         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	ResolveQuestionFunc         func(context.Context, string, *string) error
+	EmitQuestionUpdateFunc      func(context.Context, string, db.QuestionUpdate) error
+	SaveMessageToThreadFunc     func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -67,42 +119,6 @@ func (m *MockRepository) GetQuestionByID(ctx context.Context, id string) (*db.Qu
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetQuestionByID")
-}
-
-// ListAnswerablePendingQuestionsByChat records the call and delegates to ListAnswerablePendingQuestionsByChatFunc when set.
-func (m *MockRepository) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
-	m.Recorder.Record("ListAnswerablePendingQuestionsByChat", ctx, chatID)
-	if m.ListAnswerablePendingQuestionsByChatFunc != nil {
-		return m.ListAnswerablePendingQuestionsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAnswerablePendingQuestionsByChat")
-}
-
-// ListAnswerablePendingQuestionsByUser records the call and delegates to ListAnswerablePendingQuestionsByUserFunc when set.
-func (m *MockRepository) ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error) {
-	m.Recorder.Record("ListAnswerablePendingQuestionsByUser", ctx, userID)
-	if m.ListAnswerablePendingQuestionsByUserFunc != nil {
-		return m.ListAnswerablePendingQuestionsByUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAnswerablePendingQuestionsByUser")
-}
-
-// ListAsyncQuestionsByChat records the call and delegates to ListAsyncQuestionsByChatFunc when set.
-func (m *MockRepository) ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error) {
-	m.Recorder.Record("ListAsyncQuestionsByChat", ctx, chatID)
-	if m.ListAsyncQuestionsByChatFunc != nil {
-		return m.ListAsyncQuestionsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAsyncQuestionsByChat")
-}
-
-// PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.
-func (m *MockRepository) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error) {
-	m.Recorder.Record("PendingQuestionsByThread", ctx, chatID)
-	if m.PendingQuestionsByThreadFunc != nil {
-		return m.PendingQuestionsByThreadFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "PendingQuestionsByThread")
 }
 
 // EnqueueAgentMessageOnce records the call and delegates to EnqueueAgentMessageOnceFunc when set.

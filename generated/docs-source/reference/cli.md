@@ -524,7 +524,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge vuln exempt`](#reliant-forge-vuln-exempt) | Accept one advisory for an env's vuln_gate, declared in the env's KCL |
 | [`reliant forge vuln list`](#reliant-forge-vuln-list) | List the vulnerabilities in the release an env runs, judged by its vuln_gate |
 | [`reliant forge vuln patch`](#reliant-forge-vuln-patch) | Bump vulnerable dependencies, base images and the Go toolchain to their fix, and verify the result |
-| [`reliant forge vuln sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact |
+| [`reliant forge vuln sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact, or generate one for a file |
 | [`reliant forge vuln scan`](#reliant-forge-vuln-scan) | Scan a directory, an image, a release's SBOMs, or what an env runs, for vulnerabilities |
 | [`reliant forge vuln show`](#reliant-forge-vuln-show) | Show one advisory, or every finding in one package, in the release an env runs |
 | [`reliant forge why`](#reliant-forge-why) | Why forge: the reasons to use it, each with the checked benefits that back it |
@@ -2379,9 +2379,9 @@ every change. A slow test belongs in the full tier, and says so:
   if testing.Short() { t.Skip("builds the forge binary") }
 
 Under -short a marked test skips, so every test that RAN in a -short run claims
-to be fast. One over budget is a slow test nobody marked. `forge lint
---slow-tests` flags slow work it can recognize in source; this catches the rest,
-whatever made the test slow.
+to be fast. One over budget is a slow test nobody marked.
+`forge lint --slow-tests` flags slow work it can recognize in source; this
+catches the rest, whatever made the test slow.
 
 FEED IT A -short RUN. forge cannot see the flags a stream was made with. A test
 whose own body checks testing.Short or calls testkit.Slow is reported as MARKED:
@@ -2415,10 +2415,10 @@ Validate that every environment renders manifests kubectl will accept
 Renders each environment's deploy/kcl/<env>/main.k through the embedded KCL
 runtime and asserts the result is DEPLOYABLE, not merely that it evaluates.
 
-An env's applied stream is `output.manifests`, EXPANDED exactly as `forge env
-deploy` expands it: every Cluster-bound forge.dev Workload record is rendered
-through pkg/deploy.RenderWorkloads (Full profile), per (cluster, namespace)
-set. A record that does not render fails here. Every expanded object must
+An env's applied stream is `output.manifests`, EXPANDED exactly as
+`forge env deploy` expands it: every Cluster-bound forge.dev Workload record
+is rendered through pkg/deploy.RenderWorkloads (Full profile), per (cluster,
+namespace) set. A record that does not render fails here. Every expanded object must
 carry apiVersion + kind, and no top-level key but `output` may hide k8s
 objects no deploy would ever apply.
 
@@ -2737,7 +2737,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -2822,7 +2822,7 @@ reliant forge cloud cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:<ns>[,<ns>…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -4031,7 +4031,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -4116,7 +4116,7 @@ reliant forge cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:<ns>[,<ns>…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -10649,11 +10649,11 @@ grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
 It rewrites the file only while it is still forge's: byte for byte what an
 older forge scaffolded for this project. A file you edited is left alone, and
 the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
-later, since CI runs the forge it pins; `forge project upgrade --to v1.10.0`
+later, since CI runs the forge it pins; `forge project upgrade --to v1.11.0`
 moves the pin and then runs this. Re-running it changes nothing.
 
 The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
-migration skill: `forge skill load migrations/v1.10.0/sbom-vulnerabilities`.
+migration skill: `forge skill load migrations/v1.11.0/sbom-vulnerabilities`.
 
 ```
 reliant forge fix build-images-vuln-scan [flags]
@@ -12044,6 +12044,7 @@ reliant forge lint [paths...] [flags]
 |------|------|---------|-------------|
 | `--allow-skip` | `stringArray` | `[]` | Accept that a gating lane may NOT run here, by name and with a reason: LANE[,LANE...]=REASON (repeatable), e.g. --allow-skip 'frontend-typecheck=frontends typecheck in the web job'. A gating lane that could not run (a tool missing, a frontend with no node_modules) fails forge lint otherwise; an accepted one is listed as SKIPPED (allowed) in the verdict. forge.yaml lint.allow_skip is the project-level form. Accepts only could-not-run: a lane that ran and found problems still fails |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--caller-paths` | `bool` | - | Fail on Go code that builds a filesystem path from the source file runtime.Caller reports — _, file, _, _ := runtime.Caller(0), then filepath.Dir(file) to find testdata or the repository root. Under -trimpath, forge's default build mode, that file is module-relative, not on disk, so the code passes untrimmed and fails trimmed. A use checked with filepath.IsAbs, or only displayed (filepath.Base, fmt, log, errors), passes. Runs in every forge lint; the fix is to resolve paths against the package directory (filepath.Abs("testdata/x"), or walk up to the go.mod) |
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set <set> does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
@@ -12135,11 +12136,11 @@ grype vulnerability database, `forge vuln db pull` and `forge vuln scan`.
 It rewrites the file only while it is still forge's: byte for byte what an
 older forge scaffolded for this project. A file you edited is left alone, and
 the run lists what to replace by hand. forge.yaml must already pin v1.10.0 or
-later, since CI runs the forge it pins; `forge project upgrade --to v1.10.0`
+later, since CI runs the forge it pins; `forge project upgrade --to v1.11.0`
 moves the pin and then runs this. Re-running it changes nothing.
 
 The rest of the story (vuln_gate, forge vuln exempt, vuln.attach_sbom) is the
-migration skill: `forge skill load migrations/v1.10.0/sbom-vulnerabilities`.
+migration skill: `forge skill load migrations/v1.11.0/sbom-vulnerabilities`.
 
 ```
 reliant forge lint fix build-images-vuln-scan [flags]
@@ -17513,6 +17514,7 @@ package shape: service|adapter (default service)
 Example:
   forge package new cache
   forge package new notifications
+  forge package new credentials/vault          # nested: internal/credentials/vault, package vault
   forge package new events --kind eventbus
   forge package new stripe-adapter --type adapter --base-url
   forge package new pubsub --type adapter --dry-run
@@ -17585,8 +17587,9 @@ One binary, one profile: a binary that runs as several workloads (a modular
 monolith serving as server, worker and cron) gets the CPU of all of them,
 merged. The workloads come from the rendered env; `pgo.services` overrides them.
 
-Config is read from --env's KCL (default prod): `pgo = forge.PGO {from_env, since,
-min_weight, services, enabled}` on a GoBuild, or DockerBuild.pgo keyed by binary.
+Config is read from --env's KCL (default prod):
+`pgo = forge.PGO {from_env, since, min_weight, services, enabled}` on a GoBuild,
+or DockerBuild.pgo keyed by binary.
 A ShellBuild's binaries are pulled only when its `pgo` names them (forge.ShellPGO,
 keyed by package relative to its cwd), which also says where the profile goes
 (`out`, e.g. a sibling checkout's ../reliant/cmd/reliant/default.pgo) and whose
@@ -18799,8 +18802,8 @@ Print one of forge's published JSON Schemas (draft 2020-12).
         pkg/testreport types forge and the control plane write them with.
 
   test-coverage-view, test-runs
-        forge.test.coverage-view/v1, forge.test.runs/v1: what `forge test
-        coverage --json` and `forge test runs --json` print.
+        forge.test.coverage-view/v1, forge.test.runs/v1: what
+        `forge test coverage --json` and `forge test runs --json` print.
   test-collect  forge.test.collect/v1: what `forge test collect <env> --json`
         pulled from each workload of an env.
 
@@ -20900,7 +20903,10 @@ reliant forge scaffold operator <name> [flags]
 
 Scaffold a new internal package (alias for 'forge package new')
 
-Scaffold a new internal package under internal/<name>/.
+Scaffold a new internal package under internal/<name>/. A name may be a
+/-separated path (credentials/vault): the package lands in
+internal/credentials/vault, is named after the last segment, and is imported,
+scoped and wired by its full path.
 
 The --type flag picks the scaffold shape:
 
@@ -20924,6 +20930,7 @@ writes nothing.
 
 Example:
   forge scaffold package cache
+  forge scaffold package credentials/vault     # nested: internal/credentials/vault, package vault
   forge scaffold package events --kind eventbus
   forge scaffold package stripe-adapter --type adapter --base-url
   forge scaffold package pubsub --type adapter --dry-run
@@ -22120,7 +22127,7 @@ Pulls the Go coverage of the env's running instrumented workloads (the -cover
 builds forge makes for local, ephemeral and preview envs) into a run, as the
 lane's go-covdata input:
 
-  host     GET http://127.0.0.1:<pprof port>/debug/coverage, plus what earlier
+  host     GET `http://127.0.0.1:<pprof port>/debug/coverage`, plus what earlier
            processes flushed to .forge/tests/covdata/<env>/<workload>/
   compose  docker cp of the container's GOCOVERDIR (compose binds pprof on
            0.0.0.0, so the pull endpoint is withheld): what its process
@@ -23050,7 +23057,7 @@ reliant forge vuln [flags]
 | [`exempt`](#reliant-forge-vuln-exempt) | Accept one advisory for an env's vuln_gate, declared in the env's KCL |
 | [`list`](#reliant-forge-vuln-list) | List the vulnerabilities in the release an env runs, judged by its vuln_gate |
 | [`patch`](#reliant-forge-vuln-patch) | Bump vulnerable dependencies, base images and the Go toolchain to their fix, and verify the result |
-| [`sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact |
+| [`sbom`](#reliant-forge-vuln-sbom) | Print the SBOM a release recorded for one artifact, or generate one for a file |
 | [`scan`](#reliant-forge-vuln-scan) | Scan a directory, an image, a release's SBOMs, or what an env runs, for vulnerabilities |
 | [`show`](#reliant-forge-vuln-show) | Show one advisory, or every finding in one package, in the release an env runs |
 
@@ -23322,7 +23329,7 @@ reliant forge vuln patch <env | dir> [<advisory-id>...] [flags]
 
 #### reliant forge vuln sbom
 
-Print the SBOM a release recorded for one artifact
+Print the SBOM a release recorded for one artifact, or generate one for a file
 
 Print the SBOM (CycloneDX JSON, as forge stored it at the cut) of one artifact of
 the release an env runs, or of --release. The bytes come from this machine's
@@ -23335,8 +23342,16 @@ digest and kept in this machine's ledger for the next read.
 --artifact names the artifact; it may be left out when only one artifact has an
 SBOM. --format spdx converts to SPDX JSON with syft (installed on first use).
 
+--file <path> takes no env: it generates the SBOM of one file, a binary (Go
+buildinfo lists every linked module) or a lockfile, with forge's pinned syft
+and the same invocation a release cut uses for a host binary, and prints it.
+Nothing is recorded. The document names the artifact --artifact (default: the
+file's name), never the path on this machine, and carries --release as its
+version. Use it for binaries your own pipeline publishes; forge's own releases
+attach one per archive this way. A file syft cannot describe exits 2.
+
 ```
-reliant forge vuln sbom <env> [flags]
+reliant forge vuln sbom <env> | --file <path> [flags]
 ```
 
 **Flags:**
@@ -23344,9 +23359,10 @@ reliant forge vuln sbom <env> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--artifact` | `string` | - | the artifact whose SBOM to print |
+| `--artifact` | `string` | - | the artifact whose SBOM to print (with --file: the name the SBOM records) |
+| `--file` | `string` | - | generate the SBOM of this binary or lockfile with forge's pinned syft, instead of reading a release |
 | `--format` | `string` | `cyclonedx` | cyclonedx (as stored) or spdx (converted with syft) |
-| `--release` | `string` | - | read this release instead of the one the env runs |
+| `--release` | `string` | - | read this release instead of the one the env runs (with --file: the version the SBOM records) |
 
 ---
 

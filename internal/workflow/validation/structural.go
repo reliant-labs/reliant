@@ -338,6 +338,7 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 		if !model.CelStringIsSet(args.GetCommand()) {
 			result.AddError(CategoryStructure, nodePath, "command", "required")
 		}
+		validateRunLLMGateway(args, nodePath, result)
 
 	case model.NodeTypeLoop:
 		args := node.GetLoop()

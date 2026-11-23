@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -26,7 +27,7 @@ func TestChatSelectionQueries(t *testing.T) {
 		}
 	}
 
-	if got, err := store.GetChatSelection(ctx, env.ORM, "sel-a", false); got != nil || err != nil {
+	if got, err := store.GetChatSelection(ctx, env.ORM, "sel-a"); got != nil || err != nil {
 		t.Fatalf("GetChatSelection(none) = %v, %v; want (nil, nil)", got, err)
 	}
 
@@ -41,7 +42,7 @@ func TestChatSelectionQueries(t *testing.T) {
 		if err := store.LockChatSelection(ctx, env.ORM, "sel-a"); err != nil {
 			return err
 		}
-		cur, err := store.GetChatSelection(ctx, env.ORM, "sel-a", true)
+		cur, err := store.GetChatSelection(ctx, env.ORM, "sel-a")
 		if err != nil || cur != nil {
 			return errors.Join(err, errors.New("want no selection yet"))
 		}
@@ -54,52 +55,46 @@ func TestChatSelectionQueries(t *testing.T) {
 	if stored.Version != 1 || stored.ChatID != "sel-a" || !stored.UpdatedAt.Equal(at) {
 		t.Fatalf("UpsertChatSelection = %+v, want version 1", stored)
 	}
-	twin, err := env.Repo.GetChatSelection(ctx, "sel-a")
-	if err != nil {
-		t.Fatalf("Repo.GetChatSelection: %v", err)
-	}
-	requireSameSelection(t, "Repo.GetChatSelection after store write", twin, stored)
-
-	// A Repository mutation advances the version the store reads.
-	next, err := env.Repo.MutateChatSelection(ctx, "sel-a", func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+	// A mutation advances the version the store reads.
+	next, err := store.MutateChatSelection(ctx, env.ORM, "sel-a", func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 		edited := *cur
 		edited.WorkflowName = "planner"
 		edited.Params = map[string]any{}
 		return &edited, nil
 	})
 	if err != nil {
-		t.Fatalf("Repo.MutateChatSelection: %v", err)
+		t.Fatalf("MutateChatSelection: %v", err)
 	}
-	got, err := store.GetChatSelection(ctx, env.ORM, "sel-a", false)
+	got, err := store.GetChatSelection(ctx, env.ORM, "sel-a")
 	if err != nil {
 		t.Fatalf("GetChatSelection: %v", err)
 	}
 	if got.Version != 2 || got.WorkflowName != "planner" || len(got.Params) != 0 {
-		t.Fatalf("GetChatSelection after Repo write = %+v, want version 2, planner, empty params", got)
+		t.Fatalf("GetChatSelection after a mutation = %+v, want version 2, planner, empty params", got)
 	}
-	requireSameSelection(t, "GetChatSelection vs Repo write", got, next)
+	requireSameSelection(t, "GetChatSelection vs the mutation result", got, next)
 
 	// Copy: onto a chat with none, and never over one that has a selection.
-	if err := store.CopyChatSelection(ctx, env.ORM, "sel-a", "sel-b", "copier", at); err != nil {
+	if err := store.CopyChatSelection(ctx, env.ORM, "sel-a", "sel-b", "copier"); err != nil {
 		t.Fatalf("CopyChatSelection: %v", err)
 	}
-	copied, err := env.Repo.GetChatSelection(ctx, "sel-b")
+	copied, err := store.GetChatSelection(ctx, env.ORM, "sel-b")
 	if err != nil || copied == nil || copied.Version != 1 || copied.UserID != "copier" || copied.WorkflowName != "planner" {
-		t.Fatalf("Repo.GetChatSelection(copy) = %+v, %v", copied, err)
+		t.Fatalf("GetChatSelection(copy) = %+v, %v", copied, err)
 	}
-	if err := env.Repo.CopyChatSelection(ctx, "sel-a", "sel-c", "copier"); err != nil {
-		t.Fatalf("Repo.CopyChatSelection: %v", err)
+	if err := store.CopyChatSelection(ctx, env.ORM, "sel-a", "sel-c", "copier"); err != nil {
+		t.Fatalf("CopyChatSelection: %v", err)
 	}
 	if _, err := store.UpsertChatSelection(ctx, env.ORM, "sel-b", &chatselection.Selection{UserID: "copier", WorkflowName: "kept"}, at); err != nil {
 		t.Fatalf("UpsertChatSelection(sel-b): %v", err)
 	}
-	if err := store.CopyChatSelection(ctx, env.ORM, "sel-c", "sel-b", "copier", at); err != nil {
+	if err := store.CopyChatSelection(ctx, env.ORM, "sel-c", "sel-b", "copier"); err != nil {
 		t.Fatalf("CopyChatSelection(onto a selection): %v", err)
 	}
-	if got, err := store.GetChatSelection(ctx, env.ORM, "sel-b", false); err != nil || got.WorkflowName != "kept" || got.Version != 2 {
+	if got, err := store.GetChatSelection(ctx, env.ORM, "sel-b"); err != nil || got.WorkflowName != "kept" || got.Version != 2 {
 		t.Fatalf("copy overwrote sel-b: %+v, %v", got, err)
 	}
-	if err := store.CopyChatSelection(ctx, env.ORM, "sel-none", "sel-x", "copier", at); err != nil {
+	if err := store.CopyChatSelection(ctx, env.ORM, "sel-none", "sel-x", "copier"); err != nil {
 		t.Fatalf("CopyChatSelection(no source) = %v, want a no-op", err)
 	}
 }

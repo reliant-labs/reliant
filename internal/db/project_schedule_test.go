@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -32,6 +33,7 @@ const lockRaceBudget = 2 * time.Minute
 
 type deleteFixture struct {
 	repo                       *Repo
+	purges                     projectpurge.Service
 	ctx                        context.Context
 	owner, project, chat       string
 	enabledTrigger, userPaused string
@@ -45,7 +47,7 @@ func newDeleteFixture(t *testing.T) *deleteFixture {
 	ctx, cancel := context.WithTimeout(t.Context(), lockRaceBudget)
 	t.Cleanup(cancel)
 	f := &deleteFixture{
-		repo: repo, ctx: ctx,
+		repo: repo, purges: projectpurge.New(projectpurge.Deps{DB: repo.ORM()}), ctx: ctx,
 		owner: "owner-" + suffix, project: "proj-" + suffix, chat: "chat-" + suffix,
 		enabledTrigger: "trig-on-" + suffix, userPaused: "trig-off-" + suffix,
 	}
@@ -91,7 +93,7 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	f := newDeleteFixture(t)
 	after := deleteClock.Add(core.ProjectDeleteWindow)
 
-	got, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
+	got, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
 	require.NoError(t, err)
 	assert.False(t, got.AlreadyScheduled)
 	assert.True(t, got.DeleteAfter.Equal(after))
@@ -104,7 +106,7 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	assert.False(t, chats, "its chats leave the chat list")
 	_, err = f.repo.GetProjectWithUserCheck(f.ctx, f.project, f.owner)
 	assert.ErrorIs(t, err, core.ErrProjectNotFound)
-	deleted, err := f.repo.ListDeletedProjects(f.ctx, f.owner, nil, false)
+	deleted, err := f.purges.ListDeletedProjects(f.ctx, f.owner, nil, false)
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, f.owner, *deleted[0].DeletedBy)
@@ -117,13 +119,13 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	assert.Empty(t, off.PausedReason, "a trigger a person paused keeps its own pause")
 
 	// A second delete keeps the first date and changes nothing.
-	again, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, "someone-else", after.Add(48*time.Hour), f.decided())
+	again, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, "someone-else", after.Add(48*time.Hour), f.decided())
 	require.NoError(t, err)
 	assert.True(t, again.AlreadyScheduled)
 	assert.True(t, again.DeleteAfter.Equal(after))
 	assert.Empty(t, again.PausedTriggerIDs)
 
-	resumed, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	resumed, err := f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	require.NoError(t, err)
 	assert.Equal(t, []string{f.enabledTrigger}, resumed)
 	projects, chats = f.listed(t)
@@ -137,7 +139,7 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	assert.False(t, f.trigger(t, f.userPaused).Enabled, "and leaves the one a person paused alone")
 
 	// Restoring again is a no-op.
-	resumed, err = f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	resumed, err = f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	require.NoError(t, err)
 	assert.Empty(t, resumed)
 }
@@ -145,11 +147,11 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	f := newDeleteFixture(t)
 	after := deleteClock.Add(core.ProjectDeleteWindow)
-	_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
+	_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
 	require.NoError(t, err)
 
 	// Inside the window: nothing is due.
-	res, err := f.repo.PurgeDueProjects(f.ctx, deleteClock, time.Hour, 50)
+	res, err := f.purges.PurgeDueProjects(f.ctx, deleteClock, time.Hour, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged)
 	_, err = f.repo.GetProject(f.ctx, f.project)
@@ -157,7 +159,7 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 
 	// After it: purged, with everything it owned.
 	later := after.Add(time.Minute)
-	res, err = f.repo.PurgeDueProjects(f.ctx, later, time.Hour, 50)
+	res, err = f.purges.PurgeDueProjects(f.ctx, later, time.Hour, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged)
 	assert.Zero(t, res.Failed)
@@ -169,17 +171,17 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	assert.Error(t, err, "its chat is gone")
 
 	// Idempotent: a second pass finds nothing, and so does a restore.
-	res, err = f.repo.PurgeDueProjects(f.ctx, later, time.Hour, 50)
+	res, err = f.purges.PurgeDueProjects(f.ctx, later, time.Hour, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged)
-	_, err = f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	_, err = f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	assert.ErrorIs(t, err, core.ErrProjectNotFound)
 }
 
 func TestProjectRestoreIsRefusedOncePurgeBegins(t *testing.T) {
 	f := newDeleteFixture(t)
 	after := deleteClock.Add(-time.Minute) // already due
-	_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
+	_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
 	require.NoError(t, err)
 
 	// A claim another replica holds: this one skips the project, and a
@@ -187,24 +189,24 @@ func TestProjectRestoreIsRefusedOncePurgeBegins(t *testing.T) {
 	_, claimed, err := claimPurge(f, deleteClock)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	res, err := f.repo.PurgeDueProjects(f.ctx, deleteClock.Add(30*time.Minute), time.Hour, 50)
+	res, err := f.purges.PurgeDueProjects(f.ctx, deleteClock.Add(30*time.Minute), time.Hour, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged, "a project another purge holds is left to it")
-	_, err = f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	_, err = f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	assert.ErrorIs(t, err, core.ErrProjectPurgeStarted)
-	deleted, err := f.repo.ListDeletedProjects(f.ctx, f.owner, nil, false)
+	deleted, err := f.purges.ListDeletedProjects(f.ctx, f.owner, nil, false)
 	require.NoError(t, err)
 	assert.Empty(t, deleted, "a project being purged is not offered for restore")
-	purging, err := f.repo.ListDeletedProjects(f.ctx, f.owner, nil, true)
+	purging, err := f.purges.ListDeletedProjects(f.ctx, f.owner, nil, true)
 	require.NoError(t, err)
 	require.Len(t, purging, 1, "its owner can still find it, to finish the purge")
 	assert.NotNil(t, purging[0].PurgeStartedAt)
-	others, err := f.repo.ListDeletedProjects(f.ctx, "someone-else", nil, true)
+	others, err := f.purges.ListDeletedProjects(f.ctx, "someone-else", nil, true)
 	require.NoError(t, err)
 	assert.Empty(t, others, "nobody else is shown a purge in progress")
 
 	// Its claim expires (the replica died): the next purge finishes it.
-	res, err = f.repo.PurgeDueProjects(f.ctx, deleteClock.Add(2*time.Hour), time.Hour, 50)
+	res, err = f.purges.PurgeDueProjects(f.ctx, deleteClock.Add(2*time.Hour), time.Hour, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged)
 }
@@ -215,7 +217,7 @@ func TestProjectRestoreIsRefusedOncePurgeBegins(t *testing.T) {
 // restored, so waiting would only keep half-deleted data).
 func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 	f := newDeleteFixture(t)
-	_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, deleteClock.Add(core.ProjectDeleteWindow), f.decided())
+	_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, deleteClock.Add(core.ProjectDeleteWindow), f.decided())
 	require.NoError(t, err)
 
 	// The owner's PurgeProjectNow claims it, then stops before any batch.
@@ -227,11 +229,11 @@ func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 	require.NotNil(t, p.DeleteAfter)
 	assert.True(t, p.DeleteAfter.Equal(deleteClock), "the claim brings delete_after forward to now, got %v", p.DeleteAfter)
 
-	res, err := f.repo.PurgeDueProjects(f.ctx, deleteClock.Add(30*time.Minute), time.Hour, 50)
+	res, err := f.purges.PurgeDueProjects(f.ctx, deleteClock.Add(30*time.Minute), time.Hour, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged, "the interrupted purge still holds its lease")
 
-	res, err = f.repo.PurgeDueProjects(f.ctx, deleteClock.Add(2*time.Hour), time.Hour, 50)
+	res, err = f.purges.PurgeDueProjects(f.ctx, deleteClock.Add(2*time.Hour), time.Hour, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged, "the worker resumes it once the lease runs out, well inside the original window")
 	_, err = f.repo.GetProject(f.ctx, f.project)
@@ -241,10 +243,10 @@ func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 // purgeNow is PurgeProjectNow's two halves run back to back: the claim the
 // request makes, then the batches it leaves running.
 func (f *deleteFixture) purgeNow(decided core.ProjectDecision) ([]string, error) {
-	if err := f.repo.ClaimProjectPurgeNow(f.ctx, f.project, decided); err != nil {
+	if err := f.purges.ClaimProjectPurgeNow(f.ctx, f.project, decided); err != nil {
 		return nil, err
 	}
-	return f.repo.PurgeClaimedProject(f.ctx, f.project, decided.OwnerUserID)
+	return f.purges.PurgeClaimedProject(f.ctx, f.project, decided.OwnerUserID)
 }
 
 func TestPurgeProjectNowDeletesAtOnce(t *testing.T) {
@@ -265,11 +267,11 @@ func TestPurgeProjectNowDeletesAtOnce(t *testing.T) {
 // once the claim's lease has passed.
 func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	f := newDeleteFixture(t)
-	require.NoError(t, f.repo.ClaimProjectPurgeNow(f.ctx, f.project, f.decided()))
+	require.NoError(t, f.purges.ClaimProjectPurgeNow(f.ctx, f.project, f.decided()))
 	projects, chats := f.listed(t)
 	assert.False(t, projects, "a claimed project leaves the project list")
 	assert.False(t, chats, "its chats leave the chat list")
-	_, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	_, err := f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	assert.ErrorIs(t, err, core.ErrProjectPurgeStarted, "nothing can restore it once claimed")
 
 	// The chat holds a message, which the thinning takes before the chat's
@@ -287,7 +289,7 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	exec(`CREATE FUNCTION test_refuse_chat_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN RAISE EXCEPTION 'test: the chat batch fails'; END $$`)
 	exec(`CREATE TRIGGER test_refuse_chat_delete BEFORE DELETE ON chats FOR EACH ROW EXECUTE FUNCTION test_refuse_chat_delete()`)
-	_, err = f.repo.PurgeClaimedProject(f.ctx, f.project, f.owner)
+	_, err = f.purges.PurgeClaimedProject(f.ctx, f.project, f.owner)
 	require.ErrorContains(t, err, "the chat batch fails", "the batches stop part way")
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.NoError(t, err, "what is left stays, hidden and claimed")
@@ -299,10 +301,10 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	exec(`DROP TRIGGER test_refuse_chat_delete ON chats`)
 
 	now := time.Now()
-	res, err := f.repo.PurgeDueProjects(f.ctx, now, ProjectPurgeLease, 50)
+	res, err := f.purges.PurgeDueProjects(f.ctx, now, projectpurge.Lease, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged, "the failed purge's claim holds until its lease passes")
-	res, err = f.repo.PurgeDueProjects(f.ctx, now.Add(ProjectPurgeLease+time.Minute), ProjectPurgeLease, 50)
+	res, err = f.purges.PurgeDueProjects(f.ctx, now.Add(projectpurge.Lease+time.Minute), projectpurge.Lease, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged, "the worker resumes it after the lease")
 	_, err = f.repo.GetProject(f.ctx, f.project)
@@ -347,7 +349,7 @@ func TestProjectPurgeCleansRowsWithNoForeignKey(t *testing.T) {
 	assert.Zero(t, count("worktree_recovery_checkouts", mine))
 	assert.Equal(t, 1, count("worktree_recoveries", orphan), "the purge touches only its own project's rows")
 
-	n, err := f.repo.SweepOrphanedProjectRows(f.ctx, 500)
+	n, err := store.SweepOrphanedProjectRows(f.ctx, f.repo.ORM(), 500)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(1))
 	assert.Zero(t, count("worktree_recoveries", orphan), "the sweep removes what an older delete left")
@@ -355,7 +357,7 @@ func TestProjectPurgeCleansRowsWithNoForeignKey(t *testing.T) {
 }
 
 func claimPurge(f *deleteFixture, now time.Time) (string, bool, error) {
-	ids, err := f.repo.ListDueProjectPurges(f.ctx, now, time.Hour, 10)
+	ids, err := store.ListDueProjectPurges(f.ctx, f.repo.ORM(), now, time.Hour, 10)
 	if err != nil || len(ids) == 0 {
 		return "", false, err
 	}
@@ -462,7 +464,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		receive(t, f.ctx, ready)
 		scheduled := make(chan result[core.ProjectDeletion], 1)
 		go func() {
-			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
+			d, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
 			scheduled <- result[core.ProjectDeletion]{d, err}
 		}()
 		awaitLockWait(t, f)
@@ -502,7 +504,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		receive(t, f.ctx, ready)
 		scheduled := make(chan result[core.ProjectDeletion], 1)
 		go func() {
-			d, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
+			d, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, after, f.decided())
 			scheduled <- result[core.ProjectDeletion]{d, err}
 		}()
 		awaitLockWait(t, f)
@@ -513,7 +515,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, got.v.PausedTriggerIDs)
 		assert.False(t, f.trigger(t, f.userPaused).Enabled)
 
-		resumed, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
+		resumed, err := f.purges.RestoreProject(f.ctx, f.project, f.decided())
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, resumed, "both were on when the delete paused them")
 	})
@@ -542,7 +544,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		edit.Name = "renamed"
 		require.NoError(t, f.repo.UpdateTrigger(f.ctx, edit))
 
-		resumed, err := f.repo.RestoreProject(f.ctx, f.project, f.decided())
+		resumed, err := f.purges.RestoreProject(f.ctx, f.project, f.decided())
 		require.NoError(t, err)
 		assert.Equal(t, []string{f.enabledTrigger}, resumed, "restore turns on only what the delete paused")
 		assert.False(t, f.trigger(t, f.userPaused).Enabled)
@@ -564,7 +566,7 @@ func TestADeletedProjectAdmitsNothingNew(t *testing.T) {
 	existingRun := &Workflow{ID: "run-" + uuid.NewString()[:8], ChatID: f.chat, WorkflowName: "agent", Thread: "main", CreatedAt: deleteClock}
 	require.NoError(t, f.repo.CreateWorkflow(f.ctx, existingRun))
 
-	_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, f.owner, deleteClock.Add(core.ProjectDeleteWindow), f.decided())
+	_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, f.owner, deleteClock.Add(core.ProjectDeleteWindow), f.decided())
 	require.NoError(t, err)
 
 	writes := map[string]func() error{
@@ -592,7 +594,7 @@ func TestADeletedProjectAdmitsNothingNew(t *testing.T) {
 	}
 	require.NoError(t, f.repo.CreateWorkflow(f.ctx, existingRun), "a retried insert of a run that exists stays a no-op")
 
-	_, err = f.repo.RestoreProject(f.ctx, f.project, f.decided())
+	_, err = f.purges.RestoreProject(f.ctx, f.project, f.decided())
 	require.NoError(t, err)
 	for name, write := range writes {
 		assert.NoError(t, write(), "%s is admitted after the restore", name)
@@ -641,7 +643,7 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 	t.Run("a delete decided in the source org is refused once the move commits", func(t *testing.T) {
 		f, decided := newMovable(t)
 		err := race(t, f, func() error {
-			_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, "admin-of-src", deleteClock.Add(core.ProjectDeleteWindow), decided)
+			_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, "admin-of-src", deleteClock.Add(core.ProjectDeleteWindow), decided)
 			return err
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
@@ -653,10 +655,10 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 
 	t.Run("a restore decided in the source org is refused once the move commits", func(t *testing.T) {
 		f, decided := newMovable(t)
-		_, err := f.repo.ScheduleProjectDeletion(f.ctx, f.project, "admin-of-src", deleteClock.Add(core.ProjectDeleteWindow), decided)
+		_, err := f.purges.ScheduleProjectDeletion(f.ctx, f.project, "admin-of-src", deleteClock.Add(core.ProjectDeleteWindow), decided)
 		require.NoError(t, err)
 		err = race(t, f, func() error {
-			_, err := f.repo.RestoreProject(f.ctx, f.project, decided)
+			_, err := f.purges.RestoreProject(f.ctx, f.project, decided)
 			return err
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
@@ -669,7 +671,7 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 	t.Run("an immediate purge decided in the source org is refused", func(t *testing.T) {
 		f, decided := newMovable(t)
 		err := race(t, f, func() error {
-			return f.repo.ClaimProjectPurgeNow(f.ctx, f.project, decided)
+			return f.purges.ClaimProjectPurgeNow(f.ctx, f.project, decided)
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
 		p, err := f.repo.GetProject(f.ctx, f.project)

@@ -37,7 +37,7 @@ func TestReconciler_ReapsOrphanedDescendantsEveryPass(t *testing.T) {
 	repo.workflowsByStatus[db.Active()] = nil
 	repo.workflowsByStatus[db.Paused()] = nil
 
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, nil)
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: nil})
 
 	reconciled, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -55,7 +55,7 @@ func TestReconciler_ReapRunsBeforeWorkflowsAreListed(t *testing.T) {
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
-	reconciler := NewReconciler(repo, tempClient, nil)
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: nil})
 
 	_, _ = reconciler.ReconcileRunningWorkflows(context.Background())
 
@@ -73,7 +73,7 @@ func TestReconciler_ReapFailureIsReportedAndDoesNotAbortThePass(t *testing.T) {
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
-	reconciler := NewReconciler(repo, tempClient, nil)
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: nil})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 

@@ -71,7 +71,7 @@ func workspaceProposal(key, fp, rowID string) *pb.WorktreeReclaimProposal {
 }
 
 // withLiveChats makes the repo report a live chat for these workspace rows.
-func withLiveChats(r *StubRepo, rows ...string) *StubRepo {
+func withLiveChats(r *machineStub, rows ...string) *machineStub {
 	r.GetLiveChatIDForWorktreeFunc = func(_ context.Context, id string) (string, error) {
 		for _, row := range rows {
 			if row == id {
@@ -111,9 +111,9 @@ func TestDecideWorktreeReclaim_ApprovalIsSentAsTheApproveCommand(t *testing.T) {
 // reaches it: no decision, no approval.
 func TestDecideWorktreeReclaim_UnauthorizedApproverIsDenied(t *testing.T) {
 	t.Parallel()
-	for name, repo := range map[string]*StubRepo{
+	for name, repo := range map[string]*machineStub{
 		"another user's machine": machineRepo(t, true, shownProposal("a", "fa")),
-		"a machine nobody owns": func() *StubRepo {
+		"a machine nobody owns": func() *machineStub {
 			r := machineRepo(t, true, shownProposal("a", "fa"))
 			r.GetDaemonFunc = func(_ context.Context, id string) (*core.Daemon, error) { return &core.Daemon{ID: id}, nil }
 			return r

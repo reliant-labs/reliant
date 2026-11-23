@@ -26,11 +26,11 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	target, err := s.deps.Repo.GetDaemon(ctx, req.TargetDaemonId)
+	target, err := s.getDaemon(ctx, req.TargetDaemonId)
 	if err != nil || !authz.CanWriteMachine(ctx, userID, target) {
 		return nil, svcerr.NotFound("destination machine")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
 	if err != nil || project == nil {
 		return nil, svcerr.FailedPrecondition("Install the source project on the destination machine before restoring this retained recovery")
 	}
@@ -46,7 +46,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if err != nil {
 		return nil, err
 	}
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.listRepos(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -70,7 +70,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	suffix := hex.EncodeToString(key[:16])
 	branch := "reliant-restored/" + suffix
 	idem := "recovery:" + row.ID + ":" + req.IdempotencyKey
-	wt, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, idem)
+	wt, err := s.deps.Rows.GetWorktreeByIdempotencyKey(ctx, project.ID, idem)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -92,7 +92,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 		if createErr := s.deps.Repo.CreateWorktree(ctx, wt); createErr != nil {
 			// Another same-key request may have inserted first. Only accept that
 			// exact operation's existing row; never update an unrelated workspace.
-			existing, loadErr := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, idem)
+			existing, loadErr := s.deps.Rows.GetWorktreeByIdempotencyKey(ctx, project.ID, idem)
 			if loadErr != nil || existing == nil || existing.ProjectID != project.ID || existing.Branch != branch || existing.DaemonID == nil || *existing.DaemonID != req.TargetDaemonId {
 				return nil, svcerr.Wrap(createErr)
 			}

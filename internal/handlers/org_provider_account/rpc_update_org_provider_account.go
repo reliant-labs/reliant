@@ -46,12 +46,12 @@ func (s *Service) UpdateOrgProviderAccount(
 		return nil, err
 	}
 	if patch.Label != nil || patch.Paused != nil {
-		if acct, err = s.deps.Store.PatchOwnedProviderAccount(ctx, core.OrgAccountOwner(orgID), acct.ID, patch); err != nil {
+		if acct, err = s.deps.Accounts.PatchOwnedProviderAccount(ctx, core.OrgAccountOwner(orgID), acct.ID, patch); err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 	}
 	if access != "" {
-		if acct, err = s.deps.Store.SetOrgAccountAccess(ctx, orgID, acct.ID, access); err != nil {
+		if acct, err = s.deps.OrgAccounts.SetOrgAccountAccess(ctx, orgID, acct.ID, access); err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 	}

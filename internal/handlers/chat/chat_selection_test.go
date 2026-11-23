@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -60,15 +63,15 @@ func selectionFixture(t *testing.T, status db.WorkflowStatus) (context.Context, 
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	}}
 	service := &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, workflow.NewPauseService(temporal, repo)),
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: workflow.NewPauseService(temporal, repo)}),
 	}
 	return ctx, fx, repo, temporal, service
 }
 
 func setSelection(t *testing.T, ctx context.Context, repo *db.Repo, chatID string, params map[string]any) *chatselection.Selection {
 	t.Helper()
-	sel, err := chatselection.New(repo).Merge(ctx, chatID, "test-user", "builtin://agent", params, 0)
+	sel, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Merge(ctx, chatID, "test-user", "builtin://agent", params, 0)
 	require.NoError(t, err)
 	return sel
 }
@@ -135,7 +138,7 @@ func TestSendMessage_ParamsOverrideAndUpdateTheSelection(t *testing.T) {
 	assert.Equal(t, opusOnClaude, modelID(t, in.Inputs["model"]))
 	assert.Equal(t, "plan", in.Inputs["mode"], "a key the send did not carry keeps the selection's value")
 
-	sel, err := chatselection.New(repo).Get(ctx, fx.chatID)
+	sel, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Get(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, opusOnClaude, modelID(t, sel.Params["model"]))
 	assert.Equal(t, "plan", sel.Params["mode"])
@@ -144,7 +147,7 @@ func TestSendMessage_ParamsOverrideAndUpdateTheSelection(t *testing.T) {
 // A selection made for another workflow does not apply to this one.
 func TestSendMessage_ASelectionForAnotherWorkflowIsIgnored(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Completed())
-	_, err := chatselection.New(repo).Merge(ctx, fx.chatID, "test-user", "builtin://other", map[string]any{
+	_, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Merge(ctx, fx.chatID, "test-user", "builtin://other", map[string]any{
 		"model": map[string]any{"id": sonnetOnClaude},
 	}, 0)
 	require.NoError(t, err)
@@ -167,7 +170,7 @@ func TestSendMessage_ModelMoveIsRecordedAndAnnouncedOnce(t *testing.T) {
 
 	moved := modelID(t, temporal.lastStart(t).Inputs["model"])
 	require.True(t, assertAnthropic(moved), "a Claude-only user's codex pin must run on Claude, got %q", moved)
-	sel, err := chatselection.New(repo).Get(ctx, fx.chatID)
+	sel, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Get(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, moved, modelID(t, sel.Params["model"]), "the selection holds what runs")
 	assert.Len(t, noticesNaming(transcriptBodies(t, ctx, repo, fx.chatID), "gpt-5.6-sol"), 1)
@@ -231,7 +234,7 @@ func TestUpdateWorkflowParams_ThreadScopedCarriesNoPresetAndIsNotStored(t *testi
 	assert.Equal(t, map[string]interface{}{"mode": "plan", "__thread": thread}, temporal.signals[0].Arg,
 		"a thread-scoped update must not pull the root's preset (model, tools, skills) into the thread")
 
-	after, err := chatselection.New(repo).Get(ctx, fx.chatID)
+	after, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Get(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Version, after.Version)
 	assert.NotContains(t, after.Params, "mode", "a sub-agent's edit is not the chat's choice")
@@ -265,7 +268,7 @@ func TestUpdateWorkflowParams_UnavailableRootPickIsRejected(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Empty(t, temporal.signals)
-	after, err := chatselection.New(repo).Get(ctx, fx.chatID)
+	after, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Get(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Version, after.Version)
 	assert.Equal(t, sonnetOnClaude, modelID(t, after.Params["model"]))
@@ -285,7 +288,7 @@ func TestUpdateWorkflowParams_StaleVersionIsAborted(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
 
-	got, err := chatselection.New(repo).Get(ctx, fx.chatID)
+	got, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Get(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "plan", got.Params["mode"])
 
@@ -387,7 +390,7 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	source.SelectedPresets = map[string]string{"": "general"}
 	require.NoError(t, repo.UpdateChat(ctx, source))
 	policy := chatselection.ProviderPolicy{OnLimit: chatselection.OnLimitWait}
-	svc := chatselection.New(repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())})
 	_, err = svc.Merge(ctx, sourceChatID, "test-user", "builtin://agent", map[string]any{
 		"model": map[string]any{"id": "gpt-5.6-sol@codex", "thinking_level": "high"},
 	}, 0)
@@ -395,7 +398,7 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	_, err = svc.SetPolicy(ctx, sourceChatID, "test-user", "builtin://agent", policy, 0)
 	require.NoError(t, err)
 
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
 	require.NoError(t, err)
 

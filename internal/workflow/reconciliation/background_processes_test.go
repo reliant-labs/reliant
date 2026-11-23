@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // fakeProcessDaemons stands in for the user's daemons. processes maps
@@ -114,7 +115,7 @@ func TestReconcile_ClosesBackgroundedCallsFromTheirProcessOutcome(t *testing.T) 
 			"p-running": {Status: "running"},
 		},
 	}}
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 	reconciler.SetBackgroundProcessDaemons(daemons)
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
@@ -158,7 +159,7 @@ func TestReconcile_LeavesBackgroundedCallsAloneWhileTheirDaemonIsUnreachable(t *
 	repo.seedBackgroundedCall("tc-1", "u-1", strp("p-1"), strp("d-offline"))
 	daemons := &fakeProcessDaemons{processes: map[string]map[string]daemon.ProcessStatusInfo{}}
 
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 	reconciler.SetBackgroundProcessDaemons(daemons)
 	_, err := reconciler.reconcileBackgroundedProcesses(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -182,7 +183,7 @@ func TestReconcile_ClosesBackgroundedCallsOfADeletedDaemon(t *testing.T) {
 	repo.seedBackgroundedCall("tc-1", "u-1", strp("p-1"), strp("d-gone"))
 	daemons := &fakeProcessDaemons{processes: map[string]map[string]daemon.ProcessStatusInfo{}}
 
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 	reconciler.SetBackgroundProcessDaemons(daemons)
 	_, err := reconciler.reconcileBackgroundedProcesses(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -208,7 +209,7 @@ func TestReconcile_UnattributedBackgroundedCallsCloseOnlyOnProof(t *testing.T) {
 				"d-b": {"p-live": {Status: "running"}},
 			},
 		}
-		reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 		reconciler.SetBackgroundProcessDaemons(daemons)
 		_, err := reconciler.reconcileBackgroundedProcesses(context.Background(), &passStats{})
 		require.NoError(t, err)
@@ -226,7 +227,7 @@ func TestReconcile_UnattributedBackgroundedCallsCloseOnlyOnProof(t *testing.T) {
 			connected: map[string][]string{"u-1": {"d-a", "d-silent"}},
 			processes: map[string]map[string]daemon.ProcessStatusInfo{"d-a": {}},
 		}
-		reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 		reconciler.SetBackgroundProcessDaemons(daemons)
 		_, err := reconciler.reconcileBackgroundedProcesses(context.Background(), &passStats{})
 		require.NoError(t, err)
@@ -236,7 +237,7 @@ func TestReconcile_UnattributedBackgroundedCallsCloseOnlyOnProof(t *testing.T) {
 	t.Run("no daemon connected", func(t *testing.T) {
 		repo := newMockRepo()
 		repo.seedBackgroundedCall("tc-legacy", "u-1", strp("p-old"), nil)
-		reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 		reconciler.SetBackgroundProcessDaemons(&fakeProcessDaemons{})
 		_, err := reconciler.reconcileBackgroundedProcesses(context.Background(), &passStats{})
 		require.NoError(t, err)
@@ -260,7 +261,7 @@ func TestReconcile_BackgroundedSweepNeverOverwritesASettledCall(t *testing.T) {
 	daemons := &fakeProcessDaemons{processes: map[string]map[string]daemon.ProcessStatusInfo{
 		"d-1": {"p-1": {Status: "completed", ExitCode: intp(0)}},
 	}}
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 	reconciler.SetBackgroundProcessDaemons(daemons)
 
 	closed := reconciler.settleOwnedProcesses(context.Background(), &passStats{}, daemons, "u-1", "d-1", listed)
@@ -317,7 +318,7 @@ func TestReconcile_TellsTheOwningDaemonWhetherEachProcessChatIsRunning(t *testin
 		}},
 		connected: map[string][]string{"u-1": {"d-1"}},
 	}
-	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 	reconciler.SetBackgroundProcessDaemons(daemons)
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -341,9 +342,9 @@ func TestReconcile_HeldRunBackgroundWorkKeepsItsMachineAwake(t *testing.T) {
 			"d-1": {"p-deploy": {Status: status}},
 		}}
 		activity := &fakeActivity{}
-		reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 		reconciler.SetBackgroundProcessDaemons(daemons)
-		reconciler.SetHeldRunActivity(activity)
+		reconciler.SetHeldRunActivity(activity, repo)
 		_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 		require.Empty(t, errs)
 		for _, since := range repo.heldSince {

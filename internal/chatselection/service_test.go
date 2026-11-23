@@ -59,7 +59,7 @@ func model(id string) map[string]any { return map[string]any{"id": id} }
 
 func TestMerge_CreatesThenPatchesKeyByKey(t *testing.T) {
 	store := newMemStore()
-	svc := New(store)
+	svc := New(Deps{Store: store})
 	ctx := context.Background()
 
 	first, err := svc.Merge(ctx, "c1", "u1", "builtin://agent", map[string]any{"model": model("gpt-5.6-sol@codex"), "mode": "auto"}, 0)
@@ -74,7 +74,7 @@ func TestMerge_CreatesThenPatchesKeyByKey(t *testing.T) {
 }
 
 func TestMerge_NilValueDeletesAKey(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "w", map[string]any{"model": model("a"), "mode": "auto"}, 0)
 	require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestMerge_NilValueDeletesAKey(t *testing.T) {
 }
 
 func TestMerge_ReplacesAModelSelectorWhole(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "w", map[string]any{"model": map[string]any{"id": "a", "thinking_level": "high"}}, 0)
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestMerge_ReplacesAModelSelectorWhole(t *testing.T) {
 }
 
 func TestMerge_AWorkflowChangeReplacesParams(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "builtin://agent", map[string]any{"model": model("a"), "mode": "auto"}, 0)
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestMerge_AWorkflowChangeReplacesParams(t *testing.T) {
 
 func TestMerge_ANoOpStoresNothingAndKeepsTheVersion(t *testing.T) {
 	store := newMemStore()
-	svc := New(store)
+	svc := New(Deps{Store: store})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "w", map[string]any{"mode": "auto"}, 0)
 	require.NoError(t, err)
@@ -124,14 +124,14 @@ func TestMerge_ANoOpStoresNothingAndKeepsTheVersion(t *testing.T) {
 
 func TestMerge_AnEmptyPatchOnAChatWithNothingCreatesNothing(t *testing.T) {
 	store := newMemStore()
-	got, err := New(store).Merge(context.Background(), "c1", "u1", "w", nil, 0)
+	got, err := New(Deps{Store: store}).Merge(context.Background(), "c1", "u1", "w", nil, 0)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 	assert.Empty(t, store.rows)
 }
 
 func TestMerge_StaleVersionIsRefused(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "w", map[string]any{"mode": "auto"}, 0)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestMerge_StaleVersionIsRefused(t *testing.T) {
 }
 
 func TestMerge_AClientThatReadNoneMayCreateButNotAfterSomeoneElseDid(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	// expectedVersion 0 means unconditional; a client that read version 5 of a
 	// record that does not exist is stale.
@@ -156,7 +156,7 @@ func TestMerge_AClientThatReadNoneMayCreateButNotAfterSomeoneElseDid(t *testing.
 }
 
 func TestSetPolicy_RoundTripsAndKeepsParams(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "c1", "u1", "w", map[string]any{"model": model("a")}, 0)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestSetPolicy_RoundTripsAndKeepsParams(t *testing.T) {
 }
 
 func TestSetPolicy_CreatesTheRecordWhenThereIsNone(t *testing.T) {
-	svc := New(newMemStore())
+	svc := New(Deps{Store: newMemStore()})
 	got, err := svc.SetPolicy(context.Background(), "c1", "u1", "w", ProviderPolicy{OnLimit: OnLimitWait}, 0)
 	require.NoError(t, err)
 	assert.Equal(t, OnLimitWait, got.Policy.OnLimit)
@@ -182,7 +182,7 @@ func TestSetPolicy_CreatesTheRecordWhenThereIsNone(t *testing.T) {
 
 func TestSetPolicy_ClearingAbsentPolicyCreatesNothing(t *testing.T) {
 	store := newMemStore()
-	got, err := New(store).SetPolicy(context.Background(), "c1", "u1", "w", ProviderPolicy{}, 0)
+	got, err := New(Deps{Store: store}).SetPolicy(context.Background(), "c1", "u1", "w", ProviderPolicy{}, 0)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 	assert.Empty(t, store.rows)
@@ -190,7 +190,7 @@ func TestSetPolicy_ClearingAbsentPolicyCreatesNothing(t *testing.T) {
 
 func TestCopy_GivesTheBranchItsOwnRecord(t *testing.T) {
 	store := newMemStore()
-	svc := New(store)
+	svc := New(Deps{Store: store})
 	ctx := context.Background()
 	_, err := svc.Merge(ctx, "src", "u1", "w", map[string]any{"model": model("a")}, 0)
 	require.NoError(t, err)

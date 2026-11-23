@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -36,26 +35,6 @@ func (r *Repo) RecordTriggerDelivery(ctx context.Context, d core.TriggerDelivery
 	return created && err == nil, err
 }
 
-func (r *Repo) FindTriggerDelivery(ctx context.Context, key core.TriggerDelivery) (*core.TriggerDelivery, error) {
-	return store.FindTriggerDelivery(ctx, r.ORM(), key)
-}
-
-func (r *Repo) ClaimTriggerDeliveries(ctx context.Context, now, until time.Time, token string, limit int) ([]core.TriggerDelivery, error) {
-	return store.ClaimTriggerDeliveries(ctx, r.ORM(), now, until, token, limit)
-}
-
-func (r *Repo) RetryCallerNotifiedTriggerDelivery(ctx context.Context, d core.TriggerDelivery) (*core.TriggerDelivery, error) {
-	return store.RetryCallerNotifiedTriggerDelivery(ctx, r.ORM(), d)
-}
-
-func (r *Repo) SettleTriggerDelivery(ctx context.Context, id, token string, s core.TriggerDeliverySettlement) (bool, error) {
-	return store.SettleTriggerDelivery(ctx, r.ORM(), id, token, s)
-}
-
-func (r *Repo) RenewTriggerDelivery(ctx context.Context, id, token string, now, until time.Time) (bool, error) {
-	return store.RenewTriggerDelivery(ctx, r.ORM(), id, token, now, until)
-}
-
 func (r *Repo) TriggerDeliveryEvent(ctx context.Context, id, triggerID, userID string) (*core.TriggerEvent, error) {
 	return store.LoadDeliveryTriggerEvent(ctx, r.ORM(), id, triggerID, userID)
 }
@@ -85,8 +64,4 @@ func (r *Repo) RecordDeliveryTriggerEvent(ctx context.Context, id, token string,
 		return store.LinkTriggerDeliveryEvent(tx, r.ORM(), id, token, stored.ID)
 	})
 	return stored, created, err
-}
-
-func (r *Repo) PruneTriggerDeliveries(ctx context.Context, before time.Time) (int64, error) {
-	return store.PruneTriggerDeliveries(ctx, r.ORM(), before)
 }

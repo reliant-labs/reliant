@@ -110,6 +110,34 @@ message IdentitySocialStatus {
   google.protobuf.Timestamp applied_at = 3;
 }
 
+// IdentitySocialCheck is one declared social provider's sign-in check
+// (CheckSocialSignIn): the authorize URL the issuer built for a sign-in it
+// started, or why none was started. It carries no secret: a client id is
+// public, and the URL is the one a browser is sent to.
+message IdentitySocialCheck {
+  // google | github
+  string type = 1;
+  // The provider's authorize URL the issuer answered. Empty when no sign-in
+  // was started (see error).
+  string auth_url = 2;
+  // Why no sign-in was started: the provider is not applied, or the issuer
+  // refused. Empty when one was.
+  string error = 3;
+  // The provider's state as IdentitySocialStatus reports it (applied |
+  // pending | secret_missing). Only an applied provider is started.
+  string state = 4;
+  // What the authorize URL carries.
+  string redirect_uri = 5;
+  string client_id = 6;
+  repeated string scopes = 7;
+  // The callback registered at the provider: <issuer>/idps/callback.
+  string expected_redirect_uri = 8;
+  // redirect_uri equals expected_redirect_uri. False on a started sign-in
+  // means the provider will refuse it until the OAuth app lists
+  // redirect_uri, or the issuer's public URL is fixed.
+  bool redirect_uri_matches = 9;
+}
+
 // IdentityPasswordCode is a one-time code that sets a user's password, handed
 // back to an admin who asked for it (return_code) so they can deliver it
 // themselves. It is a credential: it is never logged or audited.
@@ -179,4 +207,22 @@ message IdentityUser {
   // external identity provider) as the instance recorded it. Unset for a user
   // who has never signed in.
   google.protobuf.Timestamp last_sign_in_at = 7;
+  // Whether the instance has VERIFIED `email` (Zitadel's isVerified), as
+  // opposed to an address a user merely typed. An entitlement bound to an
+  // address must read this, never `email` alone.
+  bool email_verified = 8;
+}
+
+// IdentitySummary is one managed identity of an environment, by name: what
+// ListIdentities returns, so a console or CLI can address each one.
+message IdentitySummary {
+  // ManagedIdentity.name ("identity" unless the declaration names another).
+  string name = 1;
+  // Empty until the instance is recorded.
+  string issuer = 2;
+  // UNSPECIFIED when the identity is declared and its instance not yet
+  // recorded.
+  IdentityState state = 3;
+  // Whether the control plane holds an instance for it.
+  bool has_instance = 4;
 }

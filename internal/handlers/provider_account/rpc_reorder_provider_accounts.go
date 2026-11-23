@@ -24,15 +24,15 @@ func (s *Service) ReorderProviderAccounts(
 	if provider == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("provider is required"))
 	}
-	if err := s.deps.Store.ReorderProviderAccounts(ctx, userID, provider, req.Msg.GetAccountIds()); err != nil {
+	if err := s.deps.Accounts.ReorderProviderAccounts(ctx, userID, provider, req.Msg.GetAccountIds()); err != nil {
 		return nil, wrapAccountErr(err)
 	}
 	s.afterChange(ctx, userID, provider)
-	accounts, err := s.deps.Store.ListProviderAccounts(ctx, userID)
+	accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
+	limits, err := s.deps.Accounts.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

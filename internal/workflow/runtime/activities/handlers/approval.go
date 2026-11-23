@@ -91,12 +91,13 @@ type ApprovalResolveOutput struct {
 // ApprovalCreateActivity creates an approval record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type ApprovalCreateActivity struct {
-	repo ApprovalCreateStore
+	repo      ApprovalCreateStore
+	approvals ApprovalLookup
 }
 
 // NewApprovalCreateActivity creates a new ApprovalCreateActivity
-func NewApprovalCreateActivity(repo ApprovalCreateStore) *ApprovalCreateActivity {
-	return &ApprovalCreateActivity{repo: repo}
+func NewApprovalCreateActivity(deps ApprovalCreateDeps) *ApprovalCreateActivity {
+	return &ApprovalCreateActivity{repo: deps.Repo, approvals: deps.Approvals}
 }
 
 // Name returns the activity name for registration
@@ -140,7 +141,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		"entityID", entityID)
 
 	// IDEMPOTENCY: Check if we already created this approval using the workflow-scoped entity ID.
-	existingApproval, err := a.repo.GetApprovalByEntityID(ctx, entityID)
+	existingApproval, err := a.approvals.GetApprovalByEntityID(ctx, entityID)
 	if err == nil && existingApproval != nil {
 		logger.Debug("[ApprovalCreate] Found existing approval",
 			"approvalID", existingApproval.ID,
@@ -356,6 +357,9 @@ func (a *ApprovalResolveActivity) Category() schema.ActivityCategory {
 // is announced on the chat feed, or clients keep showing it as pending. A
 // person's decision that landed first is kept.
 func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalResolveInput) (ApprovalResolveOutput, error) {
+	if a.repo == nil {
+		return ApprovalResolveOutput{}, fmt.Errorf("approval resolution store is not configured")
+	}
 	logger := activity.GetLogger(ctx)
 	logger.Info("[ApprovalResolve] Resolving approval",
 		"approvalID", input.ApprovalID,

@@ -32,7 +32,7 @@ func (s *Service) GetConfigHealth(
 	// Credential health is per-user, so it is computed here rather than held in
 	// the process-global collector.
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
-		if stale, err := drivers.HasStaleReliantKey(ctx, s.deps.Repo, userID); err == nil && stale {
+		if stale, err := drivers.HasStaleReliantKey(ctx, s.deps.Accounts, userID); err == nil && stale {
 			// Heal first: the message is only true if the replacement failed.
 			if _, configured, healErr := drivers.HealReliantKey(ctx, userID); healErr != nil {
 				errors = append(errors, validation.NewError(validation.CategoryConfig,

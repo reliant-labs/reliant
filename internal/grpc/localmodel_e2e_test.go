@@ -29,6 +29,7 @@ import (
 	"time"
 
 	userconfig "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
@@ -96,6 +97,7 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 		Logger: slog.Default(),
 		Config: &typedconfig.Config{},
 		Repo:   repo,
+		Pools:  store.NewMachinePoolExtStore(repo.ORM()),
 		Router: router,
 	})
 	require.NoError(t, err)
@@ -104,7 +106,7 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:      slog.Default(),
 		Config:      &typedconfig.Config{},
-		LocalModels: local.NewRepoDirectory(repo),
+		LocalModels: local.NewRepoDirectory(repo, nil),
 	})
 	require.NoError(t, err)
 	p2, h2 := reliantv1connect.NewCatalogServiceHandler(catalogService, asUser)
@@ -168,7 +170,7 @@ func TestLocalModelE2E(t *testing.T) {
 
 	// ── gateway: real ToolsDaemonService + NATS bridge + daemon server ──
 	authority := tokenauthority.NewMemory()
-	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
@@ -278,7 +280,7 @@ func TestLocalModelE2E(t *testing.T) {
 	})
 
 	localSpec := &handlers.LocalModelSpec{
-		Directory: local.NewRepoDirectory(repo),
+		Directory: local.NewRepoDirectory(repo, nil),
 		Transport: func(userID, daemon, endpoint string) http.RoundTripper {
 			return toolexec.NewLocalModelTransport(router, userID, daemon, endpoint)
 		},

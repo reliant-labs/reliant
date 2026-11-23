@@ -158,6 +158,29 @@ container engine's socket), sees only its own processes, and has no capabilities
 write its working directory, and on macOS and Windows only the environment is scrubbed. Never tell an agent to look
 elsewhere for a token; publish with a `git_publish` node.
 
+### A third-party agent CLI on Reliant's gateway
+
+A `run` node with `llm_gateway` runs its command with a short-lived step key for the LLM gateway, billed to the
+run's organization's Reliant credits: capped to `budget_usd` ($5 by default, $50 at most), to `models` (the first is
+the CLI's main model), and to the node's `timeout` plus the run step's 30-minute machine wait plus 2 minutes (at most 12h),
+then revoked when the step ends. For
+`cli: claude-code` the command gets `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` (and the model variables), and
+`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` and the Bedrock/Vertex settings are removed; the key is redacted from
+its output. The node's `env:` may not set those names. `nodes.<id>.llm_gateway.spend_usd` is what was metered as of
+the step's end; it is final only when `spend_known` is true (false: some calls were still settling, so the figure may be low).
+A machine whose daemon is too old, a deployment that cannot issue keys, or an org out of
+credits refuses the step (exit -1) without running the command.
+
+```yaml
+- id: bench
+  type: run
+  timeout: 20m
+  args:
+    command: claude -p "fix the failing test" --output-format json
+    credentials: none
+    llm_gateway: {cli: claude-code, budget_usd: 2}
+```
+
 ### Threading
 
 Modes: `inherit` (default), `new`, `fork`
@@ -815,6 +838,7 @@ condition: "nodes.check.exit_code == 0"
 | `autopilot-security-review` | A read-only security reviewer for the pull requests in the repositories you enable it for. It threat-models the diff (authentication and authorization on new endpoints, injection, SSRF, secrets, unsafe deserialization, path traversal, dependency changes and their advisories, multi-tenant data scoping, CSRF/CORS) and posts ONE review comment: findings grouped by severity, each with file:line evidence, an exploit sketch, confirmed or suspected, and a fix. The review is always a COMMENT: it never approves, never requests changes and never merges. |
 | `autopilot-set-labels` | Adds and removes labels on an issue or pull request, one atomic request per label. Building block of the Autopilot pack; not meant to be started on its own. |
 | `build-workflow` | Build Workflow — create a custom Reliant workflow from a conversation. |
+| `fix-flaky-test` | Fixes one flaky Go test, the way the owner's policy says: make it deterministic, or delete it. It makes a worktree from the default branch, reads what `reliant forge test flakes` and the quarantine list know about the test (and the flake issue, when one is given), and lets an agent with a credential-free shell fix it. The fix is then verified by running the test 50 times under -race (`go test -run '^<Test>$' -count=50 -race`), plus `reliant forge test flakes gate --full` over every test the change touched. A red verify goes back to the agent with the failures, a bounded number of times, and is reported, never published. A green one removes the test's quarantine entry (`reliant forge test quarantine remove`) in the same change and opens a PR. If the agent concludes the test is worthless, deleting it waits for your approval; once approved, the deletion is published with a `flake:removed` issue carrying the test's body and failure signature. Started by you, never by itself. Needs the project to pin a forge that has `forge test`. |
 | `forge-migrate` | Migrate an existing codebase into a Forge project. Distinct from `migrate` (which imports Claude Code/Cursor/Codex config into Reliant) and from `forge-one-shot` (which builds a greenfield app from a conversation). |
 | `forge-one-shot` | Build a production Forge app from a conversation, in ONE get-it-right loop: SCOPE → SCAFFOLD → VERIFY GREEN → FAN OUT → SYNTHESIZE → VERIFY. |
 | `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
@@ -822,6 +846,7 @@ condition: "nodes.check.exit_code == 0"
 | `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
 | `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner applies the winner's changes to the project with git apply, synthesize merges best parts. |
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
+| `raise-coverage` | Raises one Go package's test coverage to a target, with tests that assert behaviour. It makes a worktree from the default branch and measures the package first (its tests, recorded with `reliant forge test capture`, read back with `reliant forge test coverage <path> --json`). Then, each round, an agent with a credential-free shell writes tests; the package's tests must pass and reach the target; `reliant forge test flakes gate` runs every new or edited test three times; and a reviewer agent reads each new test and rejects any that only execute lines (no assertion, or nothing but an error check). A failure of any of those goes back to the author, for at most max_iterations rounds. Reaching the target opens a PR with the coverage before and after and what each test asserts. Missing the target with real gains still opens one, labelled `coverage:partial`. Started by you, never by itself. Needs the project to pin a forge that has `forge test`. |
 | `scope-conversation` | Reusable scoping conversation sub-workflow. |
 | `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns once the model is done (stop_reason), this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
 | `vuln-patch` | Patches the vulnerabilities forge found in an env's release and opens ONE pull request with the fix. It makes a worktree from the default branch and runs `reliant forge vuln patch <env> --no-pr --verify --json`, which bumps each vulnerable dependency, base image or Go toolchain to its fix with the ecosystem's own tool and runs the project's gate. When that bump breaks the build or the tests, or a finding has no deterministic route, a restricted agent (a shell with no credentials, nothing loadable) takes over in the same run, for at most max_agent_iterations attempts; after each one the workflow itself checks that no test was deleted or skipped, the verify command passes and `reliant forge vuln scan . --json` no longer reports the targeted findings. The pull request opens only when that holds: a red patch ends the run failed, with the agent's summary, and opens nothing. git_publish pushes a vuln-patch/ branch (never the default branch, never a force). Never merges. |

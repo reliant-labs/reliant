@@ -8,128 +8,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
-
-// Repository defines the subset of *db.Repo needed by the threads service.
-// This allows for easier testing and decouples threads from the full repository.
-type Repository interface {
-	// Chat operations: ownership, from the chats row alone.
-	GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error)
-
-	// Thread operations
-	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
-	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
-	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
-	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
-	// SenderTitle is the heading for a message from threadID: its title, or
-	// the run's for another run's untitled main thread (db.Repo.SenderTitle).
-	SenderTitle(ctx context.Context, threadID string) *string
-
-	// Workflow operations
-	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
-	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*db.Thread, error)
-
-	// Context window operations
-	CreateContextWindow(ctx context.Context, cw *db.ContextWindow) (*db.ContextWindow, error)
-	GetContextWindow(ctx context.Context, id string) (*db.ContextWindow, error)
-	GetLatestContextWindow(ctx context.Context, threadID string) (*db.ContextWindow, error)
-	GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*db.ContextWindow, error)
-	GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error)
-	SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*db.ContextWindow, error)
-
-	// Message operations (for resolution, token counting, and fork point resolution)
-	GetMessage(ctx context.Context, id string) (*db.Message, error)
-	// FindMessage returns (nil, nil) when no row carries the id, so
-	// SaveMessage can ask whether a pre-allocated id is already taken.
-	FindMessage(ctx context.Context, id string) (*db.Message, error)
-	GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error)
-	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*db.Message, error)
-	// GetLatestMessageInThread returns (nil, nil) for a thread with no
-	// messages -- used by resolveForkPoint to fork a thread's latest state.
-	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
-
-	// Bounded message operations for the display walk
-	// (recentDisplayMessagesBeforeFromCW) and CountCurrentMessages -- these
-	// bound the read or count in SQL, one window at a time, instead of
-	// resolving a thread's whole history. The walk's read leaves out
-	// DISPLAY_STYLE_HIDDEN rows, so its limit counts transcript rows.
-	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
-	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
-	ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
-
-	// Message operations (for SaveMessage)
-	CreateMessage(ctx context.Context, msg *db.Message) error
-	DeleteMessage(ctx context.Context, messageID string) error
-	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
-	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
-	// AllocateMessageOrder takes a message's ordinal and seq from their
-	// counters (db.Repo.AllocateMessageOrder).
-	AllocateMessageOrder(ctx context.Context, threadID, chatID string) (ordinal, seq int64, err error)
-	// AllocateContextWindowSequence takes the sequence of a thread's next
-	// context window from its counter.
-	AllocateContextWindowSequence(ctx context.Context, threadID string) (int, error)
-	GetContextUsage(ctx context.Context, chatID, threadID string) (*db.ContextUsage, error)
-
-	// Content block operations
-	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
-	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
-
-	// Tool call operations. A live message update carries each tool-call
-	// block's durable status and, for a spawn, the thread it started — see
-	// db.ContentBlockPayloadsWithToolCalls.
-	// ListLiveToolCallsByChat is what interrupt and pause cancel: a chat's
-	// non-terminal calls only, read through the partial live-calls index
-	// rather than the chat's whole tool-call history.
-	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
-	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
-	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
-	// durably at the moment the user asks for it -- see cancelToolCalls.
-	UpsertToolCall(ctx context.Context, call *db.ToolCall) error
-	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
-
-	// Attachment operations
-	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
-	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*db.Attachment, error)
-
-	// Chat update operations
-	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
-
-	// SaveMessageAtomic writes a message, its content blocks and its
-	// chat_update in one statement, allocating ordinal/seq from counters
-	// rather than scanning MAX(). This is the hot write path; see
-	// db.SaveMessageAtomic for why it is one statement and why it is safe at
-	// READ COMMITTED.
-	SaveMessageAtomic(ctx context.Context, w db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
-
-	// SeedSeqCounterForFork raises a chat's seq allocator to cover history
-	// inherited through a fork chain, so a branch does not restart at 0 and
-	// sort its replies above the transcript it inherited.
-	SeedSeqCounterForFork(ctx context.Context, chatID, forkAtContextWindowID string) error
-
-	// Transaction support
-	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-}
 
 // Service provides centralized thread and context window management.
 // All thread creation, forking, compaction, and interruption should go through this service.
 type Service struct {
 	repo             Repository
+	messages         Messages
+	senders          Senders
 	temporalSignaler TemporalSignaler
 	toolCanceler     ToolCanceler
 }
 
-// NewService creates a new threads.Service with the given repository.
-func NewService(repo Repository, opts ...ServiceOption) *Service {
-	svc := &Service{repo: repo}
-	for _, opt := range opts {
-		opt(svc)
-	}
-	return svc
+// New builds a Service from deps. Deps.Repo is required; the signaler and the
+// tool canceler are only needed by InterruptThread and the pause path.
+func New(deps Deps) *Service {
+	return &Service{repo: deps.Repo, messages: deps.Messages, senders: deps.Senders, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
 }
 
 // CreateThreadOpts contains options for creating a new root thread.

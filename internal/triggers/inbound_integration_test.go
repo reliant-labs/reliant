@@ -7,11 +7,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -29,9 +32,9 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
 	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), f.starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
-	return f, NewEventFirer(f.repo, launcher), NewIntake(f.repo, starter, "test-queue"), starter
+	return f, NewEventFirer(NewStores(f.repo), launcher), NewIntake(NewStores(f.repo), starter, "test-queue"), starter
 }
 
 func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
@@ -94,9 +97,9 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f.trigger.Config = json.RawMessage(`{}`)
 			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 			runs := &recordingStarter{}
-			firer := NewEventFirer(f.repo, launch.NewLauncher(f.repo, threads.NewService(f.repo), runs, noopRunRecorder{}, "test-queue"))
+			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}
-			intake := NewIntake(f.repo, fires, "test-queue")
+			intake := NewIntake(NewStores(f.repo), fires, "test-queue")
 
 			ev := inbound(f.trigger, "delivery-1", map[string]any{"body": map[string]any{"ref": "main"}})
 			ev.Kind = kind.EventKind()

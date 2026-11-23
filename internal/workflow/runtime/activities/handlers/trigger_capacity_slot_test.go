@@ -23,7 +23,7 @@ func TestTriggerCapacitySlotActivity(t *testing.T) {
 			return true, false, nil
 		},
 	}
-	act := NewTriggerCapacitySlotActivity(repo)
+	act := NewTriggerCapacitySlotActivity(TriggerCapacitySlotDeps{Slots: repo})
 	in := TriggerCapacitySlotInput{EventID: "evt", WorkflowID: "wf", FirstRunID: "run"}
 	want := store.TriggerCapacitySlot{EventID: "evt", WorkflowID: "wf", FirstRunID: "run"}
 

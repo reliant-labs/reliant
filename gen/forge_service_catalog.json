@@ -30,6 +30,10 @@
         "Connector",
         "ConnectorGrants",
         "CoverageSource",
+        "CredentialsAutomationtokens",
+        "CredentialsConnectionvault",
+        "CredentialsOrgaccounts",
+        "CredentialsProvideraccounts",
         "DBRepo",
         "Daemon",
         "DaemonEventsConsumer",
@@ -45,6 +49,7 @@
         "InputOptions",
         "IntegrationSettings",
         "LLMUsageRetention",
+        "Llmusage",
         "MCP",
         "Message",
         "ModelEndpoint",
@@ -62,10 +67,14 @@
         "PayloadStore",
         "Plan",
         "Preset",
+        "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
         "Project",
+        "ProjectPurges",
+        "Projectaccess",
         "ProviderAccount",
+        "Providerbackoff",
         "PullRequestRecord",
         "Question",
         "QueuedDeliverer",
@@ -106,6 +115,7 @@
         "Vault",
         "Workflow",
         "WorkflowReconciler",
+        "Workflowdrafts",
         "Worktree",
         "WorktreeReclaim",
         "WorktreeSweep",
@@ -489,7 +499,12 @@
         "AccountRecorder",
         "AccountUsagePoller",
         "AgentRuns",
+        "ChangeController",
         "ChatUpdateHub",
+        "CredentialsAutomationtokens",
+        "CredentialsConnectionvault",
+        "CredentialsOrgaccounts",
+        "CredentialsProvideraccounts",
         "DBRepo",
         "Database",
         "DebugServer",
@@ -501,9 +516,13 @@
         "OrgResolver",
         "PauseService",
         "PayloadStore",
+        "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
+        "ProjectPurges",
+        "Projectaccess",
+        "Providerbackoff",
         "RemoteExecutor",
         "RepoUpdateFeed",
         "RunLauncher",
@@ -48666,6 +48685,21 @@
             }
           ],
           "reliant.v1.JoinArgs": [],
+          "reliant.v1.LLMGatewayStep": [
+            {
+              "name": "cli",
+              "kind": "string"
+            },
+            {
+              "name": "budget_usd",
+              "kind": "double"
+            },
+            {
+              "name": "models",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListWorkflowsRequest": [
             {
               "name": "project_id",
@@ -49244,6 +49278,11 @@
               "name": "writable_checkouts",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "llm_gateway",
+              "kind": "message",
+              "type_name": "reliant.v1.LLMGatewayStep"
             }
           ],
           "reliant.v1.SaveMessageConfig": [
@@ -50454,6 +50493,7 @@
           "reliant.v1.InvalidWorkflow": "reliant/v1/workflow.proto",
           "reliant.v1.InvokeToolArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.JoinArgs": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.LLMGatewayStep": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ListWorkflowsRequest": "reliant/v1/workflow.proto",
           "reliant.v1.ListWorkflowsResponse": "reliant/v1/workflow.proto",
           "reliant.v1.LoopArgs": "reliant/v1/workflow_v2.proto",
@@ -53901,6 +53941,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ChangeController",
+      "name": "ChangeController",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/llm/tools.ChangeController",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewChangeController"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Chat",
       "name": "Chat",
       "kind": "component",
@@ -53995,6 +54047,154 @@
       },
       "methods": [],
       "implementation_candidates": []
+    },
+    {
+      "id": "CredentialsAutomationtokens",
+      "name": "CredentialsAutomationtokens",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "source": {
+        "path": "internal/credentials/automationtokens/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/automationtokens.MockService",
+          "source": {
+            "path": "internal/credentials/automationtokens/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/automationtokens.forgeMiddlewareService",
+          "source": {
+            "path": "internal/credentials/automationtokens/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/automationtokens.service",
+          "source": {
+            "path": "internal/credentials/automationtokens/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
+      "id": "CredentialsConnectionvault",
+      "name": "CredentialsConnectionvault",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "source": {
+        "path": "internal/credentials/connectionvault/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/connectionvault.MockService",
+          "source": {
+            "path": "internal/credentials/connectionvault/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/connectionvault.forgeMiddlewareService",
+          "source": {
+            "path": "internal/credentials/connectionvault/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/connectionvault.service",
+          "source": {
+            "path": "internal/credentials/connectionvault/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
+      "id": "CredentialsOrgaccounts",
+      "name": "CredentialsOrgaccounts",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Service",
+      "source": {
+        "path": "internal/credentials/orgaccounts/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/orgaccounts.MockService",
+          "source": {
+            "path": "internal/credentials/orgaccounts/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/orgaccounts.forgeMiddlewareService",
+          "source": {
+            "path": "internal/credentials/orgaccounts/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/orgaccounts.service",
+          "source": {
+            "path": "internal/credentials/orgaccounts/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
+      "id": "CredentialsProvideraccounts",
+      "name": "CredentialsProvideraccounts",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "source": {
+        "path": "internal/credentials/provideraccounts/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/provideraccounts.MockService",
+          "source": {
+            "path": "internal/credentials/provideraccounts/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/provideraccounts.forgeMiddlewareService",
+          "source": {
+            "path": "internal/credentials/provideraccounts/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/credentials/provideraccounts.service",
+          "source": {
+            "path": "internal/credentials/provideraccounts/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
     },
     {
       "id": "DBRepo",
@@ -54309,6 +54509,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Llmusage",
+      "name": "Llmusage",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/llmusage.Service",
+      "source": {
+        "path": "internal/llmusage/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.MockService",
+          "source": {
+            "path": "internal/llmusage/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.forgeMiddlewareService",
+          "source": {
+            "path": "internal/llmusage/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/llmusage.service",
+          "source": {
+            "path": "internal/llmusage/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "MCP",
       "name": "MCP",
       "kind": "component",
@@ -54549,6 +54786,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Privacy",
+      "name": "Privacy",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/privacy.Service",
+      "source": {
+        "path": "internal/privacy/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.MockService",
+          "source": {
+            "path": "internal/privacy/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.forgeMiddlewareService",
+          "source": {
+            "path": "internal/privacy/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/privacy.service",
+          "source": {
+            "path": "internal/privacy/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "ProcessRuntime",
       "name": "ProcessRuntime",
       "kind": "provider",
@@ -54597,6 +54871,63 @@
       "implementation_candidates": []
     },
     {
+      "id": "ProjectPurges",
+      "name": "ProjectPurges",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewProjectPurges"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "Projectaccess",
+      "name": "Projectaccess",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "source": {
+        "path": "internal/projectaccess/contract.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.MockService",
+          "source": {
+            "path": "internal/projectaccess/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.MockStore",
+          "source": {
+            "path": "internal/projectaccess/mock_gen.go",
+            "symbol": "MockStore"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.forgeMiddlewareService",
+          "source": {
+            "path": "internal/projectaccess/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.service",
+          "source": {
+            "path": "internal/projectaccess/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "ProviderAccount",
       "name": "ProviderAccount",
       "kind": "component",
@@ -54607,6 +54938,43 @@
       },
       "methods": [],
       "implementation_candidates": []
+    },
+    {
+      "id": "Providerbackoff",
+      "name": "Providerbackoff",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "source": {
+        "path": "internal/providerbackoff/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/providerbackoff.MockService",
+          "source": {
+            "path": "internal/providerbackoff/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/providerbackoff.forgeMiddlewareService",
+          "source": {
+            "path": "internal/providerbackoff/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/providerbackoff.service",
+          "source": {
+            "path": "internal/providerbackoff/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
     },
     {
       "id": "PullRequestRecord",
@@ -55354,6 +55722,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Workflowdrafts",
+      "name": "Workflowdrafts",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/workflowdrafts.Service",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.MockService",
+          "source": {
+            "path": "internal/workflowdrafts/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.forgeMiddlewareService",
+          "source": {
+            "path": "internal/workflowdrafts/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.service",
+          "source": {
+            "path": "internal/workflowdrafts/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Worktree",
       "name": "Worktree",
       "kind": "component",
@@ -55428,6 +55833,32 @@
   ],
   "bindings": [
     {
+      "consumer": "APICatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "APIConnections",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "APIConnections",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -55448,6 +55879,68 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Account",
+      "field": "Purger",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/account.Purger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "AccountRecorder",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AccountUsagePoller",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AccountUsagePoller",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Approval",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Approval",
@@ -55618,8 +56111,33 @@
     },
     {
       "consumer": "Chat",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Backoff",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/llm/drivers/local.Directory",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Messages",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Messages",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -55655,6 +56173,30 @@
     },
     {
       "consumer": "Chat",
+      "field": "ProjectRows",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.ProjectReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Repository",
       "methods": [],
@@ -55682,12 +56224,80 @@
     },
     {
       "consumer": "Chat",
+      "field": "Selections",
+      "interface": "github.com/reliant-labs/reliant/internal/chatselection.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Senders",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Spawns",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Temporal",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Temporal",
       "methods": [],
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "ToolBlocks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ToolBlocks",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Worktrees",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.WorktreeReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -55782,6 +56392,89 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "CredentialsAutomationtokens",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsAutomationtokens",
+      "field": "Sealer",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Sealer",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsConnectionvault",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsOrgaccounts",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsOrgaccounts",
+      "field": "Sealer",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Sealer",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsProvideraccounts",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CredentialsProvideraccounts",
+      "field": "Sealer",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Sealer",
+      "methods": [],
+      "candidates": [
+        "Vault"
+      ],
+      "providers": [
+        "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Daemon",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon.Sender",
@@ -55850,6 +56543,17 @@
     },
     {
       "consumer": "DaemonRegistry",
+      "field": "Pools",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Pools",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "DaemonRegistry",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Repository",
       "methods": [],
@@ -55872,6 +56576,19 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "FileSystem",
+      "field": "Placement",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Placement",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -55904,6 +56621,20 @@
     },
     {
       "consumer": "Forge",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Forge",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/forge.Repository",
       "methods": [],
@@ -55926,6 +56657,19 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GitHubAccess",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
       ],
       "resolution": "composition_expression"
     },
@@ -55970,6 +56714,28 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Firings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Firings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Items",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Items",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Marks",
       "interface": "github.com/reliant-labs/reliant/internal/worktreesweep.MarkDecisionStore",
       "methods": [],
@@ -56000,6 +56766,30 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Notices",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Notices",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "OrgKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgKeys",
+      "methods": [],
+      "candidates": [
+        "CredentialsOrgaccounts"
+      ],
+      "providers": [
+        "CredentialsOrgaccounts"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Inbox",
@@ -56040,6 +56830,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Storage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Storage",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Sweeper",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Sweeper",
       "methods": [],
@@ -56048,6 +56849,81 @@
       ],
       "providers": [
         "WorktreeSweep"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "InputOptions",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "LLMUsageRetention",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.Service",
+      "methods": [],
+      "candidates": [
+        "Llmusage"
+      ],
+      "providers": [
+        "Llmusage"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.Ledger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -56093,12 +56969,36 @@
     },
     {
       "consumer": "Message",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Message",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Repository",
       "methods": [],
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Message",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Senders",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -56115,8 +57015,19 @@
     },
     {
       "consumer": "ModelEndpoint",
-      "field": "Repo",
+      "field": "Endpoints",
       "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ModelEndpoint",
+      "field": "Machines",
+      "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Machines",
       "methods": [],
       "candidates": [
         "Database"
@@ -56163,6 +57074,19 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgCredentialSweep",
+      "field": "OrgAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsOrgaccounts"
+      ],
+      "providers": [
+        "CredentialsOrgaccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "OrgPolicyImpact",
       "field": "Attendance",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
@@ -56172,6 +57096,19 @@
       ],
       "providers": [
         "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56202,14 +57139,54 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgPolicyWatcher",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Accounts",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "OrgProviderAccount",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgChatWaker",
       "methods": [],
       "candidates": [],
       "providers": [
-        "Database",
+        "Providerbackoff",
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "OrgAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.OrgAccounts",
+      "methods": [],
+      "candidates": [
+        "CredentialsOrgaccounts"
+      ],
+      "providers": [
+        "CredentialsOrgaccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -56227,19 +57204,6 @@
       "resolution": "composition_expression"
     },
     {
-      "consumer": "OrgProviderAccount",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
-      "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
-    },
-    {
       "consumer": "OrgResolver",
       "field": "Authority",
       "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
@@ -56249,6 +57213,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -56271,6 +57248,33 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
+      "field": "Placement",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Placement",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -56367,6 +57371,34 @@
     },
     {
       "consumer": "Preset",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/preset.Drafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Preset",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Preset",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/preset.Repository",
       "methods": [],
@@ -56375,6 +57407,43 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Privacy",
+      "field": "Settings",
+      "interface": "github.com/reliant-labs/reliant/internal/privacy.Settings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProcessRuntime",
+      "field": "Privacy",
+      "interface": "github.com/reliant-labs/reliant/internal/privacy.Service",
+      "methods": [],
+      "candidates": [
+        "Privacy"
+      ],
+      "providers": [
+        "Privacy"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProcessRuntime",
+      "field": "ProviderAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -56391,6 +57460,42 @@
       "consumer": "Project",
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Detachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Detachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.DaemonInstalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Ledger",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveLedger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Lookups",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectLookups",
       "methods": [],
       "candidates": [],
       "providers": [],
@@ -56426,6 +57531,42 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Project",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
+      "methods": [],
+      "candidates": [
+        "ProjectPurges"
+      ],
+      "providers": [
+        "ProjectPurges"
       ],
       "resolution": "composition_expression"
     },
@@ -56470,6 +57611,54 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Project",
+      "field": "Shared",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.SharedProjects",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "ProjectPurge",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "methods": [],
+      "candidates": [
+        "ProjectPurges"
+      ],
+      "providers": [
+        "ProjectPurges"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Projectaccess",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Accounts",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "ProviderAccount",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.ChatWaker",
@@ -56480,6 +57669,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
+      "field": "Funding",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.PersonalFunding",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56504,6 +57704,43 @@
       "candidates": [],
       "providers": [
         "Chat",
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Providerbackoff",
+      "field": "Activity",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.ChatActivity",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Providerbackoff",
+      "field": "Markers",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Markers",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Providerbackoff",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
         "Database"
       ],
       "resolution": "composition_expression"
@@ -56513,9 +57750,7 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Store",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -56532,6 +57767,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Questions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Questions",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56576,8 +57822,35 @@
     },
     {
       "consumer": "Repo",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Repo",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Repo",
+      "field": "Repos",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.RepoLister",
       "methods": [],
       "candidates": [
         "Database"
@@ -56598,6 +57871,32 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56638,6 +57937,84 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "RunLauncher",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "RunLifecycle",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.Drafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -56695,11 +58072,23 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Store",
       "methods": [],
+      "candidates": [],
+      "providers": [
+        "CredentialsOrgaccounts",
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Accounts",
+      "methods": [],
       "candidates": [
-        "Database"
+        "CredentialsProvideraccounts"
       ],
       "providers": [
-        "Database"
+        "CredentialsProvideraccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -56725,6 +58114,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Privacy",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Privacy",
+      "methods": [],
+      "candidates": [
+        "Privacy"
+      ],
+      "providers": [
+        "Privacy"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Settings",
@@ -56833,6 +58235,28 @@
     },
     {
       "consumer": "Streaming",
+      "field": "Heads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Heads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "OrgFeed",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeed",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeedResolver",
       "methods": [],
@@ -56846,12 +58270,69 @@
     },
     {
       "consumer": "Streaming",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Projects",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Repository",
       "methods": [],
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Senders",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Senders",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Siblings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Siblings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "SpawnCalls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "UserLog",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.UserLog",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -56980,6 +58461,45 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
+      "field": "OrgAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsOrgaccounts"
+      ],
+      "providers": [
+        "CredentialsOrgaccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
+      "field": "ProviderAccounts",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -57051,6 +58571,19 @@
     },
     {
       "consumer": "ToolCall",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolCall",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.Repository",
       "methods": [],
@@ -57084,6 +58617,83 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolCall",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Attachments",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Checkouts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.MachineCheckouts",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Installs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectDaemons",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "LocalModels",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.LocalModels",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Pools",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.MachinePools",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.ProjectLookups",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57149,6 +58759,19 @@
       ],
       "providers": [
         "TriggerAlerting"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationKeyStore",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
       ],
       "resolution": "composition_expression"
     },
@@ -57223,6 +58846,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "OrgMoves",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgMoveResumer",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgResolver",
       "methods": [],
@@ -57231,6 +58865,31 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Pools",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Pools",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57270,6 +58929,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "TriggerDeliveryRelay",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "TriggerInbound",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -57284,6 +58956,19 @@
     },
     {
       "consumer": "TriggerSenders",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TriggerSenders",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
       "methods": [],
@@ -57292,6 +58977,19 @@
       ],
       "providers": [
         "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Usage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "CredentialsProvideraccounts"
+      ],
+      "providers": [
+        "CredentialsProvideraccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -57331,6 +59029,59 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "WorkerCatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerChat",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerDaemonRouter",
+      "field": "AutomationTokens",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerIntegrationCredentials",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "WorkerIntegrationCredentials",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -57345,6 +59096,46 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "Backoff",
+      "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Providerbackoff"
+      ],
+      "providers": [
+        "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
+      "field": "ChangeController",
+      "interface": "github.com/reliant-labs/reliant/internal/llm/tools.ChangeController",
+      "methods": [],
+      "candidates": [
+        "ChangeController"
+      ],
+      "providers": [
+        "ChangeController"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -57353,6 +59144,19 @@
       ],
       "providers": [
         "WriteLedger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
       ],
       "resolution": "composition_expression"
     },
@@ -57385,6 +59189,19 @@
     },
     {
       "consumer": "Workflow",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Drafts",
+      "methods": [],
+      "candidates": [
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.OrgResolver",
       "methods": [],
@@ -57393,6 +59210,31 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Pools",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Pools",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57437,6 +59279,61 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Workflowdrafts",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.Drafts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Locks",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.OrgLocks",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.UserUpdates",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.DaemonReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Worktree",
       "field": "GitCredentials",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.GitCredentialProvider",
@@ -57444,6 +59341,33 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "ProjectRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.ProjectReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",
@@ -57471,6 +59395,19 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Repos",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.RepoLister",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Router",
       "methods": [],
@@ -57480,6 +59417,17 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Rows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Rows",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57504,6 +59452,19 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorktreeReclaim",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Daemons",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57553,6 +59514,14 @@
     {
       "code": "binding_unresolved",
       "component": "Account.ControlPlane",
+      "source": {
+        "path": "internal/handlers/account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Account.Purger",
       "source": {
         "path": "internal/handlers/account/service.go",
         "symbol": "New"
@@ -57704,7 +59673,55 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Project.Detachments",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Installs",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Ledger",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Lookups",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.ProjectConfigs",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Shared",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"
@@ -57892,6 +59909,38 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Drafts",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Locks",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Tx",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Updates",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
       }
     },
     {

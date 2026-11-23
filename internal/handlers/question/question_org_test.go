@@ -30,7 +30,7 @@ func (memberOf) DefaultOrg(context.Context, string) (string, error) { return "ho
 func TestListPendingQuestions_LeavesOutQuestionsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	org := func(s string) *string { return &s }
 	chatOrgs := map[string]*string{"c-acme": org("acme"), "c-home": org("home")}
-	repo := &MockRepository{
+	questions := &MockQuestions{
 		ListAnswerablePendingQuestionsByUserFunc: func(context.Context, string) ([]*db.Question, error) {
 			return []*db.Question{
 				{ID: "q-acme-1", ChatID: "c-acme"},
@@ -38,11 +38,13 @@ func TestListPendingQuestions_LeavesOutQuestionsOfAnOrgTheCallerMayNotRead(t *te
 				{ID: "q-acme-2", ChatID: "c-acme"},
 			}, nil
 		},
+	}
+	repo := &MockRepository{
 		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
 			return &db.ChatRow{ID: id, UserID: "test-user", OrgID: chatOrgs[id]}, nil
 		},
 	}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: questions}))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
 		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{}))

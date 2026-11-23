@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -50,6 +51,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -436,11 +439,14 @@ type ProcessRuntime struct {
 // ProcessRuntimeDeps is what that state reads. Settings orders it after the
 // config-only globals (drivers.Configure before the key provider).
 type ProcessRuntimeDeps struct {
-	Settings     *ProcessSettings
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
-	Network      *configv1.NetworkConfig
-	Analytics    *configv1.AnalyticsConfig
+	Settings         *ProcessSettings
+	DB               *db.Repo
+	ProviderAccounts provideraccounts.Service
+	ControlPlane     *configv1.ControlPlaneConfig
+	Network          *configv1.NetworkConfig
+	Analytics        *configv1.AnalyticsConfig
+	// Privacy is where each user's analytics consent is read from.
+	Privacy privacy.Service
 }
 
 // NewProcessRuntime installs the database-backed process globals.
@@ -449,9 +455,9 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.
-	drivers.InitializeAPIKeyProvider(repo)
-	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
-	analytics.Start(AnalyticsSettings(d.Analytics), repo, repo)
+	drivers.InitializeAPIKeyProvider(d.ProviderAccounts, repo)
+	healer := drivers.InstallReliantKeyHealer(d.ProviderAccounts, repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
+	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, store.NewUserAppSessionExtStore(repo.ORM()))
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 

@@ -20,7 +20,7 @@ func TestDismissInboxItem_Generated(t *testing.T) {
 	t.Parallel()
 
 	// The one write this rpc makes is programmed; every read refuses.
-	svc := inbox.NewTestInbox(t, inbox.WithInboxDeps(inbox.Deps{Repo: &inbox.MockRepository{
+	svc := inbox.NewTestInbox(t, inbox.WithInboxDeps(inbox.Deps{Items: &inbox.MockItems{
 		DismissInboxItemsFunc: func(context.Context, string, []string, time.Time) error { return nil },
 	}}))
 

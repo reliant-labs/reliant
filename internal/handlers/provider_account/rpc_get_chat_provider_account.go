@@ -38,22 +38,22 @@ func (s *Service) GetChatProviderAccount(
 		// A chat with no thread has made no model call.
 		return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
 	}
-	servingID, err := s.deps.Store.LatestServingAccount(ctx, root.ID)
+	servingID, err := s.deps.Accounts.LatestServingAccount(ctx, root.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	assignments, err := s.deps.Store.ListThreadAssignments(ctx, root.ID)
+	assignments, err := s.deps.Accounts.ListThreadAssignments(ctx, root.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	if servingID == "" && len(assignments) == 0 {
 		return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
 	}
-	accounts, err := s.deps.Store.ListProviderAccounts(ctx, userID)
+	accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
+	limits, err := s.deps.Accounts.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -65,13 +65,13 @@ func (s *Service) GetChatProviderAccount(
 	// a stale assignment to a key they lost, or of an org they left, names nothing.
 	if chat.OrgID != nil && *chat.OrgID != "" {
 		owner := core.OrgAccountOwner(*chat.OrgID)
-		orgAccounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, owner)
+		orgAccounts, err := s.deps.Accounts.ListOwnedProviderAccounts(ctx, owner)
 		if err != nil {
 			return nil, svcerr.Wrap(err)
 		}
-		orgAccounts = drivers.UsableOrgAccounts(ctx, s.deps.Store, userID, *chat.OrgID, orgAccounts)
+		orgAccounts = drivers.UsableOrgAccounts(ctx, s.deps.Accounts, userID, *chat.OrgID, orgAccounts)
 		if len(orgAccounts) > 0 {
-			orgLimits, err := s.deps.Store.ListOwnedAccountLimits(ctx, owner)
+			orgLimits, err := s.deps.Accounts.ListOwnedAccountLimits(ctx, owner)
 			if err != nil {
 				return nil, svcerr.Wrap(err)
 			}

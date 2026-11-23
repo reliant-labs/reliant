@@ -136,7 +136,7 @@ func (l *Launcher) RootProvider(ctx context.Context, userID string, chat *db.Cha
 	if chat == nil {
 		return ""
 	}
-	if sel, err := l.repo.GetChatSelection(ctx, chat.ID); err == nil && sel != nil && sel.ChatProvider != "" {
+	if sel, err := l.selections.GetChatSelection(ctx, chat.ID); err == nil && sel != nil && sel.ChatProvider != "" {
 		return sel.ChatProvider
 	}
 	inputs, err := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, chat.SelectedPresets, nil)

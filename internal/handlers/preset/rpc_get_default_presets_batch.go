@@ -52,7 +52,7 @@ func (s *Service) GetDefaultPresetsBatch(
 	}()
 	go func() {
 		defer wg.Done()
-		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userIDStr, req.Msg.ProjectId)
+		catalog = workflowcatalog.Load(ctx, workflowcatalog.NewReads(s.deps.Drafts, s.deps.Repo), userIDStr, req.Msg.ProjectId)
 	}()
 	wg.Wait()
 

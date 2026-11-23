@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -86,7 +87,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(c.h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(c.h.Repo(), workspaceRowsOf(c.h.Repo()), toolCallsOf(c.h.Repo()), executor).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},
@@ -125,7 +126,7 @@ func TestRepro_ToolCallWithAReusedIDIsNotAnsweredFromAnotherChat(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, chatA, call.ChatID, "chat A's call record must stay chat A's")
 	require.JSONEq(t, `{"command":"cat /a/secret"}`, string(call.Input))
-	result, err := c.h.Repo().GetToolCallResult(ctx, "bash")
+	result, err := store.FindToolCallResult(ctx, c.h.Repo().ORM(), "bash")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "chat A's private output", result.Content, "chat B's output must not replace chat A's recorded result")
@@ -157,7 +158,7 @@ func TestRepro_ToolCallWithAReusedIDDoesNotOverwriteAnotherChatsRunningCall(t *t
 	require.Equal(t, chatA, call.ChatID)
 	require.Equal(t, core.ToolCallStatusExecuting, call.Status, "chat A's call is still running; chat B finishing must not end it")
 	require.JSONEq(t, `{"command":"sleep 600"}`, string(call.Input))
-	result, err := c.h.Repo().GetToolCallResult(ctx, "shell-1")
+	result, err := store.FindToolCallResult(ctx, c.h.Repo().ORM(), "shell-1")
 	require.NoError(t, err)
 	require.Nil(t, result, "chat B's output must not be recorded as the result of chat A's call")
 }
@@ -284,11 +285,11 @@ func TestToolCallIDIsolation_HistoryRecoveryUsesOnlyThisCallsResult(t *testing.T
 		ToolCallID: "call_0", Content: "chat A's private output", CreatedAt: now, UpdatedAt: now,
 	}))
 	historyB := []message.Message{userWithText("u-b", "go"), assistantWithToolCall(c.assistantMessage(t, chatB, chatB), "call_0", "bash")}
-	out := recoverPersistedToolResults(ctx, c.h.Repo(), historyB)
+	out := recoverPersistedToolResults(ctx, toolCallsOf(c.h.Repo()), historyB)
 	require.Len(t, out, len(historyB), "chat B's history must not be given chat A's result: %+v", out)
 
 	historyA := []message.Message{userWithText("u-a", "go"), assistantWithToolCall(msgA, "call_0", "bash")}
-	out = recoverPersistedToolResults(ctx, c.h.Repo(), historyA)
+	out = recoverPersistedToolResults(ctx, toolCallsOf(c.h.Repo()), historyA)
 	require.Len(t, out, len(historyA)+1, "chat A's own result must still be recovered")
 	require.Equal(t, "chat A's private output", out[len(out)-1].ToolResults()[0].Content)
 }

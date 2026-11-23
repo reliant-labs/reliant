@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -72,7 +73,7 @@ func (f *runEventFixture) finish(t *testing.T, status, outcome, errText string) 
 		Status: status, Thread: f.chatID, Outcome: outcome, Error: errText,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, input, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, input, &out))
 }
 
 func (f *runEventFixture) events(t *testing.T) []*core.RunEvent {
@@ -141,13 +142,13 @@ func TestApprovalAndQuestionCreate_EmitBlockedOnceForTheFirstPendingItem(t *test
 	f := newRunEventFixture(t, true)
 
 	var approvalOut ApprovalCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewApprovalCreateActivity(f.h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(f.h.Repo())).Execute, ApprovalCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, StepID: "gate", Title: "Deploy to production?",
 	}, &approvalOut))
 
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var questionOut QuestionCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo()).Execute, QuestionCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 	}, &questionOut))
 
@@ -166,7 +167,7 @@ func TestQuestionCreate_EmitsBlockedWithTheQuestionText(t *testing.T) {
 	f := newRunEventFixture(t, true)
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var out QuestionCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo()).Execute, QuestionCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 	}, &out))
 
@@ -186,7 +187,7 @@ func TestWorkflowStatus_ChildAndCancelledEmitNoRunEvent(t *testing.T) {
 		WorkflowName: "child", Status: "completed", Thread: f.chatID + "/child",
 	}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, input, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, input, &out))
 	f.finish(t, "cancelled", "", "")
 	assert.Empty(t, f.events(t), "only a ROOT run finishing or failing is a workflow event")
 }

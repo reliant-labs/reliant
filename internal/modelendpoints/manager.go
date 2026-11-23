@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/localprobe"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -30,15 +31,20 @@ var ErrDaemonOffline = svcerr.Unavailable("that machine is offline")
 // else; the two are indistinguishable on purpose.
 var ErrDaemonNotOwned = svcerr.NotFound("machine")
 
-// Store is the slice of *db.Repo the manager uses. Declared here, at the
-// consumer.
+// Store is the model_endpoints queries the manager uses, every one scoped to
+// the owning user. Declared here, at the consumer; store.ModelEndpointExtStore
+// satisfies it.
 type Store interface {
-	CreateModelEndpoint(ctx context.Context, e *db.ModelEndpoint) error
-	GetModelEndpoint(ctx context.Context, userID, id string) (*db.ModelEndpoint, error)
-	ListModelEndpoints(ctx context.Context, userID string) ([]*db.ModelEndpoint, error)
-	UpdateModelEndpoint(ctx context.Context, e *db.ModelEndpoint) error
+	InsertModelEndpoint(ctx context.Context, e *core.ModelEndpoint) error
+	GetModelEndpoint(ctx context.Context, userID, id string) (*core.ModelEndpoint, error)
+	ListModelEndpoints(ctx context.Context, userID string) ([]*core.ModelEndpoint, error)
+	ReplaceModelEndpoint(ctx context.Context, e *core.ModelEndpoint) error
 	SetModelEndpointProbe(ctx context.Context, userID, id, probeJSON string) error
-	DeleteModelEndpoint(ctx context.Context, userID, id string) error
+	RemoveModelEndpoint(ctx context.Context, userID, id string) error
+}
+
+// Machines looks up the daemon a VIA_DAEMON endpoint names.
+type Machines interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
@@ -57,6 +63,7 @@ type DaemonControl interface {
 // Config wires a Manager.
 type Config struct {
 	Store       Store
+	Machines    Machines
 	Daemons     DaemonControl
 	Credentials EndpointCredentials
 	// Policy governs DIRECT endpoints. Hosted deployments must leave
@@ -112,7 +119,7 @@ func (m *Manager) List(ctx context.Context, userID string) ([]*reliantv1.ModelEn
 	return out, nil
 }
 
-func (m *Manager) toProto(ctx context.Context, row *db.ModelEndpoint) *reliantv1.ModelEndpoint {
+func (m *Manager) toProto(ctx context.Context, row *core.ModelEndpoint) *reliantv1.ModelEndpoint {
 	out := &reliantv1.ModelEndpoint{
 		Id: row.ID, Name: row.Name, BaseUrl: row.BaseURL, Route: routeFromDB(row.Route),
 		HeaderNames: append([]string(nil), row.HeaderNames...),
@@ -179,7 +186,7 @@ func (m *Manager) Create(ctx context.Context, userID string, in *reliantv1.Model
 		return nil, invalid("You've reached the limit of %d custom endpoints.", maxEndpointsPer)
 	}
 
-	row := &db.ModelEndpoint{
+	row := &core.ModelEndpoint{
 		ID: uuid.NewString(), UserID: userID, Name: n.Name, BaseURL: n.BaseURL, Route: n.Route,
 	}
 	if n.DaemonID != "" {
@@ -197,7 +204,7 @@ func (m *Manager) Create(ctx context.Context, userID string, in *reliantv1.Model
 
 	probe, _ := m.probeRow(ctx, row, in)
 	row.ProbeJSON = local.EncodeProbe(probe)
-	if err := m.cfg.Store.CreateModelEndpoint(ctx, row); err != nil {
+	if err := m.cfg.Store.InsertModelEndpoint(ctx, row); err != nil {
 		// The credential was sealed for an endpoint that never got stored.
 		if connID != nil {
 			_ = m.cfg.Credentials.Delete(ctx, userID, *connID)
@@ -238,7 +245,7 @@ func (m *Manager) Update(ctx context.Context, userID, id string, in *reliantv1.M
 
 	probe, _ := m.probeRow(ctx, row, in)
 	row.ProbeJSON = local.EncodeProbe(probe)
-	if err := m.cfg.Store.UpdateModelEndpoint(ctx, row); err != nil {
+	if err := m.cfg.Store.ReplaceModelEndpoint(ctx, row); err != nil {
 		return nil, err
 	}
 
@@ -258,7 +265,7 @@ func (m *Manager) Delete(ctx context.Context, userID, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := m.cfg.Store.DeleteModelEndpoint(ctx, userID, id); err != nil {
+	if err := m.cfg.Store.RemoveModelEndpoint(ctx, userID, id); err != nil {
 		return err
 	}
 	if row.CredentialConnectionID != nil {
@@ -301,7 +308,7 @@ func (m *Manager) Test(ctx context.Context, userID, id string, draft *reliantv1.
 	if _, isNA := m.cfg.Credentials.(NotAvailableCredentials); isNA && hasSecrets(draft) {
 		return nil, 0, ErrCredentialStoreUnavailable
 	}
-	row := &db.ModelEndpoint{UserID: userID, Name: n.Name, BaseURL: n.BaseURL, Route: n.Route}
+	row := &core.ModelEndpoint{UserID: userID, Name: n.Name, BaseURL: n.BaseURL, Route: n.Route}
 	if n.DaemonID != "" {
 		row.DaemonID = &n.DaemonID
 	}
@@ -316,12 +323,12 @@ func (m *Manager) Test(ctx context.Context, userID, id string, draft *reliantv1.
 // allowed to dial.
 func (m *Manager) checkRoute(ctx context.Context, userID string, n *normalizedInput) error {
 	switch n.Route {
-	case db.ModelEndpointRouteViaDaemon:
-		d, err := m.cfg.Store.GetDaemon(ctx, n.DaemonID)
+	case core.ModelEndpointRouteViaDaemon:
+		d, err := m.cfg.Machines.GetDaemon(ctx, n.DaemonID)
 		if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 			return ErrDaemonNotOwned
 		}
-	case db.ModelEndpointRouteDirect:
+	case core.ModelEndpointRouteDirect:
 		if err := m.cfg.Policy.CheckURL(ctx, n.BaseURL); err != nil {
 			return invalid("%s", err.Error())
 		}
@@ -387,16 +394,16 @@ func (m *Manager) applyCredentials(ctx context.Context, userID, endpointID strin
 // (carrying Error when the server did not answer); the error is for the
 // caller's caller to act on only when it matters, and is nil for "the server
 // said no".
-func (m *Manager) probeRow(ctx context.Context, row *db.ModelEndpoint, draft *reliantv1.ModelEndpointInput) (*reliantv1.LocalModelEndpoint, error) {
+func (m *Manager) probeRow(ctx context.Context, row *core.ModelEndpoint, draft *reliantv1.ModelEndpointInput) (*reliantv1.LocalModelEndpoint, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeBudget)
 	defer cancel()
-	if row.Route == db.ModelEndpointRouteViaDaemon {
+	if row.Route == core.ModelEndpointRouteViaDaemon {
 		return m.probeViaDaemon(ctx, row), nil
 	}
 	return m.probeDirect(ctx, row, draft), nil
 }
 
-func (m *Manager) probeDirect(ctx context.Context, row *db.ModelEndpoint, draft *reliantv1.ModelEndpointInput) *reliantv1.LocalModelEndpoint {
+func (m *Manager) probeDirect(ctx context.Context, row *core.ModelEndpoint, draft *reliantv1.ModelEndpointInput) *reliantv1.LocalModelEndpoint {
 	root, err := localprobe.NormalizeRoot(row.BaseURL)
 	if err != nil {
 		return &reliantv1.LocalModelEndpoint{Id: row.ID, Kind: "openai_compatible", BaseUrl: row.BaseURL, Source: "configured", Error: err.Error()}
@@ -424,7 +431,7 @@ func (m *Manager) probeDirect(ctx context.Context, row *db.ModelEndpoint, draft 
 
 // probeViaDaemon authorizes the endpoint on its machine's relay and returns
 // what the daemon's own prober saw.
-func (m *Manager) probeViaDaemon(ctx context.Context, row *db.ModelEndpoint) *reliantv1.LocalModelEndpoint {
+func (m *Manager) probeViaDaemon(ctx context.Context, row *core.ModelEndpoint) *reliantv1.LocalModelEndpoint {
 	daemonID := derefStr(row.DaemonID)
 	root, rootErr := localprobe.NormalizeRoot(row.BaseURL)
 	failed := func(msg string) *reliantv1.LocalModelEndpoint {
@@ -464,7 +471,7 @@ func (m *Manager) probeViaDaemon(ctx context.Context, row *db.ModelEndpoint) *re
 // endpoints in the daemon-local Settings) plus every VIA_DAEMON endpoint the
 // user has pointed at that daemon. SetLocalModelEndpoints REPLACES the daemon's
 // list, so sending only ours would silently delete the hand-added ones.
-func desiredURLs(current []string, rows []*db.ModelEndpoint, daemonID string, extra *db.ModelEndpoint, drop map[string]bool) []string {
+func desiredURLs(current []string, rows []*core.ModelEndpoint, daemonID string, extra *core.ModelEndpoint, drop map[string]bool) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(u string) {
@@ -481,8 +488,8 @@ func desiredURLs(current []string, rows []*db.ModelEndpoint, daemonID string, ex
 		}
 		add(u)
 	}
-	include := func(r *db.ModelEndpoint) {
-		if r.Route == db.ModelEndpointRouteViaDaemon && derefStr(r.DaemonID) == daemonID {
+	include := func(r *core.ModelEndpoint) {
+		if r.Route == core.ModelEndpointRouteViaDaemon && derefStr(r.DaemonID) == daemonID {
 			add(r.BaseURL)
 		}
 	}
@@ -530,7 +537,7 @@ func (m *Manager) revokeFrom(ctx context.Context, userID, daemonID, oldBaseURL s
 	return err
 }
 
-func (m *Manager) syncDaemonWith(ctx context.Context, userID, daemonID string, pending *db.ModelEndpoint, drop map[string]bool) (*reliantv1.LocalModelInventory, error) {
+func (m *Manager) syncDaemonWith(ctx context.Context, userID, daemonID string, pending *core.ModelEndpoint, drop map[string]bool) (*reliantv1.LocalModelInventory, error) {
 	if m.cfg.Daemons == nil {
 		return nil, errors.New("machine relay is not available on this server")
 	}

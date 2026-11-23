@@ -11,6 +11,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -20,9 +21,14 @@ import (
 // Service owns the run lifecycle: making a chat's run stop, and making it
 // execute again. See the package doc for what that ownership covers.
 type Service struct {
-	repo     Repository
-	temporal TemporalClient
-	pause    PauseController
+	repo      Repository
+	workflows WorkflowLoader
+	questions Questions
+	temporal  TemporalClient
+	pause     PauseController
+	// waits releases a stopped run's usage-limit wait markers; nil releases
+	// none (Deps.Waits unset).
+	waits UsageLimitWaits
 
 	// cancelGrace, cancelSettle and cancelPoll override cancelGrace,
 	// cancelSettleTimeout and cancelPollInterval when positive; tests shrink
@@ -34,10 +40,12 @@ type Service struct {
 	sleep func(ctx context.Context, d time.Duration)
 }
 
-// NewService builds a run-lifecycle service over the chat store, Temporal, and
-// the pause/reset controller.
-func NewService(repo Repository, temporal TemporalClient, pause PauseController) *Service {
-	return &Service{repo: repo, temporal: temporal, pause: pause}
+// New builds a run-lifecycle service over the chat store, its question store,
+// Temporal, the pause/reset controller and the usage-limit wait markers. Plain
+// Deps, not a forge contract package: it is built by hand in the worker and the
+// chat handler.
+func New(deps Deps) *Service {
+	return &Service{repo: deps.Repo, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -315,7 +323,7 @@ func (s *Service) cancelledRunSettled(ctx context.Context, workflowID string) bo
 //     running. The cascade ends only live descendants, so for the usual row,
 //     whose writer committed status and cascade together, it is a no-op.
 func (s *Service) settleClosedRun(ctx context.Context, workflowID string) {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
 		if err != nil {
 			logging.WarnContext(ctx, "[runs] Could not read a cancelled run's row to settle it",
@@ -340,7 +348,10 @@ func (s *Service) settleClosedRun(ctx context.Context, workflowID string) {
 // terminated run executes no code, so the workflow cannot clear its own; left
 // behind, the marker would read as a wait nobody is in.
 func (s *Service) clearUsageLimitWait(ctx context.Context, chatID string) {
-	if err := s.repo.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
+	if s.waits == nil {
+		return
+	}
+	if err := s.waits.ClearUsageLimitWait(ctx, chatID, "", time.Now()); err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to clear the usage-limit wait marker of a stopped run",
 			"chatID", chatID, "error", err)
 	}
@@ -503,7 +514,7 @@ func (s *Service) Inspect(ctx context.Context, chatID string) (Inspection, error
 	if state.IsRunning {
 		// Open in Temporal. Stuck only if the row disagrees by claiming the
 		// run already failed.
-		wf, wfErr := s.repo.GetWorkflow(ctx, workflowID)
+		wf, wfErr := s.workflows.LoadWorkflow(ctx, workflowID)
 		stuck := wfErr == nil && wf != nil && wf.Status == db.Failed()
 		return Inspection{WorkflowID: workflowID, Stuck: stuck}, nil
 	}
@@ -648,7 +659,7 @@ func (s *Service) cascadeTerminal(ctx context.Context, workflowID string, reason
 }
 
 func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, status db.WorkflowStatus) {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to load workflow before stopped-run reconciliation",
 			"workflowID", workflowID, "error", err)
@@ -661,7 +672,7 @@ func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, st
 }
 
 func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil {
 		return fmt.Errorf("load workflow %s before terminate CAS: %w", workflowID, err)
 	}
@@ -686,7 +697,7 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 	// Every pending question, not the newest: each spawned agent is a thread of
 	// the run being terminated and can be parked on its own question.
-	questions, err := s.repo.ListPendingQuestionsByChat(ctx, chatID)
+	questions, err := s.questions.ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to look up pending questions while terminating",
 			"chatID", chatID, "error", err)
@@ -736,7 +747,7 @@ func (s *Service) chatRun(ctx context.Context, chatID string) (*db.Chat, string,
 // deliberately not treated as stuck — refusing to resume because we could not
 // reach Temporal would strand a perfectly resumable chat.
 func (s *Service) isStuck(ctx context.Context, workflowID string) bool {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil || wf.Status != db.Failed() {
 		return false
 	}

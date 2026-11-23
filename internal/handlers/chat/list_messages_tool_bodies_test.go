@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -85,7 +86,7 @@ func TestListMessagesToolBodies(t *testing.T) {
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 
 	list := func(t *testing.T, svc *Service, req *reliantv1.ListMessagesRequest) *reliantv1.ListMessagesResponse {
 		t.Helper()
@@ -173,7 +174,7 @@ func TestListMessagesToolBodies(t *testing.T) {
 	})
 
 	t.Run("the kill switch serves STUB as FULL", func(t *testing.T) {
-		off := &Service{deps: Deps{Repo: repo, Config: stubsOffConfig()}}
+		off := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Config: stubsOffConfig()}}
 		assert.Equal(t,
 			deterministic(t, list(t, svc, &reliantv1.ListMessagesRequest{ChatId: f.ChatID})),
 			deterministic(t, list(t, off, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: stub})))
@@ -193,7 +194,7 @@ func TestGetChatUpdatesToolBodies(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, repo.CreateChatUpdate(ctx, f.ChatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, msgID, string(data)))
 	}
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	get := func(t *testing.T, svc *Service, mode *reliantv1.ToolBodyMode) *reliantv1.GetChatUpdatesResponse {
 		t.Helper()
 		resp, err := svc.GetChatUpdates(ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{ChatId: f.ChatID, ToolBodies: mode}))
@@ -217,6 +218,6 @@ func TestGetChatUpdatesToolBodies(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stubbed.Updates[1].Data), &tool))
 	assert.Equal(t, true, tool.ContentBlocks[0]["body_elided"])
 
-	off := &Service{deps: Deps{Repo: repo, Config: stubsOffConfig()}}
+	off := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Config: stubsOffConfig()}}
 	assert.Equal(t, deterministic(t, unset), deterministic(t, get(t, off, reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum())))
 }

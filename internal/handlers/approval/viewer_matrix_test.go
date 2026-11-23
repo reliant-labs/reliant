@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -14,6 +15,6 @@ func TestApprovalServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo}))
+	svc := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM())}))
 	viewertest.RunService(t, f, svc, "reliant.v1.ApprovalService", nil)
 }
