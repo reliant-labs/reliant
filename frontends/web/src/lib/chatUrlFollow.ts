@@ -39,13 +39,16 @@ export function followActiveChat(router: RouterLike): () => void {
   return useChatStore.subscribe((state) => {
     const next = state.activeChatId;
     if (next === previous) return;
+    const closed = previous;
     previous = next;
     const route = chatShellRouteOf(latestPathname());
     if (!route || router.state.status === "pending") return;
     if (next) {
       if (route.kind === "chat" && route.chatId === next) return;
       navigateToChatUrl(next, { orgId: getChatFromCache(next)?.orgId, replace: route.kind !== "chat" });
-    } else if (route.kind === "chat") {
+    } else if (route.kind === "chat" && closed === route.chatId) {
+      // Only the URL's own chat closing leaves its page: another one
+      // closing before the URL's chat was opened leaves the URL to open it.
       navigateToNewChatUrl({}, { replace: true });
     }
   });
