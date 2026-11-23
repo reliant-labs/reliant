@@ -60,7 +60,7 @@
 // (claimcheck.DefaultGCHorizon, 30 days; the API server's RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 // That horizon is this table's data-retention bound.
 //
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: its only I/O is the purge transaction it exists to run; a contract.go would buy no mock or decorator because reliant is not forge-generated (no forge.yaml); conversion tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: its only I/O is the purge transaction it exists to run, against the store it is handed per call; one concrete Purger with one caller, so a contract.go would add a mock nobody substitutes
 //forge:exclude-contract: one concrete Purger with a single caller (account deletion); no second implementation and no seam to fake
 package accountpurge
 

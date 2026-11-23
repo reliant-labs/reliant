@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
@@ -39,7 +40,7 @@ func requireCode(t *testing.T, err error, code connect.Code) {
 func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
 	get := func(t *testing.T, store *worktree.MockRepository, id string) error {
-		svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
+		svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store})))
 		_, err := svc.GetWorktree(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.GetWorktreeRequest{WorktreeId: id}))
 		return err
 	}
@@ -73,7 +74,7 @@ func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 		t.Run("reading its project: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			store := ownedWorktreeRepo(t)
-			store.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, tc.err }
+			projectaccesstest.Bind(store, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
 			requireCode(t, get(t, store, ownWorktreeID), tc.code)
 		})
 	}
@@ -96,7 +97,7 @@ func TestListWorktrees_StoreErrorClasses(t *testing.T) {
 			t.Parallel()
 			store := ownedWorktreeRepo(t)
 			store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) { return nil, tc.err }
-			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
+			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store})))
 			_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
 			requireCode(t, err, tc.code)
 			if tc.code == connect.CodeInternal {
@@ -162,7 +163,7 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 					return send(ctx, userID, commandType, payload, timeoutMs)
 				},
 			}
-			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
+			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store, Router: router})))
 			_, err := svc.PushWorktree(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.PushWorktreeRequest{WorktreeId: ownWorktreeID}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err), "err = %v", err)
@@ -205,7 +206,7 @@ func TestStageFiles_GitRefusalClasses(t *testing.T) {
 					return send(ctx, userID, commandType, payload, timeoutMs)
 				},
 			}
-			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
+			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store, Router: router})))
 			_, err := svc.StageFiles(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.StageFilesRequest{
 				WorktreeId: ownWorktreeID, Files: []string{"marketing/header.png"},
 			}))

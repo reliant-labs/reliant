@@ -77,6 +77,11 @@ import { useNewChatMachineStore } from "../../store/newChatMachineStore";
 import { patchNewChatUrl } from "../../lib/chatRoute";
 import { newChatAppFor, useNewChatAppStore } from "../../store/newChatAppStore";
 import { NewChatAppTag } from "../Projects/ChatAppTag";
+import {
+  OPEN_CREATE_WORKTREE_EVENT,
+  clearCreateWorktreeRequest,
+  createWorktreeRequested,
+} from "../Onboarding/checklistRequests";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -458,12 +463,22 @@ export function NewChatView({
     }
   };
 
-  // Listen for checklist-triggered worktree creation
+  // The Setup Guide's "Create a workspace": a request made while this view is
+  // mounted arrives as the event; one made from another page is waiting when
+  // the guide brings the person here, until the modal closes (checklistRequests.ts).
   useEffect(() => {
-    const handler = () => setShowCreateWorktreeModal(true);
-    window.addEventListener("open-create-worktree-modal", handler);
-    return () => window.removeEventListener("open-create-worktree-modal", handler);
+    const handler = () => {
+      clearCreateWorktreeRequest();
+      setShowCreateWorktreeModal(true);
+    };
+    window.addEventListener(OPEN_CREATE_WORKTREE_EVENT, handler);
+    if (createWorktreeRequested()) setShowCreateWorktreeModal(true);
+    return () => window.removeEventListener(OPEN_CREATE_WORKTREE_EVENT, handler);
   }, []);
+  const closeCreateWorktreeModal = () => {
+    clearCreateWorktreeRequest();
+    setShowCreateWorktreeModal(false);
+  };
 
   const handleWorktreeCreated = async (worktreeId: string) => {
     setShowWorkspaceDropdown(false);
@@ -861,7 +876,7 @@ export function NewChatView({
         <>
           <CreateWorktreeModal
             isOpen={showCreateWorktreeModal}
-            onClose={() => setShowCreateWorktreeModal(false)}
+            onClose={closeCreateWorktreeModal}
             onWorktreeCreated={handleWorktreeCreated}
             projectId={currentProject.id}
             daemonId={workspaceMachineId}

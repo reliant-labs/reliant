@@ -45,8 +45,8 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 	for _, tc := range readFailures {
 		t.Run("GetRun: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
-				GetWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return nil, tc.err },
+			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Workflows: &run.MockWorkflowLoader{
+				LoadWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "run-1"}))
 			requireClientReads(t, err, tc.want)
@@ -67,8 +67,8 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 func TestGetRun_ForeignRunIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
-		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Workflows: &run.MockWorkflowLoader{
+		LoadWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			return &db.Workflow{ID: id, ChatID: "chat-1"}, nil
 		},
 	}, ChatViews: &run.MockChatViews{GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
@@ -86,8 +86,8 @@ func TestRunService_ErrorsOverTheWire(t *testing.T) {
 	t.Parallel()
 
 	repoErr := errors.New("dsn=postgres://u:secret@h")
-	_, client := run.NewTestRunServer(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
-		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
+	_, client := run.NewTestRunServer(t, run.WithRunDeps(run.Deps{Workflows: &run.MockWorkflowLoader{
+		LoadWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			switch id {
 			case "missing":
 				return nil, svcerr.NotFound("workflow")

@@ -601,20 +601,21 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ConnectionVault: g.ConnectionVault(),
-		Network:         g.ServerProcessConfig.GetNetwork(),
-		Temporal:        g.TemporalClient(),
-		AgentRuns:       g.AgentRuns(),
-		Triggers:        g.WorkerTrigger(),
-		Credentials:     g.WorkerIntegrationCredentials(),
-		WriteLedger:     g.WriteLedger(),
-		CatalogSearch:   g.WorkerCatalogSearch(),
-		Router:          g.WorkerDaemonRouter(),
-		DB:              g.Database(),
-		Membership:      g.OrgResolver(),
-		Logger:          g.Log,
-		Config:          g.Cfg,
-		Backoff:         g.Providerbackoff(),
+		ConnectionVault:  g.ConnectionVault(),
+		Network:          g.ServerProcessConfig.GetNetwork(),
+		Temporal:         g.TemporalClient(),
+		AgentRuns:        g.AgentRuns(),
+		Triggers:         g.WorkerTrigger(),
+		Credentials:      g.WorkerIntegrationCredentials(),
+		WriteLedger:      g.WriteLedger(),
+		CatalogSearch:    g.WorkerCatalogSearch(),
+		Router:           g.WorkerDaemonRouter(),
+		DB:               g.Database(),
+		Membership:       g.OrgResolver(),
+		Logger:           g.Log,
+		Config:           g.Cfg,
+		Backoff:          g.Providerbackoff(),
+		ChangeController: g.ChangeController(),
 	})
 }
 
@@ -1138,6 +1139,10 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Config:         g.Cfg,
 		Repo:           g.Database(),
 		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
+		Repos:          store.NewRepoExtStore(g.Database().ORM()),
+		Daemons:        store.NewDaemonExtStore(g.Database().ORM()),
 		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
@@ -1151,6 +1156,9 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Workflows:   store.NewWorkflowExtStore(g.Database().ORM()),
+		Worktrees:   store.NewWorktreeExtStore(g.Database().ORM()),
+		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
@@ -1174,6 +1182,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
 		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Chats:     g.Chat(),
@@ -1472,6 +1481,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
 		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Repos:    store.NewRepoExtStore(g.Database().ORM()),
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
@@ -1522,6 +1532,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Config:      g.Cfg,
 		Repo:        g.Database(),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		Projects:    store.NewProjectExtStore(g.Database().ORM()),
 		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
 		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
 		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
@@ -1568,12 +1579,13 @@ func (g *Graph) newToken() (*token.Service, error) {
 // newToolCall constructs the tool_call handler (internal/handlers/tool_call).
 func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	return tool_call.New(tool_call.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Chats:    store.NewChatExtStore(g.Database().ORM()),
-		Temporal: g.TemporalClient().Client,
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Chats:     store.NewChatExtStore(g.Database().ORM()),
+		Temporal:  g.TemporalClient().Client,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1827,4 +1839,12 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
 	})
+}
+
+// newChangeController constructs the ChangeController provider (NewChangeController, internal/app/providers_worker.go).
+func (g *Graph) newChangeController() (tools.ChangeController, error) {
+	return NewChangeController(ChangeControllerDeps{
+		DB:           g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	}), nil
 }

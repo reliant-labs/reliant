@@ -108,7 +108,7 @@ type discoveredEntry struct {
 // project's checkout on the machine asked. A repo with relative path "" or
 // "." is the checkout itself.
 func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project, checkout projectcheckout.Target) ([]discoverRepoRef, map[string]*core.Repo, error) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.listRepos(ctx, project.ID)
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
