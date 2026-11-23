@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/llmgatewaystep"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -49,7 +48,6 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
 			}
 			c.checkFetch(path, n, cmd)
-			c.checkLLMGatewayUsed(path, n, cmd)
 		case model.NodeTypeAskQuestion:
 			c.checkAskQuestionType(path, n)
 		case model.NodeTypeAction:
@@ -615,23 +613,6 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// checkLLMGatewayUsed: a run node's llm_gateway mints a key for one CLI; a
-// command that never runs that CLI's binary pays for a key nothing uses. A
-// command written as an expression may run it in a way the text does not
-// show, so only a literal one is judged; an unknown CLI is validation's.
-func (c *checker) checkLLMGatewayUsed(path string, n *reliantv1.Node, cmd string) {
-	gw := model.GetRunArgs(n).GetLlmGateway()
-	if gw == nil || strings.Contains(cmd, "{{") {
-		return
-	}
-	cli, ok := llmgatewaystep.Lookup(gw.GetCli())
-	if !ok || cli.MentionsBinary(cmd) {
-		return
-	}
-	c.add(RuleLLMGatewayUnused, path, fmt.Sprintf("llm_gateway mints a key for %s, but the command never runs %s", cli.Name, cli.Binary),
-		fmt.Sprintf("run %s in the command, or remove llm_gateway", cli.Binary))
 }
 
 // checkAskQuestionType: the app and `reliant workflow answer` read an
