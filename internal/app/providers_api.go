@@ -1300,6 +1300,8 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Temporal:  d.Temporal.Client,
 		Config:    cfg,
+		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
+		Daemons:   store.NewDaemonExtStore(d.DB.ORM()),
 	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
