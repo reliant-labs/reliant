@@ -123,6 +123,12 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	}
 	tec.chat = chat
 
+	// Missing workspace storage must use the same graceful failure path as
+	// a project lookup error, rather than panicking in no-database setups.
+	if a.rows == nil {
+		return nil, "Failed to load project: workspace storage is unavailable"
+	}
+
 	// Load project
 	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
