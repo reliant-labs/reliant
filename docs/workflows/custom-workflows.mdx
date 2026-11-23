@@ -432,6 +432,16 @@ mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemo
 sandbox, the command is refused, never run with credentials. On macOS and Windows only the environment is
 cleaned, so a command there that goes looking can still read those files. Either way the command keeps the
 network and can write its checkout: it is a boundary around your credentials, not around your code.
+
+Claude Code's and Codex's sign-ins (`~/.claude`, `~/.codex`) are hidden the same way. Gemini CLI's
+(`~/.gemini`), Cursor Agent's (`~/.cursor`, `~/.config/cursor`) and Copilot CLI's own (`~/.copilot`) are
+still readable in this release, and the next minor release hides them too. Until then a `credentials: none`
+command on a machine that has any of them prints one line on its stderr before it starts, naming them:
+`<path> will be hidden from credentials: none steps in the next minor release; use credentials: inherit or
+requires.cli_login`. A step that runs one of these CLIs needs `credentials: inherit`, with the CLI listed in
+`requires.cli_login`; [workflow lint](/workflows/lint#credentials-none-cli-login) warns about the ones that
+do not. Its stdout is unchanged, but `output` (stdout and stderr together) carries the line.
+
 Publish a branch with a `git_publish` node, which never gives its credential to a shell. See
 [Run AI agent commands without access to your credentials](/guides/machines/sandbox-agent-commands-credentials-none).
 

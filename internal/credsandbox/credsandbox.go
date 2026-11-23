@@ -22,6 +22,10 @@
 //     directory without it, not by mounting over the file: the daemon rewrites
 //     some of these by rename, and a rename detaches a mount placed on the old
 //     file and shows the new contents;
+//   - the vendor CLI sign-ins the next minor release hides
+//     (daemonpolicy.DeprecatedReadableCredentials: Gemini CLI, Cursor Agent,
+//     Copilot CLI) are still readable, and the command is told which of them
+//     exist, on its stderr, before it starts (Plan.DeprecatedReadable);
 //   - the container engines' sockets are replaced by /dev/null;
 //   - the files that decide what a LATER run executes or believes (shell startup
 //     files, git config, the global memory file, skills, installed releases, the
@@ -142,6 +146,26 @@ type Plan struct {
 	// SIGTTIN (WrapTerminal). The helper must have been started as the
 	// session leader with the terminal as its stdin.
 	Terminal bool `json:",omitempty"`
+	// DeprecatedReadable are credential stores the command can still read in
+	// this release and will not from the next minor
+	// (daemonpolicy.DeprecatedReadableCredentials). They are not hidden: the
+	// helper names the ones that exist on the command's stderr before it
+	// starts (DeprecatedReadableNotice), except on a terminal.
+	DeprecatedReadable []string `json:",omitempty"`
+}
+
+// DeprecatedReadableNotice is the one line a credentials-none command is shown
+// before it starts when any of the deprecated-readable stores exists, or ""
+// when none does. The signal is the path's existence, not a read of it: the
+// sandbox cannot see which files a command opens without watching every
+// process on the machine, and existence is what decides whether the next
+// minor changes anything for this command.
+func DeprecatedReadableNotice(existing []string) string {
+	if len(existing) == 0 {
+		return ""
+	}
+	return "reliant: " + strings.Join(existing, ", ") + " will be hidden from credentials: none steps in the next minor release; " +
+		"use credentials: inherit or requires.cli_login\n"
 }
 
 // Overlay is one directory the command sees through a private overlay.
@@ -228,7 +252,11 @@ func DefaultPlan() Plan {
 		ro = append(ro, filepath.Dir(p))
 		seal = append(seal, filepath.Dir(p))
 	}
-	return Plan{Hide: cleanAbs(hide), ReadOnly: cleanAbs(ro), Seal: cleanAbs(seal)}
+	var deprecated []string
+	for _, c := range daemonpolicy.DeprecatedReadableCredentials() {
+		deprecated = append(deprecated, c.Path)
+	}
+	return Plan{Hide: cleanAbs(hide), ReadOnly: cleanAbs(ro), Seal: cleanAbs(seal), DeprecatedReadable: cleanAbs(deprecated)}
 }
 
 // credentialEnvPaths are the files and sockets the daemon's own credential

@@ -108,7 +108,7 @@ A workflow can set `credentials: none` on a `run` node, or bind it on the `shell
 
 **The sandbox, on Linux only.** The daemon re-runs itself as a small init process that starts the command in its own user, mount and PID namespaces:
 
-- The credential files and directories are absent from the command's view of the filesystem. These include `daemon.json`, the forge token cache and credentials, `~/.git-credentials`, `~/.ssh`, `~/.gnupg`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.docker/config.json`, `~/.kube/config`, Claude and Codex logins, and the daemon's own data directory.
+- The credential files and directories are absent from the command's view of the filesystem. These include `daemon.json`, the forge token cache and credentials, `~/.git-credentials`, `~/.ssh`, `~/.gnupg`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.docker/config.json`, `~/.kube/config`, Claude and Codex logins, and the daemon's own data directory. Gemini CLI's, Cursor Agent's and Copilot CLI's sign-ins (`~/.gemini`, `~/.cursor`, `~/.config/cursor`, `~/.copilot`) are still readable in this release, with a one-line notice on the command's stderr when they exist, and are hidden from the next minor release.
 - Container engine sockets (Docker, containerd, Podman) are replaced with `/dev/null`, because whoever holds one can ask the engine for root.
 - Files that decide what a *later* run executes or believes are read-only: shell startup files, git config, the global memory file, skills, the daemon's binary and config, and every other project checkout. The command can't plant something for the next credentialed step to run.
 - `/tmp` and `/var/tmp` are private to the command.

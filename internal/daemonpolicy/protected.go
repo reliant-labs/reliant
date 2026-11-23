@@ -78,6 +78,24 @@ var protectedHome = []homeEntry{
 	{".codex", true},
 }
 
+// deprecatedReadableHome are vendor CLI sign-ins that belong in protectedHome
+// and are not hidden yet, because steps that call these CLIs under
+// `credentials: none` have worked signed in until now (owner, 2026-11-23:
+// "with a warning first"). In this release a credentials-none command can
+// still read them, and the sandbox names the ones that exist on its stderr
+// before it starts (credsandbox, Plan.DeprecatedReadable). The next minor
+// release moves every entry here into protectedHome and deletes this tier.
+var deprecatedReadableHome = []homeEntry{
+	// Gemini CLI: ~/.gemini/oauth_creds.json.
+	{".gemini", true},
+	// Cursor Agent: ~/.config/cursor/auth.json, and ~/.cursor beside it.
+	{".cursor", true},
+	{".config/cursor", true},
+	// GitHub Copilot CLI: ~/.copilot/config.json holds its token where the
+	// machine has no keychain (a headless Linux box, every cloud machine).
+	{".copilot", true},
+}
+
 // protectedSocketPaths are sockets whose holder can read any file on the
 // machine as root (a container engine).
 var protectedSocketPaths = []string{
@@ -122,6 +140,26 @@ func ProtectedCredentials() []Credential {
 	out := protectedCredentials(home, forgeCredentialsPath(), daemonDataDir())
 	for _, s := range protectedSockets() {
 		out = appendCredential(out, Credential{Path: s})
+	}
+	return out
+}
+
+// DeprecatedReadableCredentials returns the deprecated-readable tier for the
+// process's user: credential stores a credentials-none command can still read
+// in this release and will not from the next minor (deprecatedReadableHome).
+// None of them is in ProtectedCredentials.
+func DeprecatedReadableCredentials() []Credential {
+	home, _ := os.UserHomeDir()
+	return deprecatedReadableCredentials(home)
+}
+
+func deprecatedReadableCredentials(home string) []Credential {
+	if home == "" {
+		return nil
+	}
+	var out []Credential
+	for _, e := range deprecatedReadableHome {
+		out = appendCredential(out, Credential{Path: filepath.Join(home, e.rel), Dir: e.dir})
 	}
 	return out
 }

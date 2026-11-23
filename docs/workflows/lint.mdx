@@ -125,6 +125,8 @@ requires:
 
 **Warning.** A `run` node with `credentials: none` calls `claude`, `codex` or `copilot`. That sandbox hides the files these CLIs keep their sign-in in (`~/.claude`, `~/.codex`, and `~/.config/gh`, which Copilot CLI signs in through), so the CLI runs signed out even when `requires.cli_login` found it signed in. Run that step with `credentials: inherit`.
 
+It also warns when such a step calls `gemini` or `cursor-agent`. Their sign-ins (`~/.gemini`, and `~/.cursor` and `~/.config/cursor`) are still readable under `credentials: none` in this release, and the next minor release hides them, as it does Copilot CLI's own `~/.copilot`. Until then the step prints a one-line notice on its stderr each time it runs. Move the step to `credentials: inherit` now, and list the CLI in `requires.cli_login`.
+
 ### daemon-machine-pin
 
 **Warning.** A literal `daemon:` on the workflow or on a node pins one machine: by name (`daemon: ci-box-1`, `daemon: {name: ci-box-1}`) or by id (`daemon: {id: …}`). When that box is swapped out, renamed, asleep or busy, every run stalls waiting for it, even while another machine that could do the work is idle. Pin a [machine pool](/machines/choosing#pinning-a-pool-instead-of-a-machine) (`daemon: {pool: ci}`) instead: the run is placed once on the least-loaded member that can take it. A pool, labels alone, a kind (`local`, `cloud`, `any`) and a CEL selector (`"{{ inputs.machine }}"`) are not reported. A name pin keeps working; when the workflow really must run on that one machine, allow the finding with the reason.
