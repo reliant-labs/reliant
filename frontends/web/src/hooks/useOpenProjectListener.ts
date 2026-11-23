@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { leaveChatPageFor, useProjectStore } from '../store/projectStore';
 import { useProjects } from "./project-queries";
 import { logger } from '../lib/logger';
+import { beginWorkspaceOpen } from '../lib/openChatInWorkspace';
 
 /**
  * Hook that listens for the 'open-project' IPC event from Electron.
@@ -24,6 +25,9 @@ export function useOpenProjectListener() {
   const handleOpenProject = useCallback(async (projectPath: string) => {
     logger.info('[useOpenProjectListener] Received open-project event', { projectPath });
 
+    // One generation covers creation, navigation and workspace restoration.
+    const isCurrent = beginWorkspaceOpen();
+
     // Normalize path (remove trailing slashes for consistent matching)
     const normalizedPath = projectPath.replace(/\/+$/, '');
 
@@ -39,7 +43,7 @@ export function useOpenProjectListener() {
         name: existingProject.name
       });
       await leaveChatPageFor(existingProject.id);
-      await selectProject(existingProject);
+      if (isCurrent()) await selectProject(existingProject, { isCurrent });
     } else {
       // Create a new project with name derived from path
       const pathParts = normalizedPath.split('/');
@@ -54,10 +58,15 @@ export function useOpenProjectListener() {
         const created = await createProject({
           name: projectName,
           path: normalizedPath,
-        });
+        }, { isCurrent });
+        // A superseded creation still keeps its row, but must not navigate
+        // or restore over a newer workspace action.
+        if (!isCurrent()) return;
         // createProject sets currentProject, except over a chat's page,
         // whose chat the URL keeps: leave it for the new project's.
-        if (await leaveChatPageFor(created.id)) await selectProject(created);
+        if (await leaveChatPageFor(created.id) && isCurrent()) {
+          await selectProject(created, { isCurrent });
+        }
       } catch (error) {
         logger.error('[useOpenProjectListener] Failed to create project', error);
       }

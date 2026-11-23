@@ -242,8 +242,8 @@ interface ProjectStore {
   restoreLastProject: (options?: Pick<SelectProjectOptions, "restoreWorkspace">) => Promise<boolean>;
   /** Re-read the current project from the server (after a git init, a new workspace). */
   refreshCurrentProject: () => Promise<void>;
-  /** Create a project and make it current. */
-  createProject: (data: Partial<Project>) => Promise<Project>;
+  /** Create a project and make it current, continuing an optional caller's navigation. */
+  createProject: (data: Partial<Project>, options?: Pick<SelectProjectOptions, "isCurrent">) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   /** Delete a project; deleting the current one moves to the most recent other one. */
   deleteProject: (id: string) => Promise<void>;
@@ -469,8 +469,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  createProject: async (data: Partial<Project>) => {
-    const isCurrent = beginWorkspaceOpen();
+  createProject: async (data: Partial<Project>, options) => {
+    const isCurrent = options?.isCurrent ?? beginWorkspaceOpen();
     const project = await createProjectRpc({
       name: data.name || "",
       path: data.path || "",

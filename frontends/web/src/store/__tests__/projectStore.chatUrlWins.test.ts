@@ -15,6 +15,7 @@
  */
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, type AnyRouter } from "@tanstack/react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { Chat } from "../../types/chat";
 import type { Project } from "../projectStore";
@@ -34,6 +35,8 @@ vi.mock("../../hooks/project-queries", async (importOriginal) => ({
   touchProject: vi.fn(),
   getCachedProjects: () => [projectA, projectB],
   fetchProjects: vi.fn(async () => [projectA, projectB]),
+  createProject: vi.fn(async () => projectB),
+  useProjects: () => ({ projects: [projectA], isLoading: false }),
 }));
 
 const { useProjectStore } = await import("../projectStore");
@@ -169,6 +172,45 @@ describe("a person choosing another project from the chat's page", () => {
     expect(location()).toBe(`/c/${urlChat.id}`);
     navigate.mockRestore();
   });
+});
+
+describe("opening a new Electron folder from a chat", () => {
+  for (const supersede of [false, true]) {
+    it(`keeps the creation generation through navigation (superseded: ${supersede})`, async () => {
+      const { useOpenProjectListener } = await import("../../hooks/useOpenProjectListener");
+      const { beginWorkspaceOpen } = await import("../../lib/openChatInWorkspace");
+      let openFolder!: (path: string) => void;
+      const previousApi = window.electronAPI;
+      window.electronAPI = {
+        onOpenProject: (callback: typeof openFolder) => {
+          openFolder = callback;
+          return () => {};
+        },
+      } as typeof window.electronAPI;
+      let finishNavigation!: () => Promise<void>;
+      const originalNavigate = router.navigate.bind(router);
+      const navigate = vi.spyOn(router, "navigate").mockImplementationOnce((options) => new Promise<void>((resolve) => {
+        finishNavigation = async () => {
+          await originalNavigate(options);
+          resolve();
+        };
+      }));
+      const hook = renderHook(() => useOpenProjectListener());
+      try {
+        act(() => openFolder("/new-folder"));
+        await waitFor(() => expect(navigate).toHaveBeenCalled());
+        // A newer filter/open intent invalidates the pending folder open.
+        if (supersede) beginWorkspaceOpen();
+        await act(async () => { await finishNavigation(); });
+        expect(useProjectStore.getState().currentProject?.id).toBe(supersede ? projectA.id : projectB.id);
+        expect(restoreLastWorktree).toHaveBeenCalledTimes(supersede ? 0 : 1);
+      } finally {
+        hook.unmount();
+        navigate.mockRestore();
+        window.electronAPI = previousApi;
+      }
+    });
+  }
 });
 
 describe("a direct link to a chat, with another project last used", () => {
