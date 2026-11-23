@@ -47,13 +47,14 @@ type UsageLimitWaitOutput struct {
 // the park cannot tell a run that is waiting from one that is wedged, which is
 // the whole reason provider_backoff exists. See core.ProviderBackoff.
 type UsageLimitWaitActivity struct {
-	repo  UsageLimitWaitStore
-	waits ProviderBackoffMarkers
+	repo    UsageLimitWaitStore
+	waits   ProviderBackoffMarkers
+	threads MessageSaver
 }
 
 // NewUsageLimitWaitActivity creates a new UsageLimitWaitActivity.
-func NewUsageLimitWaitActivity(repo UsageLimitWaitStore, waits ProviderBackoffMarkers) *UsageLimitWaitActivity {
-	return &UsageLimitWaitActivity{repo: repo, waits: waits}
+func NewUsageLimitWaitActivity(deps UsageLimitWaitDeps) *UsageLimitWaitActivity {
+	return &UsageLimitWaitActivity{repo: deps.Store, waits: deps.Waits, threads: deps.Threads}
 }
 
 // Name returns the activity name for registration.
@@ -69,7 +70,7 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 		if activity.IsActivity(ctx) {
 			key = "provider-switch-" + activity.GetInfo(ctx).ActivityID + "-" + input.Thread
 		}
-		postNotice(ctx, a.repo, input.ChatID, input.Thread, input.WorkflowID, key,
+		postNotice(ctx, a.threads, input.ChatID, input.Thread, input.WorkflowID, key,
 			providerSwitchNotice(input.Provider, input.Model, until, input.Probing))
 		return UsageLimitWaitOutput{Success: true}, nil
 	}

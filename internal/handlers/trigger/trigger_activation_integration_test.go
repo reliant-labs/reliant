@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -85,13 +86,13 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	taskQueue := "trigger-activation-e2e-" + uuid.NewString()
 
 	declarations := triggers.LaunchWorkflows{Repo: repo}
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).WithWorkflows(declarations).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).WithWorkflows(declarations).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).WithWorkflows(declarations).Fire,
+	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).WithWorkflows(declarations).Fire,
 		activity.RegisterOptions{Name: triggers.EventFireActivityName})
 	w.RegisterWorkflowWithOptions(func(workflow.Context, any) error { return nil }, workflow.RegisterOptions{Name: v2workflow.WorkflowDynamic})
 	require.NoError(t, w.Start())
@@ -100,15 +101,15 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	provider := webhook.NewTestProvider("e2e-secret")
 	registry := webhook.NewRegistry()
 	require.NoError(t, registry.Register(provider))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue).WithWorkflows(declarations)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue).WithWorkflows(declarations)
 	const publicURL = "https://hooks.example.com"
-	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
+	inbound := webhook.NewInbound(webhook.NewStores(repo), intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	}))
@@ -198,7 +199,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	draft, err := repo.GetWorkflowDraftBySlug(ctx, userID, "triage")
 	require.NoError(t, err)
 	renamed := strings.Replace(activatedWorkflowYAML, "- name: new-issue", "- name: issue-opened", 1)
-	require.NoError(t, repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, "triage", "triage", renamed, db.WorkflowDraftStatusComplete))
+	require.NoError(t, workflowdraftstest.New(t, repo).UpdateWorkflowDraftDefinition(ctx, draft.ID, "triage", "triage", renamed, db.WorkflowDraftStatusComplete))
 
 	list, err := svc.ListTriggers(authCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)

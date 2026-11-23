@@ -82,7 +82,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).WithToolCallResults(testToolCallResults(f.h.Repo())).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).Execute, input, &output))
 
 	for _, callID := range []string{finished, running, background, neverStarted, response} {
 		assert.Zero(t, executor.GetExecutionCount(callID), "an interrupted turn runs nothing: %s", callID)
@@ -134,9 +134,9 @@ type ToolResultMsgView struct {
 
 // unreadableToolCallStore is a store whose tool-call row lookups fail, as a
 // database that is briefly unavailable fails them.
-type unreadableToolCallStore struct{ ExecuteToolsStore }
+type unreadableToolCallStore struct{ ToolCalls }
 
-func (unreadableToolCallStore) GetToolCall(context.Context, string) (*db.ToolCall, error) {
+func (unreadableToolCallStore) FindToolCall(context.Context, string) (*core.ToolCall, error) {
 	return nil, errors.New("connection refused")
 }
 
@@ -167,8 +167,8 @@ func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	store := unreadableToolCallStore{ExecuteToolsStore: f.h.Repo()}
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(store, executor).WithToolCallResults(testToolCallResults(store)).Execute, input, &output))
+	store := unreadableToolCallStore{ToolCalls: toolCallsOf(f.h.Repo())}
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), store, executor).Execute, input, &output))
 
 	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
 	require.Len(t, output.ToolResults, 1)

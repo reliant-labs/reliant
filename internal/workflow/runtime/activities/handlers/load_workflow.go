@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -21,7 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // LoadWorkflowInput is defined in activities/types: this activity runs as a
@@ -50,11 +51,12 @@ type LoadWorkflowOutput struct {
 // LoadWorkflowActivity loads a workflow definition from the filesystem
 type LoadWorkflowActivity struct {
 	repo LoadWorkflowStore
+	rows ProjectWorktreeReader
 }
 
 // NewLoadWorkflowActivity creates a new LoadWorkflow activity
-func NewLoadWorkflowActivity(repo LoadWorkflowStore) *LoadWorkflowActivity {
-	return &LoadWorkflowActivity{repo: repo}
+func NewLoadWorkflowActivity(repo LoadWorkflowStore, rows ProjectWorktreeReader) *LoadWorkflowActivity {
+	return &LoadWorkflowActivity{repo: repo, rows: rows}
 }
 
 // Name returns the activity name

@@ -183,8 +183,8 @@ func newFireFixture(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfi
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &flakyStarter{}
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(repo, launcher), trigger: trigger}
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(NewStores(repo), launcher), trigger: trigger}
 }
 
 func (f *fireFixture) fireAt(day int) FireRequest {
@@ -197,7 +197,7 @@ func (f *fireFixture) fireAt(day int) FireRequest {
 
 func (f *fireFixture) rootStatus(t *testing.T, chatID string) core.WorkflowStatus {
 	t.Helper()
-	statuses, err := f.repo.GetRootWorkflowStatusForChats(context.Background(), []string{chatID})
+	statuses, err := NewStores(f.repo).RootWorkflowStatusForChats(context.Background(), []string{chatID})
 	require.NoError(t, err)
 	return statuses[chatID]
 }

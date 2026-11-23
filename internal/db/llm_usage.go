@@ -47,9 +47,6 @@ type LLMOrgUsageDay = store.LlmOrgUsageDaily
 // OrgKeyModelUsage is the tokens one model used through an org's own API keys.
 type OrgKeyModelUsage = store.OrgKeyModelUsage
 
-// ProviderAccountName is what a usage view shows for an account id.
-type ProviderAccountName = store.ProviderAccountName
-
 // ListLLMUsageDetail returns the user's per-call rows for the UTC days
 // from..to inclusive, summed per day and dimension (funding and account
 // included). Days older than LLMCallUsageRetention are partly or wholly gone.
@@ -74,16 +71,6 @@ func (r *Repo) ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to 
 		return nil, fmt.Errorf("list org llm usage: %w", err)
 	}
 	return rows, nil
-}
-
-// ProviderAccountNames returns the provider, label and kind of each existing
-// account in ids.
-func (r *Repo) ProviderAccountNames(ctx context.Context, ids []string) (map[string]ProviderAccountName, error) {
-	names, err := store.ProviderAccountNames(ctx, r.ORM(), ids)
-	if err != nil {
-		return nil, fmt.Errorf("provider account names: %w", err)
-	}
-	return names, nil
 }
 
 // OrgChatCall is one of an org's live chats' latest chat-turn model call.

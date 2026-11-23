@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -60,7 +61,7 @@ func TestGenerateFixture_InterruptDuringToolBatch(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Success, "SendAgentMessage refused: %s", resp.Message)
 
-	interrupter := threads.New(threads.Deps{Repo: h.Stack.Repo, Signaler: h.Stack.Temporal})
+	interrupter := threads.New(threads.Deps{Repo: h.Stack.Repo, Messages: store.NewMessageExtStore(h.Stack.Repo.ORM()), Senders: store.NewThreadExtStore(h.Stack.Repo.ORM()), Signaler: h.Stack.Temporal})
 	_, err = interrupter.InterruptThread(h.Ctx, threads.InterruptThreadOpts{UserID: h.UserID, ChatID: chatID, ThreadID: workflowID})
 	require.NoError(t, err, "InterruptThread")
 

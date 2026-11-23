@@ -54,7 +54,7 @@ func (m *MockRouter) SendDaemonCommandToDaemon(ctx context.Context, userID strin
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockRepository
-// forge:hash=d5eab4c9ae42adc9665dbeb141bc7bea3569a39fe1fe95a3419ee8999b080f8a
+// forge:hash=414ccee34ced4d998d4b29e8df02ecc5ed8a0dba9b8f8064bc7a703869ffe5ae
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -64,24 +64,11 @@ var _ Router = (*MockRouter)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
-	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
-	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
-	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
-	ListDaemonsByUserIDFunc          func(context.Context, string) ([]*db.Daemon, error)
-	ListCommandFavoritesFunc         func(context.Context, string, string) ([]string, error)
-	AddCommandFavoriteFunc           func(context.Context, string, string, string) error
-	RemoveCommandFavoriteFunc        func(context.Context, string, string, string) error
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockRepository) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorktree")
+	GetChatFunc               func(context.Context, string) (*db.Chat, error)
+	ListDaemonsByUserIDFunc   func(context.Context, string) ([]*db.Daemon, error)
+	ListCommandFavoritesFunc  func(context.Context, string, string) ([]string, error)
+	AddCommandFavoriteFunc    func(context.Context, string, string, string) error
+	RemoveCommandFavoriteFunc func(context.Context, string, string, string) error
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -91,33 +78,6 @@ func (m *MockRepository) GetChat(ctx context.Context, id string) (*db.Chat, erro
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
-}
-
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetDaemon")
-}
-
-// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
-func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
-	if m.ListProjectDaemonsForProjectFunc != nil {
-		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
 }
 
 // ListDaemonsByUserID records the call and delegates to ListDaemonsByUserIDFunc when set.
@@ -158,6 +118,62 @@ func (m *MockRepository) RemoveCommandFavorite(ctx context.Context, userID strin
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockPlacement
+// forge:hash=8e19b1bbc10c87c51dba4ba658bb53ad6ee37774b95c7149fd2204ef22adee6e
+
+// MockPlacement is a test mock for the Placement interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPlacement.<Method>Func not set" error.
+type MockPlacement struct {
+	contractkit.Recorder
+	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
+	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockPlacement) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacement", "GetWorktree")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockPlacement) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacement", "GetProject")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockPlacement) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacement", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockPlacement) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockPlacement", "ListProjectDaemonsForProject")
+}
+
+// Compile-time check.
+var _ Placement = (*MockPlacement)(nil)
 
 // forge:section MockService
 // forge:hash=2374469de5f793f66d4bf359b78581ee4ebb9e3f4fc263a78cdbdf42ff933a3c

@@ -26,11 +26,11 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	target, err := s.deps.Repo.GetDaemon(ctx, req.TargetDaemonId)
+	target, err := s.getDaemon(ctx, req.TargetDaemonId)
 	if err != nil || !authz.CanWriteMachine(ctx, userID, target) {
 		return nil, svcerr.NotFound("destination machine")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
 	if err != nil || project == nil {
 		return nil, svcerr.FailedPrecondition("Install the source project on the destination machine before restoring this retained recovery")
 	}
@@ -46,7 +46,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if err != nil {
 		return nil, err
 	}
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.listRepos(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

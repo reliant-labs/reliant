@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
@@ -37,8 +38,9 @@ func newEnv(t *testing.T) *env {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	return &env{t: t, repo: repo, svc: usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{
-		Store: repo,
-		Now:   func() time.Time { return now },
+		Store:    repo,
+		Accounts: accountNames(t, repo),
+		Now:      func() time.Time { return now },
 	}))}
 }
 
@@ -339,7 +341,7 @@ func TestGetLLMUsage_DetailBoundaryAtMidnight(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	at := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
-	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Now: func() time.Time { return at }}))
+	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Accounts: accountNames(t, repo), Now: func() time.Time { return at }}))
 	resp, err := svc.GetLLMUsage(as("u"), connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-08-01", EndDate: "2026-08-01"}))
 	require.NoError(t, err)
 	assert.Equal(t, "2026-08-01", resp.Msg.DetailAvailableFrom)
@@ -429,4 +431,12 @@ func TestGetLLMUsage_CountsEveryAttemptOfARetriedRequest(t *testing.T) {
 	assert.EqualValues(t, 2, r.Totals.Calls)
 	assert.EqualValues(t, 1, r.Totals.ErrorCalls)
 	assert.EqualValues(t, 1200, r.Totals.InputTokens, "the failed attempt's tokens are not lost")
+}
+
+// accountNames is the real provider-account store over repo's database, as composition wires it.
+func accountNames(t *testing.T, repo *db.Repo) provideraccounts.Service {
+	t.Helper()
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	return svc
 }

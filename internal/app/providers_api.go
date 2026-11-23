@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/dblock"
@@ -279,6 +280,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 	return grpcserver.NewAPIHTTPRoutes(grpcserver.APIHTTPRoutesDeps{
 		Auth:                d.Auth,
 		Repo:                d.DB,
+		Placement:           daemonplacement.NewRecords(d.DB.ORM()),
 		Router:              d.Router.NATSDaemonRouter,
 		OAuth:               d.Connections.OAuth,
 		Inbound:             d.Inbound,
@@ -289,9 +291,9 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		OAuthScopes:         d.OAuthScopes,
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
-		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(store.NewHostedHttpActionTicketExtStore(d.DB.ORM()), cp.InternalServiceSecret),
 		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(store.NewLlmOrgUsageDailyExtStore(d.DB.ORM()), cp.InternalServiceSecret),
-		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(store.NewProjectAppEnsureExtStore(d.DB.ORM()), httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
 }
 
@@ -581,7 +583,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
 	repo := d.DB
-	creds, err := credwire.New(connections.NewResolver(repo, d.ConnectionVault, d.Connections.Tokens), d.ControlPlane)
+	creds, err := credwire.New(connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: d.ConnectionVault, Tokens: d.Connections.Tokens}), d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -854,7 +856,7 @@ func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, public
 	if err != nil {
 		return nil, err
 	}
-	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: repo, Locker: locker, PublicURL: publicURL}), nil
+	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: triggers.NewStores(repo), Locker: locker, PublicURL: publicURL}), nil
 }
 
 // TriggerInboundDeps is what the inbound receivers record events in, start
@@ -881,13 +883,14 @@ type TriggerInboundDeps struct {
 //forge:root-only api
 func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	repo := d.DB
-	in := webhook.NewInbound(repo,
-		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+	ws := webhook.NewStores(repo)
+	in := webhook.NewInbound(ws,
+		triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
-		WithDeliveryInbox(repo).
+		WithDeliveryInbox(ws).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
@@ -1129,7 +1132,7 @@ type ScheduleSyncerDeps struct {
 //
 //forge:root-only api
 func NewScheduleSyncer(d ScheduleSyncerDeps) (*triggers.Syncer, error) {
-	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), d.DB, v2workflow.SharedTaskQueue).
+	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), triggers.NewStores(d.DB), v2workflow.SharedTaskQueue).
 		WithPolledIntegrations(d.Pollers.IsPolled), nil
 }
 
@@ -1181,7 +1184,7 @@ type TriggerReconcilerDeps struct {
 //forge:root-only api
 func NewTriggerReconciler(d TriggerReconcilerDeps) (*TriggerReconciler, error) {
 	repo := d.DB
-	return &TriggerReconciler{triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
+	return &TriggerReconciler{triggers.NewReconciler(triggers.NewStores(repo), triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
 }
 
 // Run reconciles until ctx ends.
@@ -1206,7 +1209,7 @@ type TriggerRedriverDeps struct {
 //
 //forge:root-only api
 func NewTriggerRedriver(d TriggerRedriverDeps) (*TriggerRedriver, error) {
-	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
+	return &TriggerRedriver{triggers.NewRedriver(triggers.NewStores(d.DB), d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
 }
 
 // Run redrives until ctx ends.

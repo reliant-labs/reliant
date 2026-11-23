@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	workflowpkg "github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -69,7 +70,7 @@ func setupProposalService(t *testing.T) (*Service, *db.Repo, *mockTemporalSignal
 	t.Helper()
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Signals: workflowpkg.NewPauseService(mockClient, repo), Connections: proposalConnections()}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Signals: workflowpkg.NewPauseService(mockClient, repo), Connections: proposalConnections()}))
 	return service, repo, mockClient
 }
 

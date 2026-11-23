@@ -148,6 +148,11 @@ type CallLLMDeps struct {
 	Store CallLLMStore
 	// Spawns reads the thread's spawn tree for the turn's grants.
 	Spawns SpawnTree
+	// Threads saves the turn's messages and the notices it posts.
+	Threads MessageSaver
+	// ToolResults recovers the tool results the history lost
+	// (recoverPersistedToolResults).
+	ToolResults ToolResultRecoveryStore
 	// Hub carries the turn's streaming deltas.
 	Hub streaming.StreamingHub
 	// ToolsFactory builds the turn's tool set.
@@ -165,6 +170,8 @@ type CallLLMDeps struct {
 type CallLLMActivity struct {
 	repo           CallLLMStore
 	spawns         SpawnTree
+	threads        MessageSaver
+	toolResults    ToolResultRecoveryStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -272,6 +279,8 @@ func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           deps.Store,
 		spawns:         deps.Spawns,
+		threads:        deps.Threads,
+		toolResults:    deps.ToolResults,
 		hub:            deps.Hub,
 		toolsFactory:   deps.ToolsFactory,
 		configProvider: deps.ConfigProvider,
@@ -672,7 +681,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 	activityID := rtx.MessageIdempotencyKey
 
-	if _, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(writeCtx, threads.SaveMessageOpts{
+	if _, err := a.threads.SaveMessage(writeCtx, threads.SaveMessageOpts{
 		ChatID:            rtx.ChatID,
 		Thread:            thread,
 		Role:              int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
@@ -786,7 +795,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
 	}
-	saved, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(ctx, threads.SaveMessageOpts{
+	saved, err := a.threads.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       thread,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
@@ -1291,7 +1300,7 @@ func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread 
 //   - DB-level orphan repair (Layer 2)
 //   - In-memory orphan repair (Layer 3)
 func (a *CallLLMActivity) loadConversationHistory(ctx context.Context, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
-	return LoadMessagesForLLM(ctx, a.repo, chatID, thread, explicitContextSeq)
+	return LoadMessagesForLLM(ctx, a.repo, a.toolResults, chatID, thread, explicitContextSeq)
 }
 
 // drainAgentMailbox folds any queued agent_messages for thread into its
@@ -1312,7 +1321,7 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 		return 0
 	}
 
-	drain := NewDrainAgentMessagesActivity(a.repo, threads.New(threads.Deps{Repo: a.repo}))
+	drain := NewDrainAgentMessagesActivity(a.repo, a.threads)
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",

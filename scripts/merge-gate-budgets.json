@@ -20,6 +20,7 @@
     "proto": 15,
     "vet": 60,
     "migsafety": 10,
+    "closedsets": 10,
     "migorder": 15
   }
 }

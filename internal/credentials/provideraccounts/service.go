@@ -18,7 +18,7 @@
 // Built by hand, by internal/app's NewProviderAccounts provider (providers.go): never
 // a node compose.go constructs from Deps.
 //
-//forge:provided
+// (exp)
 package provideraccounts
 
 import (
@@ -625,4 +625,39 @@ func (s *service) ListMemberAccountGrants(ctx context.Context, orgID, userID str
 // after a chat-wide provider switch, scoped to the thread's owner. Repeated calls are harmless.
 func (s *service) ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error {
 	return store.ClearOtherThreadAssignments(ctx, s.deps.DB, userID, threadID, provider)
+}
+
+var errEmptyUserID = errors.New("user id cannot be empty")
+
+// PurgeUser deletes the person's own accounts and the grants made to them, and returns how many
+// rows went, for the account purge. An organization's accounts, and the grants its admins made, are
+// the org's and stay. It joins the transaction ctx carries, so the purge stays all-or-nothing.
+func (s *service) PurgeUser(ctx context.Context, userID string) (int64, error) {
+	if userID == "" {
+		return 0, errEmptyUserID
+	}
+	grants, err := store.DeleteUserProviderAccountGrants(ctx, s.deps.DB, userID)
+	if err != nil {
+		return 0, fmt.Errorf("delete grants made to the user: %w", err)
+	}
+	accounts, err := store.DeleteUserProviderAccounts(ctx, s.deps.DB, userID)
+	if err != nil {
+		return 0, fmt.Errorf("delete the user's accounts: %w", err)
+	}
+	return grants + accounts, nil
+}
+
+// UserHasCredentials reports whether the person owns any account.
+func (s *service) UserHasCredentials(ctx context.Context, userID string) (bool, error) {
+	if userID == "" {
+		return false, errEmptyUserID
+	}
+	return store.UserHasProviderAccount(ctx, s.deps.DB, userID)
+}
+
+// ProviderAccountNames returns the provider, label and kind of each account in ids that still
+// exists, keyed by id, for a usage view. It reads by id with no owner and returns no secret: the
+// ids a caller passes come from usage rows it was already allowed to read.
+func (s *service) ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error) {
+	return store.ProviderAccountNames(ctx, s.deps.DB, ids)
 }

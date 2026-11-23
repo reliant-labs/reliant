@@ -198,8 +198,34 @@ func (m *MockStore) CompleteIntegrationWrite(ctx context.Context, id string, res
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
+// forge:section MockWorkflowLoader
+// forge:hash=60756489beb2435ec1ddffb9cf2d149a46dc6073488aaf3b0fd20f4146acc6ae
+
+// MockWorkflowLoader is a test mock for the WorkflowLoader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowLoader.<Method>Func not set" error.
+type MockWorkflowLoader struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*core.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
+
 // forge:section MockRunLookup
-// forge:hash=f71d1160de391011f4c7b97eb82e19548a82c1a042dfb4ce639f4c36a74193ca
+// forge:hash=c57169b139c59eb7bffda98ca3daa59c08ff4ba9e2921e26053eb9fff268f303
 
 // MockRunLookup is a test mock for the RunLookup interface.
 //
@@ -209,19 +235,9 @@ var _ Store = (*MockStore)(nil)
 // "MockRunLookup.<Method>Func not set" error.
 type MockRunLookup struct {
 	contractkit.Recorder
-	GetWorkflowFunc             func(context.Context, string) (*core.Workflow, error)
 	GetChatFunc                 func(context.Context, string) (*core.Chat, error)
 	GetTriggerEventByChatIDFunc func(context.Context, string) (*core.TriggerEvent, error)
 	GetTriggerFunc              func(context.Context, string) (*core.Trigger, error)
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockRunLookup) GetWorkflow(ctx context.Context, id string) (*core.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRunLookup", "GetWorkflow")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.

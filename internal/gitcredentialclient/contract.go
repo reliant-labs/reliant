@@ -23,9 +23,10 @@
 // User ids are EXTERNAL (the IdP subject) — the id reliant already holds for
 // every user. control-plane translates at its boundary.
 //
-// Built by hand, by internal/app's providers (providers_api.go) and
-// internal/integrations/credwire: never a node compose.go constructs from
-// Deps.
+// Built only when hosted, with the internal-service signer, by internal/app's
+// gitTokens and gitHubTokenSource providers (providers_api.go) and
+// internal/integrations/credwire; self-hosted has none (nil), so it is not a
+// node compose.go constructs from Deps.
 //
 //forge:provided
 package gitcredentialclient

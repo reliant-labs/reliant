@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
@@ -25,8 +28,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 )
 
 // ============================================================================
@@ -93,6 +94,7 @@ type ExecuteRunStepOutput struct {
 // This activity executes shell commands via the daemon's shell tool.
 type ExecuteRunStepActivity struct {
 	repo         ExecuteRunStepStore
+	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	runExecutor  RunExecutor // optional override for testing
 	// machines reports whether the run's machine is attached while a command
@@ -134,9 +136,10 @@ func (a *ExecuteRunStepActivity) WithMachineObserver(observer MachineObserver) *
 // NewExecuteRunStepActivity creates a new ExecuteRunStepActivity.
 // toolExecutor routes commands through the daemon. runExecutor is an optional
 // testing override; if non-nil it is used instead of toolExecutor.
-func NewExecuteRunStepActivity(repo ExecuteRunStepStore, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
+func NewExecuteRunStepActivity(repo ExecuteRunStepStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
 	return &ExecuteRunStepActivity{
 		repo:         repo,
+		rows:         rows,
 		toolExecutor: toolExecutor,
 		runExecutor:  runExecutor,
 	}
@@ -239,7 +242,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	}
 
 	// Resolve execution context from chat -> project -> worktree
-	execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
+	execCtx, err := resolveRunExecutorContext(ctx, a.repo, a.rows, input.ChatID)
 	if err != nil {
 		// A retry resolves where its command ran the way the attempt that
 		// sent it did. Anything that stops it here, or at any of the checks

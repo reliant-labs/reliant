@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -18,10 +19,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // wholeConfigRowReads is a real repository with one read recorded: the read
@@ -44,7 +47,7 @@ func (r *wholeConfigRowReads) GetProjectConfigRecord(ctx context.Context, projec
 	r.mu.Lock()
 	r.callers = append(r.callers, runtime.FuncForPC(pc).Name())
 	r.mu.Unlock()
-	return r.Repo.GetProjectConfigRecord(ctx, projectID)
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 func (r *wholeConfigRowReads) reads() []string {
@@ -65,7 +68,7 @@ func bigSkillsJSON() *string {
 func TestScenarioRPCs_ReadOnlyTheScenariosColumn(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	spy := &wholeConfigRowReads{Repo: repo}
-	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, Projects: projectaccesstest.For(spy)}))
+	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(spy), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -100,7 +103,7 @@ expect:
 	scenarios, err := json.Marshal([]cfg.StoredScenario{{WorkflowSlug: "tail-flow", Name: "drafts", YAMLContent: scenarioYAML}})
 	require.NoError(t, err)
 	workflowsJSON, scenariosJSON := string(workflows), string(scenarios)
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: "test-daemon",
 		ProjectWorkflowsJSON: &workflowsJSON,
 		ProjectScenariosJSON: &scenariosJSON,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -98,10 +99,10 @@ nodes:
 		Version:    1,
 	}))
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	t.Run("default listing is create-chat safe", func(t *testing.T) {
 		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
@@ -201,10 +202,10 @@ nodes:
 		}))
 	}
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: nil, Runs: nil, TaskQueue: ""})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
 
 	resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID}))
 	require.NoError(t, err)

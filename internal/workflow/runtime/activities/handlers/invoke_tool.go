@@ -8,6 +8,10 @@ import (
 	"sort"
 	"strings"
 
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -16,9 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // An invoke_tool node runs ONE tool because the graph says so, rather than
@@ -45,9 +46,9 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, toolExecutor),
+		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
 	}
 }
 

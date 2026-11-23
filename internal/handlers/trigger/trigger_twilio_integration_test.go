@@ -73,10 +73,10 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-twilio-e2e-" + uuid.NewString()
 
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
+	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
 	w.RegisterWorkflowWithOptions(func(workflow.Context, any) error { return nil }, workflow.RegisterOptions{Name: v2workflow.WorkflowDynamic})
 	require.NoError(t, w.Start())
 	defer w.Stop()
@@ -123,8 +123,8 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	const publicURL = "https://hooks.example.com"
 	registry, err := webhook.RegistryFor(webhook.RegistryConfig{PublicURL: publicURL})
 	require.NoError(t, err)
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
-	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL).WithConnectionSecrets(tokens)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
+	inbound := webhook.NewInbound(webhook.NewStores(repo), intake, registry, nil, publicURL).WithConnectionSecrets(tokens)
 	mux := http.NewServeMux()
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)

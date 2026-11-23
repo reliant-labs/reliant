@@ -21,8 +21,8 @@ type AutomationApprovalActivity struct {
 	executor *ExecuteToolsActivity
 }
 
-func (a *AutomationApprovalActivity) WithExecutionStore(repo ExecuteToolsStore) *AutomationApprovalActivity {
-	a.executor = NewExecuteToolsActivity(repo, nil)
+func (a *AutomationApprovalActivity) WithExecutionStore(repo ExecuteToolsStore, rows WorkspaceRows) *AutomationApprovalActivity {
+	a.executor = NewExecuteToolsActivity(repo, rows, nil, nil)
 	return a
 }
 

@@ -40,3 +40,29 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 
 // Compile-time check.
 var _ Questions = (*MockQuestions)(nil)
+
+// forge:section MockWorkflowLoader
+// forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
+
+// MockWorkflowLoader is a test mock for the WorkflowLoader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowLoader.<Method>Func not set" error.
+type MockWorkflowLoader struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowLoader = (*MockWorkflowLoader)(nil)

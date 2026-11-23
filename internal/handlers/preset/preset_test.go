@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -18,6 +19,7 @@ import (
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // setupTestPresetService creates a database and preset service for testing.
@@ -44,7 +46,7 @@ func setupTestPresetService(t *testing.T) (*Service, *db.Repo, string, string) {
 		t.Fatalf("failed to create test project: %v", err)
 	}
 
-	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	service := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	return service, repo, userID, projectID
 }
 
@@ -58,7 +60,7 @@ func insertStoredPresets(t *testing.T, repo *db.Repo, projectID string, presets 
 	presetsStr := string(presetsJSON)
 	now := time.Now().UTC()
 
-	err = repo.UpsertProjectConfigRecord(context.Background(), &db.ProjectConfigRecord{
+	err = store.UpsertProjectConfigRecord(context.Background(), repo.ORM(), &db.ProjectConfigRecord{
 		ID:                 uuid.New().String(),
 		ProjectID:          projectID,
 		DaemonID:           "test-daemon",

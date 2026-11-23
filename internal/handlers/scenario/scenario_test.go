@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func setupTestScenarioService(t *testing.T) (*Service, *db.Repo, string, string, context.Context) {
@@ -38,7 +40,7 @@ func setupTestScenarioService(t *testing.T) (*Service, *db.Repo, string, string,
 		LastActive: now,
 	}))
 
-	return NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)})), repo, userID, projectID, ctx
+	return NewTestScenario(t, WithScenarioDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())})), repo, userID, projectID, ctx
 }
 
 func TestScenarioService_RunScenario_LoadsReferencedProjectWorkflowInternals(t *testing.T) {
@@ -92,7 +94,7 @@ edges: []
 	}})
 	require.NoError(t, err)
 	storedWorkflowsJSON := string(storedWorkflows)
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ID:                   uuid.NewString(),
 		ProjectID:            projectID,
 		DaemonID:             "test-daemon",

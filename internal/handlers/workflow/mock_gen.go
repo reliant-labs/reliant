@@ -102,7 +102,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=efb11f96f71c0010e5150e065afd8036a04a6f40a74dddcaddc411a49ffabe0d
+// forge:hash=6991554d7715eb3daaed9aafa8602da8cdefa42b07eaf9a01ff1e2a05a17a4ad
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -114,23 +114,11 @@ type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc          func(context.Context, string, string) error
 	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
-	GetWorkflowDraftFunc             func(context.Context, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByNameFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc       func(context.Context, string, string) (*db.WorkflowDraft, error)
-	CreateWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) error
-	UpdateWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) error
-	UpsertWorkflowDraftFunc          func(context.Context, *db.WorkflowDraft) (*db.WorkflowDraft, error)
-	UpdateWorkflowForkedFromFunc     func(context.Context, string, string) (*db.WorkflowDraft, error)
-	SetWorkflowDraftHiddenFunc       func(context.Context, string, bool) (*db.WorkflowDraft, error)
-	SetWorkflowDraftStatusFunc       func(context.Context, string, db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
-	DeleteWorkflowDraftBySlugFunc    func(context.Context, string, string) error
 	ListTriggersFunc                 func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
 	DeleteTriggerFunc                func(context.Context, string) error
 	RunTxFunc                        func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListVisibilityOverridesFunc      func(context.Context, string, int32) (map[string]bool, error)
 	ListHiddenItemDefaultsFunc       func(context.Context, int32) ([]string, error)
-	ListWorkflowDraftsByUserFunc     func(context.Context, string) ([]*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -152,96 +140,6 @@ func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project
 		return m.GetProjectFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
-}
-
-// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
-func (m *MockRepository) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraft", ctx, id)
-	if m.GetWorkflowDraftFunc != nil {
-		return m.GetWorkflowDraftFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraft")
-}
-
-// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
-func (m *MockRepository) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
-	if m.GetWorkflowDraftByNameFunc != nil {
-		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraftByName")
-}
-
-// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
-func (m *MockRepository) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
-	if m.GetWorkflowDraftBySlugFunc != nil {
-		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraftBySlug")
-}
-
-// CreateWorkflowDraft records the call and delegates to CreateWorkflowDraftFunc when set.
-func (m *MockRepository) CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
-	m.Recorder.Record("CreateWorkflowDraft", ctx, draft)
-	if m.CreateWorkflowDraftFunc != nil {
-		return m.CreateWorkflowDraftFunc(ctx, draft)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateWorkflowDraft")
-}
-
-// UpdateWorkflowDraft records the call and delegates to UpdateWorkflowDraftFunc when set.
-func (m *MockRepository) UpdateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
-	m.Recorder.Record("UpdateWorkflowDraft", ctx, draft)
-	if m.UpdateWorkflowDraftFunc != nil {
-		return m.UpdateWorkflowDraftFunc(ctx, draft)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateWorkflowDraft")
-}
-
-// UpsertWorkflowDraft records the call and delegates to UpsertWorkflowDraftFunc when set.
-func (m *MockRepository) UpsertWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("UpsertWorkflowDraft", ctx, draft)
-	if m.UpsertWorkflowDraftFunc != nil {
-		return m.UpsertWorkflowDraftFunc(ctx, draft)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "UpsertWorkflowDraft")
-}
-
-// UpdateWorkflowForkedFrom records the call and delegates to UpdateWorkflowForkedFromFunc when set.
-func (m *MockRepository) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("UpdateWorkflowForkedFrom", ctx, draftID, forkedFrom)
-	if m.UpdateWorkflowForkedFromFunc != nil {
-		return m.UpdateWorkflowForkedFromFunc(ctx, draftID, forkedFrom)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "UpdateWorkflowForkedFrom")
-}
-
-// SetWorkflowDraftHidden records the call and delegates to SetWorkflowDraftHiddenFunc when set.
-func (m *MockRepository) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("SetWorkflowDraftHidden", ctx, id, isHidden)
-	if m.SetWorkflowDraftHiddenFunc != nil {
-		return m.SetWorkflowDraftHiddenFunc(ctx, id, isHidden)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SetWorkflowDraftHidden")
-}
-
-// SetWorkflowDraftStatus records the call and delegates to SetWorkflowDraftStatusFunc when set.
-func (m *MockRepository) SetWorkflowDraftStatus(ctx context.Context, id string, status db.WorkflowDraftStatus) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("SetWorkflowDraftStatus", ctx, id, status)
-	if m.SetWorkflowDraftStatusFunc != nil {
-		return m.SetWorkflowDraftStatusFunc(ctx, id, status)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SetWorkflowDraftStatus")
-}
-
-// DeleteWorkflowDraftBySlug records the call and delegates to DeleteWorkflowDraftBySlugFunc when set.
-func (m *MockRepository) DeleteWorkflowDraftBySlug(ctx context.Context, userID string, slug string) error {
-	m.Recorder.Record("DeleteWorkflowDraftBySlug", ctx, userID, slug)
-	if m.DeleteWorkflowDraftBySlugFunc != nil {
-		return m.DeleteWorkflowDraftBySlugFunc(ctx, userID, slug)
-	}
-	return contractkit.MockNotSet("MockRepository", "DeleteWorkflowDraftBySlug")
 }
 
 // ListTriggers records the call and delegates to ListTriggersFunc when set.
@@ -287,24 +185,6 @@ func (m *MockRepository) ListHiddenItemDefaults(ctx context.Context, itemType in
 		return m.ListHiddenItemDefaultsFunc(ctx, itemType)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListHiddenItemDefaults")
-}
-
-// ListWorkflowDraftsByUser records the call and delegates to ListWorkflowDraftsByUserFunc when set.
-func (m *MockRepository) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error) {
-	m.Recorder.Record("ListWorkflowDraftsByUser", ctx, userID)
-	if m.ListWorkflowDraftsByUserFunc != nil {
-		return m.ListWorkflowDraftsByUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListWorkflowDraftsByUser")
-}
-
-// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
-func (m *MockRepository) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
-	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
-	if m.GetUsableWorkflowBySlugFunc != nil {
-		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetUsableWorkflowBySlug")
 }
 
 // GetProjectWorkflowsJSON records the call and delegates to GetProjectWorkflowsJSONFunc when set.
@@ -362,6 +242,142 @@ func (m *MockPools) GetMachinePoolByName(ctx context.Context, userID string, nam
 
 // Compile-time check.
 var _ Pools = (*MockPools)(nil)
+
+// forge:section MockDrafts
+// forge:hash=918a2d427e1f7c365b3046b850c6ed06aaf7de19b775c7aac56f30c9a7e15c6e
+
+// MockDrafts is a test mock for the Drafts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockDrafts.<Method>Func not set" error.
+type MockDrafts struct {
+	contractkit.Recorder
+	GetWorkflowDraftFunc          func(context.Context, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByNameFunc    func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc    func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlugFunc   func(context.Context, string, string) (*db.WorkflowDraft, error)
+	ListWorkflowDraftsByUserFunc  func(context.Context, string) ([]*db.WorkflowDraft, error)
+	CreateWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) error
+	UpdateWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) error
+	UpsertWorkflowDraftFunc       func(context.Context, *db.WorkflowDraft) (*db.WorkflowDraft, error)
+	UpdateWorkflowForkedFromFunc  func(context.Context, string, string) (*db.WorkflowDraft, error)
+	SetWorkflowDraftHiddenFunc    func(context.Context, string, bool) (*db.WorkflowDraft, error)
+	SetWorkflowDraftStatusFunc    func(context.Context, string, db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
+	DeleteWorkflowDraftBySlugFunc func(context.Context, string, string) error
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockDrafts) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "GetWorkflowDraft")
+}
+
+// GetWorkflowDraftByName records the call and delegates to GetWorkflowDraftByNameFunc when set.
+func (m *MockDrafts) GetWorkflowDraftByName(ctx context.Context, userID string, name string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftByName", ctx, userID, name)
+	if m.GetWorkflowDraftByNameFunc != nil {
+		return m.GetWorkflowDraftByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "GetWorkflowDraftByName")
+}
+
+// GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
+func (m *MockDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraftBySlug", ctx, userID, slug)
+	if m.GetWorkflowDraftBySlugFunc != nil {
+		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "GetWorkflowDraftBySlug")
+}
+
+// GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
+func (m *MockDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
+	if m.GetUsableWorkflowBySlugFunc != nil {
+		return m.GetUsableWorkflowBySlugFunc(ctx, userID, slug)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "GetUsableWorkflowBySlug")
+}
+
+// ListWorkflowDraftsByUser records the call and delegates to ListWorkflowDraftsByUserFunc when set.
+func (m *MockDrafts) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error) {
+	m.Recorder.Record("ListWorkflowDraftsByUser", ctx, userID)
+	if m.ListWorkflowDraftsByUserFunc != nil {
+		return m.ListWorkflowDraftsByUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "ListWorkflowDraftsByUser")
+}
+
+// CreateWorkflowDraft records the call and delegates to CreateWorkflowDraftFunc when set.
+func (m *MockDrafts) CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
+	m.Recorder.Record("CreateWorkflowDraft", ctx, draft)
+	if m.CreateWorkflowDraftFunc != nil {
+		return m.CreateWorkflowDraftFunc(ctx, draft)
+	}
+	return contractkit.MockNotSet("MockDrafts", "CreateWorkflowDraft")
+}
+
+// UpdateWorkflowDraft records the call and delegates to UpdateWorkflowDraftFunc when set.
+func (m *MockDrafts) UpdateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error {
+	m.Recorder.Record("UpdateWorkflowDraft", ctx, draft)
+	if m.UpdateWorkflowDraftFunc != nil {
+		return m.UpdateWorkflowDraftFunc(ctx, draft)
+	}
+	return contractkit.MockNotSet("MockDrafts", "UpdateWorkflowDraft")
+}
+
+// UpsertWorkflowDraft records the call and delegates to UpsertWorkflowDraftFunc when set.
+func (m *MockDrafts) UpsertWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("UpsertWorkflowDraft", ctx, draft)
+	if m.UpsertWorkflowDraftFunc != nil {
+		return m.UpsertWorkflowDraftFunc(ctx, draft)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "UpsertWorkflowDraft")
+}
+
+// UpdateWorkflowForkedFrom records the call and delegates to UpdateWorkflowForkedFromFunc when set.
+func (m *MockDrafts) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("UpdateWorkflowForkedFrom", ctx, draftID, forkedFrom)
+	if m.UpdateWorkflowForkedFromFunc != nil {
+		return m.UpdateWorkflowForkedFromFunc(ctx, draftID, forkedFrom)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "UpdateWorkflowForkedFrom")
+}
+
+// SetWorkflowDraftHidden records the call and delegates to SetWorkflowDraftHiddenFunc when set.
+func (m *MockDrafts) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("SetWorkflowDraftHidden", ctx, id, isHidden)
+	if m.SetWorkflowDraftHiddenFunc != nil {
+		return m.SetWorkflowDraftHiddenFunc(ctx, id, isHidden)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "SetWorkflowDraftHidden")
+}
+
+// SetWorkflowDraftStatus records the call and delegates to SetWorkflowDraftStatusFunc when set.
+func (m *MockDrafts) SetWorkflowDraftStatus(ctx context.Context, id string, status db.WorkflowDraftStatus) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("SetWorkflowDraftStatus", ctx, id, status)
+	if m.SetWorkflowDraftStatusFunc != nil {
+		return m.SetWorkflowDraftStatusFunc(ctx, id, status)
+	}
+	return nil, contractkit.MockNotSet("MockDrafts", "SetWorkflowDraftStatus")
+}
+
+// DeleteWorkflowDraftBySlug records the call and delegates to DeleteWorkflowDraftBySlugFunc when set.
+func (m *MockDrafts) DeleteWorkflowDraftBySlug(ctx context.Context, userID string, slug string) error {
+	m.Recorder.Record("DeleteWorkflowDraftBySlug", ctx, userID, slug)
+	if m.DeleteWorkflowDraftBySlugFunc != nil {
+		return m.DeleteWorkflowDraftBySlugFunc(ctx, userID, slug)
+	}
+	return contractkit.MockNotSet("MockDrafts", "DeleteWorkflowDraftBySlug")
+}
+
+// Compile-time check.
+var _ Drafts = (*MockDrafts)(nil)
 
 // forge:section MockSender
 // forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241

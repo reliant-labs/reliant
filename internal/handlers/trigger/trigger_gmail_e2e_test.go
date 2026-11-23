@@ -112,7 +112,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	tokens := connections.NewTokenSource(store, sealer, providers, doer)
 	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(repo, store, tokens)})
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: extstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})})
 
 	connectGmail := func(userID, email string) *core.Connection {
 		google.nextEmail = email
@@ -148,22 +148,22 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	poller, err := gmail.New(gmail.Deps{BaseURL: gm.GetConnection().GetBaseUrl(), Runner: google.runner()})
 	require.NoError(t, err)
 	require.NoError(t, registry.RegisterPoller(gmail.ID, poller))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
-	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
+	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
 		Repo: repo, Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Worktrees: extstore.NewWorktreeExtStore(repo.ORM()), ProjectRows: extstore.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(
-		triggers.NewTriggerPoller(gmailPollRepo{Repo: repo, conns: store}, registry, intake, source).Poll,
+		triggers.NewTriggerPoller(gmailPollRepo{Stores: triggers.NewStores(repo), conns: store}, registry, intake, source).Poll,
 		activity.RegisterOptions{Name: triggers.PollActivityName})
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
+	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
 	w.RegisterWorkflowWithOptions(func(workflow.Context, any) error { return nil }, workflow.RegisterOptions{Name: v2workflow.WorkflowDynamic})
 	require.NoError(t, w.Start())
 	defer w.Stop()
@@ -297,6 +297,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		OrgKeys:    db.TestOrgAccounts(t, repo),
 		Items:      extstore.NewInboxDismissalExtStore(repo.ORM()),
 		Firings:    extstore.NewTriggerEventExtStore(repo.ORM()),
 		Notices:    extstore.NewTriggerExtStore(repo.ORM()),
@@ -328,7 +329,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 // gmailPollRepo adds the owner-scoped connection read, as the worker does.
 type gmailPollRepo struct {
-	*db.Repo
+	triggers.Stores
 	conns connectionvault.Service
 }
 

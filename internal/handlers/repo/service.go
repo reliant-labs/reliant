@@ -27,6 +27,8 @@ type Deps struct {
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// Repos lists a project's nested repos (deps.go).
+	Repos RepoLister
 	// Router runs repo discovery and git inspection on the caller's
 	// daemon, which owns the filesystem. The API server always has one; in
 	// a composition without one, the rpcs that need the filesystem fail
@@ -46,6 +48,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("repo: Deps.Repo is required")
+	}
+	if d.Repos == nil {
+		return fmt.Errorf("repo: Deps.Repos is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("repo: Deps.Projects is required")

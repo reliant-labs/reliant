@@ -307,7 +307,9 @@ Split the client factory by host role:
   allowlist) and builds only `StreamableClientTransport`. The package that
   exports it does not import `os/exec`. Make this its own package,
   `internal/mcp/serverclient`, and add a depguard / `go list` test that
-  forbids `os/exec` in it.
+  forbids `os/exec` in it. (A first cut of that package landed in #575 with
+  no importer and was deleted in 2026-11 as dead code; recreate it from this
+  section when the vendor-hosted-MCP integration is built.)
 
 Why the type, and not a runtime `if Type == stdio { return err }`: a runtime
 check is one forgotten branch away from the current state. A constructor

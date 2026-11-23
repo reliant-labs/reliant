@@ -65,12 +65,12 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	// This deterministically exercises the window where LAUNCHED is durable
 	// intent, but does not yet prove that Temporal has accepted the root run.
 	rootClient := &triggerRootStartBarrier{Client: temporalClient, release: make(chan struct{})}
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: rootClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: rootClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	// A stand-in for the agent: the real DynamicWorkflow needs the whole
 	// activity registry, and what this test is proving is that the run was
@@ -83,7 +83,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	// The real service, over the real schedule and workflow clients.
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -232,12 +232,12 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-cron-e2e-" + uuid.NewString()
 
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	w.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context, _ any) error { return nil },
@@ -246,7 +246,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -321,12 +321,12 @@ func TestManualFireEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-manual-e2e-" + uuid.NewString()
 
-	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	w.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context, _ any) error { return nil },
@@ -335,7 +335,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()

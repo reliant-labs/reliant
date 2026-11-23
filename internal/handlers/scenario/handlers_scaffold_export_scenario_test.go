@@ -19,7 +19,7 @@ import (
 func TestExportScenario_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
+	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ExportScenarioRequest, pb.ExportScenarioResponse]{
 		{

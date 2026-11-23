@@ -21,10 +21,17 @@ import (
 // (store.LockUserOrgs, internal/store/org_lock.go), taken first in its
 // transaction.
 var orgSensitiveStoreWrites = map[string]bool{
-	"InsertTrigger":              true,
-	"ReplaceTrigger":             true,
-	"MoveChatToProject":          true,
-	"MoveProjectOrg":             true,
+	"InsertTrigger":     true,
+	"ReplaceTrigger":    true,
+	"MoveChatToProject": true,
+	"MoveProjectOrg":    true,
+}
+
+// draftStoreWrites are the workflow_drafts writes, now made only by
+// internal/workflowdrafts (through its Drafts dependency). Each of the
+// package's methods that makes one takes its owner's org lock first: through
+// Locks.LockUserOrgs itself, or through a helper of the package that does.
+var draftStoreWrites = map[string]bool{
 	"InsertWorkflowDraft":        true,
 	"UpsertWorkflowDraftBySlug":  true,
 	"RemoveWorkflowDraft":        true,
@@ -59,6 +66,107 @@ var orgWritingDecls = map[string]string{
 }
 
 var writesOrgID = regexp.MustCompile(`(?i)\bSET\s+org_id\b|\borg_id\s*=\s*COALESCE\(`)
+
+type draftMethod struct {
+	pos            string
+	writes, helper map[string]bool
+	locks          bool
+}
+
+// takesLock reports whether m takes the org lock itself or through a helper
+// method of the package, however many calls deep.
+func takesLock(m *draftMethod, methods map[string]*draftMethod, seen map[string]bool) bool {
+	if m == nil {
+		return false
+	}
+	if m.locks {
+		return true
+	}
+	for h := range m.helper {
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		if takesLock(methods[h], methods, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestWorkflowDraftWritesTakeTheOrgLock is the same rule for the one package
+// that writes workflow_drafts: a method that calls a draft write takes the
+// owner's org lock in its own body or through a helper that does, and every
+// draft write is made by some method (so a rename cannot leave the list stale).
+func TestWorkflowDraftWritesTakeTheOrgLock(t *testing.T) {
+	dir := filepath.Join("..", "workflowdrafts")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string]*draftMethod{}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, "_gen.go") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, name, src, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv == nil {
+				continue
+			}
+			m := &draftMethod{pos: fset.Position(fn.Pos()).String(), writes: map[string]bool{}, helper: map[string]bool{}}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				switch x := sel.X.(type) {
+				case *ast.Ident:
+					if x.Name == "s" {
+						m.helper[sel.Sel.Name] = true
+					}
+				case *ast.SelectorExpr:
+					if x.Sel.Name == "Locks" && sel.Sel.Name == "LockUserOrgs" {
+						m.locks = true
+					}
+					if x.Sel.Name == "Drafts" && draftStoreWrites[sel.Sel.Name] {
+						m.writes[sel.Sel.Name] = true
+					}
+				}
+				return true
+			})
+			methods[fn.Name.Name] = m
+		}
+	}
+	used := map[string]bool{}
+	for name, m := range methods {
+		for write := range m.writes {
+			used[write] = true
+			if !takesLock(methods[name], methods, map[string]bool{}) {
+				t.Errorf("%s: (*service).%s calls Drafts.%s without its owner's org lock: take Locks.LockUserOrgs first in the transaction", m.pos, name, write)
+			}
+		}
+	}
+	for write := range draftStoreWrites {
+		if !used[write] {
+			t.Errorf("draftStoreWrites[%q] is called by no workflowdrafts method any more: remove it", write)
+		}
+	}
+}
 
 // TestOrgSensitiveWritesTakeTheOrgLock holds the backfill-vs-write race
 // closed for every org-sensitive write, not path by path:

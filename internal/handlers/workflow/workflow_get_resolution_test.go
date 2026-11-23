@@ -7,15 +7,18 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
-	"github.com/stretchr/testify/require"
 )
 
 // GetWorkflow must show the definition a run of the same name resolves to:
@@ -42,7 +45,7 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	stored, err := json.Marshal([]cfg.StoredWorkflow{{Slug: "shared-flow", Name: "shared-flow", YAMLContent: def("from-project")}})
 	require.NoError(t, err)
 	storedJSON := string(stored)
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ID: uuid.NewString(), ProjectID: projectID, DaemonID: "d",
 		ProjectWorkflowsJSON: &storedJSON, PushedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
@@ -50,7 +53,7 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	run, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{UserID: "test-user", ProjectID: projectID}, "shared-flow")
 	require.NoError(t, err)
 
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	got, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{Name: "shared-flow", ProjectId: projectID}))
 	require.NoError(t, err)
 	require.Equal(t, string(run.Source), got.Msg.Source)

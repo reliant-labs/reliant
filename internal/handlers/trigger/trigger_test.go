@@ -374,7 +374,7 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	syncer, fires := TemporalBackend(nil, env.repo, "", nil)
+	syncer, fires := TemporalBackend(nil, triggers.NewStores(env.repo), "", nil)
 	require.Nil(t, syncer, "TemporalBackend without a client must return a nil interface")
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 

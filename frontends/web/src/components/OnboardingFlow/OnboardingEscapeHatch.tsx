@@ -63,7 +63,7 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
     "disabled:cursor-not-allowed disabled:opacity-60";
 
   return (
-    <div className={cn("flex flex-col items-end gap-1", className)}>
+    <div className={cn("flex flex-col items-start gap-1 sm:items-end", className)}>
       <div className="flex items-center gap-1">
         <button
           type="button"

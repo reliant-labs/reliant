@@ -22,6 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -45,7 +46,7 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo *db.Repo) (chatID, workfl
 	chatID = createTestChatForConversation(t, repo)
 	workflowID = chatID // Root workflow ID = chat ID (standard pattern)
 
-	svc = threads.New(threads.Deps{Repo: repo})
+	svc = threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	// Mimics StartChat: CreateWorkflowWithThread before any messages
 	wf := &db.Workflow{
@@ -88,7 +89,7 @@ func TestUserMessageRoundTrip_BasicSaveAndLoad(t *testing.T) {
 	require.NotNil(t, savedMsg)
 
 	// Load via LoadMessagesForLLM (same as CallLLM path)
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 1, "Should have exactly 1 message")
 	assert.Equal(t, "user", string(messages[0].Role), "Message should be user role")
@@ -126,7 +127,7 @@ func TestUserMessageRoundTrip_ConversationEndsWithUser(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: LoadMessagesForLLM should return 3 messages, last one = user
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 3, "Should have 3 messages (user, assistant, user)")
 
@@ -189,7 +190,7 @@ func TestUserMessageRoundTrip_WithToolCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: Last message should be user
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -269,7 +270,7 @@ func TestUserMessageRoundTrip_AfterCompaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: LoadMessagesForLLM should see the user message as the last message
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -307,7 +308,7 @@ func TestUserMessageRoundTrip_SystemMessageBeforeUser(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: Last message should be user
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -361,7 +362,7 @@ func TestUserMessageRoundTrip_ForkedThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: LoadMessagesForLLM on child thread should see inherited + child messages
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, childThread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, childThread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 
@@ -405,7 +406,7 @@ func TestUserMessageRoundTrip_GhostRecoveryInheritThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: new workflow's CallLLM should see the user message
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -443,7 +444,7 @@ func TestUserMessageRoundTrip_ResumedPausedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: CallLLM should see the user message as the last one
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 3, "Should have 3 messages")
 	assert.Equal(t, "user", string(messages[2].Role),
@@ -506,7 +507,7 @@ func TestUserMessageRoundTrip_RunningWorkflowInterrupt(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: Last message must be user
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0, "Should have messages")
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -528,7 +529,7 @@ func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testin
 	thread := workflowID
 
 	// Verify: CW exists (created by CreateWorkflowWithThread)
-	svc := threads.New(threads.Deps{Repo: repo})
+	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	cw, err := svc.GetLatestContextWindow(ctx, thread)
 	require.NoError(t, err)
 	require.NotNil(t, cw, "Context window should exist from CreateWorkflowWithThread")
@@ -544,7 +545,7 @@ func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testin
 		"Message should be in the same CW created by CreateWorkflowWithThread")
 
 	// LoadMessagesForLLM should find the message
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	assert.Equal(t, "user", string(messages[0].Role))
@@ -569,7 +570,7 @@ func TestUserMessageRoundTrip_ContextWindowIDConsistency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Save another message via threads.Service.SaveMessage
-	svc := threads.New(threads.Deps{Repo: repo})
+	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	result, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  thread,
@@ -642,7 +643,7 @@ func TestUserMessageRoundTrip_MultipleContextWindows(t *testing.T) {
 		"User message should be saved to the latest context window (seq 1)")
 
 	// LoadMessagesForLLM should show messages from latest CW only
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 
 	// Should have: compaction summary + new user message
@@ -701,7 +702,7 @@ func TestUserMessageRoundTrip_SubThreadReply(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify: CallLLM on child thread should see the user reply
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, childThread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, childThread, nil)
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0)
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
@@ -727,7 +728,7 @@ func TestUserMessageRoundTrip_EmptyContentWithAttachment(t *testing.T) {
 
 	// The message exists in DB but has no content blocks
 	// LoadMessagesForLLM should still return it as a user message
-	messages, err := LoadMessagesForLLM(ctx, repo, chatID, thread, nil)
+	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
 	require.NoError(t, err)
 	// Message with no content blocks may be filtered or kept - verify it doesn't cause errors
 	assert.NoError(t, err)
