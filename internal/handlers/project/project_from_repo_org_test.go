@@ -51,7 +51,13 @@ func TestCreateProjectFromRepo_AuthorizesTheMachineBeforeTheClone(t *testing.T) 
 	clone := func(t *testing.T, r Repository, daemonID, org string) (*cloneStubControlPlane, error) {
 		t.Helper()
 		cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{ClonedPath: "/home/workspace/projects/w-" + uuid.NewString(), Queued: true}}
-		svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: r, Projects: projectaccesstest.For(r), Router: &createProjectRowRouter{resolveID: daemonID}, ControlPlane: cp, Orgs: resolver})))
+		// The machine read is Deps.Machines: a repository that fails it
+		// fails it there too.
+		var machines DaemonReader
+		if u, ok := r.(unreadableMachines); ok {
+			machines = u
+		}
+		svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: r, Machines: machines, Projects: projectaccesstest.For(r), Router: &createProjectRowRouter{resolveID: daemonID}, ControlPlane: cp, Orgs: resolver})))
 		_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
 			CloneUrl: "https://github.com/acme/w-" + uuid.NewString() + ".git", DaemonId: daemonID, OrgId: &org,
 		}))

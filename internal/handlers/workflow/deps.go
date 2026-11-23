@@ -19,6 +19,12 @@ type AutomationRetirer interface {
 	RetireDeletedTriggers(ctx context.Context, deleted []*core.Trigger)
 }
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides access on the row it returns. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
 // Repository is the slice of *db.Repo the workflow handlers use. The
 // last three are what workflowcatalog, workflowsource and launch read
 // through it when they resolve a workflow's refs.
@@ -35,7 +41,6 @@ type Repository interface {
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 
 	// What deleting a workflow does to the automations that run it.
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)

@@ -27,6 +27,7 @@ import (
 // counts how many reads are in flight at once.
 type inflightRepo struct {
 	*MockRepository
+	*MockProjectReader
 	rec       *MockRecoveries
 	items     *MockItems
 	firings   *MockFirings
@@ -37,7 +38,7 @@ type inflightRepo struct {
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -56,13 +57,13 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
 	r.notices.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return nil, nil }
 	trg := &core.Trigger{ID: "trg-1", UserID: "user-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
-	m.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
+	r.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
 		return &db.Project{ID: id, UserID: "user-1"}, nil
 	}
 	r.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
@@ -133,7 +134,7 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	assert.GreaterOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency), "reads overlap")
 	assert.LessOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency+inboxHealthReadConcurrency), "up to the bound and no further")
 	// The triggers are read once for both automation sections.
-	assert.Len(t, repo.Calls("ListTriggers"), 1)
+	assert.Len(t, repo.MockRepository.Calls("ListTriggers"), 1)
 }
 
 // The two firing reads run together, on a budget of their own, even while the

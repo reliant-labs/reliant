@@ -1280,18 +1280,20 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:     g.Log,
-		Config:     g.Cfg,
-		Repo:       g.Database(),
-		OrgKeys:    g.OrgAccounts(),
-		Items:      store.NewInboxDismissalExtStore(g.Database().ORM()),
-		Firings:    store.NewTriggerEventExtStore(g.Database().ORM()),
-		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
-		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
-		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
-		Storage:    worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
-		Sweeper:    g.WorktreeSweep(),
-		Orgs:       g.OrgResolver(),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
+		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
+		OrgKeys:     g.OrgAccounts(),
+		Items:       store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:     store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:     store.NewTriggerExtStore(g.Database().ORM()),
+		Recoveries:  store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:       store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:     worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
+		Sweeper:     g.WorktreeSweep(),
+		Orgs:        g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1309,6 +1311,7 @@ func (g *Graph) newMCP() (*mcp.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1405,6 +1408,9 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
 		Purges:         projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
 		ProjectConfigs: store.NewProjectConfigExtStore(o),
+		ProjectRows:    store.NewProjectExtStore(o),
+		Machines:       store.NewDaemonExtStore(o),
+		Repos:          store.NewRepoExtStore(o),
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
@@ -1488,6 +1494,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 		Repo:           g.Database(),
 		Drafts:         g.Workflowdrafts(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1603,6 +1610,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Drafts:      g.Workflowdrafts(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
