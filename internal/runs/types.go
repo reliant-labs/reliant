@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Built by hand, by internal/app's NewRunLifecycle provider
-// (providers_worker.go) and the chat handler: never a node compose.go
-// constructs from Deps.
+// forge:provided because it is built twice: by internal/app's NewRunLifecycle
+// provider (providers_worker.go), and by the chat handler from the chat's own
+// Deps.
 //
 //forge:provided
 //forge:exclude-contract: a concrete lifecycle service built by hand with a plain Deps; its callers take the narrow roles they need, not a Service interface

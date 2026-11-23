@@ -529,6 +529,7 @@ func (g *Graph) newRunLauncher() (*launch.Launcher, error) {
 		Runs:     g.RunLifecycle(),
 		DB:       g.Database(),
 		Router:   g.WorkerDaemonRouter(),
+		Projects: g.Projectaccess(),
 	})
 }
 
@@ -682,7 +683,7 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 }
 
 func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
-	return NewProjectPurge(ProjectPurgeDeps{Purges: projectpurge.NewInstrumented(projectpurge.Deps{DB: g.Database().ORM()})})
+	return NewProjectPurge(ProjectPurgeDeps{Purges: g.ProjectPurges()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -1174,7 +1175,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		return nil, err
 	}
 	return trigger.New(trigger.Deps{
-		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Projects:       g.Projectaccess(),
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
@@ -1248,7 +1249,7 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 // option (apiMountOptions).
 func (g *Graph) newForge() (*forge.Service, error) {
 	return forge.New(forge.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Projects: g.Projectaccess(),
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
@@ -1283,7 +1284,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Projects:       g.Projectaccess(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1326,7 +1327,7 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Projects:  projectaccess.NewFromORM(g.Database().ORM()),
+		Projects:  g.Projectaccess(),
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
@@ -1368,7 +1369,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 // newPreset constructs the preset handler (internal/handlers/preset).
 func (g *Graph) newPreset() (*preset.Service, error) {
 	return preset.New(preset.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Projects: g.Projectaccess(),
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
@@ -1382,8 +1383,8 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
-		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
-		Purges:         projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
+		Projects:       g.Projectaccess(),
+		Purges:         g.ProjectPurges(),
 		ProjectConfigs: store.NewProjectConfigExtStore(o),
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1451,7 +1452,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 // newRepo constructs the repo handler (internal/handlers/repo).
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Projects: g.Projectaccess(),
 		Repos:    store.NewRepoExtStore(g.Database().ORM()),
 		Logger:   g.Log,
 		Config:   g.Cfg,
@@ -1463,7 +1464,7 @@ func (g *Graph) newRepo() (*repo.Service, error) {
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Projects:       g.Projectaccess(),
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
@@ -1582,7 +1583,7 @@ func (g *Graph) newWorkflowdrafts() (workflowdrafts.Service, error) {
 // workflow.
 func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 	return workflowhandler.New(workflowhandler.Deps{
-		Projects:    projectaccess.NewFromORM(g.Database().ORM()),
+		Projects:    g.Projectaccess(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
@@ -1813,6 +1814,19 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 	})
 }
 
+// newProjectaccess constructs the projectaccess package (internal/projectaccess).
+func (g *Graph) newProjectaccess() (projectaccess.Service, error) {
+	return projectaccess.NewServiceWithForgeMiddleware(projectaccess.New(projectaccess.Deps{
+		Store: g.Database(),
+	})), nil
+}
+
+// newProjectPurges constructs the ProjectPurges provider (NewProjectPurges, internal/app/providers_worker.go).
+func (g *Graph) newProjectPurges() (projectpurge.Service, error) {
+	return NewProjectPurges(ProjectPurgesDeps{
+		DB: g.Database(),
+	})
+}
 func (g *Graph) newCredentialsAutomationtokens() (automationtokens.Service, error) {
 	svc, err := automationtokens.New(automationtokens.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
 	if err != nil {

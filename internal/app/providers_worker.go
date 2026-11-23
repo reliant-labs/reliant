@@ -329,6 +329,7 @@ func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
 
 // RunLauncherDeps is what a launch creates and starts.
 type RunLauncherDeps struct {
+	Projects projectaccess.Service
 	DB       *db.Repo
 	Temporal *TemporalClient
 	Runs     *runs.Service
@@ -346,7 +347,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Projects:    projectaccess.NewFromORM(d.DB.ORM()),
+		Projects:    d.Projects,
 		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
 		Threads:     threads.New(threads.Deps{Repo: d.DB}),
 		Temporal:    d.Temporal.Client,
@@ -1274,6 +1275,17 @@ const (
 // projectPurgeInterval, until its context ends.
 type ProjectPurge struct {
 	purges projectpurge.Service
+}
+
+// ProjectPurgesDeps is the database the purge service runs over.
+type ProjectPurgesDeps struct {
+	DB *db.Repo
+}
+
+// NewProjectPurges is the project deletion and purge service: the API's
+// project handler schedules and restores through it, the worker's loop purges.
+func NewProjectPurges(d ProjectPurgesDeps) (projectpurge.Service, error) {
+	return projectpurge.NewInstrumented(projectpurge.Deps{DB: d.DB.ORM()}), nil
 }
 
 // ProjectPurgeDeps is the purge service.

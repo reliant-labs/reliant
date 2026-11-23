@@ -71,6 +71,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "Project",
+        "ProjectPurges",
+        "Projectaccess",
         "ProviderAccount",
         "Providerbackoff",
         "PullRequestRecord",
@@ -518,6 +520,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
+        "ProjectPurges",
+        "Projectaccess",
         "Providerbackoff",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -54862,6 +54866,63 @@
       "implementation_candidates": []
     },
     {
+      "id": "ProjectPurges",
+      "name": "ProjectPurges",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewProjectPurges"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "Projectaccess",
+      "name": "Projectaccess",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "source": {
+        "path": "internal/projectaccess/contract.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.MockService",
+          "source": {
+            "path": "internal/projectaccess/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.MockStore",
+          "source": {
+            "path": "internal/projectaccess/mock_gen.go",
+            "symbol": "MockStore"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.forgeMiddlewareService",
+          "source": {
+            "path": "internal/projectaccess/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectaccess.service",
+          "source": {
+            "path": "internal/projectaccess/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "ProviderAccount",
       "name": "ProviderAccount",
       "kind": "component",
@@ -56559,10 +56620,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -56852,10 +56914,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57202,10 +57265,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57320,10 +57384,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57479,10 +57544,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57491,9 +57557,13 @@
       "field": "Purges",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "ProjectPurges"
+      ],
+      "providers": [
+        "ProjectPurges"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -57549,7 +57619,22 @@
       "field": "Purges",
       "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ProjectPurges"
+      ],
+      "providers": [
+        "ProjectPurges"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Projectaccess",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -57736,10 +57821,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -57861,6 +57947,20 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "RunLauncher",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "RunLifecycle",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
@@ -57905,10 +58005,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -58779,10 +58880,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -59123,10 +59225,11 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
-        "Database"
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -59253,7 +59356,8 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "Projectaccess"
       ],
       "providers": [
         "Database"
@@ -59605,14 +59709,6 @@
     {
       "code": "binding_unresolved",
       "component": "Project.ProjectConfigs",
-      "source": {
-        "path": "internal/handlers/project/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Project.Purges",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"
