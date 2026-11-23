@@ -290,7 +290,7 @@ type WriteLedgerDeps struct {
 // node or an agent tool, before it is made, so the event it causes can be
 // attributed.
 func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB}), nil
+	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())}), nil
 }
 
 // newWriteLedger is the integration write ledger over repo's database.
@@ -413,6 +413,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Chats:     d.Chats.Service,

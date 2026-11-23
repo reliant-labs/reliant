@@ -57630,6 +57630,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Run",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "RunLifecycle",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
@@ -58267,6 +58278,17 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolCall",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
