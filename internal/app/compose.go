@@ -1137,6 +1137,10 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Config:         g.Cfg,
 		Repo:           g.Database(),
 		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
+		Repos:          store.NewRepoExtStore(g.Database().ORM()),
+		Daemons:        store.NewDaemonExtStore(g.Database().ORM()),
 		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
@@ -1466,6 +1470,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
 		Projects: projectaccess.NewFromORM(g.Database().ORM()),
+		Repos:    store.NewRepoExtStore(g.Database().ORM()),
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
