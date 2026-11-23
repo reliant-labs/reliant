@@ -15,10 +15,18 @@ type Questions interface {
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 }
 
+// WorkflowLoader reads a run's workflow row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
 // Deps is what the run-lifecycle service is built from.
 type Deps struct {
 	// Repo is the chat, workflow and question-update store.
 	Repo Repository
+	// Workflows reads the run's workflow row.
+	Workflows WorkflowLoader
 	// Questions lists the pending questions a terminate resolves.
 	Questions Questions
 	// Temporal asks for execution state and cancels or terminates runs.

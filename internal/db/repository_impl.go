@@ -519,7 +519,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			DisplayStyle: displayStyle,
 		}
 		if attributed {
-			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.SenderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
+			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.senderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
 		}
 
 		updateDataJSON, err := updateData.Marshal()
@@ -1603,38 +1603,11 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 	return store.ListAttachedDaemonIDsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
-func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {
-	if record == nil {
-		return fmt.Errorf("project config record cannot be nil")
-	}
-	if record.ID == "" {
-		record.ID = uuid.New().String()
-	}
-	if record.ProjectID == "" {
-		return fmt.Errorf("project ID cannot be empty")
-	}
-	if record.DaemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-
-	return store.UpsertProjectConfigRecord(ctx, r.ORM(), record)
-}
-
-// GetProjectConfigRecord reads the project's whole config record, or
-// svcerr.NotFound. A caller that needs one part of it reads that
-// column instead (see store.GetProjectConfigRecord).
-func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
-}
-
 // GetProjectWorkflowsJSON reads one column of the project config record: the
 // synced .reliant/workflows. It returns svcerr.NotFound when the
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
-// GetProjectConfigRecord whenever that column is all a caller needs: the full
-// row carries every indexed skill body and can run to tens of MB.
+// store.GetProjectConfigRecord whenever that column is all a caller needs: the
+// full row carries every indexed skill body and can run to tens of MB.
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1650,16 +1623,6 @@ func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*st
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
-}
-
-// GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. It returns svcerr.NotFound when the
-// project has no record.
-func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectMCPConfigsJSON(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2850,18 +2813,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
-func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllTriggers(ctx, r.ORM())
-}
-
-// LockTrigger row-locks the trigger until the surrounding transaction ends.
-func (r *Repo) LockTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.LockTrigger(ctx, r.ORM(), id)
-}
-
 // UpdateTrigger is UpdateTriggerInOrg with no org reads: a write back of a
 // row as it was (restoreActivation).
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -3017,17 +2968,6 @@ func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID
 
 func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
 	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
-}
-
-func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
-}
-
-func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -3186,10 +3126,6 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 		return nil, core.ErrTriggerNotFound
 	}
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
@@ -3723,21 +3659,4 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
-// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
-func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
-	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
-}
-
-// RefusePauseNotice records that a no-org-account pause's email was refused for good
-// (store.RefusePauseNotice).
-func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
-func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
 }

@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +81,7 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
-	resolver := connections.NewResolver(repo, store, tokens)
+	resolver := connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
 	svc := connections.NewService(store, v, providers, tokens, broker, nil)
 	return &env{t: t, repo: repo, svc: svc, resolver: resolver, cp: &fakeCP{tokens: map[string]string{

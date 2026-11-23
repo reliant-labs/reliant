@@ -191,7 +191,7 @@ func TestTerminalIdempotency_NoResultReaderFallsBackToStub(t *testing.T) {
 	}))
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), unavailableToolCallResults{toolCallsOf(f.h.Repo())}, executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), unavailableToolCallResults{toolCallsOf(f.h.Repo())}, executor).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: `{"command":"echo hi"}`}},

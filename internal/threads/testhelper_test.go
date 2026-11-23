@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // testHelper wraps db.Repo and provides convenience methods for testing.
@@ -42,7 +43,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	// ID would collide (chats_pkey) across every test function that builds a helper.
 	h.chatID = h.createChat("")
 
-	h.svc = New(Deps{Repo: repo})
+	h.svc = New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	return h
 }
 

@@ -38,7 +38,7 @@ func TestRunStep_StopsTheCommandOnlyWhenTemporalCancelsTheStep(t *testing.T) {
 				cancel(tc.cause)
 			}
 			router := &toolexectest.Recorder{}
-			a := NewExecuteRunStepActivity(nil, nil, nil).WithDaemonRouter(router)
+			a := NewExecuteRunStepActivity(nil, nil, nil, nil).WithDaemonRouter(router)
 
 			a.stopCommandIfCancelled(ctx, RunExecutorContext{UserID: "user-1"}, ExecuteRunStepInput{ChatID: "chat-1", StepID: "lease"}, "runstep-abc")
 

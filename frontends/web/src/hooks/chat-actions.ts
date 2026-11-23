@@ -258,16 +258,6 @@ export async function resumeChat(chatId: string): Promise<{
   };
 }
 
-/**
- * "Retry now" on a run held until a provider's usage limit resets. Resolves to
- * whether a waiting run was woken. `useModel` ("<model>@<driver>") answers the
- * wait with a cross-provider fallback instead, until the original reset.
- */
-export async function retryUsageLimitWait(chatId: string, useModel?: string): Promise<boolean> {
-  const response = await client.retryUsageLimitWait({ chatId, useModel });
-  return response.woken;
-}
-
 /** Dismiss a chat's unread state. */
 export async function dismissChat(chatId: string): Promise<{ state: ChatState; changed: boolean; message: string }> {
   const response = await client.dismissChat({ chatId });

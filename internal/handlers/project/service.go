@@ -38,6 +38,8 @@ type Deps struct {
 	Projects projectaccess.Service
 	// Purges schedules, restores and purges a project (projectpurge).
 	Purges ProjectPurges
+	// ProjectConfigs seeds the config record of a new project.
+	ProjectConfigs ProjectConfigs
 	// Router runs every filesystem and git operation on the caller's
 	// daemon, which owns the filesystem. The API server always has one; in
 	// a composition without one, the daemon-backed steps fail through their
@@ -120,6 +122,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("project: Deps.Projects is required")
+	}
+	if d.ProjectConfigs == nil {
+		return fmt.Errorf("project: Deps.ProjectConfigs is required")
 	}
 	if d.Purges == nil {
 		return fmt.Errorf("project: Deps.Purges is required")

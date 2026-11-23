@@ -29,6 +29,7 @@ import (
 // through to the embedded MockRepository, which fails it as "Func not set".
 type mcpReadRepo struct {
 	MockRepository
+	*MockProjectConfigs
 
 	project     *db.Project
 	mcpConfigs  string
@@ -54,13 +55,13 @@ func (r *mcpReadRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error
 	return &db.Daemon{ID: id, UserID: r.project.UserID}, nil
 }
 
-func (r *mcpReadRepo) GetProjectConfigRecord(_ context.Context, projectID string) (*db.ProjectConfigRecord, error) {
+func (r *mcpReadRepo) GetProjectConfigRecord(_ context.Context, projectID string) (*core.ProjectConfigRecord, error) {
 	r.recordReads.Add(1)
 	if projectID != r.project.ID {
 		return nil, svcerr.NotFound("project config")
 	}
 	cfg := r.mcpConfigs
-	return &db.ProjectConfigRecord{ProjectID: projectID, MCPConfigs: &cfg}, nil
+	return &core.ProjectConfigRecord{ProjectID: projectID, MCPConfigs: &cfg}, nil
 }
 
 func (r *mcpReadRepo) GetProjectMCPConfigsJSON(_ context.Context, projectID string) (*string, error) {

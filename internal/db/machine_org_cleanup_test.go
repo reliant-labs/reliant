@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // cleanupFixture: a project of org "acme" with a checkout record on a
@@ -443,7 +444,7 @@ func TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, catalogs, 1)
 	assert.Equal(t, other, catalogs[0].DaemonID)
-	_, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, machine)
+	_, synced, err := store.GetProjectMachineConfigRecord(ctx, p.repo.ORM(), p.projectID, machine)
 	require.NoError(t, err)
 	assert.False(t, synced, "the machine's synced config of the project is still there")
 	detached, err := store.ListProjectDaemonDetachmentsForDaemon(ctx, p.repo.ORM(), machine)
@@ -457,7 +458,7 @@ func TestMachineOrgCleanup_DocumentedRestoreBringsTheCheckoutBack(t *testing.T) 
 	require.NoError(t, err)
 	assert.Len(t, rows, 2, "the checkout record is back")
 	assert.JSONEq(t, catalogBefore, machineCatalogJSON(t, p.repo, p.projectID, machine), "the machine's config came back other than it was")
-	record, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, machine)
+	record, synced, err := store.GetProjectMachineConfigRecord(ctx, p.repo.ORM(), p.projectID, machine)
 	require.NoError(t, err)
 	require.True(t, synced)
 	assert.Equal(t, "from "+machine, *record.UserConfigYAML)

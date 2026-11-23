@@ -42,6 +42,7 @@ import (
 // GitPublishActivity implements the git_publish node type.
 type GitPublishActivity struct {
 	repo         GitPublishStore
+	rows         WorkspaceRows
 	daemonRouter toolexec.DaemonRouter
 	catalog      *catalog.Catalog
 	runner       writeledger.Runner
@@ -66,10 +67,10 @@ type pushTokenSource interface {
 // NewGitPublishActivity builds the activity. credentials resolves the GitHub
 // credential the same way an action node's does (a saved connection, else the
 // delegated broker); nil makes every publish fail with a FailedPrecondition.
-func NewGitPublishActivity(repo GitPublishStore, daemonRouter toolexec.DaemonRouter, credentials httpaction.CredentialSource) *GitPublishActivity {
+func NewGitPublishActivity(repo GitPublishStore, rows WorkspaceRows, daemonRouter toolexec.DaemonRouter, credentials httpaction.CredentialSource) *GitPublishActivity {
 	cat := catalog.MustBuiltin()
 	return &GitPublishActivity{
-		repo: repo, daemonRouter: daemonRouter, catalog: cat,
+		repo: repo, rows: rows, daemonRouter: daemonRouter, catalog: cat,
 		runner: httpaction.NewRunner(netguard.New()), credentials: credentials,
 		token: runPushToken{credentials: credentials},
 	}
@@ -243,7 +244,7 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 // gitpublish.CapabilityForceWithLease. A daemon with no registration row has
 // advertised nothing.
 func (a *GitPublishActivity) enforcesLease(ctx context.Context, daemonID string) (bool, error) {
-	d, err := a.repo.GetDaemon(ctx, daemonID)
+	d, err := a.rows.GetDaemon(ctx, daemonID)
 	if svcerr.IsNotFound(err) || (err == nil && d == nil) {
 		return false, nil
 	}
@@ -262,7 +263,7 @@ type publishMachine struct {
 }
 
 func (a *GitPublishActivity) machineFor(ctx context.Context, chat *core.Chat, rtx RuntimeContext) (publishMachine, error) {
-	owner, err := worktreeOwnerOf(ctx, a.repo, chat.WorktreeID)
+	owner, err := worktreeOwnerOf(ctx, a.rows, chat.WorktreeID)
 	if err != nil {
 		return publishMachine{}, err
 	}

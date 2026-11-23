@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -56,7 +57,7 @@ nodes:
 		{"slug": "blog-content-pipeline", "name": "blog-content-pipeline", "relative_path": ".reliant/workflows/blog.yaml", "yaml_content": pipeline},
 		{"slug": "content-next", "name": "content-next", "relative_path": ".reliant/workflows/content-next.yaml", "yaml_content": contentNext},
 	})
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: "daemon-" + uuid.NewString(),
 		ProjectWorkflowsJSON: &workflowsJSON, PushedAt: now,
 	}))
@@ -67,7 +68,7 @@ nodes:
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	t.Run("the ref itself", func(t *testing.T) {
 		out, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "project://blog-content-pipeline"})

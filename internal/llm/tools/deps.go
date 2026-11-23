@@ -381,15 +381,40 @@ type getRunStore interface {
 	threads.Repository
 	runCallerStore
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	// GetWorkflow reads the run's root workflow, which carries why it failed.
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// RunWorkflows reads a run's root workflow, which carries why it failed
+// (get_run). store.WorkflowExtStore satisfies it.
+type RunWorkflows interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// PlacementRecords reads the worktree, project and machine rows the worktree
+// and report_bug tools name. daemonplacement.Records satisfies it. It checks
+// no owner: each tool reads only the rows of the run it serves.
+type PlacementRecords interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// bugReportMachines is what report_bug reads about the machine a report came
+// from.
+type bugReportMachines interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// worktreeRecords is what the worktree tool reads besides its store: the
+// chat's project and a worktree row it archived.
+type worktreeRecords interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // bugReportLookup is what report_bug reads to say where a report came from.
 type bugReportLookup interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	// ListFreshDaemonAttachmentsForUser names the build each of the user's
 	// attached daemons registered with: the daemon's own version, which is
@@ -474,12 +499,10 @@ type runScenarioStore interface {
 type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 }
 
 // listPendingQuestionsStore is list_pending_questions' store: the open

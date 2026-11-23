@@ -267,7 +267,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	// Create threads service
-	threadsService := threads.New(threads.Deps{Repo: cfg.Database})
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
@@ -429,7 +429,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	pauses := pauseNotices{admins: pauseAdmins}
 	if cfg.Database != nil {
-		pauses.store = cfg.Database
+		pauses.store = newPauseStores(cfg.Database, cfg.Database.ORM())
 	}
 	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
@@ -471,11 +471,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
-	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+	if sweeps := noticeSweeps(cfg, orgKeyNoticeQueueFor(cfg)); len(sweeps) > 0 {
 		out.background = append(out.background, func(ctx context.Context) {
-			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
-				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval, sweeps...)
 		})
 	}
 	return out, registry, nil
@@ -601,7 +599,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	pause := triggers.NewAutoPause(cfg.Database, schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
-		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))
 	}
 	return pause
 }

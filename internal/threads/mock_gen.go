@@ -17,8 +17,70 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
+// forge:section MockMessages
+// forge:hash=608f20e2d3e8a6db714807eec347aea9936c069acb6c1c1f6b8c553f35cc3dbb
+
+// MockMessages is a test mock for the Messages interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMessages.<Method>Func not set" error.
+type MockMessages struct {
+	contractkit.Recorder
+	FindMessageFunc           func(context.Context, string) (*db.Message, error)
+	FindMessageByActivityFunc func(context.Context, string, string, string) (*db.Message, error)
+}
+
+// FindMessage records the call and delegates to FindMessageFunc when set.
+func (m *MockMessages) FindMessage(ctx context.Context, id string) (*db.Message, error) {
+	m.Recorder.Record("FindMessage", ctx, id)
+	if m.FindMessageFunc != nil {
+		return m.FindMessageFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockMessages", "FindMessage")
+}
+
+// FindMessageByActivity records the call and delegates to FindMessageByActivityFunc when set.
+func (m *MockMessages) FindMessageByActivity(ctx context.Context, chatID string, workflowID string, activityID string) (*db.Message, error) {
+	m.Recorder.Record("FindMessageByActivity", ctx, chatID, workflowID, activityID)
+	if m.FindMessageByActivityFunc != nil {
+		return m.FindMessageByActivityFunc(ctx, chatID, workflowID, activityID)
+	}
+	return nil, contractkit.MockNotSet("MockMessages", "FindMessageByActivity")
+}
+
+// Compile-time check.
+var _ Messages = (*MockMessages)(nil)
+
+// forge:section MockSenders
+// forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9
+
+// MockSenders is a test mock for the Senders interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSenders.<Method>Func not set" error.
+type MockSenders struct {
+	contractkit.Recorder
+	SenderTitlesByThreadIDsFunc func(context.Context, []string) (map[string]string, error)
+}
+
+// SenderTitlesByThreadIDs records the call and delegates to SenderTitlesByThreadIDsFunc when set.
+func (m *MockSenders) SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitlesByThreadIDs", ctx, threadIDs)
+	if m.SenderTitlesByThreadIDsFunc != nil {
+		return m.SenderTitlesByThreadIDsFunc(ctx, threadIDs)
+	}
+	return nil, contractkit.MockNotSet("MockSenders", "SenderTitlesByThreadIDs")
+}
+
+// Compile-time check.
+var _ Senders = (*MockSenders)(nil)
+
 // forge:section MockRepository
-// forge:hash=79b89efab93afc1e01d49e5f4ab278a5fb09928454686022cf2ab124d62560d3
+// forge:hash=a940ae3daec3f2c9de4f844b9d1c546bebd9cd57ef7ff66a0abd1dab9840305d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -34,7 +96,6 @@ type MockRepository struct {
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
-	SenderTitleFunc                                          func(context.Context, string) *string
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                                 func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -44,7 +105,6 @@ type MockRepository struct {
 	GetMaxSequenceForThreadFunc                              func(context.Context, string) (int, error)
 	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
 	GetMessageFunc                                           func(context.Context, string) (*db.Message, error)
-	FindMessageFunc                                          func(context.Context, string) (*db.Message, error)
 	GetMessagesByContextWindowFunc                           func(context.Context, string, *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThreadFunc                   func(context.Context, string, int) (*db.Message, error)
 	GetLatestMessageInThreadFunc                             func(context.Context, string) (*db.Message, error)
@@ -53,8 +113,6 @@ type MockRepository struct {
 	ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
 	CreateMessageFunc                                        func(context.Context, *db.Message) error
 	DeleteMessageFunc                                        func(context.Context, string) error
-	GetMessageByActivityIDFunc                               func(context.Context, string, string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityIDFunc                    func(context.Context, string, string, string) (*db.Message, error)
 	GetEffectiveMessageCountFunc                             func(context.Context, string, string) (int, error)
 	AllocateMessageOrderFunc                                 func(context.Context, string, string) (int64, int64, error)
 	AllocateContextWindowSequenceFunc                        func(context.Context, string) (int, error)
@@ -125,15 +183,6 @@ func (m *MockRepository) GetRootThread(ctx context.Context, conversationID strin
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetRootThread")
-}
-
-// SenderTitle records the call and delegates to SenderTitleFunc when set.
-func (m *MockRepository) SenderTitle(ctx context.Context, threadID string) *string {
-	m.Recorder.Record("SenderTitle", ctx, threadID)
-	if m.SenderTitleFunc != nil {
-		return m.SenderTitleFunc(ctx, threadID)
-	}
-	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -217,15 +266,6 @@ func (m *MockRepository) GetMessage(ctx context.Context, id string) (*db.Message
 	return nil, contractkit.MockNotSet("MockRepository", "GetMessage")
 }
 
-// FindMessage records the call and delegates to FindMessageFunc when set.
-func (m *MockRepository) FindMessage(ctx context.Context, id string) (*db.Message, error) {
-	m.Recorder.Record("FindMessage", ctx, id)
-	if m.FindMessageFunc != nil {
-		return m.FindMessageFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "FindMessage")
-}
-
 // GetMessagesByContextWindow records the call and delegates to GetMessagesByContextWindowFunc when set.
 func (m *MockRepository) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error) {
 	m.Recorder.Record("GetMessagesByContextWindow", ctx, contextWindowID, maxOrdinal)
@@ -296,24 +336,6 @@ func (m *MockRepository) DeleteMessage(ctx context.Context, messageID string) er
 		return m.DeleteMessageFunc(ctx, messageID)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteMessage")
-}
-
-// GetMessageByActivityID records the call and delegates to GetMessageByActivityIDFunc when set.
-func (m *MockRepository) GetMessageByActivityID(ctx context.Context, chatID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByActivityID", ctx, chatID, activityID)
-	if m.GetMessageByActivityIDFunc != nil {
-		return m.GetMessageByActivityIDFunc(ctx, chatID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetMessageByActivityID")
-}
-
-// GetMessageByWorkflowAndActivityID records the call and delegates to GetMessageByWorkflowAndActivityIDFunc when set.
-func (m *MockRepository) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID string, workflowID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByWorkflowAndActivityID", ctx, chatID, workflowID, activityID)
-	if m.GetMessageByWorkflowAndActivityIDFunc != nil {
-		return m.GetMessageByWorkflowAndActivityIDFunc(ctx, chatID, workflowID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetMessageByWorkflowAndActivityID")
 }
 
 // GetEffectiveMessageCount records the call and delegates to GetEffectiveMessageCountFunc when set.

@@ -148,6 +148,8 @@ type CallLLMDeps struct {
 	Store CallLLMStore
 	// Spawns reads the thread's spawn tree for the turn's grants.
 	Spawns SpawnTree
+	// Threads saves the turn's messages and the notices it posts.
+	Threads MessageSaver
 	// ToolResults recovers the tool results the history lost
 	// (recoverPersistedToolResults).
 	ToolResults ToolResultRecoveryStore
@@ -168,6 +170,7 @@ type CallLLMDeps struct {
 type CallLLMActivity struct {
 	repo           CallLLMStore
 	spawns         SpawnTree
+	threads        MessageSaver
 	toolResults    ToolResultRecoveryStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
@@ -276,6 +279,7 @@ func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           deps.Store,
 		spawns:         deps.Spawns,
+		threads:        deps.Threads,
 		toolResults:    deps.ToolResults,
 		hub:            deps.Hub,
 		toolsFactory:   deps.ToolsFactory,
@@ -677,7 +681,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 	activityID := rtx.MessageIdempotencyKey
 
-	if _, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(writeCtx, threads.SaveMessageOpts{
+	if _, err := a.threads.SaveMessage(writeCtx, threads.SaveMessageOpts{
 		ChatID:            rtx.ChatID,
 		Thread:            thread,
 		Role:              int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
@@ -791,7 +795,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
 	}
-	saved, err := threads.New(threads.Deps{Repo: a.repo}).SaveMessage(ctx, threads.SaveMessageOpts{
+	saved, err := a.threads.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       thread,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
@@ -1317,7 +1321,7 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 		return 0
 	}
 
-	drain := NewDrainAgentMessagesActivity(a.repo, threads.New(threads.Deps{Repo: a.repo}))
+	drain := NewDrainAgentMessagesActivity(a.repo, a.threads)
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",

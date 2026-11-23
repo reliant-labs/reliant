@@ -305,7 +305,7 @@ func shellOutputTruncated(metadata string) bool {
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.
-func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore, chatID string) (RunExecutorContext, error) {
+func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore, rows ProjectWorktreeReader, chatID string) (RunExecutorContext, error) {
 	chat, err := repo.GetChat(ctx, chatID)
 	if err != nil {
 		return RunExecutorContext{}, fmt.Errorf("failed to get chat: %w", err)
@@ -315,7 +315,7 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 		return RunExecutorContext{}, fmt.Errorf("chat %s has no project_id", chatID)
 	}
 
-	project, err := repo.GetProject(ctx, chat.ProjectID)
+	project, err := rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return RunExecutorContext{}, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -342,7 +342,7 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 	// Check if chat has a worktree
 	worktreeOwner := ""
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		worktree, err := repo.GetWorktree(ctx, *chat.WorktreeID)
+		worktree, err := rows.GetWorktree(ctx, *chat.WorktreeID)
 		if err != nil {
 			return RunExecutorContext{}, fmt.Errorf("worktree %s lookup failed: %w", *chat.WorktreeID, err)
 		}

@@ -17,7 +17,7 @@
 // connection. Self-hosted registers nothing, and the manifest's oauth2 method
 // (RELIANT_OAUTH_GITHUB_CLIENT_ID/SECRET) or a pasted token is used instead.
 //
-//forge:not-a-component: built by internal/integrations/credwire, which the worker root's providers call — never a node of the composition graph
+//forge:not-a-component: a plug-in, not a Deps value: internal/integrations/credwire registers it as a delegated broker in connauth's registry, only on hosted deployments
 package ghdelegated
 
 import (

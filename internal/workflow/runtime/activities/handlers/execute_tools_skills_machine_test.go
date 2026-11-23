@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -59,9 +60,9 @@ func TestSkillToolReadsTheSkillsOfTheMachineTheCallRunsOn(t *testing.T) {
 	require.NoError(t, err)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
+	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(repo.ORM())), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	router := toolexec.NewNATSDaemonRouter(nil, toolexec.WithDatabase(repo))
-	activity := NewExecuteToolsActivity(repo, toolCallsOf(repo), serverToolExecutor(repo)).WithConfigProvider(provider).WithDaemonRouter(router)
+	activity := NewExecuteToolsActivity(repo, workspaceRowsOf(repo), toolCallsOf(repo), serverToolExecutor(repo)).WithConfigProvider(provider).WithDaemonRouter(router)
 	load := func(thread string, selector *activitytypes.DaemonSelector) string {
 		t.Helper()
 		callID := "call-" + uuid.NewString()

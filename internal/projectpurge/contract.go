@@ -8,6 +8,11 @@
 // the store's project_schedule queries (internal/store/project_schedule.go).
 // Handlers that held *db.Repo got these from its project_schedule methods.
 //
+// forge:provided because Deps.DB is an orm.Context, which no graph node
+// produces; internal/app's NewProjectPurges provider (providers_worker.go)
+// builds it over the repo's ORM, and that one node serves the API's project
+// handler and the worker's purge loop.
+//
 //forge:provided
 package projectpurge
 

@@ -55,6 +55,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -359,7 +360,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -373,7 +374,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport; worktree ops unavailable
 		MCPBinder:       mcpBinder,
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
@@ -403,14 +404,18 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:    slog.Default(),
-		Config:    &typedconfig.Config{},
-		Repo:      s.Repo,
-		Backoff:   providerbackofftest.New(t, s.Repo),
-		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
-		Spawns:    store.NewToolCallExtStore(s.Repo.ORM()),
-		Temporal:  s.Temporal,
-		Pause:     pause,
+		Logger:     slog.Default(),
+		Config:     &typedconfig.Config{},
+		Repo:       s.Repo,
+		Backoff:    providerbackofftest.New(t, s.Repo),
+		Questions:  store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:     store.NewToolCallExtStore(s.Repo.ORM()),
+		Selections: store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Messages:   store.NewMessageExtStore(s.Repo.ORM()),
+		ToolBlocks: store.NewMessageContentBlockExtStore(s.Repo.ORM()),
+		Senders:    store.NewThreadExtStore(s.Repo.ORM()),
+		Temporal:   s.Temporal,
+		Pause:      pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -426,10 +431,11 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:  slog.Default(),
 		Config:  &typedconfig.Config{},
 		Repo:    s.Repo,
+		Chats:   store.NewChatExtStore(s.Repo.ORM()),
 		Signals: pause,
 	})
 	require.NoError(t, err, "approval service")
-	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
+	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, triggers.NewStores(s.Repo), taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
 		Logger:   slog.Default(),
 		Config:   &typedconfig.Config{},
