@@ -18,6 +18,11 @@
 // PullRequestRecordService and the `reliant pr-record diff` report, and
 // nothing decides anything from them yet.
 //
+// Built by hand by internal/app's NewTriggerDeliveryRelay, only when
+// RELIANT_PR_RECORD_REPOSITORIES names a repository, and registered as the
+// worker inbox relay's delivery consumer: never a node compose.go constructs
+// from Deps (its Scope is config, not a graph type).
+//
 //forge:provided
 package prrecords
 

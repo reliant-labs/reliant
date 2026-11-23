@@ -15,9 +15,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -384,6 +387,9 @@ ORDER BY tc.requested_at ASC
 // call as the value: the one still executing, and the one a cancel must
 // address.
 func SpawnToolCallIDsByChildThread(ctx context.Context, db orm.Context, chatID string) (map[string]string, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	var rows []struct {
 		ChildThreadID string `bun:"child_thread_id"`
 		ToolCallID    string `bun:"tool_call_id"`
@@ -456,6 +462,9 @@ ORDER BY tc.requested_at ASC
 // ListSpawnChildren returns every spawn call issued BY threadID, in request
 // order (listSpawnChildrenForThreadSQL).
 func ListSpawnChildren(ctx context.Context, db orm.Context, threadID string) ([]*core.SpawnChild, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
 	var rows []struct {
 		ToolCallID            string          `bun:"tool_call_id"`
 		ToolCallStatus        int32           `bun:"tool_call_status"`
@@ -549,6 +558,9 @@ ORDER BY t.depth ASC, tc.id ASC
 // thread on record is skipped: relaunching it would produce a report nobody
 // can be addressed.
 func ListLiveBackgroundSpawns(ctx context.Context, db orm.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error) {
+	if rootWorkflowID == "" {
+		return nil, fmt.Errorf("root workflow ID cannot be empty")
+	}
 	var rows []struct {
 		ToolCallID        string          `bun:"tool_call_id"`
 		ParentThreadID    *string         `bun:"parent_thread_id"`
@@ -813,4 +825,185 @@ func toolCallFromRow(row *ToolCall) *core.ToolCall {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ToolCallExtra struct {
+}
+
+// maxBranchAncestry bounds the walk up a chain of branches-of-branches. Each
+// hop is a user action, so real chains are a handful deep; the bound exists
+// only so corrupt parent links cannot loop or run away.
+const maxBranchAncestry = 32
+
+// ListInheritedSpawnChildren returns the sub-agents threadID inherited by
+// being a branch (or a branch of a branch) of the conversations that spawned
+// them — every spawn an ancestor issued at or before the point the branch was
+// taken — nearest ancestor first.
+//
+// Only chat-crossing forks count. A spawned agent running in fork thread mode
+// is also an origin=fork thread, with the spawner as its parent, and it must
+// not mistake its siblings for children of its own; what makes a fork a
+// BRANCH is that it crossed into another chat, the same test ListBranches
+// applies.
+//
+// A thread that is not a branch returns nil: the common case costs one
+// primary-key read.
+func ListInheritedSpawnChildren(ctx context.Context, db orm.Context, threadID string) ([]*core.InheritedSpawnChild, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+
+	var inherited []*core.InheritedSpawnChild
+	current := threadID
+	for hop := 0; hop < maxBranchAncestry; hop++ {
+		thread, parentChatID, err := GetThreadWithParent(ctx, db, current)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load thread %s: %w", current, err)
+		}
+		isBranch := thread.Origin == core.ThreadOriginFork &&
+			thread.ParentThreadID != nil && *thread.ParentThreadID != current &&
+			parentChatID != nil && *parentChatID != thread.ChatID
+		if !isBranch || thread.ForkAtMessageID == nil {
+			// Not a branch, or a branch that inherited nothing (its parent
+			// had no messages yet) — and so nothing from further up either.
+			return inherited, nil
+		}
+
+		forkPoint, err := getMessageOrNotFound(ctx, db, *thread.ForkAtMessageID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load fork point %s of thread %s: %w", *thread.ForkAtMessageID, current, err)
+		}
+		sourceThreadID := *thread.ParentThreadID
+		children, err := ListSpawnChildren(ctx, db, sourceThreadID)
+		if err != nil {
+			return nil, err
+		}
+		// The title only makes a refusal friendlier; a failed read must not
+		// cost the caller the listing.
+		sourceChatTitle := ""
+		if chat, chatErr := GetChat(ctx, db, *parentChatID); chatErr == nil && chat != nil {
+			sourceChatTitle = chat.Title
+		}
+		for _, child := range children {
+			if !spawnedAtOrBefore(child, forkPoint) {
+				continue
+			}
+			inherited = append(inherited, &core.InheritedSpawnChild{
+				SpawnChild:      *child,
+				SourceThreadID:  sourceThreadID,
+				SourceChatID:    *parentChatID,
+				SourceChatTitle: sourceChatTitle,
+			})
+		}
+		// The next hop's cutoff is the parent's OWN fork point: the branch
+		// sees everything its parent inherited, which is all of the
+		// grandparent up to where the parent was branched.
+		current = sourceThreadID
+	}
+	return inherited, nil
+}
+
+// spawnedAtOrBefore reports whether child's spawn call is part of the history
+// up to and including forkPoint, i.e. in the branch's inherited transcript.
+func spawnedAtOrBefore(child *core.SpawnChild, forkPoint *core.Message) bool {
+	if child.IssuingMessageOrdinal != nil {
+		return *child.IssuingMessageOrdinal <= forkPoint.Ordinal
+	}
+	// No issuing message on record: fall back to time, which is coarser but
+	// errs the same way the transcript does — a call made before the fork
+	// point was written is one the branch can see.
+	return !child.RequestedAt.After(forkPoint.CreatedAt)
+}
+
+// resumeSlotSeparator joins a spawn's tool call id to the number of a resumed
+// run's report slot. runtime.resumeStoppedSpawn writes the slots; this reads
+// them back.
+const resumeSlotSeparator = "#resume-"
+
+// GetStoppedSpawnAgent returns the sub-agent on threadID if it stopped on a
+// failure, and nil, nil if it did not: no such sub-agent in chatID, or one
+// that is running, completed, or was stopped by the user.
+//
+// "Stopped on a failure" is the agent's thread AND its latest spawn run both
+// recorded failed. That is the durable form of what the workflow keeps in
+// memory as a stopped spawn (runtime.ChildWorkflowTracker.stoppedSpawns), so a
+// message can resume the agent from any execution of the chat — a successor
+// after the run that saw it stop has completed, a fresh restart of a run that
+// died, or a chat whose agent stopped before the run kept such a record at
+// all.
+func GetStoppedSpawnAgent(ctx context.Context, db orm.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error) {
+	if chatID == "" || threadID == "" {
+		return nil, fmt.Errorf("chat ID and thread ID are required")
+	}
+	run, err := LatestSpawnRunForThread(ctx, db, chatID, threadID)
+	if err != nil || run == nil {
+		return nil, err
+	}
+	stopped := run.ThreadOrigin == core.ThreadOriginSpawn &&
+		run.ThreadStatus == core.ThreadStatusFailed &&
+		run.WorkflowStatus.State == core.WorkflowStateStopped &&
+		run.WorkflowStatus.StopReason == core.StopReasonFailed
+	if !stopped || run.ParentThreadID == "" {
+		return nil, nil
+	}
+
+	slot := run.ToolCallID + resumeSlotSeparator
+	slots, err := SpawnResumeReportIDs(ctx, db, chatID, slot)
+	if err != nil {
+		return nil, err
+	}
+	resumes := 0
+	for _, id := range slots {
+		n, convErr := strconv.Atoi(strings.TrimPrefix(id, slot))
+		if convErr == nil && n > resumes {
+			resumes = n
+		}
+	}
+	lastFailure, err := LatestSpawnFailureReport(ctx, db, chatID, run.ToolCallID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.StoppedSpawnAgent{
+		ToolCallID:        run.ToolCallID,
+		ParentThreadID:    run.ParentThreadID,
+		ToolInput:         string(run.ToolInput),
+		ChildThreadID:     threadID,
+		ChildWorkflowID:   run.ChildWorkflowID,
+		IssuingWorkflowID: run.IssuingWorkflowID,
+		SpawnDepth:        run.SpawnDepth,
+		WorktreePath:      run.WorktreePath,
+		Resumes:           resumes,
+		LastFailure:       core.FailureReportDigest(lastFailure),
+	}, nil
+}
+
+// ListStoppedSpawnAgents lists only the latest failed spawn per thread.
+// Completed and user-cancelled agents are never resurrected by chat resume.
+func ListStoppedSpawnAgents(ctx context.Context, db orm.Context, chatID string) ([]*core.StoppedSpawnAgent, error) {
+	rows, err := ListStoppedSpawnRecords(ctx, db, chatID)
+	if err != nil {
+		return nil, err
+	}
+	agents := make([]*core.StoppedSpawnAgent, 0, len(rows))
+	for _, row := range rows {
+		agents = append(agents, &core.StoppedSpawnAgent{
+			ToolCallID: row.ToolCallID, ParentThreadID: row.ParentThreadID, ToolInput: row.ToolInput,
+			ChildThreadID: row.ChildThreadID, ChildWorkflowID: row.ChildWorkflowID,
+			IssuingWorkflowID: row.IssuingWorkflowID, SpawnDepth: row.SpawnDepth,
+			WorktreePath: row.WorktreePath, Resumes: row.Resumes,
+			LastFailure: core.FailureReportDigest(row.LastFailure),
+		})
+	}
+	return agents, nil
+}
+
+// getMessageOrNotFound is FindMessage with a miss as svcerr.NotFound, for a
+// caller that dereferences a known id (the fork point of a branch).
+func getMessageOrNotFound(ctx context.Context, db orm.Context, id string) (*core.Message, error) {
+	msg, err := FindMessage(ctx, db, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+	if msg == nil {
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("message"), id)
+	}
+	return msg, nil
 }

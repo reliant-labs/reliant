@@ -241,9 +241,13 @@ export const workflowsJourney: Journey = {
       ),
       targets: [
         { selector: "[data-onboarding='chat-input']", label: "The chat", description: "Start work here." },
-        { selector: "[aria-label='Toggle Chat Sidebar']", label: "Conversations", description: "Opens and closes the list on the left." },
-        { selector: "[aria-label='Toggle File Browser']", label: "Files", description: "Opens and closes files on the right." },
-        { selector: "[aria-label='Toggle Terminal']", label: "Terminal", description: "Opens and closes the terminal." },
+        { selector: "[data-tour='header-sidebar-toggle']", label: "Conversations", description: "Opens and closes the list on the left." },
+        // One target for the pair: the two buttons sit 30px apart, and two labels overlapped (Header.tsx).
+        {
+          selector: "[data-tour='header-panel-toggles']",
+          label: "Files and terminal",
+          description: "Open and close the terminal and the file browser.",
+        },
       ],
       route: {
         path: "/project/",

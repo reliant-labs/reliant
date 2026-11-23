@@ -38,13 +38,14 @@ func TestRecordRootRunID(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			var got []call
-			store := &MockWorkflowStatusStore{
+			store := &MockWorkflowStatusStore{}
+			storeRuns := &MockRunRecords{
 				SetChatRunIDFunc: func(_ context.Context, chatID, workflowID, runID string) (bool, error) {
 					got = append(got, call{chatID, workflowID, runID})
 					return true, nil
 				},
 			}
-			a := NewWorkflowStatusActivity(store)
+			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Runs: storeRuns})
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			record := func(ctx context.Context, in WorkflowStatusInput) error {
 				a.recordRootRunID(ctx, in)

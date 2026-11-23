@@ -26,6 +26,11 @@ type Store interface {
 	// LatestOrgChatCalls is each of the org's live chats' latest chat-turn
 	// call at or after since, the limit most recent.
 	LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time, limit int) ([]db.OrgChatCall, error)
+}
+
+// Chats reads a chat with its computed state. store.ChatsWithActivityExtStore
+// satisfies it.
+type Chats interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
@@ -45,6 +50,8 @@ type Deps struct {
 	Config *config.Config
 	// Store reads the org's chats' latest model calls, and the chats.
 	Store Store
+	// Chats reads the chat a call belongs to.
+	Chats Chats
 	// Attendance decides which chats are an automation's run, so the
 	// automations section judges exactly the chats it governs.
 	Attendance ChatAttendance
@@ -65,6 +72,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Store == nil {
 		return fmt.Errorf("org_policy_impact: Deps.Store is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("org_policy_impact: Deps.Chats is required")
 	}
 	if d.Attendance == nil {
 		return fmt.Errorf("org_policy_impact: Deps.Attendance is required")

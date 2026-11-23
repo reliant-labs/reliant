@@ -42,6 +42,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatselection"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 )
 
@@ -105,4 +107,24 @@ func GetChatPersonPick(ctx context.Context, db orm.Context, chatID string) (*Cha
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ChatPersonPickExtra struct {
+}
+
+// ChatPersonPickDriver is the provider a person picked for chatID's root in
+// orgID, the one named provider that is consent to spend their own account
+// there (org-provider-accounts §4.4, §10). It is "" when nobody did, when the
+// pick was made in another org, or when the chat's selection has been written
+// since (its version moved past the pick's).
+func ChatPersonPickDriver(ctx context.Context, db orm.Context, chatID, orgID string) (string, error) {
+	if chatID == "" || orgID == "" {
+		return "", nil
+	}
+	pick, err := CurrentChatPersonPick(ctx, db, chatID, orgID)
+	if err != nil || pick == nil {
+		return "", err
+	}
+	if pick.ChatProvider != "" {
+		return pick.ChatProvider, nil
+	}
+	_, driver := chatselection.RootModelPick(map[string]any{"model": pick.ModelID})
+	return driver, nil
 }

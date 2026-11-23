@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // A draft is never runnable (specs/workflow-draft-lifecycle.md). Every
@@ -66,7 +67,7 @@ nodes:
     ref: gate-draft
 `, db.WorkflowDraftStatusComplete)
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	t.Run("a complete workflow loads", func(t *testing.T) {
 		out, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "gate-complete"})
@@ -132,7 +133,7 @@ func TestLoadWorkflowActivity_BuilderTestRootMayBeADraft(t *testing.T) {
 	save("bt-leaf", leaf("bt-leaf"), db.WorkflowDraftStatusDraft)
 	save("bt-parent", "name: bt-parent\nentry: [child]\nnodes:\n  - id: child\n    type: workflow\n    ref: bt-leaf\n", db.WorkflowDraftStatusDraft)
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	t.Run("builder test root loads as a draft", func(t *testing.T) {
 		chatID := newChat("bt-leaf", core.TriggerEventKindBuilderTest)

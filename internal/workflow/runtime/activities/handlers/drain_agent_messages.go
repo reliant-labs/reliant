@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -16,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // errDrainBatchTaken signals that another writer claimed part of this drain's
@@ -49,11 +50,11 @@ type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 // keeps history always consistent at the point this activity runs.
 type DrainAgentMessagesActivity struct {
 	repo    DrainAgentMessagesStore
-	threads *threads.Service
+	threads MessageSaver
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc *threads.Service) *DrainAgentMessagesActivity {
+func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc MessageSaver) *DrainAgentMessagesActivity {
 	return &DrainAgentMessagesActivity{repo: repo, threads: threadsSvc}
 }
 
@@ -285,7 +286,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// in the strip; emitting before would clear the strip against a
 		// transcript that has not shown them yet. Rolling back is safe --
 		// the rows stay queued and the next boundary re-drains them.
-		if err := a.repo.EmitAgentMessagesDrainedUpdate(txCtx, input.ChatID, db.AgentMessagesDrainedUpdate{
+		if err := db.EmitAgentMessagesDrainedUpdate(txCtx, a.repo, input.ChatID, db.AgentMessagesDrainedUpdate{
 			Thread:     input.Thread,
 			MessageIDs: ids,
 		}); err != nil {

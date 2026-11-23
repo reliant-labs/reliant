@@ -22,7 +22,7 @@ func sharingFixture(t *testing.T) (*Service, *viewertest.Fixture) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	return NewTestSharing(t, WithSharingDeps(Deps{Repo: repo, Orgs: f.Membership})), f
+	return NewTestSharing(t, WithSharingDeps(realDeps(repo, f.Membership))), f
 }
 
 const (
@@ -274,7 +274,7 @@ func TestListSharedWithoutOrgs(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestSharing(t, WithSharingDeps(Deps{Repo: repo}))
+	svc := NewTestSharing(t, WithSharingDeps(realDeps(repo, nil)))
 	resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A coarse fresh restart of a run that had fanned out hands each thread back
@@ -38,7 +39,7 @@ func TestFreshRestart_EachThreadKeepsItsOwnGrants(t *testing.T) {
 	recordLoad(t, repo, chatID, parent, "tc-load-parent", []string{"sourcegraph"})
 	recordLoad(t, repo, chatID, child, "tc-load-child", []string{"fetch"})
 
-	resume := ResumeInputFromDurableState(ctx, repo, chatID, root)
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, root)
 	require.Equal(t, "agent_loop", resume.NodeID)
 	require.Len(t, resume.Spawns, 1, "the sub-agent that never reported back is relaunched")
 	require.Equal(t, child, resume.Spawns[0].ChildThread)
@@ -113,7 +114,7 @@ func seedDeadFanOut(t *testing.T, repo *db.Repo, chatID, root, parentThread, chi
 		ID: childThread, ParentID: &root, ChatID: chatID, WorkflowName: "agent", Thread: childThread,
 		Status: db.Failed(), CreatedAt: now,
 	}))
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &db.WorkflowCheckpoint{
 		WorkflowID: root, ChatID: chatID, NodeID: "agent_loop", LoopIteration: 2,
 	}))
 	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
@@ -169,12 +170,12 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	require.NoError(t, err)
 
 	const chatID, workflowID = "chat-restart-pin", "wf-restart-pin"
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: workflowID, ChatID: chatID, NodeID: "agent_loop", CatalogPin: pin,
 	}))
 	push("v2", now.Add(time.Minute))
 
-	resume := ResumeInputFromDurableState(ctx, repo, chatID, workflowID)
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, workflowID)
 	assert.Equal(t, pin, resume.CatalogPin, "the restart carries the interrupted run's pin")
 	assert.Equal(t, pin, rootCatalogPin(WorkflowInput{Resume: resume}), "and its root load reads it")
 	catalog, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
@@ -187,10 +188,10 @@ func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
 	}), "a continue-as-new successor's own pin wins")
 	assert.Empty(t, rootCatalogPin(WorkflowInput{}), "a new run pins anew")
 
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: workflowID, ChatID: chatID, NodeID: "agent_loop", CatalogPin: "0000gone",
 	}))
-	assert.Empty(t, ResumeInputFromDurableState(ctx, repo, chatID, workflowID).CatalogPin,
+	assert.Empty(t, ResumeInputFromDurableState(ctx, withSpawnTree(repo), chatID, workflowID).CatalogPin,
 		"a pin no longer stored is dropped: the restart pins the current catalog")
 }
 

@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
-	"github.com/stretchr/testify/require"
 )
 
 func boundFixture(t *testing.T, env *storetest.Env, id string, main bool) *core.Chat {
@@ -165,7 +168,7 @@ func TestListChatsForWorktree(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := boundFixture(t, env, "listed", false)
-	chats, err := env.Repo.ListChatsForWorktree(ctx, storetest.SeedUserID, *c.WorktreeID, 10)
+	chats, err := store.ListChatsForWorktree(ctx, env.ORM, storetest.SeedUserID, *c.WorktreeID, 10)
 	require.NoError(t, err)
 	require.Len(t, chats, 1)
 	require.Equal(t, c.ID, chats[0].ChatID)
@@ -173,12 +176,12 @@ func TestListChatsForWorktree(t *testing.T) {
 	require.Equal(t, core.ChatStateIdle, chats[0].State)
 
 	require.NoError(t, env.Repo.UpdateChatState(ctx, c.ID, core.ChatStateArchived, "test"))
-	chats, err = env.Repo.ListChatsForWorktree(ctx, storetest.SeedUserID, *c.WorktreeID, 10)
+	chats, err = store.ListChatsForWorktree(ctx, env.ORM, storetest.SeedUserID, *c.WorktreeID, 10)
 	require.NoError(t, err)
 	require.Len(t, chats, 1)
 	require.Equal(t, core.ChatStateArchived, chats[0].State)
 
-	chats, err = env.Repo.ListChatsForWorktree(ctx, "someone-else", *c.WorktreeID, 10)
+	chats, err = store.ListChatsForWorktree(ctx, env.ORM, "someone-else", *c.WorktreeID, 10)
 	require.NoError(t, err)
 	require.Empty(t, chats)
 }

@@ -296,6 +296,34 @@ DELETE FROM thread_funding tf
 USING threads t, chats c
 WHERE t.id = tf.thread_id AND c.id = t.chat_id AND c.project_id = ?0 AND tf.org_id IS DISTINCT FROM ?1`
 
+// CommitProjectOrgMove commits a prepared move in one ReadCommitted
+// transaction: the project owner's org lock first, so no backfill or
+// org-sensitive write of the owner interleaves, then MoveProjectOrg. inTx, when
+// set, runs in the same transaction after a move that was not already
+// committed, with its result: the owner's clients learn the project moved in
+// the commit's own transaction, so a retried commit announces nothing more.
+// The owner is fixed on the move row, so it is read before the lock;
+// MoveProjectOrg re-reads the row under it.
+func CommitProjectOrgMove(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCommit, inTx func(ctx context.Context, result *core.ProjectOrgMoveResult) error) (*core.ProjectOrgMoveResult, error) {
+	move, err := readProjectOrgMove(ctx, db, c.MoveID, false)
+	if err != nil {
+		return nil, err
+	}
+	var result *core.ProjectOrgMoveResult
+	err = db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := LockUserOrgs(ctx, db, move.OwnerUserID); err != nil {
+			return err
+		}
+		var err error
+		result, err = MoveProjectOrg(ctx, db, c)
+		if err != nil || result.AlreadyMoved || inTx == nil {
+			return err
+		}
+		return inTx(ctx, result)
+	})
+	return result, err
+}
+
 // MoveProjectOrg is the move's transaction (design §3.2). It runs inside the
 // caller's transaction (ReadCommitted), after the caller took the project
 // owner's org lock (LockUserOrgs) first, and in this order:
@@ -764,6 +792,51 @@ WHERE id = ? AND NOT enabled AND paused_reason = ? AND updated_at = ?`, id, reas
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
+}
+
+// ResumePausedTrigger turns a trigger the system paused for reason back on,
+// and reports whether it did, recording it in the trigger's change history,
+// in one ReadCommitted transaction. Its project is locked before its row: a
+// resume is refused while the project is scheduled for deletion
+// (LockProjectsForWrite). Only while the trigger is still paused for reason
+// and is the version the caller checked (its updated_at, seen); a person's
+// pause or resume since wins (false). A change since that left the pause
+// standing, such as an edit that kept it disabled, is
+// core.ErrTriggerChangedSinceRead: the caller reads it again and checks the
+// definition it would turn on.
+func ResumePausedTrigger(ctx context.Context, db orm.Context, id, reason string, seen time.Time) (bool, error) {
+	var resumed bool
+	err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		project, err := TriggerProjectID(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		if err := LockProjectsForWrite(ctx, db, project); err != nil {
+			return err
+		}
+		if err := LockTrigger(ctx, db, id); err != nil {
+			return err
+		}
+		before, err := GetTrigger(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		if before.Enabled || before.PausedReason != reason {
+			return nil
+		}
+		if !before.UpdatedAt.Equal(seen) {
+			return core.ErrTriggerChangedSinceRead
+		}
+		if resumed, err = ResumeTriggerPausedBy(ctx, db, id, reason, seen); err != nil || !resumed {
+			return err
+		}
+		after, err := GetTrigger(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		return RecordTriggerChange(ctx, db, core.TriggerChangeOrgMoveResumed, before, after)
+	})
+	return resumed, err
 }
 
 // ListProjectTriggersResumedSince lists the project's triggers a move turned

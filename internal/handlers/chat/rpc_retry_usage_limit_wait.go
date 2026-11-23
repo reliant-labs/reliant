@@ -114,7 +114,7 @@ func (s *Service) wakeChatBestEffort(ctx context.Context, chat *db.Chat, useMode
 // router moves a thread off the account it was pinned to when that account is
 // benched and the new one is usable.
 func (s *Service) WakeUserChats(ctx context.Context, userID, why string) int {
-	return capacitywake.WakeUser(ctx, s.deps.Repo, s.deps.Temporal, userID, why)
+	return capacitywake.WakeUser(ctx, s.deps.Backoff, s.deps.Temporal, userID, why)
 }
 
 // RetryUsageLimitWait is "Retry now": it sends the chat's run a capacity wake,

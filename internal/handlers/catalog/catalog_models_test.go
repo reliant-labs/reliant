@@ -45,7 +45,7 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	llmdrivers.InitializeAPIKeyProvider(repo)
+	llmdrivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := newCatalogServiceTestContext()
 	// A logged-in user always has their managed Reliant key synced locally
 	// (JWT -> admin server -> LiteLLM key, minted and persisted by
@@ -106,7 +106,7 @@ func TestCatalogService_ListModels_HidesUnregisteredDriversAndReportsTemperature
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	llmdrivers.InitializeAPIKeyProvider(repo)
+	llmdrivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := newCatalogServiceTestContext()
 	db.SeedProviderAccount(t, repo, "test-user", "xai", "xai-test-key")
 	db.SeedProviderAccount(t, repo, "test-user", "openrouter", "sk-or-test")

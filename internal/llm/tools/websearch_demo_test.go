@@ -10,9 +10,10 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/netguard"
 
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // TestWebSearchDemo demonstrates the web search tool with actual output.

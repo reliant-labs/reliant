@@ -107,6 +107,15 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 // constant for a session, and a renewal that finds the row leaves it alone.
 // Bound ($N): it runs on every heartbeat.
 func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.DaemonAttachment) (created bool, err error) {
+	if att == nil || att.DaemonID == "" || att.UserID == "" || att.Source == "" {
+		return false, fmt.Errorf("renewing daemon attachment requires daemon_id, user_id and source")
+	}
+	// A renewal names its session (attached_at). Defaulting it would make a
+	// renewal look like a newer session and adopt, and so outlive, a lease its
+	// real session can then no longer release.
+	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
+		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
+	}
 	err = db.QueryRow(ctx, `
 		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity,
 			build_version, build_commit, build_commit_time_unix, build_forge_version)
@@ -130,6 +139,9 @@ func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemon
 // on the lease. A no-op when there is no lease; last_stream_activity is left
 // to RenewDaemonAttachment.
 func SetDaemonAttachmentMemory(ctx context.Context, db orm.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	row := &DaemonAttachment{DaemonID: daemonID, MemoryUsedBytes: usedBytes, MemoryLimitBytes: limitBytes, MemoryPressure: pressure}
 	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldMemoryUsedBytes, DaemonAttachmentFieldMemoryLimitBytes, DaemonAttachmentFieldMemoryPressure},
@@ -139,6 +151,9 @@ func SetDaemonAttachmentMemory(ctx context.Context, db orm.Context, daemonID str
 // SetDaemonAttachmentPorts records a heartbeat's detected listener ports on
 // the lease, JSON-encoded (nil is []). A no-op when there is no lease.
 func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID string, ports []uint32) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	if ports == nil {
 		ports = []uint32{}
 	}
@@ -155,6 +170,9 @@ func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID stri
 // SetDaemonAttachmentHealth records a heartbeat's machine health on the
 // lease. A no-op when there is no lease.
 func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID string, h core.MachineHealth) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	row := &DaemonAttachment{DaemonID: daemonID, HealthState: string(h.State), HealthCode: h.Code, HealthReason: h.Reason}
 	if !h.Since.IsZero() {
 		since := h.Since
@@ -171,6 +189,12 @@ func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID str
 // released lease's last_stream_activity onto daemons.last_seen_at, forward
 // only, in the same statement.
 func ReleaseDaemonAttachment(ctx context.Context, db orm.Context, daemonID string, attachedAt time.Time) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if attachedAt.IsZero() {
+		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
+	}
 	_, err := db.Bun().NewRaw(`
 		WITH released AS (
 			DELETE FROM daemon_attachment

@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -112,7 +114,7 @@ func TestDaemonQueries(t *testing.T) {
 		t.Fatalf("UpsertDaemonIdentity(unchanged) = %v, %v; want no-op", wrote, err)
 	}
 	ident.Name = "box-2"
-	if wrote, err := env.Repo.UpsertDaemonIdentity(ctx, ident); err != nil || !wrote {
+	if wrote, err := daemonmirrortest.New(t, env.Repo).UpsertDaemonIdentity(ctx, ident); err != nil || !wrote {
 		t.Fatalf("Repo.UpsertDaemonIdentity(renamed) = %v, %v", wrote, err)
 	}
 	if d, _ := store.GetDaemon(ctx, env.ORM, "d3"); d.Name != "box-2" || *d.DaemonType != "managed" {
@@ -176,7 +178,7 @@ func TestDaemonQueries(t *testing.T) {
 	if w, _ := env.Repo.GetWorktree(ctx, "wt-d"); w.DaemonID != nil {
 		t.Fatalf("worktree still bound to removed daemon: %v", *w.DaemonID)
 	}
-	if pds, _ := env.Repo.ListProjectDaemonsForDaemon(ctx, "d2"); len(pds) != 0 {
+	if pds, _ := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "d2"); len(pds) != 0 {
 		t.Fatalf("installs on removed daemon survived: %+v", pds)
 	}
 	if owner, removed, err := store.DeleteDaemonRow(ctx, env.ORM, "d4"); err != nil || !removed || owner != "u1" {
@@ -247,7 +249,7 @@ func TestDaemonAttachmentQueries(t *testing.T) {
 	if created, err := store.RenewDaemonAttachment(ctx, env.ORM, &core.DaemonAttachment{DaemonID: "b1", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now}); err != nil || created {
 		t.Fatalf("RenewDaemonAttachment(not the user's daemon) = %v, %v", created, err)
 	}
-	if created, err := env.Repo.RenewDaemonAttachment(ctx, &core.DaemonAttachment{DaemonID: "a2", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now.Add(time.Second)}); err != nil || created {
+	if created, err := store.RenewDaemonAttachment(ctx, env.Repo.ORM(), &core.DaemonAttachment{DaemonID: "a2", UserID: "u1", Source: core.DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now.Add(time.Second)}); err != nil || created {
 		t.Fatalf("Repo.RenewDaemonAttachment = %v, %v", created, err)
 	}
 	all, err := store.ListAllDaemonAttachments(ctx, env.ORM)

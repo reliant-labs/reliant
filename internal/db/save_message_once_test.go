@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A send the client named is saved under the client's id, and the primary key
@@ -263,6 +264,12 @@ func TestDeleteUndeliveredAgentMessage_OnlyTouchesUndeliveredRows(t *testing.T) 
 	assert.NotNil(t, kept)
 }
 
+func isLatestTurn(ctx context.Context, t *testing.T, repo *Repo, threadID, messageID string) (bool, error) {
+	t.Helper()
+	turn, err := store.LatestTurnInThread(ctx, repo.ORM(), threadID)
+	return turn != nil && turn.ID == messageID, err
+}
+
 func TestIsLatestTurnInThread(t *testing.T) {
 	t.Parallel()
 
@@ -279,19 +286,19 @@ func TestIsLatestTurnInThread(t *testing.T) {
 	first, err := repo.SaveMessageToThread(ctx, chatID, chatID, user, "question", nil, nil, nil)
 	require.NoError(t, err)
 
-	latest, err := repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err := isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.True(t, latest, "nothing follows the message")
 
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, system, "a note about the run", nil, nil, nil)
 	require.NoError(t, err)
-	latest, err = repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err = isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.True(t, latest, "a system note is not a turn, so it does not make the message look answered")
 
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, assistant, "answer", nil, nil, nil)
 	require.NoError(t, err)
-	latest, err = repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err = isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.False(t, latest, "a reply follows it")
 }

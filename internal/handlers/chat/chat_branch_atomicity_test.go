@@ -9,11 +9,13 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
 )
 
 // branchAtomicityRepo wraps the real repository behind the chat Repository
@@ -55,7 +57,7 @@ func setupBranchAtomicitySource(t *testing.T, repo *db.Repo, ctx context.Context
 		UpdatedAt: now,
 	}))
 
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatID,
@@ -115,9 +117,13 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: true}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo,
+			Repo:        failingRepo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 		},
-		threads: threads.NewService(failingRepo),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
 	}
 
 	// Baseline: chats that exist before the branch attempt.
@@ -172,9 +178,13 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: false}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo,
+			Repo:        failingRepo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 		},
-		threads: threads.NewService(failingRepo),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
 	}
 
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{

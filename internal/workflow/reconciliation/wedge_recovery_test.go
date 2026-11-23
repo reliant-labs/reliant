@@ -112,7 +112,7 @@ func shippedConfigWithFastDebounce() *ReconcilerConfig {
 func TestReconciler_ReplayDivergedRun_RecoveredWithShippedConfig(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := wedgedClient(28, replayDivergedTail())
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	wf := runningWorkflow()
 
 	result := reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -160,7 +160,7 @@ func (f *fakeQueuedDelivery) Sweep(context.Context) (int, error) { return 0, nil
 func TestReconciler_WedgedRunWithAnUndeliveredMessage_IsContinued(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := wedgedClient(28, replayDivergedTail())
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	delivery := &fakeQueuedDelivery{start: true}
 	reconciler.SetQueuedDelivery(delivery)
 	wf := runningWorkflow()
@@ -216,7 +216,7 @@ func TestReconciler_NondeterminismWedge_EndedOnTheFirstRepeatedFailure_WithShipp
 	tempClient.setPollersActive(true)
 	cfg := DefaultConfig() // as shipped; only the namespace is the test's
 	cfg.Namespace = "test-ns"
-	reconciler := NewReconciler(repo, tempClient, cfg)
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: cfg})
 	delivery := &fakeQueuedDelivery{start: true}
 	reconciler.SetQueuedDelivery(delivery)
 	wf := runningWorkflow()
@@ -269,7 +269,7 @@ func TestReconciler_WedgeWhoseAttemptCountASignalRestarted_IsStillEnded(t *testi
 	tempClient.setPollersActive(true)
 	cfg := DefaultConfig()
 	cfg.Namespace = "test-ns"
-	reconciler := NewReconciler(repo, tempClient, cfg)
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: cfg})
 	wf := runningWorkflow()
 
 	tempClient.setPendingTask(3, chat66a045ceTail())
@@ -296,7 +296,7 @@ func TestReconciler_WedgeWhoseAttemptCountASignalRestarted_IsStillEnded(t *testi
 func TestReconciler_WedgedRunWithNothingUndelivered_AsksForTheNextMessage(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := wedgedClient(28, replayDivergedTail())
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	delivery := &fakeQueuedDelivery{start: false}
 	reconciler.SetQueuedDelivery(delivery)
 	wf := runningWorkflow()
@@ -319,7 +319,7 @@ func TestReconciler_RecordedDivergenceNotYetRetried_IsLeftToHeal(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := wedgedClient(28, replayDivergedTail())
 	tempClient.retryingWedge = false // no worker has retried it since
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 5; i++ {
@@ -343,7 +343,7 @@ func TestReconciler_HighAttemptCountFromTimeouts_IsNotAWedge(t *testing.T) {
 	tempClient := wedgedClient(42, timedOutTail())
 	// Even with interventions ON: the history shows a slow worker, not a
 	// wedge, and there is nothing a terminate would fix.
-	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 5; i++ {
@@ -369,7 +369,7 @@ func TestReconciler_WedgedRunWithPendingCancel_EndsCancelledAndSilent(t *testing
 	}
 	repo := newMockRepo()
 	tempClient := wedgedClient(29, tail)
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	wf := runningWorkflow()
 	wf.Status = db.Paused()
 
@@ -390,7 +390,7 @@ func TestReconciler_WorkflowCodePanicOnEveryTask_IsAWedge(t *testing.T) {
 	}
 	repo := newMockRepo()
 	tempClient := wedgedClient(9, tail)
-	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: shippedConfigWithFastDebounce()})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)

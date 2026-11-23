@@ -15,6 +15,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -47,7 +49,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	// Warm the probe vault's DEK for the seed user, so the account rows below
 	// begin only their own transaction: a tenant's first seal adds the
 	// vault's detached ones (pinned by their own subtest at the end).
-	if _, _, err := p.Repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	if _, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 		IdentityKey: "iso-warm", Secrets: core.AccountSecrets{Secret: "sk-warm"},
 	}); err != nil {
@@ -102,11 +104,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			})
 		}},
 		{"Repo.RemoveDaemon", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.RemoveDaemon(ctx, "daemon-none")
+			_, _, err := daemonmirrortest.New(t, p.Repo).RemoveDaemon(ctx, "daemon-none")
 			return err
 		}},
 		{"Repo.ApplyDaemonRegistrySnapshot", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.ApplyDaemonRegistrySnapshot(ctx, db.RegistrySnapshotApply{UserID: storetest.SeedUserID})
+			_, err := daemonmirrortest.New(t, p.Repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{UserID: storetest.SeedUserID})
 			return err
 		}},
 		{"Repo.CreateWorkflowDraft", readCommitted, func(ctx context.Context) error {
@@ -119,7 +121,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// the loser's snapshot predates the wait and it fails with 40001
 		// (TestChatSelectionConcurrentWritersLoseNothing).
 		{"Repo.MutateChatSelection", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
+			_, err := store.NewChatSelectionExtStore(p.Repo.ORM()).MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
 			return err
 		}},
 		{"Repo.MergeWorktreeCleanupMetadata", readCommitted, func(ctx context.Context) error {
@@ -143,14 +145,14 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// provider), then read-then-write; never retried, since it seals
 		// with fresh randomness under the locks it took.
 		{"Repo.UpsertProviderAccount (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+			_, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 				UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 				IdentityKey: "iso-key", Secrets: core.AccountSecrets{Secret: "sk-iso"},
 			})
 			return err
 		}},
 		{"Repo.ReorderProviderAccounts (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			return p.Repo.ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
+			return db.TestAccounts(t, p.Repo).ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
 		}},
 		// The self-hosted token store's rotation (LocalStore.MintForUser with
 		// Rotate): READ COMMITTED as database/sql's BeginTx(nil) was, never

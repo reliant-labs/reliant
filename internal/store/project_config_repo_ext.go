@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -65,6 +66,18 @@ import (
 // column but id and created_at of an existing one. A zero PushedAt or
 // CreatedAt is the time of the write; updated_at always is.
 func UpsertProjectConfigRecord(ctx context.Context, db orm.Context, rec *core.ProjectConfigRecord) error {
+	if rec == nil {
+		return fmt.Errorf("project config record cannot be nil")
+	}
+	if rec.ID == "" {
+		rec.ID = uuid.New().String()
+	}
+	if rec.ProjectID == "" {
+		return fmt.Errorf("project ID cannot be empty")
+	}
+	if rec.DaemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	now := time.Now().UTC()
 	pushedAt := rec.PushedAt
 	if pushedAt.IsZero() {
@@ -120,6 +133,9 @@ func UpsertProjectConfigRecord(ctx context.Context, db orm.Context, rec *core.Pr
 // GetProjectConfigRecord reads the project's whole record. See above for why
 // a caller that needs one column should not.
 func GetProjectConfigRecord(ctx context.Context, db orm.Context, projectID string) (*core.ProjectConfigRecord, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
 	rows, err := ListProjectConfig(ctx, db, orm.WhereEq(ProjectConfigFieldProjectID, projectID), orm.WithLimit(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config record for project %s: %w", projectID, err)
@@ -186,6 +202,9 @@ func GetProjectConfigPushedAt(ctx context.Context, db orm.Context, projectID str
 // would share updated_at; they cannot share xmin. Callers compare tokens for
 // equality only — they are not ordered.
 func GetProjectConfigVersion(ctx context.Context, db orm.Context, projectID string) (string, error) {
+	if projectID == "" {
+		return "", fmt.Errorf("project ID cannot be empty")
+	}
 	var (
 		updatedAt sql.NullTime
 		xmin      string
@@ -251,6 +270,9 @@ func GetProjectCatalogJSON(ctx context.Context, db orm.Context, projectID string
 // projectConfigColumn reads one nullable text column of the project's
 // record. column is one of the ProjectConfigField* names, never caller input.
 func projectConfigColumn(ctx context.Context, db orm.Context, projectID, column string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
 	var value *string
 	err := db.Bun().NewSelect().Model((*ProjectConfig)(nil)).
 		Column(column).

@@ -12,12 +12,15 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -86,7 +89,7 @@ func (te *tokenEndpoint) Do(req *http.Request) (*http.Response, error) {
 
 type pollCredEnv struct {
 	repo   *db.Repo
-	store  db.ConnectionStore
+	store  connectionvault.Service
 	vault  vault.Service
 	tokens *tokenEndpoint
 	poller *credPoller
@@ -111,13 +114,13 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	}))
 	require.NoError(t, err)
 	te := newTokenEndpoint(t)
-	store := repo.Connections()
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(repo, store, connections.NewTokenSource(store, v, providers, te))})
+	store := db.TestConnections(t, repo)
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: connections.NewTokenSource(store, v, providers, te)})})
 	poller := &credPoller{}
 	tp := NewTriggerPoller(
-		pollRepoOver{Repo: repo, conns: store},
+		pollRepoOver{Stores: NewStores(repo), conns: store},
 		fakePollers{"github": poller},
-		NewIntake(repo, &recordingStarter{}, ""),
+		NewIntake(NewStores(repo), &recordingStarter{}, ""),
 		source,
 	)
 	return &pollCredEnv{repo: repo, store: store, vault: v, tokens: te, poller: poller, tp: tp}
@@ -125,8 +128,8 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 
 // pollRepoOver adds the owner-scoped connection read, as the worker does.
 type pollRepoOver struct {
-	*db.Repo
-	conns db.ConnectionStore
+	Stores
+	conns connectionvault.Service
 }
 
 func (r pollRepoOver) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {
@@ -230,7 +233,7 @@ func TestPollDeadRefreshGrantIsRecordedOnTheRegistration(t *testing.T) {
 	ctx := context.Background()
 	conn := e.oauthConnection(t, "alice", "ghu_stale", true)
 	trigger := e.githubTrigger(t, "alice", conn.ID)
-	require.NoError(t, e.repo.UpsertTriggerRegistration(ctx, &core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "42"}))
+	require.NoError(t, NewStores(e.repo).UpsertTriggerRegistration(ctx, &core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "42"}))
 
 	e.tokens.dead = true
 	out, err := e.tp.Poll(ctx, PollInput{TriggerID: trigger.ID})
@@ -238,7 +241,7 @@ func TestPollDeadRefreshGrantIsRecordedOnTheRegistration(t *testing.T) {
 	assert.True(t, out.Skipped)
 	assert.Empty(t, e.poller.seen)
 
-	reg, err := e.repo.GetTriggerRegistration(ctx, trigger.ID)
+	reg, err := NewStores(e.repo).GetTriggerRegistration(ctx, trigger.ID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerRegistrationNeedsReauth, reg.Status)
 	assert.Contains(t, reg.StatusDetail, "reconnect")
@@ -266,8 +269,8 @@ func TestTriggerRegistrationStateInTheStore(t *testing.T) {
 	bobs := e.githubTrigger(t, "bob", bobConn.ID)
 
 	save := func(reg *core.TriggerRegistration) *core.TriggerRegistration {
-		require.NoError(t, e.repo.UpsertTriggerRegistration(ctx, reg))
-		got, err := e.repo.GetTriggerRegistration(ctx, reg.TriggerID)
+		require.NoError(t, NewStores(e.repo).UpsertTriggerRegistration(ctx, reg))
+		got, err := NewStores(e.repo).GetTriggerRegistration(ctx, reg.TriggerID)
 		require.NoError(t, err)
 		return got
 	}

@@ -17,6 +17,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/localprobe"
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
@@ -25,40 +26,40 @@ import (
 
 type memStore struct {
 	mu      sync.Mutex
-	rows    map[string]*db.ModelEndpoint
+	rows    map[string]*core.ModelEndpoint
 	daemons map[string]string // id -> owner
 }
 
 func newMemStore() *memStore {
-	return &memStore{rows: map[string]*db.ModelEndpoint{}, daemons: map[string]string{}}
+	return &memStore{rows: map[string]*core.ModelEndpoint{}, daemons: map[string]string{}}
 }
 
-func (s *memStore) CreateModelEndpoint(_ context.Context, e *db.ModelEndpoint) error {
+func (s *memStore) InsertModelEndpoint(_ context.Context, e *core.ModelEndpoint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, r := range s.rows {
 		if r.UserID == e.UserID && r.Name == e.Name {
-			return db.ErrModelEndpointNameTaken
+			return core.ErrModelEndpointNameTaken
 		}
 	}
 	cp := *e
 	s.rows[e.ID] = &cp
 	return nil
 }
-func (s *memStore) GetModelEndpoint(_ context.Context, userID, id string) (*db.ModelEndpoint, error) {
+func (s *memStore) GetModelEndpoint(_ context.Context, userID, id string) (*core.ModelEndpoint, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, ok := s.rows[id]
 	if !ok || r.UserID != userID {
-		return nil, db.ErrModelEndpointNotFound
+		return nil, core.ErrModelEndpointNotFound
 	}
 	cp := *r
 	return &cp, nil
 }
-func (s *memStore) ListModelEndpoints(_ context.Context, userID string) ([]*db.ModelEndpoint, error) {
+func (s *memStore) ListModelEndpoints(_ context.Context, userID string) ([]*core.ModelEndpoint, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []*db.ModelEndpoint
+	var out []*core.ModelEndpoint
 	for _, r := range s.rows {
 		if r.UserID == userID {
 			cp := *r
@@ -68,12 +69,12 @@ func (s *memStore) ListModelEndpoints(_ context.Context, userID string) ([]*db.M
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
-func (s *memStore) UpdateModelEndpoint(_ context.Context, e *db.ModelEndpoint) error {
+func (s *memStore) ReplaceModelEndpoint(_ context.Context, e *core.ModelEndpoint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, ok := s.rows[e.ID]
 	if !ok || r.UserID != e.UserID {
-		return db.ErrModelEndpointNotFound
+		return core.ErrModelEndpointNotFound
 	}
 	cp := *e
 	s.rows[e.ID] = &cp
@@ -87,11 +88,11 @@ func (s *memStore) SetModelEndpointProbe(_ context.Context, userID, id, probe st
 	}
 	return nil
 }
-func (s *memStore) DeleteModelEndpoint(_ context.Context, userID, id string) error {
+func (s *memStore) RemoveModelEndpoint(_ context.Context, userID, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if r, ok := s.rows[id]; !ok || r.UserID != userID {
-		return db.ErrModelEndpointNotFound
+		return core.ErrModelEndpointNotFound
 	}
 	delete(s.rows, id)
 	return nil
@@ -298,7 +299,7 @@ func TestDirectRouteSSRFMatrix(t *testing.T) {
 			trap := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody, Header: http.Header{}}, errors.New("unreachable in test")
 			})}
-			m := NewManager(Config{Store: newMemStore(), Policy: hosted, ProbeClient: trap})
+			m := NewManager(Config{Store: newMemStore(), Machines: newMemStore(), Policy: hosted, ProbeClient: trap})
 			_, err := m.Create(context.Background(), "u1", in("ep", tc.url, direct))
 			if tc.blocked {
 				require.Error(t, err)
@@ -316,7 +317,7 @@ func TestDirectRouteSSRFMatrix(t *testing.T) {
 	}
 
 	t.Run("self-host allows private and loopback", func(t *testing.T) {
-		m := NewManager(Config{Store: newMemStore(), Policy: selfHost, ProbeClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		m := NewManager(Config{Store: newMemStore(), Machines: newMemStore(), Policy: selfHost, ProbeClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, errors.New("down")
 		})}})
 		for _, u := range []string{"http://127.0.0.1:8000/v1", "http://10.1.2.3/v1", "http://localhost:11434/v1"} {
@@ -328,7 +329,7 @@ func TestDirectRouteSSRFMatrix(t *testing.T) {
 	t.Run("via daemon is allowed to name private hosts", func(t *testing.T) {
 		st := newMemStore()
 		st.daemons["d-1"] = "u1"
-		m := NewManager(Config{Store: st, Policy: hosted, Daemons: &fakeDaemon{online: true}})
+		m := NewManager(Config{Store: st, Machines: st, Policy: hosted, Daemons: &fakeDaemon{online: true}})
 		_, err := m.Create(context.Background(), "u1", func() *reliantv1.ModelEndpointInput {
 			i := in("lan", "http://10.0.0.5:8000/v1", via)
 			i.DaemonId = "d-1"
@@ -340,7 +341,7 @@ func TestDirectRouteSSRFMatrix(t *testing.T) {
 	t.Run("via daemon requires a daemon the user owns", func(t *testing.T) {
 		st := newMemStore()
 		st.daemons["d-other"] = "someone-else"
-		m := NewManager(Config{Store: st, Policy: hosted, Daemons: &fakeDaemon{online: true}})
+		m := NewManager(Config{Store: st, Machines: st, Policy: hosted, Daemons: &fakeDaemon{online: true}})
 		for _, id := range []string{"d-other", "d-missing"} {
 			i := in("lan", "http://10.0.0.5:8000/v1", via)
 			i.DaemonId = id
@@ -359,7 +360,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 func TestCredentialsRejectedWithoutSealedStore(t *testing.T) {
 	st := newMemStore()
 	var dialed bool
-	m := NewManager(Config{Store: st, Policy: netguard.Policy{AllowPrivate: true}, ProbeClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	m := NewManager(Config{Store: st, Machines: st, Policy: netguard.Policy{AllowPrivate: true}, ProbeClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		dialed = true
 		return nil, errors.New("down")
 	})}})
@@ -427,7 +428,7 @@ func TestNotAvailableCredentialsContract(t *testing.T) {
 func TestCredentialsStoredAndMaskedWithASealedStore(t *testing.T) {
 	st := newMemStore()
 	creds := &recordingCreds{}
-	m := NewManager(Config{Store: st, Credentials: creds, Policy: netguard.Policy{AllowPrivate: true},
+	m := NewManager(Config{Store: st, Machines: st, Credentials: creds, Policy: netguard.Policy{AllowPrivate: true},
 		ProbeClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("down") })}})
 	key := "sk-secret-key-1234"
 	i := in("keyed", "https://llm.example.com/v1", direct)
@@ -473,7 +474,7 @@ func openAIServer(t *testing.T, ids ...string) *httptest.Server {
 func TestDirectProbeStoresResultAndReportsFailureWithoutBlockingSave(t *testing.T) {
 	srv := openAIServer(t, "llama-3-70b", "mixtral")
 	st := newMemStore()
-	m := NewManager(Config{Store: st, Policy: netguard.Policy{AllowPrivate: true}})
+	m := NewManager(Config{Store: st, Machines: st, Policy: netguard.Policy{AllowPrivate: true}})
 
 	created, err := m.Create(context.Background(), "u1", in("live", srv.URL+"/v1", direct))
 	require.NoError(t, err)
@@ -507,7 +508,7 @@ func TestDirectProbeStoresResultAndReportsFailureWithoutBlockingSave(t *testing.
 		_, _, err := m.Test(context.Background(), "u1", created.GetId(), nil)
 		require.NoError(t, err)
 		_, _, err = m.Test(context.Background(), "u2", created.GetId(), nil)
-		require.ErrorIs(t, err, db.ErrModelEndpointNotFound, "another user cannot test it")
+		require.ErrorIs(t, err, core.ErrModelEndpointNotFound, "another user cannot test it")
 	})
 
 	t.Run("a non-OpenAI server is reported, not trusted", func(t *testing.T) {
@@ -529,11 +530,11 @@ func TestDirectProbeStoresResultAndReportsFailureWithoutBlockingSave(t *testing.
 
 func TestDuplicateNameRejected(t *testing.T) {
 	srv := openAIServer(t, "m")
-	m := NewManager(Config{Store: newMemStore(), Policy: netguard.Policy{AllowPrivate: true}})
+	m := NewManager(Config{Store: newMemStore(), Machines: newMemStore(), Policy: netguard.Policy{AllowPrivate: true}})
 	_, err := m.Create(context.Background(), "u1", in("Same", srv.URL+"/v1", direct))
 	require.NoError(t, err)
 	_, err = m.Create(context.Background(), "u1", in("Same", srv.URL+"/v1", direct))
-	require.ErrorIs(t, err, db.ErrModelEndpointNameTaken)
+	require.ErrorIs(t, err, core.ErrModelEndpointNameTaken)
 	_, err = m.Create(context.Background(), "u2", in("Same", srv.URL+"/v1", direct))
 	require.NoError(t, err)
 }
@@ -551,7 +552,7 @@ func TestViaDaemonAuthorizesEndpointOnTheMachineAndPreservesTheRest(t *testing.T
 			"http://10.0.0.5:8000": {{Name: "qwen-72b", SupportsChat: true, ContextWindow: 32768}},
 		},
 	}
-	m := NewManager(Config{Store: st, Daemons: daemon, Policy: netguard.Policy{}})
+	m := NewManager(Config{Store: st, Machines: st, Daemons: daemon, Policy: netguard.Policy{}})
 
 	i := in("Home vLLM", lanURL, via)
 	i.DaemonId = "d-1"
@@ -584,7 +585,7 @@ func TestViaDaemonOfflineSavesAndRepairsOnTest(t *testing.T) {
 	st := newMemStore()
 	st.daemons["d-1"] = "u1"
 	daemon := &fakeDaemon{online: false, serve: map[string][]*reliantv1.LocalModelInfo{"http://10.0.0.5:8000": {{Name: "m", SupportsChat: true}}}}
-	m := NewManager(Config{Store: st, Daemons: daemon})
+	m := NewManager(Config{Store: st, Machines: st, Daemons: daemon})
 
 	i := in("Home", "http://10.0.0.5:8000/v1", via)
 	i.DaemonId = "d-1"
@@ -607,7 +608,7 @@ func TestMovingAnEndpointRevokesItFromTheOldMachine(t *testing.T) {
 	old := &fakeDaemon{online: true}
 	other := &fakeDaemon{online: true}
 	router := routedDaemons{"d-1": old, "d-2": other}
-	m := NewManager(Config{Store: st, Daemons: router})
+	m := NewManager(Config{Store: st, Machines: st, Daemons: router})
 
 	i := in("Move", "http://10.0.0.5:8000/v1", via)
 	i.DaemonId = "d-1"
@@ -635,7 +636,7 @@ func (r routedDaemons) SetConfiguredEndpoints(ctx context.Context, u, d string, 
 func TestUserIsolationInManager(t *testing.T) {
 	srv := openAIServer(t, "m")
 	st := newMemStore()
-	m := NewManager(Config{Store: st, Policy: netguard.Policy{AllowPrivate: true}})
+	m := NewManager(Config{Store: st, Machines: st, Policy: netguard.Policy{AllowPrivate: true}})
 	created, err := m.Create(context.Background(), "u1", in("mine", srv.URL+"/v1", direct))
 	require.NoError(t, err)
 
@@ -643,15 +644,15 @@ func TestUserIsolationInManager(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list)
 	_, err = m.Update(context.Background(), "u2", created.GetId(), in("x", srv.URL+"/v1", direct))
-	require.ErrorIs(t, err, db.ErrModelEndpointNotFound)
-	require.ErrorIs(t, m.Delete(context.Background(), "u2", created.GetId()), db.ErrModelEndpointNotFound)
+	require.ErrorIs(t, err, core.ErrModelEndpointNotFound)
+	require.ErrorIs(t, m.Delete(context.Background(), "u2", created.GetId()), core.ErrModelEndpointNotFound)
 	list, _ = m.List(context.Background(), "u1")
 	assert.Len(t, list, 1)
 }
 
 func TestListMergesDiscoveredModelsWithUserSettings(t *testing.T) {
 	srv := openAIServer(t, "a", "b")
-	m := NewManager(Config{Store: newMemStore(), Policy: netguard.Policy{AllowPrivate: true}})
+	m := NewManager(Config{Store: newMemStore(), Machines: newMemStore(), Policy: netguard.Policy{AllowPrivate: true}})
 	i := in("e", srv.URL+"/v1", direct)
 	i.Models = []*reliantv1.ModelEndpointModel{{Name: "a", Hidden: true, ContextWindow: 4096}}
 	_, err := m.Create(context.Background(), "u1", i)

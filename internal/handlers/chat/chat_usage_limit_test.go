@@ -12,10 +12,13 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -55,7 +58,7 @@ func seedWaitingRun(t *testing.T, repo *db.Repo, ctx context.Context) (chatID st
 		ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent", Thread: chatID,
 		Status: db.Active(), CreatedAt: now,
 	}))
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, chatID, "Anthropic", false, now.Add(time.Hour), now))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, chatID, "Anthropic", false, now.Add(time.Hour), now))
 	return chatID
 }
 
@@ -71,7 +74,7 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 
 	chatID := seedWaitingRun(t, repo, ctx)
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}}
 
 	resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -80,8 +83,9 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 
 	// Only a sub-agent waits now: the chat no longer reads as waiting, and the
 	// run is still woken — the agent's wait is what the click is for.
-	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, chatID, time.Now()))
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, time.Now().Add(time.Hour), time.Now()))
+	fixed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, chatID, fixed))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, fixed.Add(time.Hour), fixed))
 	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Woken, "a sub-agent's wait is woken from the chat")
@@ -118,14 +122,14 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, nil),
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil, Waits: providerbackofftest.New(t, repo)}),
 	}
 	_, err = svc.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	require.Equal(t, []string{chatID}, temporal.terminated)
 
-	backoffs, err := repo.ProviderBackoffByChat(ctx, chatID)
+	backoffs, err := providerbackofftest.New(t, repo).ProviderBackoffByChat(ctx, chatID)
 	require.NoError(t, err)
 	assert.False(t, backoffs[chatID].Waiting(), "the marker is released when the run is stopped")
 	chat, err = repo.GetChat(ctx, chatID)
@@ -145,7 +149,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 	chatID := seedWaitingRun(t, repo, ctx)
 
 	temporal := &usageLimitPayloadClient{}
-	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}}
 
 	t.Run("a plain retry carries no model", func(t *testing.T) {
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
@@ -204,7 +208,7 @@ func (c *usageLimitPayloadClient) SignalWorkflow(_ context.Context, _, _, _ stri
 func TestUpdateChatProviderPolicy_WakesAWaitingRun(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
 	now := time.Now().UTC()
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, fx.chatID, fx.rootThreadID, "Anthropic", false, now.Add(time.Hour), now))
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, fx.chatID, fx.rootThreadID, "Anthropic", false, now.Add(time.Hour), now))
 
 	retries := func() int {
 		n := 0

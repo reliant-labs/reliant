@@ -7,11 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -128,7 +132,7 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 
 	snapshot := func() string {
 		t.Helper()
-		drafts, err := repo.ListWorkflowDraftsByUser(memberCtx, userID)
+		drafts, err := workflowdraftstest.New(t, repo).ListWorkflowDraftsByUser(memberCtx, userID)
 		require.NoError(t, err)
 		sort.Slice(drafts, func(i, j int) bool { return drafts[i].ID < drafts[j].ID })
 		out, err := json.Marshal(drafts)
@@ -149,7 +153,7 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 		},
 	}
 	for who, caller := range callers {
-		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Orgs: caller.resolver}))
+		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: caller.resolver}))
 		for name, call := range calls {
 			before := snapshot()
 			err := call(caller.ctx)

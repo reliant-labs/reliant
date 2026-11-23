@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -67,7 +69,7 @@ func TestPickerVersionConflictCannotPartiallyChangeBinding(t *testing.T) {
 	req.Msg.ExpectedVersion = &original.Version
 	_, err := svc.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
-	selected, err := repo.GetChatSelection(ctx, fx.chatID)
+	selected, err := store.NewChatSelectionExtStore(repo.ORM()).GetChatSelection(ctx, fx.chatID)
 	require.NoError(t, err)
 	require.Empty(t, selected.ChatProvider)
 	require.Equal(t, opusOnClaude, selected.Params["model"].(map[string]interface{})["id"])
@@ -77,7 +79,7 @@ func TestFreshStoredModelDoesNotBindChat(t *testing.T) {
 	ctx, fx, repo, _, svc := selectionFixture(t, db.Completed())
 	for _, model := range []any{map[string]any{"id": opusOnClaude}, map[string]any{"tags": []any{"fast"}}, map[string]any{"id": "my-model@local"}} {
 		setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": model})
-		_, err := chatselection.New(repo).SetPolicy(ctx, fx.chatID, "test-user", "builtin://agent", chatselection.ProviderPolicy{OnLimit: chatselection.OnLimitFallback, FallbackModel: "gpt-6.1-sol@codex"}, 0)
+		_, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).SetPolicy(ctx, fx.chatID, "test-user", "builtin://agent", chatselection.ProviderPolicy{OnLimit: chatselection.OnLimitFallback, FallbackModel: "gpt-6.1-sol@codex"}, 0)
 		require.NoError(t, err)
 		chat, err := repo.GetChat(ctx, fx.chatID)
 		require.NoError(t, err)

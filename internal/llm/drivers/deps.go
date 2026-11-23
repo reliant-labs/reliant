@@ -43,13 +43,17 @@ type AccountTokenStore interface {
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
 }
 
-// APIKeyStore is what the global API key provider (InitializeAPIKeyProvider)
-// serves: driver availability, account token refresh, and the user's
-// per-tag model preferences (modelprefs.LoadAll).
-type APIKeyStore interface {
+// AccountStore is what the global API key provider reads of accounts: driver
+// availability and account token refresh. credentials/provideraccounts.Service
+// satisfies it.
+type AccountStore interface {
 	AvailabilityStore
 	AccountTokenStore
-	// ListSettingsByKey is modelprefs.SettingsReader: the store is handed to
-	// modelprefs.LoadAll.
+}
+
+// SettingsStore is the user's per-tag model preferences' reader
+// (modelprefs.SettingsReader): it is handed to modelprefs.LoadAll. *db.Repo
+// satisfies it.
+type SettingsStore interface {
 	ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*db.Setting, error)
 }

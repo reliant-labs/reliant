@@ -582,8 +582,7 @@ export async function getServiceSignals(req: GetServiceSignalsRequest, options: 
 
 // ── Usage and billing ────────────────────────────────────────────────────────
 
-// The legacy ObservabilityService enum has the same numbers, so either reads here.
-function quotaState(state: ObservabilityQuotaState | number): QuotaState {
+function quotaState(state: ObservabilityQuotaState): QuotaState {
   switch (state) {
     case ObservabilityQuotaState.OK:
       return "ok";
@@ -596,25 +595,17 @@ function quotaState(state: ObservabilityQuotaState | number): QuotaState {
   }
 }
 
-/**
- * GetObservabilityUsage from ObservabilityBillingService. ObservabilityService's
- * retired copy is gone from the control plane's contract, so there is no
- * fallback to it.
- */
-async function fetchObservabilityUsage(orgId: string) {
-  return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
-}
-
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
 
 /**
  * The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org.
  * Served by ObservabilityBillingService (a Postgres read, same admission as the
- * observability reads), not ObservabilityService, whose copy of this rpc is retired.
- * It spends no ClickHouse read slot, so it bypasses obsClient's read queue.
+ * observability reads). ObservabilityService's copy of this rpc was removed in
+ * control-plane#3095. It spends no ClickHouse read slot, so it bypasses
+ * obsClient's read queue.
  */
 export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
-  const res = await fetchObservabilityUsage(orgId);
+  const res = await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {

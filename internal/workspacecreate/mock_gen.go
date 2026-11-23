@@ -120,7 +120,7 @@ func (m *MockStore) SettleCheckoutTeardown(ctx context.Context, id string, state
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockFailedCreateStore
-// forge:hash=cd0c22de58421b3aad7673a4c7f55f40e3b009ae63f2a7d6bb0d60c0e6efc108
+// forge:hash=0489eaf60fac78efe9a257d84c919c120fc98aea5d5c5160896593461c916c1d
 
 // MockFailedCreateStore is a test mock for the FailedCreateStore interface.
 //
@@ -130,19 +130,10 @@ var _ Store = (*MockStore)(nil)
 // "MockFailedCreateStore.<Method>Func not set" error.
 type MockFailedCreateStore struct {
 	contractkit.Recorder
-	ListFailedWorktreesForDaemonFunc func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
 	ListProjectDaemonsForDaemonFunc  func(context.Context, string) ([]*core.ProjectDaemon, error)
+	ListFailedWorktreesForDaemonFunc func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
 	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	MergeWorktreeCleanupMetadataFunc func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
-}
-
-// ListFailedWorktreesForDaemon records the call and delegates to ListFailedWorktreesForDaemonFunc when set.
-func (m *MockFailedCreateStore) ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error) {
-	m.Recorder.Record("ListFailedWorktreesForDaemon", ctx, daemonID, since, limit)
-	if m.ListFailedWorktreesForDaemonFunc != nil {
-		return m.ListFailedWorktreesForDaemonFunc(ctx, daemonID, since, limit)
-	}
-	return nil, contractkit.MockNotSet("MockFailedCreateStore", "ListFailedWorktreesForDaemon")
 }
 
 // ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
@@ -152,6 +143,15 @@ func (m *MockFailedCreateStore) ListProjectDaemonsForDaemon(ctx context.Context,
 		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
 	}
 	return nil, contractkit.MockNotSet("MockFailedCreateStore", "ListProjectDaemonsForDaemon")
+}
+
+// ListFailedWorktreesForDaemon records the call and delegates to ListFailedWorktreesForDaemonFunc when set.
+func (m *MockFailedCreateStore) ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error) {
+	m.Recorder.Record("ListFailedWorktreesForDaemon", ctx, daemonID, since, limit)
+	if m.ListFailedWorktreesForDaemonFunc != nil {
+		return m.ListFailedWorktreesForDaemonFunc(ctx, daemonID, since, limit)
+	}
+	return nil, contractkit.MockNotSet("MockFailedCreateStore", "ListFailedWorktreesForDaemon")
 }
 
 // ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
@@ -174,3 +174,49 @@ func (m *MockFailedCreateStore) MergeWorktreeCleanupMetadata(ctx context.Context
 
 // Compile-time check.
 var _ FailedCreateStore = (*MockFailedCreateStore)(nil)
+
+// forge:section MockFailedCreateRepo
+// forge:hash=bfa923da64143fa276fbf56a84099be3641be907a8a376131da496a9e951c754
+
+// MockFailedCreateRepo is a test mock for the FailedCreateRepo interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockFailedCreateRepo.<Method>Func not set" error.
+type MockFailedCreateRepo struct {
+	contractkit.Recorder
+	ListFailedWorktreesForDaemonFunc func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
+	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
+	MergeWorktreeCleanupMetadataFunc func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
+}
+
+// ListFailedWorktreesForDaemon records the call and delegates to ListFailedWorktreesForDaemonFunc when set.
+func (m *MockFailedCreateRepo) ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error) {
+	m.Recorder.Record("ListFailedWorktreesForDaemon", ctx, daemonID, since, limit)
+	if m.ListFailedWorktreesForDaemonFunc != nil {
+		return m.ListFailedWorktreesForDaemonFunc(ctx, daemonID, since, limit)
+	}
+	return nil, contractkit.MockNotSet("MockFailedCreateRepo", "ListFailedWorktreesForDaemon")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockFailedCreateRepo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockFailedCreateRepo", "ListReposByProject")
+}
+
+// MergeWorktreeCleanupMetadata records the call and delegates to MergeWorktreeCleanupMetadataFunc when set.
+func (m *MockFailedCreateRepo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error {
+	m.Recorder.Record("MergeWorktreeCleanupMetadata", ctx, id, fn)
+	if m.MergeWorktreeCleanupMetadataFunc != nil {
+		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
+	}
+	return contractkit.MockNotSet("MockFailedCreateRepo", "MergeWorktreeCleanupMetadata")
+}
+
+// Compile-time check.
+var _ FailedCreateRepo = (*MockFailedCreateRepo)(nil)

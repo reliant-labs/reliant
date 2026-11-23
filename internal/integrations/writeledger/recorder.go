@@ -24,9 +24,10 @@ const settleTimeout = 10 * time.Second
 
 // Recorder is the Service: it builds the decorated runner.
 type Recorder struct {
-	store Store
-	runs  RunLookup
-	now   func() time.Time
+	store     Store
+	runs      RunLookup
+	workflows WorkflowLoader
+	now       func() time.Time
 }
 
 // New builds the write ledger.
@@ -35,7 +36,7 @@ func New(deps Deps) Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Recorder{store: deps.Store, runs: deps.Runs, now: now}
+	return &Recorder{store: deps.Store, runs: deps.Runs, workflows: deps.Workflows, now: now}
 }
 
 // Wrap returns inner with every mutating call recorded.
@@ -142,6 +143,19 @@ func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
+// loadRun reads runID's workflow row, or nil when there is no reader or no
+// such row: the id is then read as a chat id.
+func (r *Recorder) loadRun(ctx context.Context, runID string) *core.Workflow {
+	if r.workflows == nil {
+		return nil
+	}
+	wf, err := r.workflows.LoadWorkflow(ctx, runID)
+	if err != nil {
+		return nil
+	}
+	return wf
+}
+
 // attributeRun fills in the run a call belongs to. Every lookup is best effort:
 // the call's own authentication already resolved the owner, and an unresolved
 // field only makes the echo less attributable, never the call less correct.
@@ -150,7 +164,7 @@ func (r *Recorder) attributeRun(ctx context.Context, w *core.IntegrationWrite, r
 		return
 	}
 	chatID := runID
-	if wf, err := r.runs.GetWorkflow(ctx, runID); err == nil && wf != nil {
+	if wf := r.loadRun(ctx, runID); wf != nil {
 		if wf.ChatID != "" {
 			chatID = wf.ChatID
 		}
