@@ -58812,6 +58812,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Firings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Firings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Intake",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.EventIntake",
       "methods": [],
@@ -58922,6 +58933,17 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "WebhookSecrets",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.WebhookSecrets",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "TriggerDeliveryRelay",
