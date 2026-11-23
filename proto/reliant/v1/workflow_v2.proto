@@ -1288,6 +1288,10 @@ message RunArgs {
     example: "reliant"
     hidden: true
   }];
+  // Field 7 was llm_gateway (reliant#3299), reverted before any release; only
+  // release candidates carried it, so it is never reused.
+  reserved 7;
+  reserved "llm_gateway";
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -2188,6 +2192,10 @@ message RunOutput {
   // stdout, half that of stderr): they are not the command's whole output,
   // and text a workflow decodes (json.decode) may not decode.
   bool truncated = 6;
+  // Field 7 was llm_gateway (reliant#3299), reverted before any release; only
+  // release candidates carried it, so it is never reused.
+  reserved 7;
+  reserved "llm_gateway";
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -2484,6 +2492,10 @@ message WorkflowRequirements {
   // itself), that must exist and reach their origin. Reaching origin is
   // checked with git ls-remote, which writes nothing into the checkout.
   repeated string repos = 3;
+  // Field 4 was cli_login (reliant#3291), reverted before any release; only
+  // release candidates carried it, so it is never reused.
+  reserved 4;
+  reserved "cli_login";
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
