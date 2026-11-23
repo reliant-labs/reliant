@@ -18,7 +18,7 @@ import (
 func TestGetMessage_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: foreignMessageRepo{}}))
+	svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: foreignMessageRepo{}, Chats: foreignMessageChats{}, Senders: &message.MockSenders{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetMessageRequest, pb.GetMessageResponse]{
 		{

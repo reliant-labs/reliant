@@ -71,6 +71,7 @@ type MachineResumeWakeOutput struct {
 // is doing, exactly as before.
 type MachineResumeWakeActivity struct {
 	repo         MachineResumeWakeStore
+	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a slice re-checks the machine; zero means
 	// preflightPollInterval. Tests shrink it.
@@ -81,8 +82,8 @@ type MachineResumeWakeActivity struct {
 }
 
 // NewMachineResumeWakeActivity creates a MachineResumeWakeActivity.
-func NewMachineResumeWakeActivity(repo MachineResumeWakeStore, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
-	return &MachineResumeWakeActivity{repo: repo, toolExecutor: toolExecutor}
+func NewMachineResumeWakeActivity(repo MachineResumeWakeStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
+	return &MachineResumeWakeActivity{repo: repo, rows: rows, toolExecutor: toolExecutor}
 }
 
 func (a *MachineResumeWakeActivity) Name() string { return "MachineResumeWake" }
@@ -111,8 +112,8 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	// A resumed run can still carry the snapshot from before its chat was
 	// pinned, or a pin from before its chat moved to its workspace's machine.
 	// Check/wake the same machine its commands and tools will use.
-	selector := runMachineSelector(ctx, a.repo, chat, input.DaemonSelector)
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	selector := runMachineSelector(ctx, a.rows, chat, input.DaemonSelector)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return MachineResumeWakeOutput{}, fmt.Errorf("loading project for the resume wake: %w", err)
 	}

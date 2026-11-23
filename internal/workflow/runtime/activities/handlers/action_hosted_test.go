@@ -8,8 +8,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
 type hostedFake struct {

@@ -142,10 +142,63 @@ func TestMigrationChangeRequiresMigsafetyAndLintOnAPinMove(t *testing.T) {
 		t.Fatal("a migration and a pin bump passed without migsafety or lint")
 	}
 	v := verdict(t, dir)
-	for _, want := range []string{"migsafety", "lint"} {
+	for _, want := range []string{"migsafety", "closedsets", "lint"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("verdict %q does not name %s", v, want)
 		}
+	}
+}
+
+// forge lint --closed-sets is obliged whenever a migration or the forge pin
+// (go.mod, forge.yaml) moves, and not otherwise: a pin bump that grew
+// accesstoken.AllScopes merged without the widening migration and turned the
+// release gate red (#3382).
+func TestClosedSetsRunOnAMigrationOrAPinMove(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		files []string
+		want  bool
+	}{
+		{"a migration", []string{"db/migrations/1_a.up.sql"}, true},
+		{"go.mod", []string{"go.mod"}, true},
+		{"forge.yaml", []string{"forge.yaml"}, true},
+		{"go.sum alone", []string{"go.sum"}, false},
+		{"unrelated code", []string{"internal/x/x.go", "README.md"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var files []FileReport
+			for _, p := range tc.files {
+				files = append(files, FileReport{Path: p})
+			}
+			dir := gateDir(t, &Plan{Files: files}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "migorder": 0, "lint": 0, "golangci": 0, "vet": 0})
+			code, _ := verify(t, dir)
+			if tc.want {
+				if code == 0 || !strings.Contains(verdict(t, dir), "closedsets never completed") {
+					t.Fatalf("%v passed without a closedsets row: %q", tc.files, verdict(t, dir))
+				}
+				if err := os.WriteFile(filepath.Join(dir, "closedsets.row"), []byte("closedsets 0 1 0\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if code, out := verify(t, dir); code != 0 {
+					t.Fatalf("%v with a closedsets row failed: %s", tc.files, out)
+				}
+				return
+			}
+			if code, out := verify(t, dir); code != 0 {
+				t.Fatalf("%v needs no closedsets row: %s", tc.files, out)
+			}
+		})
+	}
+}
+
+// A closedsets phase that FAILED fails the gate, naming it.
+func TestFailedClosedSetsFailTheGate(t *testing.T) {
+	dir := gateDir(t, &Plan{Files: []FileReport{{Path: "go.mod"}}}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "closedsets": 1})
+	if code, _ := verify(t, dir); code == 0 {
+		t.Fatal("a failing closedsets row passed")
+	}
+	if v := verdict(t, dir); !strings.Contains(v, "closedsets") {
+		t.Fatalf("verdict %q does not name closedsets", v)
 	}
 }
 
@@ -154,7 +207,7 @@ func TestMigrationChangeRequiresMigsafetyAndLintOnAPinMove(t *testing.T) {
 // not obliged to lint (migsafety still follows forge.yaml).
 func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
 	pl := &Plan{Files: []FileReport{{Path: "go.mod"}, {Path: "go.sum"}, {Path: "forge.yaml"}}}
-	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0})
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "closedsets": 0})
 	if code, out := verify(t, dir); code != 0 {
 		t.Fatalf("a pin-only change must pass without a lint row: %s", out)
 	}
@@ -179,11 +232,11 @@ func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 		obliged    []string
 		notObliged []string
 	}{
-		{"queue", true, []string{"migsafety", "lint"}, []string{"vet", "golangci"}},
-		{"skip-lint", true, []string{"migsafety"}, []string{"vet", "lint", "golangci"}},
-		{"skip-lint", false, []string{"migsafety", "golangci"}, []string{"vet", "lint"}},
-		{"", true, []string{"migsafety", "lint", "vet"}, []string{"golangci"}},
-		{"", false, []string{"migsafety", "lint", "vet", "golangci"}, nil},
+		{"queue", true, []string{"migsafety", "closedsets", "lint"}, []string{"vet", "golangci"}},
+		{"skip-lint", true, []string{"migsafety", "closedsets"}, []string{"vet", "lint", "golangci"}},
+		{"skip-lint", false, []string{"migsafety", "closedsets", "golangci"}, []string{"vet", "lint"}},
+		{"", true, []string{"migsafety", "closedsets", "lint", "vet"}, []string{"golangci"}},
+		{"", false, []string{"migsafety", "closedsets", "lint", "vet", "golangci"}, nil},
 	} {
 		_ = os.Remove(filepath.Join(dir, "tier"))
 		_ = os.Remove(filepath.Join(dir, "golangci-elsewhere"))

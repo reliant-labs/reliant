@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +20,7 @@ import (
 // startRunCall issues start_run from callerID with the given tool call id.
 func startRunCall(t *testing.T, repo *db.Repo, starter RunStarter, callerID, toolCallID string, params StartRunParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewStartRunTool(repo, starter), callerRC(callerID, toolCallID), StartRunToolName, params)
+	return callRunTool(t, NewStartRunTool(repo, store.NewTriggerEventExtStore(repo.ORM()), starter), callerRC(callerID, toolCallID), StartRunToolName, params)
 }
 
 func startedChatID(t *testing.T, resp ToolResponse) string {

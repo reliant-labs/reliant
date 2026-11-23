@@ -20,14 +20,24 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 
 	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -92,8 +102,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
@@ -108,6 +123,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -162,6 +178,7 @@ func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
 	return NewOrgPolicyWatcher(OrgPolicyWatcherDeps{
 		Policies: g.OrgPolicyResolver(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 		Temporal: g.TemporalClient(),
 	})
 }
@@ -192,6 +209,12 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
+		Projects:        store.NewProjectExtStore(g.Database().ORM()),
+		Installs:        store.NewProjectDaemonExtStore(g.Database().ORM()),
+		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
+		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
+		Checkouts:       store.NewProjectDaemonDetachmentExtStore(g.Database().ORM()),
+		Pools:           store.NewMachinePoolExtStore(g.Database().ORM()),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
@@ -250,6 +273,7 @@ func (g *Graph) newStateDerivation() (*StateDerivation, error) {
 		NATS:        g.NATSConn(),
 		ToolsDaemon: g.ToolsDaemon(),
 		DB:          g.Database(),
+		Mirror:      g.Daemonmirror(),
 	})
 }
 
@@ -331,7 +355,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
 		TagPrefs:           g.Database(),
-		LocalModels:        local.NewRepoDirectory(g.Database()),
+		LocalModels:        local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -384,11 +408,13 @@ func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 
 func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
-		Settings:     g.ProcessSettings(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Network:      g.ServerProcessConfig.GetNetwork(),
-		Analytics:    g.ServerProcessConfig.GetAnalytics(),
-		DB:           g.Database(),
+		Settings:         g.ProcessSettings(),
+		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
+		Network:          g.ServerProcessConfig.GetNetwork(),
+		Analytics:        g.ServerProcessConfig.GetAnalytics(),
+		DB:               g.Database(),
+		ProviderAccounts: g.CredentialsProvideraccounts(),
+		Privacy:          g.Privacy(),
 	})
 }
 
@@ -454,31 +480,28 @@ func (g *Graph) newTriggerPollers() (*webhook.Registry, error) {
 
 func (g *Graph) newWorkerDaemonRouter() (*WorkerDaemonRouter, error) {
 	return NewWorkerDaemonRouter(WorkerDaemonRouterDeps{
-		NATS:         g.NATSConn(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		NATS:             g.NATSConn(),
+		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
+		DB:               g.Database(),
+		AutomationTokens: g.CredentialsAutomationtokens(),
 	})
 }
 
 func (g *Graph) newWorkerIntegrationCredentials() (*WorkerIntegrationCredentials, error) {
 	return NewWorkerIntegrationCredentials(WorkerIntegrationCredentialsDeps{
-		Vault:        g.Vault(),
-		Integrations: g.IntegrationSettings(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Vault:           g.Vault(),
+		Integrations:    g.IntegrationSettings(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newWorkerCatalogSearch() (*WorkerCatalogSearch, error) {
 	return NewWorkerCatalogSearch(WorkerCatalogSearchDeps{
-		Credentials: g.WorkerIntegrationCredentials(),
-		DB:          g.Database(),
-	})
-}
-
-func (g *Graph) newWriteLedger() (writeledger.Service, error) {
-	return NewWriteLedger(WriteLedgerDeps{
-		DB: g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Credentials:     g.WorkerIntegrationCredentials(),
+		DB:              g.Database(),
 	})
 }
 
@@ -493,6 +516,7 @@ func (g *Graph) newRunLifecycle() (*runs.Service, error) {
 		Temporal: g.TemporalClient(),
 		Pause:    g.PauseService(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
@@ -502,6 +526,7 @@ func (g *Graph) newRunLauncher() (*launch.Launcher, error) {
 		Runs:     g.RunLifecycle(),
 		DB:       g.Database(),
 		Router:   g.WorkerDaemonRouter(),
+		Projects: g.Projectaccess(),
 	})
 }
 
@@ -513,6 +538,7 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
 		DB:       g.Database(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
@@ -534,31 +560,36 @@ func (g *Graph) newAgentRuns() (*agentruns.Runs, error) {
 
 func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 	return NewWorkerTrigger(WorkerTriggerDeps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Temporal:     g.TemporalClient(),
-		Vault:        g.Vault(),
-		Pollers:      g.TriggerPollers(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Logger:          g.Log,
+		Config:          g.Cfg,
+		Temporal:        g.TemporalClient(),
+		Vault:           g.Vault(),
+		Pollers:         g.TriggerPollers(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		Network:       g.ServerProcessConfig.GetNetwork(),
-		Temporal:      g.TemporalClient(),
-		AgentRuns:     g.AgentRuns(),
-		Triggers:      g.WorkerTrigger(),
-		Credentials:   g.WorkerIntegrationCredentials(),
-		WriteLedger:   g.WriteLedger(),
-		CatalogSearch: g.WorkerCatalogSearch(),
-		Router:        g.WorkerDaemonRouter(),
-		DB:            g.Database(),
-		Membership:    g.OrgResolver(),
-		Logger:        g.Log,
-		Config:        g.Cfg,
+		ConnectionVault:  g.CredentialsConnectionvault(),
+		Network:          g.ServerProcessConfig.GetNetwork(),
+		Temporal:         g.TemporalClient(),
+		AgentRuns:        g.AgentRuns(),
+		Triggers:         g.WorkerTrigger(),
+		Credentials:      g.WorkerIntegrationCredentials(),
+		WriteLedger:      g.IntegrationsWriteledger(),
+		CatalogSearch:    g.WorkerCatalogSearch(),
+		Router:           g.WorkerDaemonRouter(),
+		DB:               g.Database(),
+		Membership:       g.OrgResolver(),
+		Logger:           g.Log,
+		Config:           g.Cfg,
+		Backoff:          g.Providerbackoff(),
+		ChangeController: g.ChangeController(),
+		Mirror:           g.Daemonmirror(),
 	})
 }
 
@@ -581,26 +612,29 @@ func (g *Graph) newRemoteExecutor() (*toolexec.RemoteExecutor, error) {
 
 func (g *Graph) newAccountRecorder() (*AccountRecorder, error) {
 	return NewAccountRecorder(AccountRecorderDeps{
-		DB: g.Database(),
+		Accounts: g.CredentialsProvideraccounts(),
 	})
 }
 
 func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
-		Temporal:       g.TemporalClient(),
-		Streaming:      g.StreamingHub(),
-		Tools:          g.WorkerToolsFactory(),
-		Executor:       g.RemoteExecutor(),
-		Router:         g.WorkerDaemonRouter(),
-		ConfigProvider: g.StoredConfigProvider(),
-		Launcher:       g.RunLauncher(),
-		Credentials:    g.WorkerIntegrationCredentials(),
-		WriteLedger:    g.WriteLedger(),
-		Pollers:        g.TriggerPollers(),
-		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
-		Network:        g.ServerProcessConfig.GetNetwork(),
-		Recorder:       g.AccountRecorder(),
-		DB:             g.Database(),
+		ConnectionVault:  g.CredentialsConnectionvault(),
+		ProviderAccounts: g.CredentialsProvideraccounts(),
+		OrgAccounts:      g.CredentialsOrgaccounts(),
+		Temporal:         g.TemporalClient(),
+		Streaming:        g.StreamingHub(),
+		Tools:            g.WorkerToolsFactory(),
+		Executor:         g.RemoteExecutor(),
+		Router:           g.WorkerDaemonRouter(),
+		ConfigProvider:   g.StoredConfigProvider(),
+		Launcher:         g.RunLauncher(),
+		Credentials:      g.WorkerIntegrationCredentials(),
+		WriteLedger:      g.IntegrationsWriteledger(),
+		Pollers:          g.TriggerPollers(),
+		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
+		Network:          g.ServerProcessConfig.GetNetwork(),
+		Recorder:         g.AccountRecorder(),
+		DB:               g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
 		// names them (pkg/config Roots).
 		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
@@ -624,7 +658,8 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 
 func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
-		DB: g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
 	})
 }
@@ -632,19 +667,21 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
+		Accounts: g.CredentialsProvideraccounts(),
 		Temporal: g.TemporalClient(),
+		Backoff:  g.Providerbackoff(),
 	})
 }
 
 func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	return NewWriteLedgerPrune(WriteLedgerPruneDeps{
-		Ledger: g.WriteLedger(),
+		Ledger: g.IntegrationsWriteledger(),
 		DB:     g.Database(),
 	})
 }
 
 func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
-	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
+	return NewProjectPurge(ProjectPurgeDeps{Purges: g.ProjectPurges()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -703,6 +740,7 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:       g.TokenAuthority(),
 		Integrations: g.IntegrationSettings(),
 		OAuthIssuers: g.ApiServerConfig.GetMcpOauthIssuers(),
+		OAuthScopes:  g.ApiServerConfig.GetMcpOauthScopes(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
 		Membership:   g.OrgResolver(),
@@ -749,11 +787,12 @@ func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 
 func (g *Graph) newAPIConnections() (*APIConnections, error) {
 	return NewAPIConnections(APIConnectionsDeps{
-		Vault:        g.Vault(),
-		Integrations: g.IntegrationSettings(),
-		AppOrigins:   g.ApiServerConfig.GetCorsAllowedOrigins(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Vault:           g.Vault(),
+		Integrations:    g.IntegrationSettings(),
+		AppOrigins:      g.ApiServerConfig.GetCorsAllowedOrigins(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 		// Off until every replica and the rollback target read org
 		// connections (org-sharing.md §9, D13).
 		OrgConnections: APIOrgConnections(g.ApiServerConfig),
@@ -762,40 +801,38 @@ func (g *Graph) newAPIConnections() (*APIConnections, error) {
 
 func (g *Graph) newAPICatalogSearch() (*APICatalogSearch, error) {
 	return NewAPICatalogSearch(APICatalogSearchDeps{
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newInputOptions() (inputoptions.Service, error) {
 	return NewInputOptions(InputOptionsDeps{
-		Connections:  g.APIConnections(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
-	})
-}
-
-func (g *Graph) newConnectorGrants() (connectorgrant.Store, error) {
-	return NewConnectorGrants(ConnectorGrantsDeps{
-		DB: g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Connections:     g.APIConnections(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newGitHubAccess() (*ghaccess.Refresher, error) {
 	return NewGitHubAccess(GitHubAccessDeps{
-		Vault:        g.Vault(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Vault:           g.Vault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newTriggerSenders() (TriggerSenders, error) {
 	return NewTriggerSenders(TriggerSendersDeps{
-		Vault:        g.Vault(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Vault:           g.Vault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
 	})
 }
 
@@ -918,7 +955,7 @@ func (g *Graph) newReliantKeySweep() (*ReliantKeySweep, error) {
 
 func (g *Graph) newLLMUsageRetention() (*LLMUsageRetention, error) {
 	return NewLLMUsageRetention(LLMUsageRetentionDeps{
-		DB: g.Database(),
+		Ledger: g.Llmusage(),
 	})
 }
 
@@ -983,15 +1020,24 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 }
 
 // newAccount constructs the account handler (internal/handlers/account). Its
-// purge runs on the raw *sql.DB: an ordered multi-statement transaction across
-// every user-owned table, which the per-entity Repository surface cannot
-// express. The control plane is wired only when this deployment HAS one:
-// self-hosted reliant has no platform account to delete.
+// purge is an ordered multi-statement transaction across every user-owned
+// table, with each credential package deleting its own rows inside it. The
+// control plane is wired only when this deployment HAS one: self-hosted
+// reliant has no platform account to delete.
 func (g *Graph) newAccount() (*account.Service, error) {
+	purger, err := accountpurge.New(accountpurge.Deps{
+		DB:          g.Database().ORM(),
+		Automation:  g.CredentialsAutomationtokens(),
+		Accounts:    g.CredentialsProvideraccounts(),
+		Connections: g.CredentialsConnectionvault(),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return account.New(account.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		SQL:          g.Database().DB.SQLDB(),
+		Purger:       purger,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
@@ -1002,6 +1048,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
 	})
@@ -1059,6 +1106,11 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
+		Repos:          store.NewRepoExtStore(g.Database().ORM()),
+		Daemons:        store.NewDaemonExtStore(g.Database().ORM()),
 		Recoveries:     store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
@@ -1072,10 +1124,20 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Workflows:   store.NewWorkflowExtStore(g.Database().ORM()),
+		Worktrees:   store.NewWorktreeExtStore(g.Database().ORM()),
+		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
+		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
+		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
+		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
+		Messages:    store.NewMessageExtStore(g.Database().ORM()),
+		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		Backoff:     g.Providerbackoff(),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database()),
+		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:        g.OrgResolver(),
 	})
 }
@@ -1085,11 +1147,14 @@ func (g *Graph) newChat() (*chat.Service, error) {
 // anything, so mounting it adds surface without adding behavior.
 func (g *Graph) newRun() (*run.Service, error) {
 	return run.New(run.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Chats:  g.Chat(),
-		Orgs:   g.OrgResolver(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		Chats:     g.Chat(),
+		Orgs:      g.OrgResolver(),
 	})
 }
 
@@ -1100,7 +1165,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 // inbound receivers.
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
-	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, triggers.NewStores(g.Database()), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
 	// An org's linked GitHub App installations, from control-plane: nil when
 	// self-hosted, which refuses binding a trigger to one.
 	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
@@ -1108,22 +1173,28 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		return nil, err
 	}
 	return trigger.New(trigger.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Syncer:       syncer,
-		Fires:        fires,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Integrations: g.IntegrationSettings().Config,
-		Sealer:       in.Vault,
-		Catalog:      in.Registry,
-		Intake:       in.Intake,
-		Access:       triggerAccess(in),
-		Senders:      g.TriggerSenders(),
-		Options:      optionsChecker{svc: g.InputOptions()},
-		Alerting:     alertingProvisioner(g.TriggerAlerting()),
-		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
-		Orgs:         g.OrgResolver(),
+		Projects:       g.Projectaccess(),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
+		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
+		Syncer:         syncer,
+		Fires:          fires,
+		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		AutomationKeys: g.CredentialsAutomationtokens(),
+		Integrations:   g.IntegrationSettings().Config,
+		Sealer:         in.Vault,
+		Catalog:        in.Registry,
+		Intake:         in.Intake,
+		Access:         triggerAccess(in),
+		Senders:        g.TriggerSenders(),
+		Options:        optionsChecker{svc: g.InputOptions()},
+		Alerting:       alertingProvisioner(g.TriggerAlerting()),
+		Drafter:        automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
+		Orgs:           g.OrgResolver(),
 		// A nil gitcredentialclient.Service converts to a nil interface.
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
@@ -1152,6 +1223,8 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
+		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
+		Mirror:       g.Daemonmirror(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1163,10 +1236,11 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 // holds the files.
 func (g *Graph) newFileSystem() (*file_system.Service, error) {
 	return file_system.New(file_system.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:      g.Database(),
+		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
 
@@ -1176,10 +1250,11 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 // option (apiMountOptions).
 func (g *Graph) newForge() (*forge.Service, error) {
 	return forge.New(forge.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects: g.Projectaccess(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:     g.Database(),
 	})
 }
 
@@ -1189,8 +1264,13 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Repo:       g.Database(),
+		OrgKeys:    g.CredentialsOrgaccounts(),
+		Items:      store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:    store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:    store.NewTriggerExtStore(g.Database().ORM()),
 		Recoveries: store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
 		Marks:      store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:    worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
 		Sweeper:    g.WorktreeSweep(),
 		Orgs:       g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
@@ -1205,19 +1285,23 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       g.Projectaccess(),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
 // newMessage constructs the message handler (internal/handlers/message).
 func (g *Graph) newMessage() (*message.Service, error) {
 	return message.New(message.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Repo:    g.Database(),
+		Chats:   store.NewChatExtStore(g.Database().ORM()),
+		Senders: store.NewThreadExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1230,7 +1314,8 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
+		Machines:    g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),
@@ -1243,10 +1328,12 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Projects:  g.Projectaccess(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:      g.Database(),
+		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
 
@@ -1283,9 +1370,11 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 // newPreset constructs the preset handler (internal/handlers/preset).
 func (g *Graph) newPreset() (*preset.Service, error) {
 	return preset.New(preset.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
+		Projects: g.Projectaccess(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Drafts:   g.Workflowdrafts(),
 	})
 }
 
@@ -1293,12 +1382,21 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 // a deployment WITH a control plane can clone from GitHub on the user's
 // behalf; self-hosted leaves ControlPlane nil.
 func (g *Graph) newProject() (*project.Service, error) {
+	o := g.Database().ORM()
 	return project.New(project.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Projects:       g.Projectaccess(),
+		Purges:         g.ProjectPurges(),
+		ProjectConfigs: store.NewProjectConfigExtStore(o),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Lookups:        store.NewProjectExtStore(o),
+		Installs:       store.NewProjectDaemonExtStore(o),
+		Detachments:    store.NewProjectDaemonDetachmentExtStore(o),
+		Ledger:         store.NewProjectOrgMoveExtStore(o),
+		Shared:         store.NewShareEventExtStore(o),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
+		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil
 		// self-hosted, where it lists them as unavailable.
 		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
@@ -1325,10 +1423,12 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Accounts:    g.CredentialsProvideraccounts(),
+		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
 		UsageRefresher: &accountlimits.Fetcher{
-			Store:  g.Database(),
-			Tokens: drivers.RefreshingTokens{Store: g.Database()},
+			Store:  g.CredentialsProvideraccounts(),
+			Tokens: drivers.RefreshingTokens{Store: g.CredentialsProvideraccounts()},
 			// A refresh that lifts a bench wakes the user's blocked chats.
 			OnCapacity: func(ctx context.Context, userID, _ string) {
 				g.Chat().WakeUserChats(ctx, userID, "a usage refresh found a limited account serving again")
@@ -1341,31 +1441,37 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Signals:  g.PauseService(),
-		Messages: g.Chat(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Signals:   g.PauseService(),
+		Messages:  g.Chat(),
 	})
 }
 
 // newRepo constructs the repo handler (internal/handlers/repo).
 func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects: g.Projectaccess(),
+		Repos:    store.NewRepoExtStore(g.Database().ORM()),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       g.Projectaccess(),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Drafts:         g.Workflowdrafts(),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1375,6 +1481,8 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),
+		Accounts:                g.CredentialsProvideraccounts(),
+		Privacy:                 g.Privacy(),
 		ControlPlane:            controlPlaneClient(g.ServerProcessConfig.GetControlPlane()),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
@@ -1396,6 +1504,13 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		Projects:    store.NewProjectExtStore(g.Database().ORM()),
+		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
+		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
@@ -1437,11 +1552,30 @@ func (g *Graph) newToken() (*token.Service, error) {
 // newToolCall constructs the tool_call handler (internal/handlers/tool_call).
 func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	return tool_call.New(tool_call.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Temporal: g.TemporalClient().Client,
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Chats:     store.NewChatExtStore(g.Database().ORM()),
+		Temporal:  g.TemporalClient().Client,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+	})
+}
+
+// newWorkflowdrafts constructs the workflowdrafts package
+// (internal/workflowdrafts): the one writer of saved workflows, which reads
+// them scoped to what a caller may see. The Repo is its transaction runner,
+// org locker and user-update publisher, so each write runs in the Repo's
+// retry ladder, as it did on the facade.
+func (g *Graph) newWorkflowdrafts() (workflowdrafts.Service, error) {
+	repo := g.Database()
+	return workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Tx:      repo,
+		Locks:   repo,
+		Updates: repo,
+		Drafts:  store.NewWorkflowDraftExtStore(repo.ORM()),
 	})
 }
 
@@ -1450,9 +1584,12 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 // workflow.
 func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 	return workflowhandler.New(workflowhandler.Deps{
+		Projects:    g.Projectaccess(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
+		Drafts:      g.Workflowdrafts(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
 		Orgs:        g.OrgResolver(),
@@ -1462,20 +1599,22 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 // newUsage constructs the usage handler (internal/handlers/usage).
 func (g *Graph) newUsage() (*usage.Service, error) {
 	return usage.New(usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.CredentialsProvideraccounts(),
+		Now:      nil, // optional — no provider
 	})
 }
 
 // newWorktreeReclaim constructs the worktree-reclaim handler (internal/handlers/worktree_reclaim).
 func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 	return worktree_reclaim.New(worktree_reclaim.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Sender: g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Repo:    g.Database(),
+		Daemons: store.NewDaemonExtStore(g.Database().ORM()),
+		Sender:  g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1523,20 +1662,84 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 	return NewOrgProviderAccount(g.ApiServerConfig, org_provider_account.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Store:       g.Database(),
+		Accounts:    g.CredentialsProvideraccounts(),
+		OrgAccounts: g.CredentialsOrgaccounts(),
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
-		ChatWaker:   orgAccountChatWaker(g.Database(), g.TemporalClient()),
+		ChatWaker:   orgAccountChatWaker(g.Providerbackoff(), g.TemporalClient()),
 	})
 }
 
 // newOrgCredentialSweep constructs the OrgCredentialSweep provider (NewOrgCredentialSweep, internal/app/org_credentials_sweep.go).
 func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
 	return NewOrgCredentialSweep(OrgCredentialSweepDeps{
-		DB:        g.Database(),
-		Authority: g.TokenAuthority(),
+		OrgAccounts: g.CredentialsOrgaccounts(),
+		Authority:   g.TokenAuthority(),
 	})
+}
+
+// newPrivacy constructs the privacy package (internal/privacy): each user's
+// analytics and crash-reporting choices, kept as user-level settings.
+func (g *Graph) newPrivacy() (privacy.Service, error) {
+	svc, err := privacy.New(privacy.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Settings: store.NewSettingExtStore(g.Database().ORM()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return privacy.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newProviderbackoff constructs the providerbackoff package
+// (internal/providerbackoff): the markers a thread parked on a provider leaves.
+func (g *Graph) newProviderbackoff() (providerbackoff.Service, error) {
+	svc, err := providerbackoff.New(providerbackoff.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Markers:  store.NewProviderBackoffExtStore(g.Database().ORM()),
+		Tx:       g.Database(),
+		Activity: g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return providerbackoff.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newLlmusage constructs the llmusage package (internal/llmusage): the
+// per-call usage ledger and its retention.
+func (g *Graph) newLlmusage() (llmusage.Service, error) {
+	svc, err := llmusage.New(llmusage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Ledger: store.NewLlmCallUsageExtStore(g.Database().ORM()),
+		Tx:     g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return llmusage.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newDaemonmirror constructs the daemonmirror package (internal/daemonmirror):
+// the registry replica of the control plane's daemon set.
+func (g *Graph) newDaemonmirror() (daemonmirror.Service, error) {
+	o := g.Database().ORM()
+	svc, err := daemonmirror.New(daemonmirror.Deps{
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Daemons:   daemonmirror.NewStores(o),
+		Tx:        g.Database(),
+		Lifecycle: g.Database(),
+		Updates:   g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return daemonmirror.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newSeatmatch constructs the seatmatch package (internal/seatmatch).
@@ -1544,7 +1747,7 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 	svc, err := seatmatch.New(seatmatch.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Store:   g.Database(),
+		Store:   seatmatchStore{g.CredentialsProvideraccounts(), g.CredentialsOrgaccounts()},
 		Members: g.OrgResolver(),
 		// Attributing seats is off until every replica and the rollback target honour a
 		// seat's org (orgs.provider_workspace_seats_enabled).
@@ -1561,11 +1764,12 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // through control-plane (OrgUsageListPrices; nil shows no estimates).
 func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 	return org_usage.New(org_usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Prices: OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.CredentialsProvideraccounts(),
+		Prices:   OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Now:      nil, // optional — no provider
 	})
 }
 
@@ -1575,6 +1779,7 @@ func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Store:      g.Database(),
+		Chats:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Now:        nil, // optional — no provider
 		Attendance: g.OrgPolicyAttendance(),
 	})
@@ -1603,7 +1808,7 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 // coverage report names it. Without a control plane, or without a way to
 // read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
-	blobs, err := CoverageSourceBlobs(g.Database(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	blobs, err := CoverageSourceBlobs(g.Database(), g.CredentialsConnectionvault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
 	if err != nil {
 		return nil, err
 	}
@@ -1623,7 +1828,83 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 	return pull_request_record.New(pull_request_record.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Store:  g.Database(),
+		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
 	})
+}
+
+// newIntegrationsWriteledger constructs the integrations/writeledger package (internal/integrations/writeledger).
+func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
+	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
+		Store:     g.WriteLedgerStore(),
+		Runs:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Now:       time.Now, // framework clock
+	})), nil
+}
+
+// newWriteLedgerStore constructs the WriteLedgerStore provider (NewWriteLedgerStore, internal/app/providers_worker.go).
+func (g *Graph) newWriteLedgerStore() (writeledger.Store, error) {
+	return NewWriteLedgerStore(WriteLedgerStoreDeps{
+		DB: g.Database(),
+	})
+}
+
+// newProjectaccess constructs the projectaccess package (internal/projectaccess).
+func (g *Graph) newProjectaccess() (projectaccess.Service, error) {
+	return projectaccess.NewServiceWithForgeMiddleware(projectaccess.New(projectaccess.Deps{
+		Store: g.Database(),
+	})), nil
+}
+
+// newProjectPurges constructs the ProjectPurges provider (NewProjectPurges, internal/app/providers_worker.go).
+func (g *Graph) newProjectPurges() (projectpurge.Service, error) {
+	return NewProjectPurges(ProjectPurgesDeps{
+		DB: g.Database(),
+	})
+}
+func (g *Graph) newCredentialsAutomationtokens() (automationtokens.Service, error) {
+	svc, err := automationtokens.New(automationtokens.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	if err != nil {
+		return nil, err
+	}
+	return automationtokens.NewServiceWithForgeMiddleware(svc), nil
+}
+
+func (g *Graph) newCredentialsProvideraccounts() (provideraccounts.Service, error) {
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	if err != nil {
+		return nil, err
+	}
+	return provideraccounts.NewServiceWithForgeMiddleware(svc), nil
+}
+
+func (g *Graph) newCredentialsConnectionvault() (connectionvault.Service, error) {
+	svc, err := connectionvault.New(connectionvault.Deps{DB: g.Database().ORM()})
+	if err != nil {
+		return nil, err
+	}
+	return connectionvault.NewServiceWithForgeMiddleware(svc), nil
+}
+
+func (g *Graph) newCredentialsOrgaccounts() (orgaccounts.Service, error) {
+	svc, err := orgaccounts.New(orgaccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	if err != nil {
+		return nil, err
+	}
+	return orgaccounts.NewServiceWithForgeMiddleware(svc), nil
+}
+
+func (g *Graph) newConnectorGrants() (connectorgrant.Store, error) {
+	return NewConnectorGrants(ConnectorGrantsDeps{
+		DB: g.Database(),
+	})
+}
+
+// newChangeController constructs the ChangeController provider (NewChangeController, internal/app/providers_worker.go).
+func (g *Graph) newChangeController() (tools.ChangeController, error) {
+	return NewChangeController(ChangeControllerDeps{
+		DB:           g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	}), nil
 }

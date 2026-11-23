@@ -7,13 +7,15 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSendAgentMessage_EndToEndDelivery exercises the full path a real user
@@ -31,7 +33,7 @@ func TestSendAgentMessage_EndToEndDelivery(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	service := &Service{deps: Deps{Repo: repo}}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 
 	// A queued message must carry attachments exactly like an ordinary
 	// SendMessage turn -- this is the screenshot the user tried to queue
@@ -65,7 +67,7 @@ func TestSendAgentMessage_EndToEndDelivery(t *testing.T) {
 	// Simulate the agent-loop step boundary: drain the child thread's
 	// mailbox, via a real Temporal test activity environment (Execute reads
 	// activity.GetLogger, which panics outside one).
-	drainActivity := handlers.NewDrainAgentMessagesActivity(repo, threads.NewService(repo))
+	drainActivity := handlers.NewDrainAgentMessagesActivity(repo, threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(drainActivity.Execute)

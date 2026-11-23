@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -55,9 +56,13 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*Service, *wakeRecordi
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}, err: wakeErr}
 	svc := &Service{
 		deps: Deps{
-			Repo: repo, Temporal: temporal, Router: router,
+			Repo:        repo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Spawns:      store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
 		},
-		runs: runs.NewService(repo, temporal, nil),
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 	return svc, router, ctx, fx.chatID
 }

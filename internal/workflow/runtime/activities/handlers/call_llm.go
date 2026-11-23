@@ -35,6 +35,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
 
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolbindings"
@@ -44,9 +48,6 @@ import (
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ============================================================================
@@ -133,10 +134,44 @@ type streamingToolCall struct {
 // ACTIVITY IMPLEMENTATION
 // ============================================================================
 
+// SpawnTree reads who spawned whom for a turn's capability grants: whether the
+// thread has sub-agents of its own, and whether it inherited any by being a
+// branch. store.ToolCallExtStore satisfies it.
+type SpawnTree interface {
+	ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error)
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
+}
+
+// CallLLMDeps is what a CallLLMActivity is built from.
+type CallLLMDeps struct {
+	// Store is what the activity reads and writes.
+	Store CallLLMStore
+	// Spawns reads the thread's spawn tree for the turn's grants.
+	Spawns SpawnTree
+	// Threads saves the turn's messages and the notices it posts.
+	Threads MessageSaver
+	// ToolResults recovers the tool results the history lost
+	// (recoverPersistedToolResults).
+	ToolResults ToolResultRecoveryStore
+	// Hub carries the turn's streaming deltas.
+	Hub streaming.StreamingHub
+	// ToolsFactory builds the turn's tool set.
+	ToolsFactory *tools.ToolsFactory
+	// ConfigProvider reads the machine's synced config.
+	ConfigProvider cfgpkg.ConfigProvider
+	// DriverResolver picks the model driver.
+	DriverResolver drivers.DriverResolver
+	// MCPBinder binds MCP contexts for the turn's tools.
+	MCPBinder toolexec.MCPContextBinder
+}
+
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
 	repo           CallLLMStore
+	spawns         SpawnTree
+	threads        MessageSaver
+	toolResults    ToolResultRecoveryStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -145,6 +180,8 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// modelEndpoints lists the user's configured model endpoints; nil lists none.
+	modelEndpoints local.EndpointSource
 	// machines resolves the turn's selector to the machine whose synced
 	// config it reads (configMachine); nil reads the project's union for any
 	// selector that names no id. Set by WithDaemonRouter.
@@ -161,6 +198,25 @@ type CallLLMActivity struct {
 	// firstTokenNow is the first-token guard's clock; nil is time.Now. Tests
 	// set it to decide exactly when the deadline passes.
 	firstTokenNow func() time.Time
+	// usage records each model request in the usage ledger; nil records
+	// nothing.
+	usage LLMUsageRecorder
+	// backoff marks a thread parked in the driver's retry ladder; nil marks
+	// nothing.
+	backoff ProviderBackoffMarkers
+}
+
+// WithProviderBackoff wires the marker a thread parked in a driver's retry
+// ladder leaves behind.
+func (a *CallLLMActivity) WithProviderBackoff(m ProviderBackoffMarkers) *CallLLMActivity {
+	a.backoff = m
+	return a
+}
+
+// WithUsageRecorder wires the usage ledger into the turn's requests.
+func (a *CallLLMActivity) WithUsageRecorder(r LLMUsageRecorder) *CallLLMActivity {
+	a.usage = r
+	return a
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's
@@ -188,6 +244,14 @@ func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLL
 	return a
 }
 
+// WithModelEndpoints lets "<name>@local" resolve the user's configured model
+// endpoints (store.ModelEndpointExtStore); without it only detected local
+// models resolve.
+func (a *CallLLMActivity) WithModelEndpoints(endpoints local.EndpointSource) *CallLLMActivity {
+	a.modelEndpoints = endpoints
+	return a
+}
+
 // localModelSpec is what resolving a "<name>@local" selector needs. Without a
 // relay, detected local models and via-machine endpoints report themselves
 // unavailable; endpoints reached directly still work. A run with no machine
@@ -200,7 +264,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		}
 	}
 	return &LocalModelSpec{
-		Directory:      local.NewRepoDirectory(a.repo),
+		Directory:      local.NewRepoDirectory(a.repo, a.modelEndpoints),
 		Transport:      relay,
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
@@ -211,15 +275,17 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
-// The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
-func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
+func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 	return &CallLLMActivity{
-		repo:           repo,
-		hub:            hub,
-		toolsFactory:   toolsFactory,
-		configProvider: cfgProvider,
-		driverResolver: resolver,
-		mcpBinder:      mcpBinder,
+		repo:           deps.Store,
+		spawns:         deps.Spawns,
+		threads:        deps.Threads,
+		toolResults:    deps.ToolResults,
+		hub:            deps.Hub,
+		toolsFactory:   deps.ToolsFactory,
+		configProvider: deps.ConfigProvider,
+		driverResolver: deps.DriverResolver,
+		mcpBinder:      deps.MCPBinder,
 		trackerFor:     analytics.ForUser,
 	}
 }
@@ -399,7 +465,9 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		if out != nil {
 			out.TraceParent = turn.TraceParent()
 		}
-		turn.End(retErr)
+		// The turn's failure is classed as its provider call's is: a
+		// code, never the error's text (the activity's failure log keeps it).
+		turn.EndAs(retErr, llm.ErrorType(retErr))
 	}()
 
 	// A running workflow may predate launch-time pinning. Its inputs are a
@@ -613,7 +681,7 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 	activityID := rtx.MessageIdempotencyKey
 
-	if _, err := threads.NewService(a.repo).SaveMessage(writeCtx, threads.SaveMessageOpts{
+	if _, err := a.threads.SaveMessage(writeCtx, threads.SaveMessageOpts{
 		ChatID:            rtx.ChatID,
 		Thread:            thread,
 		Role:              int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
@@ -727,7 +795,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
 	}
-	saved, err := threads.NewService(a.repo).SaveMessage(ctx, threads.SaveMessageOpts{
+	saved, err := a.threads.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:       chatID,
 		Thread:       thread,
 		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
@@ -1232,7 +1300,7 @@ func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread 
 //   - DB-level orphan repair (Layer 2)
 //   - In-memory orphan repair (Layer 3)
 func (a *CallLLMActivity) loadConversationHistory(ctx context.Context, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
-	return LoadMessagesForLLM(ctx, a.repo, chatID, thread, explicitContextSeq)
+	return LoadMessagesForLLM(ctx, a.repo, a.toolResults, chatID, thread, explicitContextSeq)
 }
 
 // drainAgentMailbox folds any queued agent_messages for thread into its
@@ -1253,7 +1321,7 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 		return 0
 	}
 
-	drain := NewDrainAgentMessagesActivity(a.repo, threads.NewService(a.repo))
+	drain := NewDrainAgentMessagesActivity(a.repo, a.threads)
 	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",
@@ -2862,10 +2930,10 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 // those grants for this turn only — the next turn reads again — so it is
 // logged rather than failing the turn.
 func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, thread string) (ownChildren, inheritedChildren bool) {
-	if a.repo == nil || chat == nil || thread == "" {
+	if a.repo == nil || a.spawns == nil || chat == nil || thread == "" {
 		return false, false
 	}
-	children, err := a.repo.ListSpawnChildren(ctx, thread)
+	children, err := a.spawns.ListSpawnChildren(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Could not read spawn history; spawn management tools not auto-granted",
 			"chatID", chat.ID, "thread", thread, "error", err)
@@ -2877,7 +2945,7 @@ func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, threa
 			break
 		}
 	}
-	inherited, err := a.repo.ListInheritedSpawnChildren(ctx, thread)
+	inherited, err := a.spawns.ListInheritedSpawnChildren(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[CallLLM] Could not read inherited sub-agents",
 			"chatID", chat.ID, "thread", thread, "error", err)
@@ -3363,7 +3431,10 @@ func (a *CallLLMActivity) recordProviderBackoff(ctx context.Context, chatID, thr
 		"statusCode", wait.StatusCode,
 		"reason", wait.Reason)
 
-	if err := a.repo.RecordProviderBackoff(ctx, chatID, thread,
+	if a.backoff == nil {
+		return
+	}
+	if err := a.backoff.RecordProviderBackoff(ctx, chatID, thread,
 		wait.Attempt, wait.MaxAttempts, wait.StatusCode, wait.Reason, wait.Delay, time.Now()); err != nil {
 		log.Error("[CallLLM] Failed to record provider backoff marker",
 			"chatID", chatID, "thread", thread, "error", err)
@@ -3380,7 +3451,10 @@ func (a *CallLLMActivity) releaseProviderBackoff(ctx context.Context, thread str
 		return
 	}
 	state.inProviderBackoff = false
-	if err := a.repo.ClearProviderBackoff(ctx, thread, time.Now()); err != nil {
+	if a.backoff == nil {
+		return
+	}
+	if err := a.backoff.ClearProviderBackoff(ctx, thread, time.Now()); err != nil {
 		providerBackoffLogger(ctx).Error("[CallLLM] Failed to clear provider backoff marker",
 			"thread", thread, "error", err)
 	}

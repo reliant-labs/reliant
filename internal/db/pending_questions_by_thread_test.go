@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func insertPendingQuestionTest(t *testing.T, repo *Repo, id, chatID, threadID, stepID string, status int, createdAt time.Time) {
@@ -48,7 +50,7 @@ func TestPendingQuestionsByThread_MultiThreadChat(t *testing.T) {
 	// A different chat must not leak in.
 	insertPendingQuestionTest(t, repo, "q-other", "chat-other", "thread-z", "execute_tools", QuestionStatusPending, base.Add(30*time.Minute))
 
-	byThread, err := repo.PendingQuestionsByThread(ctx, chatID)
+	byThread, err := store.NewQuestionExtStore(repo.ORM()).PendingQuestionsByThread(ctx, chatID)
 	if err != nil {
 		t.Fatalf("PendingQuestionsByThread: %v", err)
 	}
@@ -84,7 +86,7 @@ func TestPendingQuestionsByThread_NewestPerThread(t *testing.T) {
 	insertPendingQuestionTest(t, repo, "q-old", chatID, "thread-a", "first_gate", QuestionStatusPending, base)
 	insertPendingQuestionTest(t, repo, "q-new", chatID, "thread-a", "second_gate", QuestionStatusPending, base.Add(5*time.Minute))
 
-	byThread, err := repo.PendingQuestionsByThread(ctx, chatID)
+	byThread, err := store.NewQuestionExtStore(repo.ORM()).PendingQuestionsByThread(ctx, chatID)
 	if err != nil {
 		t.Fatalf("PendingQuestionsByThread: %v", err)
 	}
@@ -116,7 +118,7 @@ func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
 	insertPendingQuestionTest(t, repo, "q-b3", chatID, "thread-b", "ask_user", QuestionStatusPending, base.Add(20*time.Minute))
 	insertPendingQuestionTest(t, repo, "q-other", "chat-other-list", "thread-z", "ask_user", QuestionStatusPending, base)
 
-	got, err := repo.ListPendingQuestionsByChat(ctx, chatID)
+	got, err := store.NewQuestionExtStore(repo.ORM()).ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		t.Fatalf("ListPendingQuestionsByChat: %v", err)
 	}
@@ -132,7 +134,7 @@ func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
 		t.Errorf("threads = %v, want %v", threads, want)
 	}
 
-	empty, err := repo.ListPendingQuestionsByChat(ctx, "chat-nothing-pending")
+	empty, err := store.NewQuestionExtStore(repo.ORM()).ListPendingQuestionsByChat(ctx, "chat-nothing-pending")
 	if err != nil {
 		t.Fatalf("ListPendingQuestionsByChat(empty): %v", err)
 	}
@@ -148,7 +150,7 @@ func TestPendingQuestionsByThread_Empty(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 
-	byThread, err := repo.PendingQuestionsByThread(context.Background(), "chat-quiet")
+	byThread, err := store.NewQuestionExtStore(repo.ORM()).PendingQuestionsByThread(context.Background(), "chat-quiet")
 	if err != nil {
 		t.Fatalf("PendingQuestionsByThread: %v", err)
 	}

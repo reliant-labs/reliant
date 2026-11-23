@@ -12,6 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
@@ -50,7 +51,7 @@ type fakeRepo struct {
 	lifecycleErr   error
 
 	// snapshots records every registry snapshot applied, in order.
-	snapshots []db.RegistrySnapshotApply
+	snapshots []daemonmirror.RegistrySnapshotApply
 }
 
 func newFakeRepo() *fakeRepo {
@@ -210,7 +211,7 @@ func TestDerivation_StaleDisconnectNeverDeletesALiveLease(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	d := NewDerivation(nc, repo)
+	d := NewDerivation(nc, repo, repo)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()
 	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
@@ -264,7 +265,7 @@ func TestDerivation_DropsInvalidEventsAtParse(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = NewDerivation(nc, repo).Start(ctx) }()
+	go func() { _ = NewDerivation(nc, repo, repo).Start(ctx) }()
 	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
 		t.Fatal("subscription did not register")
 	}
@@ -322,7 +323,7 @@ func TestDerivation_ReapsExpiredAttachmentsOnStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	d := NewDerivation(nc, repo)
+	d := NewDerivation(nc, repo, repo)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()
 
@@ -369,7 +370,7 @@ func TestDerivation_ReapFailureIsNotFatal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	d := NewDerivation(nc, repo)
+	d := NewDerivation(nc, repo, repo)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()
 

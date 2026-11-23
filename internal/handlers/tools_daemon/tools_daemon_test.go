@@ -11,21 +11,90 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
-	"github.com/stretchr/testify/require"
 )
 
 // newTestService builds the gateway service over repo as the daemon-gateway
 // does, with no publishers; a test that needs one sets it in svc.deps. A nil
 // repo exercises the in-memory routing alone.
-func newTestService(repo Repository) *Service {
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo})
+func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
+	var co MachineCheckouts = &MockMachineCheckouts{}
+	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo}
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		// A real repository also gets the stores over its database, as the
+		// composition root wires them; a fake gets none, so the writes it
+		// would observe go through newTestServiceWithLeases.
+		co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
+		deps.Attachments, deps.LocalModels = realLeases(r)
+		deps.Projects, deps.Installs = store.NewProjectExtStore(r.ORM()), store.NewProjectDaemonExtStore(r.ORM())
+	} else {
+		// A fake repository stands for the project roles too when it answers
+		// them; otherwise the project lookup is an unset mock and the
+		// machine holds no checkouts.
+		deps.Projects, _ = repo.(ProjectLookups)
+		deps.Installs, _ = repo.(ProjectDaemons)
+		if deps.Projects == nil {
+			deps.Projects = &MockProjectLookups{}
+		}
+		if deps.Installs == nil {
+			deps.Installs = noInstalls()
+		}
+	}
+	if len(checkouts) > 0 {
+		co = checkouts[0]
+	}
+	deps.Checkouts = co
+	deps.Pools = poolsOf(repo)
+	return newService(deps)
+}
+
+// noInstalls is the machine holding no checkouts yet.
+func noInstalls() ProjectDaemons {
+	return &MockProjectDaemons{ListProjectDaemonsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemon, error) { return nil, nil }}
+}
+
+// newTestServiceWithInstalls is newTestService with the machine's checkout
+// rows answered by installs.
+func newTestServiceWithInstalls(repo Repository, installs ProjectDaemons, checkouts ...MachineCheckouts) *Service {
+	svc := newTestService(repo, checkouts...)
+	svc.deps.Installs = installs
+	return svc
+}
+
+// newTestServiceWithLeases is newTestService with the lease and inventory
+// roles wired explicitly (a nil role leaves its writes off, as in production
+// without a database).
+func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalModels) *Service {
+	var projects ProjectLookups = &MockProjectLookups{}
+	if p, ok := repo.(ProjectLookups); ok {
+		projects = p
+	}
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
+}
+
+// realLeases is the generated stores over a real database: what the composition
+// root hands the gateway.
+func realLeases(repo interface{ ORM() *orm.Client }) (Attachments, LocalModels) {
+	return store.NewDaemonAttachmentExtStore(repo.ORM()), store.NewDaemonExtStore(repo.ORM())
+}
+
+// poolsOf is the generated machine pool store over repo when it is a database,
+// else an empty stub.
+func poolsOf(repo Repository) MachinePools {
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		return store.NewMachinePoolExtStore(r.ORM())
+	}
+	return &StubPools{}
 }
 
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
@@ -433,7 +502,7 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	require.NoError(t, err)
 	require.NotNil(t, project)
 
-	record, err := repo.GetProjectConfigRecord(context.Background(), project.ID)
+	record, err := store.GetProjectConfigRecord(context.Background(), repo.ORM(), project.ID)
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 	require.NotNil(t, record.UserConfigYAML)
@@ -619,7 +688,7 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 		},
 	}))
 
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := store.GetProjectConfigRecord(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 

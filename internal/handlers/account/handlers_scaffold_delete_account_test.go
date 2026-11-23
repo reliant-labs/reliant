@@ -2,7 +2,6 @@ package account_test
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -23,7 +22,7 @@ func TestDeleteAccount_Generated(t *testing.T) {
 	t.Parallel()
 
 	// Never opened: every row is refused before the purge reaches it.
-	svc := account.NewTestAccount(t, account.WithAccountDeps(account.Deps{SQL: &sql.DB{}}))
+	svc := account.NewTestAccount(t, account.WithAccountDeps(account.Deps{Purger: &unusedPurger{}}))
 
 	minted, err := fat.Mint()
 	if err != nil {

@@ -243,6 +243,11 @@ func authenticateCLILogin(r *http.Request, validator auth.TokenValidator, access
 	if err != nil {
 		return ctx, "", http.StatusUnauthorized, "invalid or expired token"
 	}
+	// Only person sessions and self-host shared keys may use this path.
+	// Software-held credentials must not bypass access-token scope checks.
+	if claims.Credential != auth.CredentialSession && claims.Credential != auth.CredentialSharedKey {
+		return ctx, "", http.StatusForbidden, errCLILoginNeedsPerson
+	}
 	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
 	ctx = auth.WithCredential(ctx, claims.Credential)
 	return ctx, claims.Sub, 0, ""

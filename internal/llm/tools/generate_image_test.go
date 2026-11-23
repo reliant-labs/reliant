@@ -14,14 +14,15 @@ import (
 
 	"github.com/google/uuid"
 	openaisdk "github.com/openai/openai-go/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/imagegen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // pngBytes is a one-pixel PNG. The 0x89 signature byte is the point: it is not

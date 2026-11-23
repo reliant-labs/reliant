@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -96,4 +99,34 @@ func (a *ActionActivity) executeHosted(ctx context.Context, uses, grant string, 
 		out.Data = data
 	}
 	return out
+}
+
+// endHostedCall ends a hosted call's integration.call span from its output. A
+// failure the provider answered is an error. One with only a code was never
+// answered: failed_precondition (a missing or refused grant, hosted HTTP
+// switched off) is a refusal, anything else (invalid params, a result that
+// would not convert) a failure. Only the status, the retry verdict and the
+// URL's host reach the span, never the content. The controller returns no
+// response headers, so a hosted call carries no rate limit.
+func endHostedCall(call *telemetry.IntegrationCall, out *reliantv1.ActionOutput, params map[string]any) {
+	outcome, code := telemetry.IntegrationAnswerOutcome(out.GetIsError(), int(out.GetStatusCode()))
+	if out.GetIsError() && out.GetStatusCode() == 0 && out.GetErrorCode() != "" {
+		outcome, code = telemetry.IntegrationOutcomeFailed, out.GetErrorCode()
+		if code == "failed_precondition" {
+			outcome = telemetry.IntegrationOutcomeRefused
+		}
+	}
+	var attrs []attribute.KeyValue
+	if out.GetStatusCode() != 0 {
+		attrs = append(attrs, attribute.Int(telemetry.AttrHTTPResponseStatusCode, int(out.GetStatusCode())))
+	}
+	if out.GetIsError() {
+		attrs = append(attrs, attribute.Bool(telemetry.AttrIntegrationRetryable, out.GetRetryable()))
+	}
+	if raw, ok := params["url"].(string); ok {
+		if u, err := url.Parse(strings.TrimSpace(raw)); err == nil && u.Hostname() != "" {
+			attrs = append(attrs, attribute.String(telemetry.AttrServerAddress, u.Hostname()))
+		}
+	}
+	call.End(outcome, code, attrs...)
 }

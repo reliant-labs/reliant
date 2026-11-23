@@ -43,6 +43,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/uptrace/bun"
+
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -164,6 +166,9 @@ func ListAllTriggers(ctx context.Context, db orm.Context) ([]*core.Trigger, erro
 // transaction, serializing the overlap check with the launch it guards across
 // concurrent fires. A missing trigger is core.ErrTriggerNotFound.
 func LockTrigger(ctx context.Context, db orm.Context, id string) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	var locked string
 	if err := db.Bun().NewRaw(`SELECT id FROM triggers WHERE id = ?0 FOR UPDATE`, id).Scan(ctx, &locked); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -259,6 +264,9 @@ func SetTriggerWebhookTokenHash(ctx context.Context, db orm.Context, id string, 
 // the owner's tenant; nil clears it. A missing trigger is
 // core.ErrTriggerNotFound.
 func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sealed []byte) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	return writeTrigger(ctx, db, &Trigger{ID: id, WebhookSecretSealed: sealed}, "webhook secret", TriggerFieldWebhookSecretSealed)
 }
 
@@ -303,6 +311,9 @@ func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string
 // the row version it writes, so a binding committed after the reconciler
 // read its snapshot is neither dropped nor overwritten with the old one.
 func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core.TriggerProjection) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	cfg := string(triggerConfigJSON(p.Config))
 	res, err := db.Bun().NewUpdate().Model((*Trigger)(nil)).
 		Set(projectionConfigSQL, cfg, cfg, core.ActivationInstallationKey, core.ActivationInstallationKey,
@@ -604,4 +615,61 @@ func triggerJSONInto(raw []byte, out any) error {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type TriggerExtra struct {
+}
+
+// The Inbox's notices of control-plane docs/design/org-provider-accounts.md
+// §11.3 and §11.4: an automation paused because none of its org's accounts
+// could run it, and the automations still on their owner's own accounts in a
+// team org. The sweep that emails about them is trigger_notices_repo_ext.go.
+
+// noOrgAccountPause selects the triggers this release paused for want of an
+// org account: still paused for it, with the time of the pause.
+func noOrgAccountPause(q *bun.SelectQuery) *bun.SelectQuery {
+	return q.Where("enabled = false").Where("paused_reason = ?", core.TriggerPausedNoOrgAccount).
+		Where("paused_at IS NOT NULL").Where("org_id IS NOT NULL")
+}
+
+// HasNoOrgAccountPauses reports whether any trigger is paused for want of an
+// org account, so an inbox read with none asks no one about anything.
+func HasNoOrgAccountPauses(ctx context.Context, db orm.Context) (bool, error) {
+	return noOrgAccountPause(db.Bun().NewSelect().Model((*Trigger)(nil))).Limit(1).Exists(ctx)
+}
+
+// ListNoOrgAccountPauses returns the triggers paused for want of an org account
+// that userID owns, or that belong to one of adminOrgIDs (the orgs they own or
+// administer), newest pause first.
+func ListNoOrgAccountPauses(ctx context.Context, db orm.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	var rows []*Trigger
+	q := noOrgAccountPause(db.Bun().NewSelect().Model(&rows))
+	if len(adminOrgIDs) > 0 {
+		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("user_id = ?", userID).WhereOr("org_id IN (?)", bun.List(adminOrgIDs))
+		})
+	} else {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.Order("paused_at DESC", "id").Limit(200).Scan(ctx); err != nil {
+		return nil, err
+	}
+	return triggersToCore(rows)
+}
+
+// ListPersonallyFundedTriggers returns userID's triggers of an org whose runs
+// may spend their own accounts: stamped any, or before the stamp (NULL),
+// oldest first.
+func ListPersonallyFundedTriggers(ctx context.Context, db orm.Context, userID string) ([]*core.Trigger, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	var rows []*Trigger
+	if err := db.Bun().NewSelect().Model(&rows).Where("user_id = ?", userID).Where("org_id IS NOT NULL").
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("unattended_funding IS NULL").WhereOr("unattended_funding = ?", core.UnattendedFundingAny)
+		}).Order("created_at", "id").Scan(ctx); err != nil {
+		return nil, err
+	}
+	return triggersToCore(rows)
 }

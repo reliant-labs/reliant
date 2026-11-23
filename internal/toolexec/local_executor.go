@@ -182,6 +182,7 @@ func (e *LocalToolExecutor) executeTool(
 	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
 	if toolContext.RunStep {
 		toolContext.RunWorkDir, _ = contextMap[RunWorkDirContextKey].(string)
+		toolContext.RunStepEnv = runStepEnvFrom(contextMap)
 	}
 	toolContext.BoundParams = boundParamsFrom(contextMap)
 	if machine, ok := contextMap[RunMachineContextKey].(map[string]interface{}); ok {
@@ -308,6 +309,31 @@ func (e *LocalToolExecutor) executeTool(
 // server recorded them in the context map (ToolRequest.BoundParams). The map
 // has crossed JSON on the way to a daemon, and stayed a []string on the way to
 // a worker.
+// runStepEnvFrom is the run step's own environment as the server recorded it
+// in the context map (ToolRequest.RunStepEnv): the *daemon.StepEnv itself
+// when the map stays in process, a decoded JSON object once it has crossed to
+// a daemon. Absent or unreadable is none.
+func runStepEnvFrom(contextMap map[string]interface{}) *daemon.StepEnv {
+	switch v := contextMap[RunStepEnvContextKey].(type) {
+	case *daemon.StepEnv:
+		if v.Empty() {
+			return nil
+		}
+		return v
+	case map[string]interface{}:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		var env daemon.StepEnv
+		if err := json.Unmarshal(raw, &env); err != nil || env.Empty() {
+			return nil
+		}
+		return &env
+	}
+	return nil
+}
+
 func boundParamsFrom(contextMap map[string]interface{}) []string {
 	var out []string
 	switch bound := contextMap[BoundParamsContextKey].(type) {

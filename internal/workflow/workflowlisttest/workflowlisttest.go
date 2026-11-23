@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
 // Repo is the repository ListWorkflows runs against, in memory and
@@ -127,16 +128,27 @@ func (r *Repo) GetProjectWorkflowsJSON(_ context.Context, projectID string) (*st
 	return r.projectWorkflows, nil
 }
 
-func (r *Repo) ListWorkflowDraftsByUser(_ context.Context, userID string) ([]*db.WorkflowDraft, error) {
-	r.Count("ListWorkflowDraftsByUser")
+func (d *Drafts) ListWorkflowDraftsByUser(_ context.Context, userID string) ([]*db.WorkflowDraft, error) {
+	d.r.Count("ListWorkflowDraftsByUser")
 	var out []*db.WorkflowDraft
-	for _, d := range r.drafts {
-		if d.UserID == userID {
-			out = append(out, d)
+	for _, draft := range d.r.drafts {
+		if draft.UserID == userID {
+			out = append(out, draft)
 		}
 	}
 	return out, nil
 }
+
+// Drafts is the saved-workflow reads of the fake, answering as
+// workflowdrafts.Service does: it is what a handler's Drafts dependency is set
+// to. Writes fall through to the nil embedded service and panic.
+type Drafts struct {
+	workflowdrafts.Service
+	r *Repo
+}
+
+// Drafts is the fake's workflowdrafts.Service.
+func (r *Repo) Drafts() *Drafts { return &Drafts{r: r} }
 
 func (r *Repo) draftBySlug(userID, slug string) *db.WorkflowDraft {
 	for _, d := range r.drafts {
@@ -147,23 +159,23 @@ func (r *Repo) draftBySlug(userID, slug string) *db.WorkflowDraft {
 	return nil
 }
 
-func (r *Repo) GetWorkflowDraftBySlug(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
-	r.Count("GetWorkflowDraftBySlug")
-	return r.draftBySlug(userID, slug), nil
+func (d *Drafts) GetWorkflowDraftBySlug(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	d.r.Count("GetWorkflowDraftBySlug")
+	return d.r.draftBySlug(userID, slug), nil
 }
 
 // GetUsableWorkflowBySlug mirrors db.Repo's: a complete, visible workflow, or
 // a not-runnable verdict for a visible draft.
-func (r *Repo) GetUsableWorkflowBySlug(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
-	r.Count("GetUsableWorkflowBySlug")
-	d := r.draftBySlug(userID, slug)
-	if d == nil || d.IsHidden {
+func (d *Drafts) GetUsableWorkflowBySlug(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+	d.r.Count("GetUsableWorkflowBySlug")
+	row := d.r.draftBySlug(userID, slug)
+	if row == nil || row.IsHidden {
 		return nil, nil
 	}
-	if d.Status != db.WorkflowDraftStatusComplete {
+	if row.Status != db.WorkflowDraftStatusComplete {
 		return nil, &db.WorkflowDraftNotRunnableError{Slug: slug}
 	}
-	return d, nil
+	return row, nil
 }
 
 func (r *Repo) ListVisibilityOverrides(context.Context, string, int32) (map[string]bool, error) {

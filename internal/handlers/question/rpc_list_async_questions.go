@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -43,7 +44,7 @@ func (s *Service) ListAsyncQuestions(
 		return nil, svcerr.NotFound("chat")
 	}
 
-	questions, err := s.deps.Repo.ListAsyncQuestionsByChat(ctx, req.Msg.ChatId)
+	questions, err := s.deps.Questions.ListAsyncQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list async questions"))
 	}

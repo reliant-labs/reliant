@@ -147,7 +147,7 @@ func startCLILoginServer(t *testing.T, router *cliLoginRouter) cliLoginServer {
 		s.narrow:  {ActingUserID: terminalTestUserID, Scopes: fat.SetOf(fat.ScopeReliantAPI)},
 		s.machine: {ActingUserID: terminalTestUserID, Scopes: fat.SetOf(fat.ScopeReliantAPI, fat.ScopeDaemonManage, fat.ScopeDaemonConnect)},
 	}
-	srv := httptest.NewServer(TerminalCLILoginWSHandler(router, staticTokenValidator{userID: terminalTestUserID}, tokens, cliLoginMachines{},
+	srv := httptest.NewServer(TerminalCLILoginWSHandler(router, loginCredentialValidator{auth.CredentialSession}, tokens, cliLoginMachines{},
 		withTerminalCreateTimeout(2*time.Second)))
 	t.Cleanup(srv.Close)
 	s.url = "ws" + strings.TrimPrefix(srv.URL, "http")

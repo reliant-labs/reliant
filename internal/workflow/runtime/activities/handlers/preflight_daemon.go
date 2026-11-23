@@ -67,6 +67,7 @@ type PreflightDaemonCheckOutput struct {
 // This fails fast with a clear error message if a daemon is required but not available.
 type PreflightDaemonCheckActivity struct {
 	repo         PreflightDaemonCheckStore
+	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a waiting slice re-checks the daemon; zero
 	// means preflightPollInterval. Tests shrink it.
@@ -79,9 +80,10 @@ type PreflightDaemonCheckActivity struct {
 const preflightPollInterval = 2 * time.Second
 
 // NewPreflightDaemonCheckActivity creates a new PreflightDaemonCheckActivity.
-func NewPreflightDaemonCheckActivity(repo PreflightDaemonCheckStore, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
+func NewPreflightDaemonCheckActivity(repo PreflightDaemonCheckStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
 	return &PreflightDaemonCheckActivity{
 		repo:         repo,
+		rows:         rows,
 		toolExecutor: toolExecutor,
 	}
 }
@@ -120,9 +122,9 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// Resumed workflows can carry inputs from before launch-time pinning, or
 	// a pin from before their chat moved to its workspace's machine.
 	// Wake/check the same durable machine their tools will use.
-	selector := runMachineSelector(ctx, a.repo, chat, input.DaemonSelector)
+	selector := runMachineSelector(ctx, a.rows, chat, input.DaemonSelector)
 
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("failed to get project for preflight check: %w", err)
 	}

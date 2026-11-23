@@ -23,9 +23,22 @@ type Deps struct {
 
 	// Router carries each request to the machine that holds its workspace.
 	Router Router
-	// Repo resolves a request's workspace, the machine it is on, and that
-	// machine's owner.
+	// Repo reads the chat a request names.
 	Repo Repository
+	// Placement resolves a request's workspace, the machine it is on, and
+	// that machine's owner.
+	Placement Placement
+}
+
+// workspaces is daemonplacement.WorkspaceReader (and
+// filepreview.BasePathReader): the chat from Repo, the rest from Placement.
+func (s *Service) workspaces() workspaceReader {
+	return workspaceReader{Repository: s.deps.Repo, Placement: s.deps.Placement}
+}
+
+type workspaceReader struct {
+	Repository
+	Placement
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -42,6 +55,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("file_system: Deps.Repo is required")
+	}
+	if d.Placement == nil {
+		return fmt.Errorf("file_system: Deps.Placement is required")
 	}
 	return nil
 }

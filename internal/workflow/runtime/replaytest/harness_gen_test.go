@@ -50,6 +50,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -193,7 +195,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
@@ -289,7 +291,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// daemon id is the truthful hermetic answer: a daemon has reported, and
 	// this project genuinely has no skills, so the miss is permanent rather
 	// than not-yet-known.
-	require.NoError(t, s.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, s.Repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "replayfix-daemon-" + shortID(),
 		PushedAt:  now,
@@ -324,7 +326,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport
 		MCPBinder:       toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon)),
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		// Inert for every workflow but the workflow_panic scenario's.
@@ -347,25 +349,29 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
-	pause := workflow.NewPauseService(s.Temporal, s.Repo)
+	pause := workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: s.Temporal, Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM())})
 	// No daemon router: the replay harness has no daemon. A new chat's run
 	// still schedules the greenfield probe (StartChat asks for it on every
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Temporal: s.Temporal,
-		Pause:    pause,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Backoff:   providerbackofftest.New(t, s.Repo),
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:    store.NewToolCallExtStore(s.Repo.ORM()),
+		Temporal:  s.Temporal,
+		Pause:     pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Signals:  pause,
-		Messages: chatSvc,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Signals:   pause,
+		Messages:  chatSvc,
 	})
 	require.NoError(t, err, "question service")
 
@@ -599,7 +605,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 	var q *db.Question
 	h.eventually("pending question on chat "+chatID, func() (bool, string) {
 		// Oldest first: the newest pending question is the last.
-		pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+		pending, err := store.NewQuestionExtStore(h.Stack.Repo.ORM()).ListPendingQuestionsByChat(h.Ctx, chatID)
 		if err != nil || len(pending) == 0 {
 			return false, fmt.Sprintf("pending questions: %d, %v", len(pending), err)
 		}

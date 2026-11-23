@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -158,6 +159,7 @@ type StateDerivation struct{ d *daemonstate.Derivation }
 type StateDerivationDeps struct {
 	NATS        *NATSConn
 	DB          *db.Repo
+	Mirror      daemonmirror.Service
 	ToolsDaemon *tools_daemon.Service
 }
 
@@ -166,7 +168,7 @@ type StateDerivationDeps struct {
 // ListDaemons reports, so it tells the owner's web clients to refetch rather
 // than leaving them to poll for it.
 func NewStateDerivation(d StateDerivationDeps) (*StateDerivation, error) {
-	derivation := daemonstate.NewDerivation(d.NATS.Conn, d.DB)
+	derivation := daemonstate.NewDerivation(d.NATS.Conn, d.DB, d.Mirror)
 	derivation.NotifyLifecycleApplied(d.ToolsDaemon.PublishDaemonListChanged)
 	return &StateDerivation{d: derivation}, nil
 }

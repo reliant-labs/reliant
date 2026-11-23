@@ -49,14 +49,9 @@ func cliProblems(ids []string, out, machine string) []Problem {
 				Problem: fmt.Sprintf("could not tell whether %s is signed in %s: its status check timed out or answered something unexpected", v.Name, on),
 				Fix:     fmt.Sprintf("run `reliant machine login --status %s%s`%s to see why, then `reliant machine login %s%s` to sign it in again", id, flag, where, id, flag)})
 		}
-		// Found only in ~/.local/bin, off the PATH the probe (and so every
-		// run step) got there: a daemon older than the one that appends
-		// ~/.local/bin to its children's PATH.
-		if d.OffPath && d.State != vendorcli.StateMissing {
-			problems = append(problems, Problem{Kind: "cli", Name: id, Machine: machine,
-				Problem: fmt.Sprintf("%s is installed in ~/.local/bin %s, which is not on the PATH its run steps get", v.Name, on),
-				Fix:     fmt.Sprintf("update Reliant %s (newer daemons put ~/.local/bin on their run steps' PATH), or call it by its full path, \"$HOME/.local/bin/%s\"", on, v.Binary)})
-		}
+		// OffPath is diagnostic only: cli_login requires installation and
+		// sign-in, not bare-name lookup. Older daemons can run the CLI by
+		// its full path even without ~/.local/bin on their children's PATH.
 	}
 	return problems
 }

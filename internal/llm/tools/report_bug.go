@@ -88,28 +88,33 @@ var processBugReportLimiter = newBugReportLimiter(reportBugWindow, reportBugPerC
 type reportBugTool struct {
 	// lookup is nil where there is no database (the daemon runtime); the
 	// report is then described by the tool context alone.
-	lookup  bugReportLookup
-	file    fileBugReport
-	limiter *bugReportLimiter
-	now     func() time.Time
+	lookup   bugReportLookup
+	machines bugReportMachines
+	file     fileBugReport
+	limiter  *bugReportLimiter
+	now      func() time.Time
 }
 
 // fileBugReport files a report and returns its id.
 type fileBugReport func(ctx context.Context, report telemetry.BugReport) (reportID string)
 
 // NewReportBugTool builds report_bug on the process logger.
-func NewReportBugTool(lookup bugReportLookup) Tool {
-	return newReportBugTool(lookup, func(ctx context.Context, report telemetry.BugReport) string {
+//
+// machines reads the machine a report came from; nil leaves its type and pod
+// out of the report.
+func NewReportBugTool(lookup bugReportLookup, machines bugReportMachines) Tool {
+	return newReportBugTool(lookup, machines, func(ctx context.Context, report telemetry.BugReport) string {
 		return telemetry.FileBugReport(ctx, nil, report)
 	}, processBugReportLimiter, time.Now)
 }
 
-func newReportBugTool(lookup bugReportLookup, file fileBugReport, limiter *bugReportLimiter, now func() time.Time) Tool {
+func newReportBugTool(lookup bugReportLookup, machines bugReportMachines, file fileBugReport, limiter *bugReportLimiter, now func() time.Time) Tool {
 	return NewToolWrapper[ReportBugParams, ToolResponse](&reportBugTool{
-		lookup:  lookup,
-		file:    file,
-		limiter: limiter,
-		now:     now,
+		lookup:   lookup,
+		machines: machines,
+		file:     file,
+		limiter:  limiter,
+		now:      now,
 	})
 }
 
@@ -243,8 +248,8 @@ func (t *reportBugTool) describeCaller(tc *rctx.ToolContext, report *telemetry.B
 			report.DaemonID = daemons[0].ID
 		}
 	}
-	if report.DaemonID != "" {
-		if daemon, err := t.lookup.GetDaemon(tc.Context, report.DaemonID); err == nil && daemon != nil {
+	if report.DaemonID != "" && t.machines != nil {
+		if daemon, err := t.machines.GetDaemon(tc.Context, report.DaemonID); err == nil && daemon != nil {
 			report.DaemonType = stringOrEmpty(daemon.DaemonType)
 			// A managed machine's hostname is its workspace pod's name.
 			if report.DaemonType == daemonTypeManaged {

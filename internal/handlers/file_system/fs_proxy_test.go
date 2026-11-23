@@ -44,9 +44,18 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 // newProxy builds the service on router and repo. A nil repo leaves the
 // harness's fail-closed stub in its place, for requests decided before any
 // lookup.
-func newProxy(t *testing.T, router Router, repo Repository) *Service {
+// newProxy builds the service over router and repo, which serves as Deps.Repo
+// and Deps.Placement for whichever of the two it implements.
+func newProxy(t *testing.T, router Router, repo any) *Service {
 	t.Helper()
-	return NewTestFileSystem(t, WithFileSystemDeps(Deps{Router: router, Repo: repo}))
+	deps := Deps{Router: router}
+	if r, ok := repo.(Repository); ok {
+		deps.Repo = r
+	}
+	if p, ok := repo.(Placement); ok {
+		deps.Placement = p
+	}
+	return NewTestFileSystem(t, WithFileSystemDeps(deps))
 }
 
 func TestFileSystemProxy_CreateDirectory_RoutesMkdirToDaemon(t *testing.T) {

@@ -102,7 +102,7 @@ func (s *Service) activationOrgs(ctx context.Context, user, project string, row,
 	if len(orgs) > 0 || project == "" {
 		return orgs, nil
 	}
-	p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, project, user)
+	p, err := s.deps.Projects.GetProjectWithUserCheck(ctx, project, user)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

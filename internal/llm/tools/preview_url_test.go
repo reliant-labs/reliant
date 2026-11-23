@@ -4,9 +4,10 @@ package tools
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/stretchr/testify/require"
 )
 
 func TestIsPreviewablePort(t *testing.T) {

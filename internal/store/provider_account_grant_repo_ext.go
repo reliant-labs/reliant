@@ -98,6 +98,16 @@ func ReplaceProviderAccountGrants(ctx context.Context, db orm.Context, orgID, ac
 	return err
 }
 
+// DeleteUserProviderAccountGrants deletes the grants made TO the person, and returns how many. The
+// grants they made as an admin stay: granted_by_user_id is attribution, not ownership.
+func DeleteUserProviderAccountGrants(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*ProviderAccountGrant)(nil)).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ProviderAccountGrantExtra carries fields on ProviderAccountGrant that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ProviderAccountGrant is
 // embedded on ProviderAccountGrantExtra (see provider_account_grant_orm.go), so a field added here is a field on

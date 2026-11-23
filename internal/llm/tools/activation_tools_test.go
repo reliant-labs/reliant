@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/require"
 )
 
 // activationBackend stands in for the trigger service: it applies a change

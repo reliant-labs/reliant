@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
 func draftUpdates(t *testing.T, repo *Repo, userID string) []UserUpdate {
@@ -78,16 +81,16 @@ func TestWorkflowDraftWrites_EachPublishesOneUpdate(t *testing.T) {
 	}{
 		{"update", func() error { draft.Name = "renamed"; return repo.UpdateWorkflowDraft(ctx, draft) }, 2},
 		{"update definition", func() error {
-			return repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, "name: y\n", WorkflowDraftStatusDraft)
+			return testDrafts(t, repo).UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, "name: y\n", WorkflowDraftStatusDraft)
 		}, 3},
 		{"set status", func() error {
-			_, err := repo.SetWorkflowDraftStatus(ctx, draft.ID, WorkflowDraftStatusComplete)
+			_, err := testDrafts(t, repo).SetWorkflowDraftStatus(ctx, draft.ID, WorkflowDraftStatusComplete)
 			return err
 		}, 4},
-		{"set hidden", func() error { _, err := repo.SetWorkflowDraftHidden(ctx, draft.ID, true); return err }, 5},
+		{"set hidden", func() error { _, err := testDrafts(t, repo).SetWorkflowDraftHidden(ctx, draft.ID, true); return err }, 5},
 		{"upsert", func() error {
 			up := *draft
-			_, err := repo.UpsertWorkflowDraft(ctx, &up)
+			_, err := testDrafts(t, repo).UpsertWorkflowDraft(ctx, &up)
 			return err
 		}, 6},
 	}
@@ -100,7 +103,7 @@ func TestWorkflowDraftWrites_EachPublishesOneUpdate(t *testing.T) {
 
 	second := newDraftForTest(userID)
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, second))
-	require.NoError(t, repo.DeleteWorkflowDraftBySlug(ctx, userID, second.Slug))
+	require.NoError(t, testDrafts(t, repo).DeleteWorkflowDraftBySlug(ctx, userID, second.Slug))
 	ups = draftUpdates(t, repo, userID)
 	require.Len(t, ups, len(steps)+3)
 	requireDraftUpdate(t, ups[len(ups)-1], second.ID, second.Slug, 1, true)
@@ -144,7 +147,7 @@ func TestUpdateWorkflowForkedFrom_PublishesVersionBump(t *testing.T) {
 
 	draft := newDraftForTest(userID)
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
-	saved, err := repo.UpdateWorkflowForkedFrom(ctx, draft.ID, "origin-slug")
+	saved, err := testDrafts(t, repo).UpdateWorkflowForkedFrom(ctx, draft.ID, "origin-slug")
 	require.NoError(t, err)
 	require.EqualValues(t, 2, saved.Version)
 	ups := draftUpdates(t, repo, userID)
@@ -163,8 +166,8 @@ func TestWorkflowDraftWrites_RenameCollisionIsDomainError(t *testing.T) {
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, b))
 	b.Slug = a.Slug
 	require.ErrorIs(t, repo.UpdateWorkflowDraft(ctx, b), ErrWorkflowSlugTaken)
-	require.ErrorIs(t, repo.UpdateWorkflowDraftDefinition(ctx, b.ID, b.Name, a.Slug, "name: z\n", WorkflowDraftStatusDraft), ErrWorkflowSlugTaken)
-	_, err := repo.UpsertWorkflowDraft(ctx, &WorkflowDraft{ID: uuid.NewString(), UserID: userID, Name: "n", Slug: a.Slug, Definition: "x", Status: WorkflowDraftStatusDraft})
+	require.ErrorIs(t, testDrafts(t, repo).UpdateWorkflowDraftDefinition(ctx, b.ID, b.Name, a.Slug, "name: z\n", WorkflowDraftStatusDraft), ErrWorkflowSlugTaken)
+	_, err := testDrafts(t, repo).UpsertWorkflowDraft(ctx, &WorkflowDraft{ID: uuid.NewString(), UserID: userID, Name: "n", Slug: a.Slug, Definition: "x", Status: WorkflowDraftStatusDraft})
 	require.NoError(t, err) // upsert resolves the conflict by updating, never erroring
 }
 
@@ -181,12 +184,26 @@ func TestUpdateWorkflowDraftDefinitionAtVersion_RefusesAStaleVersion(t *testing.
 	read, err := repo.GetWorkflowDraft(ctx, draft.ID)
 	require.NoError(t, err)
 
-	require.NoError(t, repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: a\n", WorkflowDraftStatusDraft))
-	err = repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: b\n", WorkflowDraftStatusDraft)
+	require.NoError(t, testDrafts(t, repo).UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: a\n", WorkflowDraftStatusDraft))
+	err = testDrafts(t, repo).UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, read.Version, draft.Name, draft.Slug, "name: b\n", WorkflowDraftStatusDraft)
 	require.ErrorIs(t, err, ErrWorkflowDraftVersionConflict)
 
 	got, err := repo.GetWorkflowDraft(ctx, draft.ID)
 	require.NoError(t, err)
 	require.Equal(t, "name: a\n", got.Definition)
 	require.Equal(t, read.Version+1, got.Version)
+}
+
+// testDrafts is the drafts package over repo (workflowdraftstest imports db,
+// so a db test builds it itself).
+func testDrafts(t *testing.T, repo *Repo) workflowdrafts.Service {
+	t.Helper()
+	svc, err := workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+		Tx:      repo,
+		Locks:   repo,
+		Updates: repo,
+		Drafts:  store.NewWorkflowDraftExtStore(repo.ORM()),
+	})
+	require.NoError(t, err)
+	return svc
 }

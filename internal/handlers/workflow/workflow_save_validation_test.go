@@ -7,15 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // The workflow draft lifecycle (specs/workflow-draft-lifecycle.md): a DRAFT is
@@ -35,7 +40,7 @@ func saveTestSetup(t *testing.T) (context.Context, *db.Repo, *Service, string) {
 		ID: projectID, UserID: "test-user", Name: "Save Validation Project",
 		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo})), projectID
+	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM())})), projectID
 }
 
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {

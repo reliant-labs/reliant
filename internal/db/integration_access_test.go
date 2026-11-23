@@ -38,7 +38,7 @@ func accessTrigger(t *testing.T, repo *Repo, userID, integration string, enabled
 
 func routedIDs(t *testing.T, repo *Repo, integration, account, resource string, freshAfter time.Time) []string {
 	t.Helper()
-	got, err := repo.ListAccessRoutedTriggers(context.Background(), integration, account, resource, freshAfter)
+	got, err := store.ListAccessRoutedTriggers(context.Background(), repo.ORM(), integration, account, resource, freshAfter)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(got))
 	for _, tr := range got {
@@ -122,7 +122,7 @@ func TestAccessRoutingHonoursANamedConnection(t *testing.T) {
 		ID: uuid.NewString(), OwnerKind: core.ConnectionOwnerUser, UserID: "alice", IntegrationID: "github",
 		AuthKind: "oauth2", Name: "gh", Status: core.ConnectionStatusActive, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, conn, nil,
+	require.NoError(t, TestConnections(t, repo).CreateConnection(ctx, conn, nil,
 		core.ConnectionEvent{ConnectionID: conn.ID, UserID: "alice", Kind: core.ConnectionEventCreated, Actor: "user:alice"}))
 	withConn := accessTrigger(t, repo, "alice", "github", true, &conn.ID)
 	delegated := accessTrigger(t, repo, "alice", "github", true, nil)

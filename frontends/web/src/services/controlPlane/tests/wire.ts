@@ -5,19 +5,17 @@
  * as protobuf-es generates them, mapped to the plain types in types.ts, and
  * the requests built from them.
  *
- * THE WIRE TYPES BELOW ARE DECLARED BY HAND, FOR NOW — the Vulnerabilities
- * stack's arrangement (../vulnerabilities/wire.ts). The generated client comes
- * from proto-vendor/controlplane/, which takes only the services
- * control-plane's proto/public-api.txt EXPORTS, and TestsService is withheld
- * there until control-plane mounts it (control-plane#3286 adds the proto
- * withheld; the mount is C4). Each interface here is the structural subset of
- * the generated message of the same name (control-plane
- * proto/services/tests/v1/tests.proto): field names as protobuf-es writes
- * them, enums as their numbers, int64 as bigint, timestamps as
- * google.protobuf.Timestamp. So once `task contract:controlplane:sync` brings
- * the service in (W0), the generated messages are assignable to these, and
- * the swap is testApi.ts calling the generated client; these declarations can
- * then be replaced by imports of the generated types.
+ * The wire interfaces below are the structural subset of the generated
+ * messages (gen/controlplane/services/tests/v1/tests_pb.ts, vendored from
+ * control-plane at the commit proto-vendor/controlplane/SOURCE names): field
+ * names as protobuf-es writes them, enums as their numbers, int64 as bigint,
+ * timestamps as google.protobuf.Timestamp. testApi.ts hands each generated
+ * response straight to its mapper here, so the compiler checks that every
+ * field below exists on the real message with a compatible type. They stay
+ * plain interfaces, not the generated types, because the fixtures
+ * (components/Forge/Tests/*Fixtures.ts) build them as object literals.
+ * Fields added to the proto after the first sync are optional here, so the
+ * fixtures need not set them.
  */
 
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -35,6 +33,7 @@ import type {
   FileCoverage,
   FileCoverageRequest,
   FlakyRequest,
+  HostHealth,
   LanguageCoverage,
   LineCoverage,
   PackageCoverage,
@@ -239,17 +238,28 @@ export interface WireSummaryResponse {
   lastRun?: WireRunSummary;
   lowCoveragePackages: WirePackageCoverage[];
   hostFailures30d: number;
+  hostHealth?: WireHostHealth[];
   /**
-   * NOT IN THE PROTO YET (control-plane#3331 item 5; the name may change when
-   * it lands): true when the project acts at `suspected` (forge.yaml
+   * NOT IN THE PROTO YET (absent from the vendored tests.proto at
+   * control-plane 86c178dbadb5; control-plane#3331 item 5, the name may change
+   * when it lands): true when the project acts at `suspected` (forge.yaml
    * tests.flakes.issues on, or quarantine: pr). Absent reads as false.
    */
   actsOnSuspected?: boolean;
 }
 
+export interface WireHostHealth {
+  signature: string;
+  events: number;
+  runs: string[];
+  tests: string[];
+}
+
 export interface WireListRunsResponse {
   runs: WireRunSummary[];
   nextPageToken: string;
+  /** Unset when the server did not count them. */
+  totalCount?: bigint;
 }
 
 export interface WireFailure {
@@ -260,6 +270,7 @@ export interface WireFailure {
   failureSignature: string;
   attempts: number;
   verdict: number;
+  infraGroup?: string;
 }
 
 export interface WireTiming {
@@ -284,6 +295,7 @@ export interface WireCoverageNode {
   lanes: { [lane: string]: WireStatementCoverage };
   diff?: WireDiffCoverage;
   changed: boolean;
+  dirty?: boolean;
 }
 
 export interface WireCoverageResponse {
@@ -313,6 +325,7 @@ export interface WireFileCoverageResponse {
   lanes: string[];
   coverage?: WireCoverage;
   lines: WireLineCoverage[];
+  dirty?: boolean;
 }
 
 export interface WireReleaseTestsResponse {
@@ -512,13 +525,14 @@ export function summaryOf(res: WireSummaryResponse): TestSummary {
       (p): PackageCoverage => ({ path: p.path, lang: p.lang, combined: statementsOf(p.combined), lanes: lanesOf(p.lanes), deltaPercent: p.deltaPercent ?? null })
     ),
     hostFailures30d: res.hostFailures30d,
+    hostHealth: (res.hostHealth ?? []).map((h): HostHealth => ({ signature: h.signature, events: h.events, runs: [...h.runs], tests: [...h.tests] })),
     // Absent until the server says: the customer default, flaky only.
     flakePolicy: res.actsOnSuspected ? "suspected" : "flaky",
   };
 }
 
 export function runPageOf(res: WireListRunsResponse): TestRunPage {
-  return { runs: res.runs.map(runOf), nextPageToken: res.nextPageToken };
+  return { runs: res.runs.map(runOf), nextPageToken: res.nextPageToken, totalCount: res.totalCount === undefined ? null : n(res.totalCount) };
 }
 
 export function runDetailOf(res: WireRunResponse): TestRunDetail {
@@ -533,6 +547,7 @@ export function runDetailOf(res: WireRunResponse): TestRunDetail {
         failureSignature: f.failureSignature,
         attempts: f.attempts,
         verdict: flakeVerdictOf(f.verdict),
+        infraGroup: f.infraGroup ?? "",
       })
     ),
     retryPasses: res.retryPasses.map(keyOf),
@@ -558,6 +573,7 @@ export function coverageTreeOf(res: WireCoverageResponse): CoverageTree {
         lanes: lanesOf(c.lanes),
         diff: diffOf(c.diff),
         changed: c.changed,
+        dirty: c.dirty ?? false,
       })
     ),
   };
@@ -582,6 +598,7 @@ export function fileCoverageOf(res: WireFileCoverageResponse): FileCoverage {
         changed: l.changed,
       })
     ),
+    dirty: res.dirty ?? false,
   };
 }
 

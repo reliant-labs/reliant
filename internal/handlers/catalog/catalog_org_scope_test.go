@@ -70,7 +70,7 @@ func newPickerFixture(t *testing.T) (*Service, *memberOf, context.Context) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	llmdrivers.InitializeAPIKeyProvider(repo)
+	llmdrivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	db.SeedProviderAccount(t, repo, pickerUser, "anthropic", "sk-ant-picker")
 
 	prev := orgpolicy.EnforcementOf(orgpolicy.PointProviders)

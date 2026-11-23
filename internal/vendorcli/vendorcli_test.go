@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -32,6 +33,9 @@ type machine struct {
 
 func newMachine(t *testing.T) *machine {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fixtures require POSIX shell scripts and symlinks")
+	}
 	root := t.TempDir()
 	m := &machine{t: t, home: filepath.Join(root, "home"), fake: filepath.Join(root, "fake"), sys: filepath.Join(root, "sys"), log: filepath.Join(root, "calls.log")}
 	for _, d := range []string{m.home, m.fake, m.sys} {

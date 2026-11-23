@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/tmpl"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 const (
@@ -119,6 +120,7 @@ func (s *service) List(ctx context.Context, req ListRequest) (*ListResult, error
 	if req.UserID == "" {
 		return nil, &detailError{ErrBadRequest, "no user"}
 	}
+	ctx = callScope(ctx, req.UserID, req.OrgID)
 	if req.PageSize < 0 {
 		return nil, &detailError{ErrBadRequest, "page_size must not be negative"}
 	}
@@ -225,6 +227,7 @@ func (s *service) Resolve(ctx context.Context, req ResolveRequest) (*Resolution,
 	if req.UserID == "" {
 		return nil, &detailError{ErrBadRequest, "no user"}
 	}
+	ctx = callScope(ctx, req.UserID, req.OrgID)
 	rt, err := s.typeFor(req.Type)
 	if err != nil {
 		return nil, err
@@ -453,6 +456,13 @@ func isEmpty(v any) bool {
 // --- running the action -------------------------------------------------------
 
 var errNeedsConnection = errors.New("inputoptions: no usable connection")
+
+// callScope names, for the integration.call spans of the calls a listing
+// makes, whose listing it is: the user, and the org when the caller knows one.
+// A listing runs outside any run, so nothing else would.
+func callScope(ctx context.Context, userID, orgID string) context.Context {
+	return telemetry.WithRunScope(ctx, telemetry.RunScope{UserID: userID, OrgID: orgID})
+}
 
 // run performs one call as userID, or returns the cached listing of an
 // identical one made moments ago. Concurrent identical calls share one call.

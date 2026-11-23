@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -72,7 +74,7 @@ func TestListLiveBackgroundSpawns(t *testing.T) {
 	insertTestWorkflowWithParent(t, repo, child5, other, &other, Failed())
 	insertTestSpawnToolCall(t, repo, "tc-5", other, other, &child5, core.ToolCallStatusBackgrounded)
 
-	got, err := repo.ListLiveBackgroundSpawns(ctx, root)
+	got, err := store.NewToolCallExtStore(repo.ORM()).ListLiveBackgroundSpawns(ctx, root)
 	if err != nil {
 		t.Fatalf("ListLiveBackgroundSpawns: %v", err)
 	}

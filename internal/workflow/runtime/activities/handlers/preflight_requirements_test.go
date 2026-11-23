@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
 )
 
 // requirementsStore is the chat → project lookup, for a chat on a machine.
@@ -77,8 +78,8 @@ func (f *fakeConnections) Credential(_ context.Context, req httpaction.Credentia
 	return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: req.IntegrationID + " is not connected."}
 }
 
-func newRequirementsActivity(store RunExecutorContextStore, m *fakeProbeMachine, conns *fakeConnections) *PreflightRequirementsActivity {
-	a := NewPreflightRequirementsActivity(store, nil, conns)
+func newRequirementsActivity(store requirementsStore, m *fakeProbeMachine, conns *fakeConnections) *PreflightRequirementsActivity {
+	a := NewPreflightRequirementsActivity(store, store, nil, conns)
 	a.machine = func(ec RunExecutorContext) requirements.Machine { m.where = ec; return m }
 	return a
 }

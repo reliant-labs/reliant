@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,7 +119,7 @@ func runRemoteCLILogin(cmd *cobra.Command, target loginTarget, vendor vendorcli.
 		return explainLoginDial(conn, target, err, resp)
 	}
 	defer ws.Close()
-	return pumpRemoteLogin(ws, target, cmd.InOrStdin(), cmd.OutOrStdout())
+	return pumpRemoteLogin(cmd.Context(), ws, target, cmd.InOrStdin(), cmd.OutOrStdout())
 }
 
 // explainLoginDial turns a refused websocket handshake into what to do.
@@ -141,7 +142,11 @@ func explainLoginDial(conn *connection, target loginTarget, err error, resp *htt
 }
 
 // pumpRemoteLogin carries the session until it ends.
-func pumpRemoteLogin(ws *websocket.Conn, target loginTarget, stdin io.Reader, stdout io.Writer) error {
+func pumpRemoteLogin(ctx context.Context, ws *websocket.Conn, target loginTarget, stdin io.Reader, stdout io.Writer) error {
+	// DialContext only governs the handshake. Close the connection on command
+	// cancellation too, interrupting reads and writes so raw mode is restored.
+	stop := context.AfterFunc(ctx, func() { _ = ws.Close() })
+	defer stop()
 	var first loginFrame
 	if err := ws.ReadJSON(&first); err != nil {
 		return fmt.Errorf("starting the sign-in on %s: %w", target.display(), err)
