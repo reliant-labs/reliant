@@ -379,11 +379,10 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Config Health Indicator */}
             <ConfigHealthIndicator />
 
-            {/* Settings, only while there is no project: with one, the nav
-                (Settings at its foot) is the way in. A user with no project
-                yet (the first-run state) has no nav, and reaches /settings,
-                and signs out, through this. */}
-            {onNavigateToSettings && !currentProject && (
+            {/* Keep Settings available even when a project is selected: the
+                sidebar's Settings link is not mounted in every shell state.
+                This also provides access to sign-out. */}
+            {onNavigateToSettings && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}
                 side="bottom"
