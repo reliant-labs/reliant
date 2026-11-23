@@ -164,8 +164,60 @@ func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Co
 // Compile-time check.
 var _ Orphans = (*MockOrphans)(nil)
 
+// forge:section MockWorkflowLoader
+// forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
+
+// MockWorkflowLoader is a test mock for the WorkflowLoader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowLoader.<Method>Func not set" error.
+type MockWorkflowLoader struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
+
+// forge:section MockDaemonReader
+// forge:hash=77b97304e251e097932e3aae261fe6e3253ecd750fdf801d1c935dc41c1fb362
+
+// MockDaemonReader is a test mock for the DaemonReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockDaemonReader.<Method>Func not set" error.
+type MockDaemonReader struct {
+	contractkit.Recorder
+	GetDaemonFunc func(context.Context, string) (*db.Daemon, error)
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockDaemonReader", "GetDaemon")
+}
+
+// Compile-time check.
+var _ DaemonReader = (*MockDaemonReader)(nil)
+
 // forge:section MockReconcilerStore
-// forge:hash=837f5779baf4b0af0bc878dff5c368ca20d6cb6202fe031d5787b4b436aff9da
+// forge:hash=cf7e1559de4781059ce561eb7671d4de9acbc763a77fa9ea59c87c78d11bd077
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -175,7 +227,6 @@ var _ Orphans = (*MockOrphans)(nil)
 // "MockReconcilerStore.<Method>Func not set" error.
 type MockReconcilerStore struct {
 	contractkit.Recorder
-	GetWorkflowFunc                          func(context.Context, string) (*db.Workflow, error)
 	ListWorkflowsByStatusFunc                func(context.Context, db.WorkflowStatus) ([]*db.Workflow, error)
 	ListWorkflowsByChatFunc                  func(context.Context, string) ([]*db.Workflow, error)
 	CompareAndSwapWorkflowStatusFunc         func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
@@ -195,7 +246,6 @@ type MockReconcilerStore struct {
 	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResultFunc                 func(context.Context, string, *db.ToolCallResult) error
 	EmitToolCallUpdateFunc                   func(context.Context, string, db.ToolCallUpdate) error
-	GetDaemonFunc                            func(context.Context, string) (*db.Daemon, error)
 	GetChatFunc                              func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                           func(context.Context, *db.Chat) error
 	GetPinnedProjectCatalogFunc              func(context.Context, string) (*db.PinnedCatalog, bool, error)
@@ -218,15 +268,6 @@ type MockReconcilerStore struct {
 	GetContentBlockByToolCallIDFunc          func(context.Context, string) (*db.MessageContentBlock, error)
 	GetMessageFunc                           func(context.Context, string) (*db.Message, error)
 	UpsertToolCallFunc                       func(context.Context, *core.ToolCall) error
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockReconcilerStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetWorkflow")
 }
 
 // ListWorkflowsByStatus records the call and delegates to ListWorkflowsByStatusFunc when set.
@@ -398,15 +439,6 @@ func (m *MockReconcilerStore) EmitToolCallUpdate(ctx context.Context, chatID str
 		return m.EmitToolCallUpdateFunc(ctx, chatID, update)
 	}
 	return contractkit.MockNotSet("MockReconcilerStore", "EmitToolCallUpdate")
-}
-
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockReconcilerStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetDaemon")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
