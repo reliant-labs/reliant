@@ -38,7 +38,8 @@ export function useOpenProjectListener() {
         projectId: existingProject.id,
         name: existingProject.name
       });
-      await selectProject(existingProject);
+      // The person opened it: over a chat's URL, its chat follows.
+      await selectProject(existingProject, { leaveChatUrl: true });
     } else {
       // Create a new project with name derived from path
       const pathParts = normalizedPath.split('/');
