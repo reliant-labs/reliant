@@ -1524,6 +1524,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Config:      g.Cfg,
 		Repo:        g.Database(),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
+		Projects:    store.NewProjectExtStore(g.Database().ORM()),
 		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
 		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
 		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),

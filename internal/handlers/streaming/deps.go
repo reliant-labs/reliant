@@ -66,9 +66,8 @@ type Repository interface {
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 
-	// The org of the project or saved workflow a user update is about, which
+	// The org of the saved workflow a user update is about, which
 	// decides whether the user stream delivers it (orgGate).
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 
 	// What a chat snapshot is assembled from.
@@ -81,6 +80,12 @@ type Repository interface {
 	// roles below already declare them.
 	threads.Repository
 	messageproto.ToolCallReader
+}
+
+// Projects reads the org of the project a user update is about (orgGate).
+// store.ProjectExtStore satisfies it.
+type Projects interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // Senders titles the senders of the messages a read assembles (a sender that
