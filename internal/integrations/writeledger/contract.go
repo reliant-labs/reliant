@@ -68,9 +68,15 @@ type Store interface {
 	CompleteIntegrationWrite(ctx context.Context, id string, res core.IntegrationWriteResult) (bool, error)
 }
 
-// RunLookup resolves the run a call is made for. *db.Repo satisfies it.
+// WorkflowLoader reads the workflow row a call's run id names.
+// store.WorkflowExtStore satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// RunLookup resolves the chat and trigger a call is made for. *db.Repo
+// satisfies it.
 type RunLookup interface {
-	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
@@ -80,6 +86,9 @@ type RunLookup interface {
 type Deps struct {
 	Store Store
 	Runs  RunLookup
+	// Workflows reads the run a call names. nil treats every run id as the
+	// chat id, as a run whose row is missing is treated.
+	Workflows WorkflowLoader
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 }

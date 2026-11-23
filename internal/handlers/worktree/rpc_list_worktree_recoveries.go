@@ -29,7 +29,7 @@ func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *connect.Reque
 		}
 		ok, seen := readable[row.ProjectID]
 		if !seen {
-			project, getErr := s.deps.Repo.GetProject(ctx, row.ProjectID)
+			project, getErr := s.getProject(ctx, row.ProjectID)
 			ok = (svcerr.IsNotFound(getErr) && authz.CanReadOwn(ctx, userID, nil)) || (getErr == nil && authz.CanReadProject(ctx, userID, project))
 			readable[row.ProjectID] = ok
 		}

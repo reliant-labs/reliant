@@ -110,16 +110,20 @@ const tourStart = "forge:fg-intro";
 const navGroups = {
   Issues: [`${home}/observability/errors`, `${home}/observability/alerts`],
   Performance: [`${home}/observability/traces`, `${home}/observability/rpc`],
-  "More tools": [`${home}/observability/dashboards`, `${home}/observability/logs`, `${home}/observability/metrics`, `${home}/observability/graph`, `${home}/storage`],
+  "More tools": [`${home}/observability/logs`, `${home}/observability/metrics`, `${home}/observability/profiles`, `${home}/observability/graph`],
 };
 const navRows = [
   { label: "Home", to: (key) => key === demoSection("home") },
   { label: "Overview", to: (key) => key === home },
+  { label: "Services", to: (key) => key === `${home}/services` },
+  { label: "Storage", to: (key) => key === `${home}/storage` },
+  { label: "Dashboards", to: (key) => key === `${home}/observability/dashboards` },
   { label: "Sessions", to: (key) => key === `${home}/observability/sessions` },
   { label: "Product analytics", to: (key) => key.startsWith(`${home}/observability/dashboards/`) },
   { label: "Releases", to: (key) => key === `${home}/releases` },
   { label: "Data", to: (key) => key === `${home}/data` },
-  { label: "Users", to: (key) => key === `${home}/users` },
+  // Users became Auth (/users redirects there).
+  { label: "Auth", to: (key) => key === `${home}/auth` },
   { label: "Environments", to: (key) => key === `${home}/environments` },
   { label: "Secrets", to: (key) => key === `${home}/secrets` },
   { label: "Domains", to: (key) => key === `${home}/domains` },

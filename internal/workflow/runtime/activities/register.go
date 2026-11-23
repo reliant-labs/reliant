@@ -173,7 +173,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// MESSAGE PROCESSING ACTIVITIES
 	// ========================================================================
 
-	saveMessage := handlers.NewSaveMessageActivity(deps.Repo)
+	saveMessage := handlers.NewSaveMessageActivity(handlers.SaveMessageDeps{Store: deps.Repo, Threads: deps.Threads})
 	v2.RegisterActivity(registry, saveMessage)
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
@@ -188,7 +188,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, ToolResults: toolCalls, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -219,7 +219,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, toolCalls, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 
@@ -285,7 +285,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo, deps.ProviderBackoff))
+	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))

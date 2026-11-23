@@ -14,6 +14,6 @@ func TestWorktreeServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestWorktree(t, WithWorktreeDeps(Deps{Repo: repo}))
+	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: repo})))
 	viewertest.RunService(t, f, svc, "reliant.v1.WorktreeService", nil)
 }

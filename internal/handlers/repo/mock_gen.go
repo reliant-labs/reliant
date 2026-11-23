@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=a49d09aa3f2de6243dcbc6acf086641ec87055f13de623db64b208128f49cd13
+// forge:hash=01fd76e06ad3cc85c6dd1d9f3437a12a087638cb8fedf59adf001486cc770868
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -31,7 +31,6 @@ type MockRepository struct {
 	UpdateProjectFunc                func(context.Context, *db.Project, string) error
 	GetRepoFunc                      func(context.Context, string) (*core.Repo, error)
 	GetRepoByProjectAndPathFunc      func(context.Context, string, string) (*core.Repo, error)
-	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	ListRepoForgeAppsByProjectFunc   func(context.Context, string) ([]core.RepoForgeApp, error)
 	CreateRepoFunc                   func(context.Context, *core.Repo) error
 	DeleteRepoFunc                   func(context.Context, string) error
@@ -64,15 +63,6 @@ func (m *MockRepository) GetRepoByProjectAndPath(ctx context.Context, projectID 
 		return m.GetRepoByProjectAndPathFunc(ctx, projectID, relativePath)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetRepoByProjectAndPath")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockRepository) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListReposByProject")
 }
 
 // ListRepoForgeAppsByProject records the call and delegates to ListRepoForgeAppsByProjectFunc when set.
@@ -122,6 +112,32 @@ func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, proje
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockRepoLister
+// forge:hash=67847607cfccbb0e7dd016307a836dfcc60c123ee0ce4360f7436520c2990c43
+
+// MockRepoLister is a test mock for the RepoLister interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRepoLister.<Method>Func not set" error.
+type MockRepoLister struct {
+	contractkit.Recorder
+	ListReposByProjectFunc func(context.Context, string) ([]*core.Repo, error)
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockRepoLister) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepoLister", "ListReposByProject")
+}
+
+// Compile-time check.
+var _ RepoLister = (*MockRepoLister)(nil)
 
 // forge:section MockSender
 // forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241
