@@ -108,6 +108,7 @@ func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router dae
 		Config: &typedconfig.Config{},
 		Repo:   repo,
 		Pools:  registryPools(repo),
+		Mirror: &daemon_registry.MockMirror{},
 		Router: router,
 	})
 	require.NoError(t, err)

@@ -43,7 +43,7 @@ func (s *Service) ListTriggers(
 	for i, t := range stored {
 		ids[i] = t.ID
 	}
-	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
+	recent, err := s.deps.Firings.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve triggers' recent firings", "error", err)
 		recent = nil

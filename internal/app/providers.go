@@ -664,7 +664,7 @@ type PauseServiceDeps struct {
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	ps := v2workflow.NewPauseService(d.Temporal.Client, d.DB)
+	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())})
 	ps.SetNamespace(d.Temporal.Namespace)
 	return ps, nil
 }

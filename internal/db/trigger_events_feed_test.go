@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func feedTrigger(t *testing.T, repo *Repo, id string) *core.Trigger {
@@ -172,7 +173,7 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, items, "another user must never read this trigger's firings")
 
-	recent, err := repo.RecentTriggerFirings(ctx, "someone-else", []string{tr.ID}, 10)
+	recent, err := store.RecentTriggerFirings(ctx, repo.ORM(), "someone-else", []string{tr.ID}, 10)
 	require.NoError(t, err)
 	assert.Empty(t, recent)
 
@@ -195,7 +196,7 @@ func TestRecentTriggerFirings_WindowPerTrigger(t *testing.T) {
 	}
 	feedEvent(t, repo, "ev-b-0", b.ID, "test-user", core.TriggerEventFailed, base)
 
-	recent, err := repo.RecentTriggerFirings(ctx, "test-user", []string{a.ID, b.ID, "trg-win-none"}, 3)
+	recent, err := store.RecentTriggerFirings(ctx, repo.ORM(), "test-user", []string{a.ID, b.ID, "trg-win-none"}, 3)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ev-a-4", "ev-a-3", "ev-a-2"}, idsOfEvents(recent[a.ID]))
 	assert.Equal(t, []string{"ev-b-0"}, idsOfEvents(recent[b.ID]))

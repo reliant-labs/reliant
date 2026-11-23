@@ -255,7 +255,7 @@ func newCapsAgentEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, e *ca
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetMessageWriter(messageWriterFunc(func(context.Context, types.RuntimeContext, *reliantv1.SaveMessageNodeArgs, string, int32) (*reliantv1.SaveMessageOutput, error) {
 		return &reliantv1.SaveMessageOutput{MessageId: "msg-save"}, nil
 	}))

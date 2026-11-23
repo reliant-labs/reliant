@@ -51,13 +51,27 @@ type Deps struct {
 	// Config holds the pass's thresholds; nil, or a zero field, is the
 	// DefaultConfig value.
 	Config *ReconcilerConfig
+	// Workflows reads a workflow row by id.
+	Workflows WorkflowLoader
+	// Daemons reads the daemon a backgrounded process runs on.
+	Daemons DaemonReader
+}
+
+// WorkflowLoader reads a workflow row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// DaemonReader reads a daemon row by id. store.DaemonExtStore satisfies it.
+type DaemonReader interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // ReconcilerStore is everything a reconcile pass reads and writes.
 type ReconcilerStore interface {
 	// Workflow rows: the drift scan, CAS terminal transitions, and the
 	// checkpoint a terminal repair keeps or drops.
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListWorkflowsByStatus(ctx context.Context, status db.WorkflowStatus) ([]*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
@@ -86,7 +100,6 @@ type ReconcilerStore interface {
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	// The agent-message mailbox.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)

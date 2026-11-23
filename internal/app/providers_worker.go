@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -497,19 +498,21 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		return nil, fmt.Errorf("trigger service: %w", err)
 	}
 	svc, err := trigger.New(trigger.Deps{
-		OrgGitHubApps: apps,
-		Logger:        d.Logger,
-		Config:        d.Config,
-		Repo:          repo,
-		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Pools:         store.NewMachinePoolExtStore(repo.ORM()),
-		Syncer:        syncer,
-		Fires:         fires,
-		ControlPlane:  hostedControlPlane(d.ControlPlane),
-		Access:        access,
-		Integrations:  d.Integrations.Config,
-		Sealer:        d.Vault,
-		Catalog:       d.Pollers,
+		OrgGitHubApps:  apps,
+		Logger:         d.Logger,
+		Config:         d.Config,
+		Repo:           repo,
+		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
+		Syncer:         syncer,
+		Fires:          fires,
+		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		Access:         access,
+		Integrations:   d.Integrations.Config,
+		Sealer:         d.Vault,
+		Catalog:        d.Pollers,
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
@@ -539,6 +542,7 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger     writeledger.Service
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
+	Mirror          daemonmirror.Service
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -580,7 +584,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	// The registry service is a library here, not a mount: the label and
 	// pool tools call its rpcs in-process, as the run's owner. Its
 	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM())}
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
 	if d.Router != nil && d.Router.ControlPlane != nil {
 		registryDeps.IdleTimeouts = d.Router.ControlPlane
 	}

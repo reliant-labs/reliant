@@ -102,7 +102,7 @@ func newWrapperHarness(
 		writer: &recordingMessageWriter{},
 	}
 	h.env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
-	registry := NewActivityRegistry(h.repo)
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: h.repo, Workflows: h.repo})
 	registry.SetMessageWriter(h.writer)
 	for _, c := range configure {
 		c(registry)
@@ -196,7 +196,7 @@ func TestWrapperSave_CancelledActivityDoesNotSave(t *testing.T) {
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	repo := &wrapperTestRepo{}
 	writer := &recordingMessageWriter{}
-	registry := NewActivityRegistry(repo)
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: repo, Workflows: repo})
 	registry.SetMessageWriter(writer)
 
 	ctx, cancel := context.WithCancel(context.Background())
