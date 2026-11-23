@@ -35,18 +35,17 @@ import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
 import { describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { WORKFLOWS_SHOW_KEYS, type LibrarySearch, type LibrarySortKey, type WorkflowsShowKey } from "@/routeSchemas";
+import { useProjectLibraries, useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import {
   useCopyWorkflow,
   useDeleteWorkflow,
   useImportWorkflow,
-  useProjectLibraries,
   useSetWorkflowVisibility,
-  useWorkflowLibrary,
-} from "@/hooks/workflow-library-queries";
+} from "@/hooks/workflow-service-hooks_gen";
 import { useHiddenItems, useScopePreferences, useToggleHiddenItem, useUpdateScopePreferences } from "@/hooks/settings-queries";
 import { useProjects } from "@/hooks/project-queries";
 import { useProjectStore } from "@/store/projectStore";
-import { downloadWorkflow } from "@/hooks/workflow-queries";
+import { downloadWorkflow, importWorkflowRequest, workflowWriteRefresh } from "@/hooks/workflow-queries";
 import Card from "../../forge-ui/card";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
@@ -124,7 +123,7 @@ export function WorkflowsListPage() {
 function WorkflowsHeader({ projectId }: { projectId?: string }) {
   const navigate = useNavigate();
   const fileInput = useRef<HTMLInputElement>(null);
-  const importWorkflow = useImportWorkflow(projectId ?? "");
+  const importWorkflow = useImportWorkflow(workflowWriteRefresh({ ifSucceeded: true }));
   const [conflict, setConflict] = useState<{ slug: string; yaml: string } | null>(null);
 
   const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +132,7 @@ function WorkflowsHeader({ projectId }: { projectId?: string }) {
     if (!file || !projectId) return;
     const yaml = await file.text();
     importWorkflow.mutate(
-      { yaml, overwrite: false },
+      importWorkflowRequest(projectId, yaml),
       {
         onSuccess: (result) => {
           if (result.conflict) setConflict({ slug: result.slug || "workflow", yaml });
@@ -223,12 +222,12 @@ function ImportConflictModal({
   yaml: string;
   onClose: () => void;
 }) {
-  const importWorkflow = useImportWorkflow(projectId);
+  const importWorkflow = useImportWorkflow(workflowWriteRefresh({ ifSucceeded: true }));
   const [newName, setNewName] = useState(() => `${slug}-${Math.random().toString(36).substring(2, 8)}`);
 
   const replace = () =>
     importWorkflow.mutate(
-      { yaml, overwrite: true },
+      importWorkflowRequest(projectId, yaml, true),
       {
         onSuccess: (result) => {
           if (result.success) {
@@ -243,7 +242,7 @@ function ImportConflictModal({
   const saveAsNew = () => {
     if (!newName.trim()) return;
     importWorkflow.mutate(
-      { yaml: yaml.replace(/^name:\s*.+$/m, `name: ${newName.trim()}`), overwrite: false },
+      importWorkflowRequest(projectId, yaml.replace(/^name:\s*.+$/m, `name: ${newName.trim()}`)),
       {
         onSuccess: (result) => {
           if (result.success) {
@@ -387,15 +386,15 @@ function WorkflowsBody() {
   const [deleting, setDeleting] = useState<{ workflow: WorkflowResponse; projectId: string } | null>(null);
 
   const actionProject = scope.currentProjectId ?? "";
-  const deleteWorkflow = useDeleteWorkflow(deleting?.projectId ?? actionProject);
+  const deleteWorkflow = useDeleteWorkflow(workflowWriteRefresh({ triggers: true }));
   // Deleting a workflow deletes the triggers that run it, in every project.
   const allTriggers = useTriggers(undefined, { enabled: deleting !== null });
   const deletedAutomations = useMemo(() => {
     if (!deleting) return [];
     return automationsDeletedWith(deleting.workflow, allTriggers.data ?? triggers.data ?? []);
   }, [deleting, allTriggers.data, triggers.data]);
-  const copyWorkflow = useCopyWorkflow(actionProject);
-  const setVisibility = useSetWorkflowVisibility(actionProject);
+  const copyWorkflow = useCopyWorkflow(workflowWriteRefresh({ ifSucceeded: true }));
+  const setVisibility = useSetWorkflowVisibility(workflowWriteRefresh());
   const scopePreferences = useScopePreferences();
   // Unknown until the answer arrives: no "default" badge rather than a guess.
   const defaultWorkflow = scopePreferences.isPending ? undefined : scopePreferences.data.defaultWorkflow;
@@ -466,7 +465,7 @@ function WorkflowsBody() {
     actions.push({
       label: "Duplicate",
       onSelect: () =>
-        copyWorkflow.mutate(workflow.name, {
+        copyWorkflow.mutate({ projectId: actionProject, sourceSlug: workflow.name }, {
           onSuccess: (result) => {
             if (!result.success) {
               toast.error(result.message || "Failed to copy workflow");
@@ -503,7 +502,10 @@ function WorkflowsBody() {
         const failed = (error: unknown) =>
           toast.error(error instanceof Error ? error.message : "Failed to update visibility");
         if (workflow.source === "user") {
-          setVisibility.mutate({ filename: workflow.filename, hidden: !hidden }, { onSuccess: done, onError: failed });
+          setVisibility.mutate(
+            { projectId: actionProject, slug: workflow.filename, isHidden: !hidden },
+            { onSuccess: done, onError: failed },
+          );
         } else {
           void toggleWorkflowVisibility(workflow.name).then(done, failed);
         }
@@ -670,7 +672,7 @@ function WorkflowsBody() {
         onConfirm={() => {
           if (!deleting) return;
           const displayName = workflowDisplayName(deleting.workflow);
-          deleteWorkflow.mutate(deleting.workflow.filename, {
+          deleteWorkflow.mutate({ projectId: deleting.projectId, name: deleting.workflow.filename }, {
             onSuccess: () => {
               setDeleting(null);
               toast.success(`Deleted “${displayName}”`);
