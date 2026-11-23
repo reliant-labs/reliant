@@ -226,10 +226,6 @@ func TestMessageWrites_RoundTripAcrossLayers(t *testing.T) {
 	if other, err := store.FindMessageByActivity(ctx, f.env.ORM, f.chat, "wf-other", "act-n5"); err != nil || other != nil {
 		t.Fatalf("FindMessageByActivity(other workflow) = %v, %v; want nil", other, err)
 	}
-	twin, err := f.env.Repo.GetMessageByWorkflowAndActivityID(ctx, f.chat, "wf-"+f.node, "act-n5")
-	if err != nil || twin == nil || twin.ID != "n5" {
-		t.Fatalf("Repo.GetMessageByWorkflowAndActivityID = %v, %v; want n5", twin, err)
-	}
 }
 
 func TestMessageReads_AgreeWithRepository(t *testing.T) {

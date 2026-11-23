@@ -1527,7 +1527,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=175d97e1e6ff88643ec7d64bfaded8bb66d2ab8f5ac40cec684830ade0fc4393
+// forge:hash=8eef1e7468238968f012641e7a7e4a95cfa6746e808955325616200d0f7f134e
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1543,7 +1543,6 @@ type MockspawnStatusStore struct {
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
-	SenderTitleFunc                                          func(context.Context, string) *string
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                                 func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -1553,7 +1552,6 @@ type MockspawnStatusStore struct {
 	GetMaxSequenceForThreadFunc                              func(context.Context, string) (int, error)
 	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
 	GetMessageFunc                                           func(context.Context, string) (*db.Message, error)
-	FindMessageFunc                                          func(context.Context, string) (*db.Message, error)
 	GetMessagesByContextWindowFunc                           func(context.Context, string, *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThreadFunc                   func(context.Context, string, int) (*db.Message, error)
 	GetLatestMessageInThreadFunc                             func(context.Context, string) (*db.Message, error)
@@ -1562,8 +1560,6 @@ type MockspawnStatusStore struct {
 	ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
 	CreateMessageFunc                                        func(context.Context, *db.Message) error
 	DeleteMessageFunc                                        func(context.Context, string) error
-	GetMessageByActivityIDFunc                               func(context.Context, string, string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityIDFunc                    func(context.Context, string, string, string) (*db.Message, error)
 	GetEffectiveMessageCountFunc                             func(context.Context, string, string) (int, error)
 	AllocateMessageOrderFunc                                 func(context.Context, string, string) (int64, int64, error)
 	AllocateContextWindowSequenceFunc                        func(context.Context, string) (int, error)
@@ -1637,15 +1633,6 @@ func (m *MockspawnStatusStore) GetRootThread(ctx context.Context, conversationID
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetRootThread")
-}
-
-// SenderTitle records the call and delegates to SenderTitleFunc when set.
-func (m *MockspawnStatusStore) SenderTitle(ctx context.Context, threadID string) *string {
-	m.Recorder.Record("SenderTitle", ctx, threadID)
-	if m.SenderTitleFunc != nil {
-		return m.SenderTitleFunc(ctx, threadID)
-	}
-	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -1729,15 +1716,6 @@ func (m *MockspawnStatusStore) GetMessage(ctx context.Context, id string) (*db.M
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetMessage")
 }
 
-// FindMessage records the call and delegates to FindMessageFunc when set.
-func (m *MockspawnStatusStore) FindMessage(ctx context.Context, id string) (*db.Message, error) {
-	m.Recorder.Record("FindMessage", ctx, id)
-	if m.FindMessageFunc != nil {
-		return m.FindMessageFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "FindMessage")
-}
-
 // GetMessagesByContextWindow records the call and delegates to GetMessagesByContextWindowFunc when set.
 func (m *MockspawnStatusStore) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error) {
 	m.Recorder.Record("GetMessagesByContextWindow", ctx, contextWindowID, maxOrdinal)
@@ -1808,24 +1786,6 @@ func (m *MockspawnStatusStore) DeleteMessage(ctx context.Context, messageID stri
 		return m.DeleteMessageFunc(ctx, messageID)
 	}
 	return contractkit.MockNotSet("MockspawnStatusStore", "DeleteMessage")
-}
-
-// GetMessageByActivityID records the call and delegates to GetMessageByActivityIDFunc when set.
-func (m *MockspawnStatusStore) GetMessageByActivityID(ctx context.Context, chatID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByActivityID", ctx, chatID, activityID)
-	if m.GetMessageByActivityIDFunc != nil {
-		return m.GetMessageByActivityIDFunc(ctx, chatID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetMessageByActivityID")
-}
-
-// GetMessageByWorkflowAndActivityID records the call and delegates to GetMessageByWorkflowAndActivityIDFunc when set.
-func (m *MockspawnStatusStore) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID string, workflowID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByWorkflowAndActivityID", ctx, chatID, workflowID, activityID)
-	if m.GetMessageByWorkflowAndActivityIDFunc != nil {
-		return m.GetMessageByWorkflowAndActivityIDFunc(ctx, chatID, workflowID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetMessageByWorkflowAndActivityID")
 }
 
 // GetEffectiveMessageCount records the call and delegates to GetEffectiveMessageCountFunc when set.
@@ -2199,7 +2159,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=29340210a34456b06cf225c346d619b29348fbdd8adb02ce07732cef0481de2e
+// forge:hash=7979d516473bc486917858fbfdc8649bafecc7dbc19ee4ced7d0fcd62a3c9eae
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -2215,7 +2175,6 @@ type MockgetRunStore struct {
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
-	SenderTitleFunc                                          func(context.Context, string) *string
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                                 func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -2225,7 +2184,6 @@ type MockgetRunStore struct {
 	GetMaxSequenceForThreadFunc                              func(context.Context, string) (int, error)
 	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
 	GetMessageFunc                                           func(context.Context, string) (*db.Message, error)
-	FindMessageFunc                                          func(context.Context, string) (*db.Message, error)
 	GetMessagesByContextWindowFunc                           func(context.Context, string, *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThreadFunc                   func(context.Context, string, int) (*db.Message, error)
 	GetLatestMessageInThreadFunc                             func(context.Context, string) (*db.Message, error)
@@ -2234,8 +2192,6 @@ type MockgetRunStore struct {
 	ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
 	CreateMessageFunc                                        func(context.Context, *db.Message) error
 	DeleteMessageFunc                                        func(context.Context, string) error
-	GetMessageByActivityIDFunc                               func(context.Context, string, string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityIDFunc                    func(context.Context, string, string, string) (*db.Message, error)
 	GetEffectiveMessageCountFunc                             func(context.Context, string, string) (int, error)
 	AllocateMessageOrderFunc                                 func(context.Context, string, string) (int64, int64, error)
 	AllocateContextWindowSequenceFunc                        func(context.Context, string) (int, error)
@@ -2308,15 +2264,6 @@ func (m *MockgetRunStore) GetRootThread(ctx context.Context, conversationID stri
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockgetRunStore", "GetRootThread")
-}
-
-// SenderTitle records the call and delegates to SenderTitleFunc when set.
-func (m *MockgetRunStore) SenderTitle(ctx context.Context, threadID string) *string {
-	m.Recorder.Record("SenderTitle", ctx, threadID)
-	if m.SenderTitleFunc != nil {
-		return m.SenderTitleFunc(ctx, threadID)
-	}
-	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -2400,15 +2347,6 @@ func (m *MockgetRunStore) GetMessage(ctx context.Context, id string) (*db.Messag
 	return nil, contractkit.MockNotSet("MockgetRunStore", "GetMessage")
 }
 
-// FindMessage records the call and delegates to FindMessageFunc when set.
-func (m *MockgetRunStore) FindMessage(ctx context.Context, id string) (*db.Message, error) {
-	m.Recorder.Record("FindMessage", ctx, id)
-	if m.FindMessageFunc != nil {
-		return m.FindMessageFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockgetRunStore", "FindMessage")
-}
-
 // GetMessagesByContextWindow records the call and delegates to GetMessagesByContextWindowFunc when set.
 func (m *MockgetRunStore) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error) {
 	m.Recorder.Record("GetMessagesByContextWindow", ctx, contextWindowID, maxOrdinal)
@@ -2479,24 +2417,6 @@ func (m *MockgetRunStore) DeleteMessage(ctx context.Context, messageID string) e
 		return m.DeleteMessageFunc(ctx, messageID)
 	}
 	return contractkit.MockNotSet("MockgetRunStore", "DeleteMessage")
-}
-
-// GetMessageByActivityID records the call and delegates to GetMessageByActivityIDFunc when set.
-func (m *MockgetRunStore) GetMessageByActivityID(ctx context.Context, chatID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByActivityID", ctx, chatID, activityID)
-	if m.GetMessageByActivityIDFunc != nil {
-		return m.GetMessageByActivityIDFunc(ctx, chatID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockgetRunStore", "GetMessageByActivityID")
-}
-
-// GetMessageByWorkflowAndActivityID records the call and delegates to GetMessageByWorkflowAndActivityIDFunc when set.
-func (m *MockgetRunStore) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID string, workflowID string, activityID string) (*db.Message, error) {
-	m.Recorder.Record("GetMessageByWorkflowAndActivityID", ctx, chatID, workflowID, activityID)
-	if m.GetMessageByWorkflowAndActivityIDFunc != nil {
-		return m.GetMessageByWorkflowAndActivityIDFunc(ctx, chatID, workflowID, activityID)
-	}
-	return nil, contractkit.MockNotSet("MockgetRunStore", "GetMessageByWorkflowAndActivityID")
 }
 
 // GetEffectiveMessageCount records the call and delegates to GetEffectiveMessageCountFunc when set.

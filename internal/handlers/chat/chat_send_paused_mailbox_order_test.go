@@ -38,7 +38,7 @@ import (
 // environment because Execute reads activity.GetLogger.
 func drainThreadMailbox(t *testing.T, repo *db.Repo, chatID, threadID string) {
 	t.Helper()
-	drain := handlers.NewDrainAgentMessagesActivity(repo, threads.New(threads.Deps{Repo: repo}))
+	drain := handlers.NewDrainAgentMessagesActivity(repo, threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(drain.Execute)
 	_, err := env.ExecuteActivity(drain.Execute, handlers.DrainAgentMessagesInput{ChatID: chatID, Thread: threadID})

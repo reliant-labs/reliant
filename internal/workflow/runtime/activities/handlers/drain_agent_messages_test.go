@@ -17,11 +17,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
 func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity {
-	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo()}))
+	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}))
 }
 
 func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
@@ -433,7 +434,7 @@ func TestDrainAgentMessages_OrderingInvariant(t *testing.T) {
 
 	// The assistant turn that is mid-flight: it has emitted a tool call and
 	// is waiting on execute_tools to save the matching tool_result.
-	saveMsgActivity := NewSaveMessageActivity(h.Repo())
+	saveMsgActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 	var assistantOut SaveMessageOutput
 	err = h.ExecuteActivity(saveMsgActivity.Execute, &SaveMessageInput{
 		ChatID: chatID,
@@ -547,7 +548,7 @@ func TestDrainAgentMessages_BeforeToolResults_WouldBreakInvariant(t *testing.T) 
 
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	saveMsgActivity := NewSaveMessageActivity(h.Repo())
+	saveMsgActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 	var assistantOut SaveMessageOutput
 	err = h.ExecuteActivity(saveMsgActivity.Execute, &SaveMessageInput{
 		ChatID: chatID,

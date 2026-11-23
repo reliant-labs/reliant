@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +103,7 @@ func setupNoMachineFixture(t *testing.T, noMachine bool) *noMachineFixture {
 		chat:    chat,
 		driver:  driver,
 		mcp:     runtime,
-		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: binder}),
+		callLLM: NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: binder}),
 	}
 }
 

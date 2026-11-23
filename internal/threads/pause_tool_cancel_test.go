@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // CancelChatToolCalls is pause's tool-cancel push -- the same mechanism
@@ -150,7 +151,7 @@ func TestCancelChatToolCalls_RequiresChatAndUser(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo})
+	svc := New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	_, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{UserID: fx.userID})
 	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)

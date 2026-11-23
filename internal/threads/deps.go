@@ -17,12 +17,35 @@ import (
 type Deps struct {
 	// Repo is everything the service reads and writes.
 	Repo Repository
+	// Messages answers SaveMessage's idempotency checks: whether a message
+	// id or an activity's message already exists. Required for SaveMessage
+	// (a read-only caller may leave it nil). store.MessageExtStore
+	// satisfies it.
+	Messages Messages
+	// Senders titles the sender of an agent-to-agent message SaveMessage
+	// writes. Required for SaveMessage (a read-only caller may leave it
+	// nil). store.ThreadExtStore satisfies it.
+	Senders Senders
 	// Signaler wakes a thread's workflow when it is interrupted. Nil sends
 	// no signal: the interrupt still cancels the thread's running tools.
 	Signaler TemporalSignaler
 	// ToolCanceler cancels a thread's running tool executions on the daemon.
 	// Nil leaves them to finish.
 	ToolCanceler ToolCanceler
+}
+
+// Messages finds the message an earlier attempt of a save wrote, by id or by
+// the activity that wrote it. Both return (nil, nil) when none exists.
+// store.MessageExtStore satisfies it.
+type Messages interface {
+	FindMessage(ctx context.Context, id string) (*db.Message, error)
+	FindMessageByActivity(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
+}
+
+// Senders maps sender thread ids to the heading a message from each is shown
+// under. store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }
 
 // Repository defines the subset of *db.Repo needed by the threads service.
@@ -37,9 +60,6 @@ type Repository interface {
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
 	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
-	// SenderTitle is the heading for a message from threadID: its title, or
-	// the run's for another run's untitled main thread (db.Repo.SenderTitle).
-	SenderTitle(ctx context.Context, threadID string) *string
 
 	// Workflow operations
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
@@ -55,9 +75,6 @@ type Repository interface {
 
 	// Message operations (for resolution, token counting, and fork point resolution)
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
-	// FindMessage returns (nil, nil) when no row carries the id, so
-	// SaveMessage can ask whether a pre-allocated id is already taken.
-	FindMessage(ctx context.Context, id string) (*db.Message, error)
 	GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*db.Message, error)
 	// GetLatestMessageInThread returns (nil, nil) for a thread with no
@@ -76,8 +93,6 @@ type Repository interface {
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error
 	DeleteMessage(ctx context.Context, messageID string) error
-	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
 	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
 	// AllocateMessageOrder takes a message's ordinal and seq from their
 	// counters (db.Repo.AllocateMessageOrder).
