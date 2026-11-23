@@ -297,6 +297,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
+		OrgKeys:    db.TestOrgAccounts(t, repo),
 		Items:      extstore.NewInboxDismissalExtStore(repo.ORM()),
 		Firings:    extstore.NewTriggerEventExtStore(repo.ORM()),
 		Notices:    extstore.NewTriggerExtStore(repo.ORM()),
