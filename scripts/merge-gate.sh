@@ -95,6 +95,11 @@
 #              when the plan's web-demo lane is selected: a change in the
 #              bundle's import graph, its build config, or a FULL web lane
 #   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
+#   closedsets forge lint --closed-sets, only when a migration, go.mod or forge.yaml changed: a
+#              CHECK declared forge:closed-set must list exactly the forge set the pin
+#              carries. A pin bump that grows accesstoken.AllScopes (mcp:oauth, mcp:forge)
+#              merged without the widening migration and turned the release gate red
+#              (#3382); the whole-project forge lint that names it is the release gate's.
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
@@ -646,6 +651,12 @@ if [ "$fail" = 0 ]; then
     # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
+  # A forge:closed-set CHECK must list the set the pinned forge carries, so the
+  # lane runs whenever a migration or the pin (go.mod, forge.yaml) moves. It is
+  # not part of the scoped lint above: a pin bump has no directory to scope to.
+  if echo "$files" | grep -qE '^db/migrations/|^go\.mod$|^forge\.yaml$'; then
+    phase closedsets "${forge[@]}" lint --closed-sets --no-fix & pids+=($!)
+  fi
   # A migration below main's newest is never applied and reliant's migrator
   # refuses to start on it (reliant#1399). The check fetches origin/main
   # itself, so it judges main as it is now, not as this clone last saw it.
@@ -704,7 +715,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety closedsets migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
