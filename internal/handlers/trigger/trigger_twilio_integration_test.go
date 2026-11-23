@@ -124,7 +124,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	registry, err := webhook.RegistryFor(webhook.RegistryConfig{PublicURL: publicURL})
 	require.NoError(t, err)
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
-	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL).WithConnectionSecrets(tokens)
+	inbound := webhook.NewInbound(webhook.NewStores(repo), intake, registry, nil, publicURL).WithConnectionSecrets(tokens)
 	mux := http.NewServeMux()
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)

@@ -112,7 +112,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
-	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
+	inbound := webhook.NewInbound(webhook.NewStores(repo), intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)

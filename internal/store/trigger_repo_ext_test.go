@@ -281,11 +281,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListIntegrationTriggers: %v", err)
 	}
-	twinRoutes, err := env.Repo.ListIntegrationTriggers(ctx, "github")
-	if err != nil {
-		t.Fatalf("Repo.ListIntegrationTriggers: %v", err)
-	}
-	sameValue(t, "ListIntegrationTriggers", routes, twinRoutes)
 	if len(routes) != 2 || routes[0].Trigger.ID != "trg-int-live" || routes[0].ConnectionAccount != "acct-1" || routes[0].ConnectionStatus != "active" ||
 		routes[1].Trigger.ID != "trg-int-reauth" || routes[1].ConnectionAccount != "" || routes[1].ConnectionStatus != "needs_reauth" {
 		t.Fatalf("ListIntegrationTriggers(github) = %+v, want live and reauth through the owner's connections", routes)
@@ -443,11 +438,6 @@ func TestListAccessRoutedTriggers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
 		}
-		twin, err := env.Repo.ListAccessRoutedTriggers(ctx, "github", c.account, c.resource, c.fresh)
-		if err != nil {
-			t.Fatalf("Repo.ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
-		}
-		sameValue(t, "ListAccessRoutedTriggers", port, twin)
 		var got []string
 		for _, tr := range port {
 			got = append(got, tr.ID)
