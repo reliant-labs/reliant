@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
@@ -102,9 +103,10 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(cleanup)
 	e := &env{t: t, repo: repo, dir: &directory{grants: map[string]map[string][]string{}}, prices: &listPrices{}}
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
-		Store:  repo,
-		Prices: e.prices,
-		Now:    func() time.Time { return now },
+		Store:    repo,
+		Accounts: accountNames(t, repo),
+		Prices:   e.prices,
+		Now:      func() time.Time { return now },
 	}))
 	// ada is org-a's billing admin; bob a member of org-a without the grant;
 	// gus the billing admin of org-b only.
@@ -379,7 +381,7 @@ func TestGetOrgLLMUsage_InvalidRateIsUnpriced(t *testing.T) {
 	e := newEnv(t)
 	e.record(call{user: "ada", org: "org-a", provider: "anthropic", model: "claude-sonnet-4-5", funding: "org_key", fundingOrg: "org-a", account: "acct-acme-key", in: 1000, out: 10})
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
-		Store: e.repo, Now: func() time.Time { return now },
+		Store: e.repo, Accounts: accountNames(t, e.repo), Now: func() time.Time { return now },
 		Prices: negativePrices{},
 	}))
 	got, err := e.read(e.asPerson("ada"), "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
@@ -396,4 +398,12 @@ func (negativePrices) GetModelListPrices(_ context.Context, refs []controlplane.
 		out[i] = controlplane.ModelListPrice{Ref: r, Priced: true, InputNanosPerMTok: -3e9, OutputNanosPerMTok: 15e9}
 	}
 	return out, now, nil
+}
+
+// accountNames is the real provider-account store over repo's database, as composition wires it.
+func accountNames(t *testing.T, repo *db.Repo) provideraccounts.Service {
+	t.Helper()
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	return svc
 }

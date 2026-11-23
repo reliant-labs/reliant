@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -26,12 +27,16 @@ type fullConfigRowReads struct {
 	callers []string
 }
 
+func (r *fullConfigRowReads) GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*db.ProjectConfigRecord, bool, error) {
+	return store.GetProjectMachineConfigRecord(ctx, r.ORM(), projectID, daemonID)
+}
+
 func (r *fullConfigRowReads) GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error) {
 	pc, _, _, _ := runtime.Caller(1)
 	r.mu.Lock()
 	r.callers = append(r.callers, runtime.FuncForPC(pc).Name())
 	r.mu.Unlock()
-	return r.Repo.GetProjectConfigRecord(ctx, projectID)
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 // The worker's preset paths read only the presets column — and a project
@@ -44,7 +49,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 
 	presets := `[{"name":"project-reviewer","yaml_content":"name: project-reviewer\ndescription: Reviews with house rules\ntag: agent\nparams:\n  mode: plan\n"}]`
 	skills := `[{"name":"big","body":"` + strings.Repeat("x", 64<<10) + `"}]`
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: "test-project", DaemonID: "daemon-1",
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))

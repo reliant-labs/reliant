@@ -24,7 +24,7 @@ func policyCapacityFixture(t *testing.T, policy *reliantv1.WorkflowConcurrency) 
 	starter := &describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}
 	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	wake := &recordingStarter{}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(capacityResolver{wf: &reliantv1.Workflow{Concurrency: policy}}).
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(capacityResolver{wf: &reliantv1.Workflow{Concurrency: policy}}).
 		WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
 	return f, starter, wake
 }

@@ -342,7 +342,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertTriggerRegistration: %v", err)
 	}
-	twin, err := env.Repo.GetTriggerRegistration(ctx, "trg-reg-a")
+	twin, err := store.GetTriggerRegistration(ctx, env.ORM, "trg-reg-a")
 	if err != nil {
 		t.Fatalf("Repo.GetTriggerRegistration: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 		t.Fatalf("backdate status_since: %v", err)
 	}
 	gap := base.Add(2 * time.Minute)
-	if err := env.Repo.UpsertTriggerRegistration(ctx, &core.TriggerRegistration{
+	if err := store.UpsertTriggerRegistration(ctx, env.ORM, &core.TriggerRegistration{
 		TriggerID: "trg-reg-a", Provider: "gmail", Cursor: "c2", Status: core.TriggerRegistrationActive, LastGapAt: &gap, LastGapDetail: "rebaselined",
 	}); err != nil {
 		t.Fatalf("Repo.UpsertTriggerRegistration(same status): %v", err)
@@ -375,13 +375,13 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertTriggerRegistration(new status): %v", err)
 	}
-	twin, _ = env.Repo.GetTriggerRegistration(ctx, "trg-reg-a")
+	twin, _ = store.GetTriggerRegistration(ctx, env.ORM, "trg-reg-a")
 	if twin.StatusSince.Equal(old) || twin.Status != core.TriggerRegistrationNeedsReauth || twin.StatusDetail != "token revoked" {
 		t.Fatalf("after a status change = %+v, want status_since moved", twin)
 	}
 
 	for _, id := range []string{"trg-reg-b", "trg-reg-foreign"} {
-		if err := env.Repo.UpsertTriggerRegistration(ctx, &core.TriggerRegistration{TriggerID: id, Provider: "github", RegistrationID: "hook-" + id}); err != nil {
+		if err := store.UpsertTriggerRegistration(ctx, env.ORM, &core.TriggerRegistration{TriggerID: id, Provider: "github", RegistrationID: "hook-" + id}); err != nil {
 			t.Fatalf("Repo.UpsertTriggerRegistration(%s): %v", id, err)
 		}
 	}

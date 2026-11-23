@@ -85,7 +85,7 @@ func webhookEvent(trig *core.Trigger, delivery string) InboundEvent {
 func TestABatchPinsAndReadsTheCatalogOncePerScope(t *testing.T) {
 	p := newProvenanceProject(t)
 	repo := &countingRepo{Repo: p.repo}
-	intake := NewIntake(p.repo, &recordingStarter{}, "").WithWorkflows(LaunchWorkflows{Repo: repo})
+	intake := NewIntake(NewStores(p.repo), &recordingStarter{}, "").WithWorkflows(LaunchWorkflows{Repo: repo})
 	trigs := p.webhookTriggers(t, 5)
 
 	batch := NewBatch()
@@ -124,7 +124,7 @@ func TestABatchPinsAndReadsTheCatalogOncePerScope(t *testing.T) {
 func TestABatchDoesNotShareAFailedRead(t *testing.T) {
 	p := newProvenanceProject(t)
 	repo := &countingRepo{Repo: p.repo, failPins: 1}
-	intake := NewIntake(p.repo, &recordingStarter{}, "").WithWorkflows(LaunchWorkflows{Repo: repo})
+	intake := NewIntake(NewStores(p.repo), &recordingStarter{}, "").WithWorkflows(LaunchWorkflows{Repo: repo})
 	trigs := p.webhookTriggers(t, 3)
 
 	batch := NewBatch()

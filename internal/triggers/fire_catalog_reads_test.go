@@ -145,9 +145,9 @@ func TestFireReadsItsPinnedCatalogOncePerSide(t *testing.T) {
 				created, cerr := p.repo.CreateTriggerEvent(p.ctx, &core.TriggerEvent{ID: uuid.NewString(), UserID: p.userID, TriggerID: &p.webhook.ID, Kind: kind, DedupeKey: key, OccurredAt: now, CreatedAt: now, Payload: map[string]any{}, Outcome: core.TriggerEventPending})
 				require.NoError(t, cerr)
 				require.True(t, created)
-				out, err = NewEventFirer(repo, launcher).WithWorkflows(workflows).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
+				out, err = NewEventFirer(NewStores(repo.Repo), launcher).WithWorkflows(workflows).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
 			} else {
-				out, err = NewFirer(repo, launcher).WithWorkflows(workflows).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
+				out, err = NewFirer(NewStores(repo.Repo), launcher).WithWorkflows(workflows).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
 			}
 			require.NoError(t, err)
 			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome, out.Reason)

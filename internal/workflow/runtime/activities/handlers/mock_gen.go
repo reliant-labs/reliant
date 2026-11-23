@@ -310,16 +310,16 @@ var _ RunExecutorContextStore = (*MockRunExecutorContextStore)(nil)
 // "MockToolResultRecoveryStore.<Method>Func not set" error.
 type MockToolResultRecoveryStore struct {
 	contractkit.Recorder
-	GetToolCallResultForMessageFunc func(context.Context, string, string) (*db.ToolCallResult, error)
+	FindToolCallResultForMessageFunc func(context.Context, string, string) (*core.ToolCallResult, error)
 }
 
-// GetToolCallResultForMessage records the call and delegates to GetToolCallResultForMessageFunc when set.
-func (m *MockToolResultRecoveryStore) GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResultForMessage", ctx, toolCallID, messageID)
-	if m.GetToolCallResultForMessageFunc != nil {
-		return m.GetToolCallResultForMessageFunc(ctx, toolCallID, messageID)
+// FindToolCallResultForMessage records the call and delegates to FindToolCallResultForMessageFunc when set.
+func (m *MockToolResultRecoveryStore) FindToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*core.ToolCallResult, error) {
+	m.Recorder.Record("FindToolCallResultForMessage", ctx, toolCallID, messageID)
+	if m.FindToolCallResultForMessageFunc != nil {
+		return m.FindToolCallResultForMessageFunc(ctx, toolCallID, messageID)
 	}
-	return nil, contractkit.MockNotSet("MockToolResultRecoveryStore", "GetToolCallResultForMessage")
+	return nil, contractkit.MockNotSet("MockToolResultRecoveryStore", "FindToolCallResultForMessage")
 }
 
 // Compile-time check.
@@ -340,7 +340,6 @@ type MockMessageRepairStore struct {
 	ListContentBlocksForMessagesFunc func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetContextWindowFunc             func(context.Context, string) (*db.ContextWindow, error)
 	GetAttachmentFunc                func(context.Context, string) (*db.Attachment, error)
-	GetToolCallResultForMessageFunc  func(context.Context, string, string) (*db.ToolCallResult, error)
 }
 
 // ListContentBlocks records the call and delegates to ListContentBlocksFunc when set.
@@ -377,15 +376,6 @@ func (m *MockMessageRepairStore) GetAttachment(ctx context.Context, id string) (
 		return m.GetAttachmentFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockMessageRepairStore", "GetAttachment")
-}
-
-// GetToolCallResultForMessage records the call and delegates to GetToolCallResultForMessageFunc when set.
-func (m *MockMessageRepairStore) GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResultForMessage", ctx, toolCallID, messageID)
-	if m.GetToolCallResultForMessageFunc != nil {
-		return m.GetToolCallResultForMessageFunc(ctx, toolCallID, messageID)
-	}
-	return nil, contractkit.MockNotSet("MockMessageRepairStore", "GetToolCallResultForMessage")
 }
 
 // Compile-time check.
@@ -441,7 +431,6 @@ type MockLLMHistoryStore struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.
@@ -795,17 +784,64 @@ func (m *MockLLMHistoryStore) ListContentBlocksForMessages(ctx context.Context, 
 	return nil, contractkit.MockNotSet("MockLLMHistoryStore", "ListContentBlocksForMessages")
 }
 
-// GetToolCallResultForMessage records the call and delegates to GetToolCallResultForMessageFunc when set.
-func (m *MockLLMHistoryStore) GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResultForMessage", ctx, toolCallID, messageID)
-	if m.GetToolCallResultForMessageFunc != nil {
-		return m.GetToolCallResultForMessageFunc(ctx, toolCallID, messageID)
+// Compile-time check.
+var _ LLMHistoryStore = (*MockLLMHistoryStore)(nil)
+
+// forge:section MockToolCalls
+// forge:hash=48d53f52f9b466d1b262f5400a641c84c0c0a5e67388da23f838c5e89b69ef5b
+
+// MockToolCalls is a test mock for the ToolCalls interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolCalls.<Method>Func not set" error.
+type MockToolCalls struct {
+	contractkit.Recorder
+	FindToolCallFunc                 func(context.Context, string) (*core.ToolCall, error)
+	FindToolCallResultFunc           func(context.Context, string) (*core.ToolCallResult, error)
+	UpsertToolCallResultFunc         func(context.Context, string, *core.ToolCallResult) error
+	FindToolCallResultForMessageFunc func(context.Context, string, string) (*core.ToolCallResult, error)
+}
+
+// FindToolCall records the call and delegates to FindToolCallFunc when set.
+func (m *MockToolCalls) FindToolCall(ctx context.Context, id string) (*core.ToolCall, error) {
+	m.Recorder.Record("FindToolCall", ctx, id)
+	if m.FindToolCallFunc != nil {
+		return m.FindToolCallFunc(ctx, id)
 	}
-	return nil, contractkit.MockNotSet("MockLLMHistoryStore", "GetToolCallResultForMessage")
+	return nil, contractkit.MockNotSet("MockToolCalls", "FindToolCall")
+}
+
+// FindToolCallResult records the call and delegates to FindToolCallResultFunc when set.
+func (m *MockToolCalls) FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
+	m.Recorder.Record("FindToolCallResult", ctx, toolCallID)
+	if m.FindToolCallResultFunc != nil {
+		return m.FindToolCallResultFunc(ctx, toolCallID)
+	}
+	return nil, contractkit.MockNotSet("MockToolCalls", "FindToolCallResult")
+}
+
+// UpsertToolCallResult records the call and delegates to UpsertToolCallResultFunc when set.
+func (m *MockToolCalls) UpsertToolCallResult(ctx context.Context, chatID string, result *core.ToolCallResult) error {
+	m.Recorder.Record("UpsertToolCallResult", ctx, chatID, result)
+	if m.UpsertToolCallResultFunc != nil {
+		return m.UpsertToolCallResultFunc(ctx, chatID, result)
+	}
+	return contractkit.MockNotSet("MockToolCalls", "UpsertToolCallResult")
+}
+
+// FindToolCallResultForMessage records the call and delegates to FindToolCallResultForMessageFunc when set.
+func (m *MockToolCalls) FindToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*core.ToolCallResult, error) {
+	m.Recorder.Record("FindToolCallResultForMessage", ctx, toolCallID, messageID)
+	if m.FindToolCallResultForMessageFunc != nil {
+		return m.FindToolCallResultForMessageFunc(ctx, toolCallID, messageID)
+	}
+	return nil, contractkit.MockNotSet("MockToolCalls", "FindToolCallResultForMessage")
 }
 
 // Compile-time check.
-var _ LLMHistoryStore = (*MockLLMHistoryStore)(nil)
+var _ ToolCalls = (*MockToolCalls)(nil)
 
 // forge:section MockWorkflowErrorWriter
 // forge:hash=48d53f52f9b466d1b262f5400a641c84c0c0a5e67388da23f838c5e89b69ef5b
@@ -1249,7 +1285,6 @@ type MockCallLLMStore struct {
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
 
 // ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
@@ -1783,15 +1818,6 @@ func (m *MockCallLLMStore) ListContentBlocksForMessages(ctx context.Context, mes
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "ListContentBlocksForMessages")
 }
 
-// GetToolCallResultForMessage records the call and delegates to GetToolCallResultForMessageFunc when set.
-func (m *MockCallLLMStore) GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResultForMessage", ctx, toolCallID, messageID)
-	if m.GetToolCallResultForMessageFunc != nil {
-		return m.GetToolCallResultForMessageFunc(ctx, toolCallID, messageID)
-	}
-	return nil, contractkit.MockNotSet("MockCallLLMStore", "GetToolCallResultForMessage")
-}
-
 // Compile-time check.
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
@@ -2012,7 +2038,6 @@ type MockCompactStore struct {
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	GetToolCallResultForMessageFunc                          func(context.Context, string, string) (*db.ToolCallResult, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -2409,15 +2434,6 @@ func (m *MockCompactStore) ListContentBlocksForMessages(ctx context.Context, mes
 		return m.ListContentBlocksForMessagesFunc(ctx, messageIDs)
 	}
 	return nil, contractkit.MockNotSet("MockCompactStore", "ListContentBlocksForMessages")
-}
-
-// GetToolCallResultForMessage records the call and delegates to GetToolCallResultForMessageFunc when set.
-func (m *MockCompactStore) GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error) {
-	m.Recorder.Record("GetToolCallResultForMessage", ctx, toolCallID, messageID)
-	if m.GetToolCallResultForMessageFunc != nil {
-		return m.GetToolCallResultForMessageFunc(ctx, toolCallID, messageID)
-	}
-	return nil, contractkit.MockNotSet("MockCompactStore", "GetToolCallResultForMessage")
 }
 
 // Compile-time check.
@@ -3044,14 +3060,13 @@ type MockExecuteToolsStore struct {
 	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
 	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	GetContextUsageFunc              func(context.Context, string, string) (*db.ContextUsage, error)
-	GetToolCallFunc                  func(context.Context, string) (*db.ToolCall, error)
-	UpsertToolCallResultFunc         func(context.Context, string, *db.ToolCallResult) error
 	SetChatDaemonBlockedFunc         func(context.Context, string, bool) error
 	CreateAttachmentFunc             func(context.Context, *db.Attachment) error
 	GetAttachmentFunc                func(context.Context, string) (*db.Attachment, error)
 	EmitToolCallUpdateFunc           func(context.Context, string, db.ToolCallUpdate) error
 	EmitUserRefetchFunc              func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	ListSettingsByKeyFunc            func(context.Context, string, string) ([]*db.Setting, error)
+	GetToolCallFunc                  func(context.Context, string) (*core.ToolCall, error)
 	GetContentBlockByToolCallIDFunc  func(context.Context, string) (*db.MessageContentBlock, error)
 	GetMessageFunc                   func(context.Context, string) (*db.Message, error)
 	UpsertToolCallFunc               func(context.Context, *core.ToolCall) error
@@ -3117,24 +3132,6 @@ func (m *MockExecuteToolsStore) GetContextUsage(ctx context.Context, chatID stri
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetContextUsage")
 }
 
-// GetToolCall records the call and delegates to GetToolCallFunc when set.
-func (m *MockExecuteToolsStore) GetToolCall(ctx context.Context, id string) (*db.ToolCall, error) {
-	m.Recorder.Record("GetToolCall", ctx, id)
-	if m.GetToolCallFunc != nil {
-		return m.GetToolCallFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetToolCall")
-}
-
-// UpsertToolCallResult records the call and delegates to UpsertToolCallResultFunc when set.
-func (m *MockExecuteToolsStore) UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error {
-	m.Recorder.Record("UpsertToolCallResult", ctx, chatID, result)
-	if m.UpsertToolCallResultFunc != nil {
-		return m.UpsertToolCallResultFunc(ctx, chatID, result)
-	}
-	return contractkit.MockNotSet("MockExecuteToolsStore", "UpsertToolCallResult")
-}
-
 // SetChatDaemonBlocked records the call and delegates to SetChatDaemonBlockedFunc when set.
 func (m *MockExecuteToolsStore) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error {
 	m.Recorder.Record("SetChatDaemonBlocked", ctx, chatID, blocked)
@@ -3187,6 +3184,15 @@ func (m *MockExecuteToolsStore) ListSettingsByKey(ctx context.Context, userID st
 		return m.ListSettingsByKeyFunc(ctx, userID, keyPattern)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "ListSettingsByKey")
+}
+
+// GetToolCall records the call and delegates to GetToolCallFunc when set.
+func (m *MockExecuteToolsStore) GetToolCall(ctx context.Context, id string) (*core.ToolCall, error) {
+	m.Recorder.Record("GetToolCall", ctx, id)
+	if m.GetToolCallFunc != nil {
+		return m.GetToolCallFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetToolCall")
 }
 
 // GetContentBlockByToolCallID records the call and delegates to GetContentBlockByToolCallIDFunc when set.

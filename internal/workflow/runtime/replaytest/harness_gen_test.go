@@ -292,7 +292,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// daemon id is the truthful hermetic answer: a daemon has reported, and
 	// this project genuinely has no skills, so the miss is permanent rather
 	// than not-yet-known.
-	require.NoError(t, s.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, s.Repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "replayfix-daemon-" + shortID(),
 		PushedAt:  now,
@@ -327,7 +327,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport
 		MCPBinder:       toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon)),
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		// Inert for every workflow but the workflow_panic scenario's.

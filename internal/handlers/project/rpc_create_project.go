@@ -458,7 +458,7 @@ func (s *Service) CreateProject(
 		ProjectID: project.ID,
 		DaemonID:  config.SeedDaemonID,
 	}
-	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
+	if err := s.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
 		logging.ErrorContext(ctx, "Failed to seed project config record", "error", err, "project_id", project.ID)
 	}
 

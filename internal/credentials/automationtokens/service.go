@@ -115,3 +115,20 @@ func (s *service) DeleteAutomationToken(ctx context.Context, userID, daemonID st
 	}
 	return store.DeleteAPIKey(ctx, s.deps.DB, userID, provider(daemonID))
 }
+
+// PurgeUser deletes every token the user holds and returns how many, for the account purge. It
+// joins the transaction ctx carries, so the purge stays all-or-nothing.
+func (s *service) PurgeUser(ctx context.Context, userID string) (int64, error) {
+	if userID == "" {
+		return 0, errEmptyKey
+	}
+	return store.DeleteUserAPIKeys(ctx, s.deps.DB, userID)
+}
+
+// UserHasCredentials reports whether the user holds any token.
+func (s *service) UserHasCredentials(ctx context.Context, userID string) (bool, error) {
+	if userID == "" {
+		return false, errEmptyKey
+	}
+	return store.UserHasAPIKey(ctx, s.deps.DB, userID)
+}
