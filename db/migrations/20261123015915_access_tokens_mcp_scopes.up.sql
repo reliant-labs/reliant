@@ -11,6 +11,13 @@
 
 -- access_tokens_scopes on access_tokens mirrors forge:closed-set accesstoken.AllScopes.
 -- Replace it with a CHECK that lists exactly that set, in the set's order.
+-- Predecessor at BASE: 20261121164700_access_tokens_v190_scopes.up.sql,
+-- lines 30-76; validated by 20261121164701_access_tokens_v190_scopes_validate.up.sql.
+-- That CHECK requires cardinality(scopes) > 0 AND scopes <@ ARRAY[40 scopes]::text[].
+-- This retains the same predicate and all 40 values, adding only mcp:oauth and
+-- mcp:forge (42 values total). No formerly accepted row is excluded, so the
+-- separate validation is safe for existing rows and previous releases' writes.
+-- No row or column is changed, and no broader wildcard scope is admitted.
 -- DROP and ADD are one ALTER TABLE: one lock, and no instant
 -- without the constraint. postgres drops a constraint's comment with it, so the
 -- declaration is re-issued after.
