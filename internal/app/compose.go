@@ -1798,7 +1798,7 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 }
 
 func (g *Graph) newCredentialsAutomationtokens() (automationtokens.Service, error) {
-	svc, err := automationtokens.NewInstrumented(automationtokens.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	svc, err := automationtokens.New(automationtokens.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
 	if err != nil {
 		return nil, err
 	}
@@ -1806,7 +1806,7 @@ func (g *Graph) newCredentialsAutomationtokens() (automationtokens.Service, erro
 }
 
 func (g *Graph) newCredentialsProvideraccounts() (provideraccounts.Service, error) {
-	svc, err := provideraccounts.NewInstrumented(provideraccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
 	if err != nil {
 		return nil, err
 	}
@@ -1814,7 +1814,7 @@ func (g *Graph) newCredentialsProvideraccounts() (provideraccounts.Service, erro
 }
 
 func (g *Graph) newCredentialsConnectionvault() (connectionvault.Service, error) {
-	svc, err := connectionvault.NewInstrumented(connectionvault.Deps{DB: g.Database().ORM()})
+	svc, err := connectionvault.New(connectionvault.Deps{DB: g.Database().ORM()})
 	if err != nil {
 		return nil, err
 	}
@@ -1822,7 +1822,7 @@ func (g *Graph) newCredentialsConnectionvault() (connectionvault.Service, error)
 }
 
 func (g *Graph) newCredentialsOrgaccounts() (orgaccounts.Service, error) {
-	svc, err := orgaccounts.NewInstrumented(orgaccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
+	svc, err := orgaccounts.New(orgaccounts.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
 	if err != nil {
 		return nil, err
 	}
