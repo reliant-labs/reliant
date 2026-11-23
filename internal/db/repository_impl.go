@@ -3144,10 +3144,6 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
-}
-
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }

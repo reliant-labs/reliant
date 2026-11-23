@@ -973,7 +973,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
+	return &TriggerDeliveryRelay{relay: webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
 		membership: membership, policies: d.Policies}, nil
 }
 
