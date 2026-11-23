@@ -26,7 +26,7 @@ func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).WithToolCallResults(testToolCallResults(h.Repo()))
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(h.Repo()), Store: h.Repo(), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	refusedID := "toolu_" + uuid.NewString()
 	readID := "toolu_" + uuid.NewString()
 	reason := "The user did not approve slack__message_post, so it was not run. Do not attempt it another way."

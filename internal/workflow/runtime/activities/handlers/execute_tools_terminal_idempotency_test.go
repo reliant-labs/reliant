@@ -153,8 +153,14 @@ func TestTerminalIdempotency_TerminalRowWithNoResultFallsBackToStub(t *testing.T
 	assert.Equal(t, InterruptedToolResultContent, output.ToolResults[0].GetContent())
 }
 
+type unavailableToolCallResults struct{ ToolCalls }
+
+func (unavailableToolCallResults) FindToolCallResult(context.Context, string) (*core.ToolCallResult, error) {
+	return nil, errNoToolCallResults
+}
+
 // TestTerminalIdempotency_NoResultReaderFallsBackToStub: an activity built
-// without WithToolCallResults (RegisterAll always sets it) answers a retried
+// with an unavailable result reader answers a retried
 // terminal call with the interrupted stub instead of panicking on the missing
 // reader, and still never re-executes it.
 func TestTerminalIdempotency_NoResultReaderFallsBackToStub(t *testing.T) {
@@ -186,7 +192,7 @@ func TestTerminalIdempotency_NoResultReaderFallsBackToStub(t *testing.T) {
 	}))
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolCalls: unavailableToolCallResults{toolCallsOf(f.h.Repo())}, ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: `{"command":"echo hi"}`}},

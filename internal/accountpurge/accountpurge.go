@@ -2,9 +2,9 @@
 //
 // Package accountpurge removes every row reliant stores for one user.
 //
-// Leaf package: a concrete Purger over *sql.DB with no collaborator to fake
-// and no second implementation. An interface here would have one implementor
-// and one caller.
+// A concrete Purger over the forge ORM and the credential packages. It has one
+// implementation and one caller; the only interface is the narrow Credentials slice
+// each credential package satisfies.
 //
 // # Why this is a hand-written ordered SQL sequence
 //
@@ -45,7 +45,9 @@
 // under a user id that no longer has projects, still visible to nothing and
 // billable to nobody, with no record of how far the delete got. The whole
 // sequence runs in one transaction so it either completes or changes nothing
-// and can be retried.
+// and can be retried. The credential packages (internal/credentials) delete their
+// own rows: each PurgeUser joins the transaction the ctx carries, so their rows go in
+// the same all-or-nothing unit, last, and only for the one person.
 //
 // # temporal_payload_blobs is deliberately not purged here
 //
@@ -59,16 +61,76 @@
 // That horizon is this table's data-retention bound.
 //
 //forge:lint-disable-next-line forge-exclude-contract-outbound-io: its only I/O is the purge transaction it exists to run; a contract.go would buy no mock or decorator because reliant is not forge-generated (no forge.yaml); conversion tracked in H-RELIANT-CI-lint follow-ups
-//forge:exclude-contract: one concrete Purger over *sql.DB with a single caller (account deletion); no second implementation and no seam to fake
+//forge:exclude-contract: one concrete Purger with a single caller (account deletion); no second implementation and no seam to fake
 package accountpurge
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
+
+// Credentials is the slice of a credential package the purge uses. Each takes effect in the
+// transaction ctx carries and touches only the one person's rows.
+type Credentials interface {
+	// PurgeUser deletes the person's credential rows and returns how many.
+	PurgeUser(ctx context.Context, userID string) (int64, error)
+	// UserHasCredentials reports whether the person holds any.
+	UserHasCredentials(ctx context.Context, userID string) (bool, error)
+}
+
+// Deps are what a Purger runs on.
+type Deps struct {
+	// DB is the forge ORM handle the purge's transaction opens on.
+	DB orm.Context
+	// Automation, Accounts and Connections own the person's credential rows: automation tokens,
+	// provider accounts and their grants, and connections with their OAuth flows and events.
+	// Every table that holds a credential belongs to exactly one of them; a new one is added here
+	// and to credentials() below, or its rows outlive the account.
+	Automation  Credentials
+	Accounts    Credentials
+	Connections Credentials
+}
+
+// Purger previews and purges one user's data.
+type Purger struct {
+	deps Deps
+}
+
+// New returns a Purger. Every dependency is required: a Purger missing one would leave that
+// credential's rows behind after the account is deleted.
+func New(deps Deps) (*Purger, error) {
+	switch {
+	case deps.DB == nil:
+		return nil, errors.New("accountpurge: Deps.DB is required")
+	case deps.Automation == nil:
+		return nil, errors.New("accountpurge: Deps.Automation is required")
+	case deps.Accounts == nil:
+		return nil, errors.New("accountpurge: Deps.Accounts is required")
+	case deps.Connections == nil:
+		return nil, errors.New("accountpurge: Deps.Connections is required")
+	}
+	return &Purger{deps: deps}, nil
+}
+
+// named is a credential package with the step name an error reports it under.
+type named struct {
+	name string
+	c    Credentials
+}
+
+// credentials is every credential package, in the order their rows are deleted.
+func (p *Purger) credentials() []named {
+	return []named{
+		{"automation tokens", p.deps.Automation},
+		{"provider accounts", p.deps.Accounts},
+		{"connections", p.deps.Connections},
+	}
+}
 
 // Counts is a preview of what Purge would delete. Headline aggregates only:
 // removing a chat also removes its messages, threads and tool calls by
@@ -80,19 +142,20 @@ type Counts struct {
 	Messages  int64
 	// HasProviderCredentials reports stored third-party credentials (Claude /
 	// Codex / Copilot / Antigravity OAuth tokens, or provider API keys).
-	// Every provider token table must be listed in both the EXISTS union
-	// below and purgeSteps; a table missed in either one leaves live
-	// credentials behind after the account is deleted. Surfaced separately
-	// because losing a credential differs in kind from losing content.
+	// Every credential table belongs to one of the Credentials packages, which
+	// answers for it in both Preview and Purge; a package missing from
+	// credentials() leaves live credentials behind after the account is deleted.
+	// Surfaced separately because losing a credential differs in kind from
+	// losing content.
 	HasProviderCredentials bool
 }
 
 // Preview counts the caller's data without modifying anything.
-func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
+func (p *Purger) Preview(ctx context.Context, userID string) (Counts, error) {
 	var c Counts
 	// One round trip. The message count joins through chats because messages
 	// carry no user_id of their own.
-	row := db.QueryRowContext(ctx, `
+	row := p.deps.DB.QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM projects  WHERE user_id = $1),
 			(SELECT COUNT(*) FROM chats     WHERE user_id = $1),
@@ -101,13 +164,17 @@ func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
 			  WHERE p.user_id = $1),
 			(SELECT COUNT(*) FROM messages m
 			   JOIN chats c ON c.id = m.chat_id
-			  WHERE c.user_id = $1),
-			(EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM provider_accounts       WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM connections             WHERE user_id = $1 AND deleted_at IS NULL))`,
+			  WHERE c.user_id = $1)`,
 		userID)
-	if err := row.Scan(&c.Projects, &c.Chats, &c.Worktrees, &c.Messages, &c.HasProviderCredentials); err != nil {
+	if err := row.Scan(&c.Projects, &c.Chats, &c.Worktrees, &c.Messages); err != nil {
 		return Counts{}, fmt.Errorf("accountpurge: preview: %w", err)
+	}
+	for _, cred := range p.credentials() {
+		has, err := cred.c.UserHasCredentials(ctx, userID)
+		if err != nil {
+			return Counts{}, fmt.Errorf("accountpurge: preview %s: %w", cred.name, err)
+		}
+		c.HasProviderCredentials = c.HasProviderCredentials || has
 	}
 	return c, nil
 }
@@ -274,44 +341,21 @@ var purgeSteps = []step{
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.
 	{"user_app_sessions", `DELETE FROM user_app_sessions WHERE user_id = $1`},
-
-	// --- Depth 6: credentials, deleted last. ---
-	//
-	// Deliberately the final step. These are live third-party OAuth refresh
-	// tokens and provider API keys; if any earlier step fails and the
-	// transaction rolls back, the user keeps working with their credentials
-	// intact rather than being left authenticated to nothing.
-	// api_keys holds the person's automation tokens (one per daemon).
-	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
-	// The person's grants to use org accounts (the grants they made as an
-	// admin stay: granted_by_user_id is attribution, not ownership).
-	{"provider_account_grants", `DELETE FROM provider_account_grants WHERE user_id = $1`},
-	// provider_account_limits, thread_provider_accounts and provider_account_grants cascade
-	// from provider_accounts. Only the person's own: an org-owned account's user_id is the
-	// org's owner key 'org:<org_id>', which no person's id matches, so the org keys a person
-	// added (created_by_user_id) outlive their account (control-plane
-	// docs/design/org-provider-accounts.md §3.1, §6).
-	{"provider_accounts", `DELETE FROM provider_accounts WHERE user_id = $1`},
-
-	// Connections (credential vault). connection_secrets cascades from
-	// connections. The audit rows go too: they are the user's data, and a
-	// deleted account must leave nothing keyed to it.
-	{"oauth_flows", `DELETE FROM oauth_flows WHERE user_id = $1`},
-	{"connection_events", `DELETE FROM connection_events WHERE user_id = $1`},
-	// Only the user's PERSONAL connections. An org connection's user_id is
-	// the admin who created it (attribution): it is the org's, sealed under
-	// the org's tenant, and must outlive the admin's account
-	// (control-plane docs/design/org-sharing.md §7.2).
-	{"connections", `DELETE FROM connections WHERE user_id = $1 AND owner_kind = 'user'`},
-	// Last: dropping the user's wrapped DEK is crypto-shredding. Anything the
-	// purge missed, or a backup, becomes unreadable. Must follow every table
-	// holding data sealed under it (connection_secrets references vault_keys).
-	{"vault_keys", `DELETE FROM vault_keys WHERE tenant_kind = 'user' AND tenant_id = $1`},
 }
+
+// vaultKeysStep is the last statement of the purge, after every credential package has deleted
+// its rows. Dropping the user's wrapped DEK is crypto-shredding: anything the purge missed, or a
+// backup, becomes unreadable. It must follow every table holding data sealed under it
+// (connection_secrets references vault_keys), so it cannot move earlier.
+var vaultKeysStep = step{"vault_keys", `DELETE FROM vault_keys WHERE tenant_kind = 'user' AND tenant_id = $1`}
 
 // Purge deletes every row owned by userID, in one transaction, and returns the
 // total number of rows removed. Either everything goes or nothing does.
-func Purge(ctx context.Context, db *sql.DB, userID string) (int64, error) {
+//
+// The transaction is READ COMMITTED and one attempt, never retried: the user's LLM-usage advisory
+// lock taken first is what serializes this against the ledger's writers, and the delete is a fixed
+// sequence with no read-then-write to conflict.
+func (p *Purger) Purge(ctx context.Context, userID string) (int64, error) {
 	if userID == "" {
 		// A blank user id would make every `WHERE user_id = ''` match nothing,
 		// so this is not destructive — but it always indicates a caller bug
@@ -320,38 +364,62 @@ func Purge(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 		return 0, fmt.Errorf("accountpurge: empty user id")
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("accountpurge: begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }() // no-op once committed
-
-	// Fence the LLM usage ledger before deleting anything. A model call already
-	// in flight finishes after the account is gone and writes its usage row; the
-	// ledger takes this same lock (shared) per write and refuses a fenced user, so
-	// a write either commits before the lock is granted and is deleted by the
-	// steps below, or waits for this transaction and is refused. Neither lock nor fence counts toward the deleted total.
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
-		return 0, fmt.Errorf("accountpurge: lock llm usage: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_usage_purged_users (user_id) VALUES ($1)
-		ON CONFLICT (user_id) DO UPDATE SET purged_at = now()`, userID); err != nil {
-		return 0, fmt.Errorf("accountpurge: fence llm usage: %w", err)
-	}
-
 	var total int64
-	for _, s := range purgeSteps {
-		res, err := tx.ExecContext(ctx, s.sql, userID)
-		if err != nil {
-			return 0, fmt.Errorf("accountpurge: %s: %w", s.name, err)
+	err := p.deps.DB.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		total = 0
+
+		// Fence the LLM usage ledger before deleting anything. A model call already
+		// in flight finishes after the account is gone and writes its usage row; the
+		// ledger takes this same lock (shared) per write and refuses a fenced user, so
+		// a write either commits before the lock is granted and is deleted by the
+		// steps below, or waits for this transaction and is refused. Neither lock nor fence counts toward the deleted total.
+		if _, err := p.deps.DB.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
+			return fmt.Errorf("accountpurge: lock llm usage: %w", err)
 		}
-		if n, err := res.RowsAffected(); err == nil {
+		if _, err := p.deps.DB.Exec(ctx, `INSERT INTO llm_usage_purged_users (user_id) VALUES ($1)
+			ON CONFLICT (user_id) DO UPDATE SET purged_at = now()`, userID); err != nil {
+			return fmt.Errorf("accountpurge: fence llm usage: %w", err)
+		}
+
+		for _, s := range purgeSteps {
+			n, err := p.exec(ctx, s, userID)
+			if err != nil {
+				return err
+			}
 			total += n
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("accountpurge: commit: %w", err)
+		// Credentials last. These are live third-party OAuth refresh tokens and provider API
+		// keys; if any earlier step fails and the transaction rolls back, the user keeps working
+		// with their credentials intact rather than being left authenticated to nothing.
+		for _, cred := range p.credentials() {
+			n, err := cred.c.PurgeUser(ctx, userID)
+			if err != nil {
+				return fmt.Errorf("accountpurge: %s: %w", cred.name, err)
+			}
+			total += n
+		}
+		n, err := p.exec(ctx, vaultKeysStep, userID)
+		if err != nil {
+			return err
+		}
+		total += n
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return total, nil
+}
+
+func (p *Purger) exec(ctx context.Context, s step, userID string) (int64, error) {
+	res, err := p.deps.DB.Exec(ctx, s.sql, userID)
+	if err != nil {
+		return 0, fmt.Errorf("accountpurge: %s: %w", s.name, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return n, nil
 }

@@ -165,7 +165,7 @@ func (m *MockDaemonInstalls) ListProjectDaemonsForDaemon(ctx context.Context, da
 var _ DaemonInstalls = (*MockDaemonInstalls)(nil)
 
 // forge:section MockRepository
-// forge:hash=da91491e5ebf2d5161b429ea503b31e461f4e1ffb3b837b3ac90a71b256956cf
+// forge:hash=b579c42af9c57631e1b8baa157b217975ede7591b3ea91e3cc664de21b239168
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -204,7 +204,6 @@ type MockRepository struct {
 	UpdateWorktreeFunc                     func(context.Context, *db.Worktree) error
 	ListFailedWorktreesForDaemonFunc       func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
 	MergeWorktreeCleanupMetadataFunc       func(context.Context, string, func(m *db.CleanupMetadata, archived bool) bool) error
-	UpsertProjectConfigRecordFunc          func(context.Context, *db.ProjectConfigRecord) error
 	CreateSettingFunc                      func(context.Context, *db.Setting) error
 	GetSettingFunc                         func(context.Context, string, *string, string) (*db.Setting, error)
 	UpdateSettingFunc                      func(context.Context, *db.Setting) error
@@ -471,15 +470,6 @@ func (m *MockRepository) MergeWorktreeCleanupMetadata(ctx context.Context, id st
 	return contractkit.MockNotSet("MockRepository", "MergeWorktreeCleanupMetadata")
 }
 
-// UpsertProjectConfigRecord records the call and delegates to UpsertProjectConfigRecordFunc when set.
-func (m *MockRepository) UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error {
-	m.Recorder.Record("UpsertProjectConfigRecord", ctx, record)
-	if m.UpsertProjectConfigRecordFunc != nil {
-		return m.UpsertProjectConfigRecordFunc(ctx, record)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpsertProjectConfigRecord")
-}
-
 // CreateSetting records the call and delegates to CreateSettingFunc when set.
 func (m *MockRepository) CreateSetting(ctx context.Context, setting *db.Setting) error {
 	m.Recorder.Record("CreateSetting", ctx, setting)
@@ -509,6 +499,32 @@ func (m *MockRepository) UpdateSetting(ctx context.Context, setting *db.Setting)
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockProjectConfigs
+// forge:hash=1303fad046076a0a0b575f6cd2b0e3a734eaf60c90d9eab093981bc9f7f09a8f
+
+// MockProjectConfigs is a test mock for the ProjectConfigs interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectConfigs.<Method>Func not set" error.
+type MockProjectConfigs struct {
+	contractkit.Recorder
+	UpsertProjectConfigRecordFunc func(context.Context, *core.ProjectConfigRecord) error
+}
+
+// UpsertProjectConfigRecord records the call and delegates to UpsertProjectConfigRecordFunc when set.
+func (m *MockProjectConfigs) UpsertProjectConfigRecord(ctx context.Context, rec *core.ProjectConfigRecord) error {
+	m.Recorder.Record("UpsertProjectConfigRecord", ctx, rec)
+	if m.UpsertProjectConfigRecordFunc != nil {
+		return m.UpsertProjectConfigRecordFunc(ctx, rec)
+	}
+	return contractkit.MockNotSet("MockProjectConfigs", "UpsertProjectConfigRecord")
+}
+
+// Compile-time check.
+var _ ProjectConfigs = (*MockProjectConfigs)(nil)
 
 // forge:section MockProjectPurges
 // forge:hash=0153f78e9f45d88bdc8ac44486ac9fba1d2cbb27d5f962258f169c46d08937ff

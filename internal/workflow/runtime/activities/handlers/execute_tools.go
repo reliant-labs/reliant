@@ -276,6 +276,7 @@ func ptrValue(s *string) string {
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
 	preemption   MailboxPreempter
+	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
 	// results reads the durable result of a finished tool call. Set by
 	// WithToolCallResults.
@@ -316,6 +317,9 @@ var errNoToolCallResults = errors.New("execute tools: no tool call result reader
 // error as "no result survived", the same as a missing row.
 func (a *ExecuteToolsActivity) findToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
 	if a.results == nil {
+		if a.toolCalls != nil {
+			return a.toolCalls.FindToolCallResult(ctx, toolCallID)
+		}
 		return nil, errNoToolCallResults
 	}
 	return a.results.FindToolCallResult(ctx, toolCallID)
@@ -335,10 +339,12 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 	return a
 }
 
-// NewExecuteToolsActivity creates a new ExecuteToolsActivity
+// NewExecuteToolsActivity creates a new ExecuteToolsActivity; deps.ToolCalls is
+// the tool-call records it reads and writes (NewToolCalls).
 func NewExecuteToolsActivity(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         deps.Store,
+		toolCalls:    deps.ToolCalls,
 		preemption:   deps.Preemption,
 		toolExecutor: deps.ToolExecutor,
 	}
@@ -995,7 +1001,7 @@ func runFunding(ctx context.Context, store RunFundingStore, chat *db.Chat, who a
 // treated as no prior result. A row that never learned its thread (written
 // before execute_tools recorded one) is compared on the chat alone.
 func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, chatID, thread, toolCallID, toolName string) (message.ToolResult, bool) {
-	call, err := a.repo.GetToolCall(ctx, toolCallID)
+	call, err := a.toolCalls.FindToolCall(ctx, toolCallID)
 	if err != nil || call == nil || !call.Status.IsTerminal() {
 		return message.ToolResult{}, false
 	}
@@ -1016,9 +1022,7 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 
 	result, err := a.findToolCallResult(ctx, toolCallID)
 	if errors.Is(err, errNoToolCallResults) {
-		activity.GetLogger(ctx).Warn("[ExecuteTools] Terminal tool call's recorded result cannot be read; answering with the interrupted stub",
-			"tool_call_id", toolCallID,
-			"error", err)
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Terminal tool call's recorded result cannot be read; answering with the interrupted stub", "tool_call_id", toolCallID, "error", err)
 	}
 	if err != nil || result == nil {
 		// Terminal row, but no result content survived (e.g. a historical
@@ -1325,7 +1329,7 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 			return nil
 		}
 		now := time.Now()
-		return a.repo.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
+		return a.toolCalls.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
 			ToolCallID:   tec.toolCallID,
 			Content:      res.content,
 			IsError:      res.isError,
@@ -1562,7 +1566,7 @@ func (a *ExecuteToolsActivity) recordInterruptedRetry(ctx context.Context, chatI
 	if a.repo == nil || chatID == "" || toolCallID == "" {
 		return
 	}
-	if existing, err := a.repo.GetToolCall(ctx, toolCallID); err == nil && existing != nil &&
+	if existing, err := a.toolCalls.FindToolCall(ctx, toolCallID); err == nil && existing != nil &&
 		existing.ChatID == chatID && existing.Status == core.ToolCallStatusBackgrounded {
 		return
 	}
@@ -1688,7 +1692,7 @@ func (a *ExecuteToolsActivity) upsertToolCallResult(ctx context.Context, chatID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	if err := a.repo.UpsertToolCallResult(ctx, chatID, result); err != nil {
+	if err := a.toolCalls.UpsertToolCallResult(ctx, chatID, result); err != nil {
 		activity.GetLogger(ctx).Error("[TOOL_STATUS] Failed to persist tool call result",
 			"error", err,
 			"tool_call_id", toolCallID)

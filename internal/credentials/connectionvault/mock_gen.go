@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=85de0e201c7279ca58589e24ecb35ea8da8a0fe1ac6558595d1b17ec96a797d3
+// forge:hash=7a193a1f193c23ef2cd21cab83d69eb76f976f57544a6aeeac36ee3a123ab574
 
 // MockService is a test mock for the Service interface.
 //
@@ -57,6 +57,8 @@ type MockService struct {
 	ConsumeOAuthFlowFunc           func(context.Context, []byte, time.Time) (*core.OAuthFlow, error)
 	AppendConnectionEventFunc      func(context.Context, core.ConnectionEvent) error
 	ListConnectionEventsFunc       func(context.Context, string, string, int, int64) ([]core.ConnectionEvent, error)
+	PurgeUserFunc                  func(context.Context, string) (int64, error)
+	UserHasCredentialsFunc         func(context.Context, string) (bool, error)
 }
 
 // CreateConnection records the call and delegates to CreateConnectionFunc when set.
@@ -327,6 +329,24 @@ func (m *MockService) ListConnectionEvents(ctx context.Context, userID string, i
 		return m.ListConnectionEventsFunc(ctx, userID, id, limit, beforeID)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListConnectionEvents")
+}
+
+// PurgeUser records the call and delegates to PurgeUserFunc when set.
+func (m *MockService) PurgeUser(ctx context.Context, userID string) (int64, error) {
+	m.Recorder.Record("PurgeUser", ctx, userID)
+	if m.PurgeUserFunc != nil {
+		return m.PurgeUserFunc(ctx, userID)
+	}
+	return 0, contractkit.MockNotSet("MockService", "PurgeUser")
+}
+
+// UserHasCredentials records the call and delegates to UserHasCredentialsFunc when set.
+func (m *MockService) UserHasCredentials(ctx context.Context, userID string) (bool, error) {
+	m.Recorder.Record("UserHasCredentials", ctx, userID)
+	if m.UserHasCredentialsFunc != nil {
+		return m.UserHasCredentialsFunc(ctx, userID)
+	}
+	return false, contractkit.MockNotSet("MockService", "UserHasCredentials")
 }
 
 // Compile-time check.

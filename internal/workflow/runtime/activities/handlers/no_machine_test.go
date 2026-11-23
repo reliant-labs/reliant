@@ -298,7 +298,7 @@ func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := newMockToolExecutor()
-			activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
+			activity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(f.h.Repo()), Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 			shellID, viewID := "call-shell-"+uuid.NewString(), "call-view-"+uuid.NewString()
 
 			var output ExecuteToolsOutput
@@ -335,7 +335,7 @@ func TestExecuteTools_NoMachineRunStillRunsServerToolsOnAMarkedContext(t *testin
 
 	f := setupNoMachineFixture(t, true)
 	executor := &contextRecordingExecutor{}
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).WithToolCallResults(testToolCallResults(f.h.Repo()))
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{ToolCalls: toolCallsOf(f.h.Repo()), Store: f.h.Repo(), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{

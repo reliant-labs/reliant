@@ -147,7 +147,7 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			require.NoError(t, err)
 			// A synced record, as every project with a connected daemon has.
 			skills := `[{"name":"a-skill","body":"` + strings.Repeat("x", 64<<10) + `"}]`
-			require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+			require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 				ProjectID: chat.ProjectID, DaemonID: "daemon-1", ProjectSkillsJSON: &skills,
 			}))
 

@@ -85,10 +85,11 @@ type introspectResponse struct {
 	// machine (control-plane's daemons.org_id). Absent for any other token,
 	// a machine with no recorded org, and from an older control plane.
 	DaemonOrgID string `json:"daemonOrgId"`
-	// ClientID and Audience are an mcp:oauth token's OAuth client and the
-	// RFC 8707 resource it was issued for. Empty for every other token, and
-	// from an older control plane, so such a token is never accepted as an
-	// MCP client's (fat.Principal.IsMCPOAuthFor needs both).
+	// ClientID and Audience are an MCP client token's (mcp:oauth or
+	// mcp:forge) OAuth client and the RFC 8707 resource it was issued for.
+	// Empty for every other token, and from an older control plane, so such
+	// a token is never accepted as an MCP client's
+	// (fat.Principal.IsMCPOAuthFor and IsMCPForgeFor need both).
 	ClientID string `json:"clientId"`
 	Audience string `json:"audience"`
 }

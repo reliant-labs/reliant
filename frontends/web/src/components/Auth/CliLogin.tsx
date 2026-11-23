@@ -29,13 +29,26 @@ import { authPath, oauthCliPath } from "@/lib/paths";
  *
  * A third-party MCP client (Claude, ChatGPT, Cursor…) that registered itself
  * with the control plane (RFC 7591) arrives here the same way, asking to act
- * on the person's Reliant MCP connectors. Its name is whatever it registered,
+ * on the person's Reliant MCP connectors, or in Reliant Forge when the resource
+ * is the Reliant Forge connector (/forge/mcp). Its name is whatever it registered,
  * so the page shows it only as the control plane resolves it
  * (GET /oauth/client), labelled unverified, and never from the query string,
  * which anyone can write. A client the control plane cannot resolve, or one
  * it says is not third-party while this page does not know it, cannot be
  * approved.
  */
+
+// isForgeMCPResource reports whether an RFC 8707 resource is the Reliant Forge
+// MCP connector (`<api>/forge/mcp`), whose token acts in Reliant Forge
+// (monitoring, releases, environments) rather than on a workspace connector.
+// Copy only: the control plane decides what the token may do.
+function isForgeMCPResource(resource: string): boolean {
+  try {
+    return new URL(resource).pathname.endsWith("/forge/mcp");
+  } catch {
+    return false;
+  }
+}
 
 // What each scope lets a CLI do, in the words a person approving it needs.
 const SCOPE_LABELS: Record<string, string> = {
@@ -118,6 +131,7 @@ export function CliLogin() {
   // RFC 8707: the MCP server a third-party client asks to act on. The control
   // plane accepts only a resource it is configured for.
   const resource = params.get("resource") ?? "";
+  const forgeResource = isForgeMCPResource(resource);
   const returnsTo = redirectHost(params.get("redirect_uri"));
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
@@ -345,12 +359,17 @@ export function CliLogin() {
               <ul className="space-y-1.5" data-testid="mcp-consent-scopes">
                 <li className="text-sm flex items-start gap-2">
                   <span className="text-muted-foreground mt-0.5">•</span>
-                  <span>Act as you on your Reliant MCP connectors</span>
+                  <span>
+                    {forgeResource
+                      ? "Act as you in Reliant Forge: monitoring, releases and environments"
+                      : "Act as you on your Reliant MCP connectors"}
+                  </span>
                 </li>
               </ul>
               <p className="text-xs text-muted-foreground">
-                Which workspace it may use, and what it may do there, is the connector you choose. You can disconnect
-                it at any time.
+                {forgeResource
+                  ? "It reaches only the organization you choose here, and which of its projects and tools it may use is the Reliant Forge connector you choose next. You can disconnect it at any time."
+                  : "Which workspace it may use, and what it may do there, is the connector you choose. You can disconnect it at any time."}
               </p>
             </div>
           </div>

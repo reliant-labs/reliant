@@ -30,7 +30,7 @@ func TestCapacityLaunchWakesTheNextWaitingEvent(t *testing.T) {
 	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 2}}}
 	wake := &recordingStarter{}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
 
 	first, err := f.firer.Fire(ctx, f.fireAt(2))
 	require.NoError(t, err)
@@ -74,7 +74,6 @@ func TestCapacityLaunchWakesTheNextWaitingEvent(t *testing.T) {
 
 type orderedCapacityRepo struct {
 	capacityRedriveRepo
-	capacityRepository
 	calls []string
 }
 
