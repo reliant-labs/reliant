@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func bodiesByID(resp *reliantv1.GetContentBlockBodiesResponse) map[string]*reliantv1.ContentBlockBody {
@@ -45,7 +46,7 @@ func TestGetContentBlockBodies(t *testing.T) {
 		return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	}
 	ctx := as("test-user")
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	mine := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 	theirs := dbtest.SeedTranscriptBodies(t, as("someone-else"), repo, "someone-else")
 
@@ -195,7 +196,7 @@ func TestGetToolResultAndBodiesAgreeOnBranches(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	mine := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 	branch := seedToolResult(t, repo, "test-user", "", "", ptr.Of(mine.ContextWindowID))
 

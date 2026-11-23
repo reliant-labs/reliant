@@ -4,8 +4,9 @@ package handlers
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 // TestRepairMessageHistory_NoOrphanedToolCalls verifies that messages

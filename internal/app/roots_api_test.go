@@ -101,10 +101,11 @@ func TestAPIReadiness(t *testing.T) {
 // api-server's own config and the config-only settings before
 // every other node, the database-backed globals (the LLM key provider and
 // Reliant-key healer, analytics, the error reporter) right after the
-// database they read.
+// database they read (the analytics consent is read through privacy, which
+// is built first for it).
 func TestAPIInstallsProcessStateFirst(t *testing.T) {
 	names := PlanAPI().Names()
-	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "database", "process_runtime"}, names[:7])
+	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "database", "vault", "credentials_provideraccounts", "privacy", "process_runtime"}, names[:10])
 }
 
 // The api root reaches only the api's variants: never the worker's router —

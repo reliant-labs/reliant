@@ -116,25 +116,27 @@ type ClaimableServiceClient interface {
 	// The org is one more org the caller belongs to; it is not made their
 	// default.
 	//
-	// FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
-	// (docs/orgs.md). If the caller already has one and the claimed deploy brings
-	// another, the claim needs to know which keeps the slot: set free_site to
-	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
-	// is refused (FailedPrecondition, claimable_free_site_choice_required, with a
-	// FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
-	// is no default. The choice is re-checked inside the claim's transaction: if
-	// the other site is gone or the caller subscribed meanwhile, the real state is
-	// applied and the response's free_site_outcome says what happened. To keep
-	// both sites, subscribe first (the claim link stays valid); no choice is
-	// needed afterwards.
+	// FREE STATIC HOSTING. Each founder can designate one organization
+	// (docs/orgs.md). If both organizations have free-tier static sites, moving
+	// the designation can pause all free sites in the previously designated org.
+	// Choose the organization that keeps free hosting with free_site:
+	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without a choice the
+	// claim is refused (FailedPrecondition, claimable_free_site_choice_required,
+	// with a FreeSiteChoiceRequired detail naming a representative site in each
+	// org), and nothing changes. The claim re-checks whether the conflict still
+	// exists inside its transaction; free_site_outcome says what happened.
+	// FREE_SITE_CHOICE_CLAIMED moves the designation to the claimed org. Inside
+	// the 30-day move cooldown, this is refused (FailedPrecondition,
+	// claimable_free_hosting_move_cooldown; nothing changes). Set up hosting
+	// billing to keep sites live in both organizations.
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
 	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
-	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
-	// claiming would put a second site on their one free slot, and names both
-	// sites. GetClaim cannot say: it is public and does not know who is asking.
-	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+	// GetClaimFreeSite previews whether the signed-in caller must choose which
+	// organization keeps free hosting, with a representative site in each org.
+	// GetClaim is public and cannot make this determination. CompleteClaim
+	// re-checks in its transaction.
 	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
 }
 
@@ -294,25 +296,27 @@ type ClaimableServiceHandler interface {
 	// The org is one more org the caller belongs to; it is not made their
 	// default.
 	//
-	// FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
-	// (docs/orgs.md). If the caller already has one and the claimed deploy brings
-	// another, the claim needs to know which keeps the slot: set free_site to
-	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
-	// is refused (FailedPrecondition, claimable_free_site_choice_required, with a
-	// FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
-	// is no default. The choice is re-checked inside the claim's transaction: if
-	// the other site is gone or the caller subscribed meanwhile, the real state is
-	// applied and the response's free_site_outcome says what happened. To keep
-	// both sites, subscribe first (the claim link stays valid); no choice is
-	// needed afterwards.
+	// FREE STATIC HOSTING. Each founder can designate one organization
+	// (docs/orgs.md). If both organizations have free-tier static sites, moving
+	// the designation can pause all free sites in the previously designated org.
+	// Choose the organization that keeps free hosting with free_site:
+	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without a choice the
+	// claim is refused (FailedPrecondition, claimable_free_site_choice_required,
+	// with a FreeSiteChoiceRequired detail naming a representative site in each
+	// org), and nothing changes. The claim re-checks whether the conflict still
+	// exists inside its transaction; free_site_outcome says what happened.
+	// FREE_SITE_CHOICE_CLAIMED moves the designation to the claimed org. Inside
+	// the 30-day move cooldown, this is refused (FailedPrecondition,
+	// claimable_free_hosting_move_cooldown; nothing changes). Set up hosting
+	// billing to keep sites live in both organizations.
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
 	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
-	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
-	// claiming would put a second site on their one free slot, and names both
-	// sites. GetClaim cannot say: it is public and does not know who is asking.
-	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+	// GetClaimFreeSite previews whether the signed-in caller must choose which
+	// organization keeps free hosting, with a representative site in each org.
+	// GetClaim is public and cannot make this determination. CompleteClaim
+	// re-checks in its transaction.
 	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
 }
 

@@ -85,3 +85,42 @@ func TestRepoForgeAppQueries(t *testing.T) {
 	require.NoError(t, env.Repo.DeleteRepo(ctx, "repo-b"))
 	require.Empty(t, list())
 }
+
+// TestListReposHoldingForgeApp: the repos of the named projects that hold a
+// forge app of one name, once each however many subpaths declare it, and
+// none of another project's.
+func TestListReposHoldingForgeApp(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)
+	remote := "git@github.com:acme/shop.git"
+	for _, p := range []string{"proj-1", "proj-2", "proj-other"} {
+		require.NoError(t, env.Repo.CreateProject(ctx, &core.Project{ID: p, UserID: "user-a", Name: p, Path: "/srv/" + p,
+			CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	}
+	for _, r := range []*core.Repo{
+		{ID: "r1-root", ProjectID: "proj-1", Name: "root", RelativePath: "", RemoteURL: &remote, CreatedAt: now, UpdatedAt: now},
+		{ID: "r1-lib", ProjectID: "proj-1", Name: "lib", RelativePath: "lib", CreatedAt: now, UpdatedAt: now},
+		{ID: "r2-root", ProjectID: "proj-2", Name: "root", RelativePath: "", CreatedAt: now, UpdatedAt: now},
+		{ID: "ro-root", ProjectID: "proj-other", Name: "root", RelativePath: "", CreatedAt: now, UpdatedAt: now},
+	} {
+		require.NoError(t, env.Repo.CreateRepo(ctx, r))
+	}
+	require.NoError(t, env.Repo.SetRepoForgeApps(ctx, "r1-root", []core.RepoForgeApp{{Subpath: "", Name: "shop"}, {Subpath: "deploy", Name: "shop"}}, true))
+	require.NoError(t, env.Repo.SetRepoForgeApps(ctx, "r1-lib", []core.RepoForgeApp{{Subpath: "", Name: "lib"}}, true))
+	require.NoError(t, env.Repo.SetRepoForgeApps(ctx, "r2-root", []core.RepoForgeApp{{Subpath: "web", Name: "shop"}}, true))
+	require.NoError(t, env.Repo.SetRepoForgeApps(ctx, "ro-root", []core.RepoForgeApp{{Subpath: "", Name: "shop"}}, true))
+
+	got, err := env.Repo.ListReposHoldingForgeApp(ctx, "shop", []string{"proj-1", "proj-2"})
+	require.NoError(t, err)
+	ids := make([]string, len(got))
+	for i, r := range got {
+		ids[i] = r.ID
+	}
+	require.Equal(t, []string{"r1-root", "r2-root"}, ids)
+	require.Equal(t, remote, *got[0].RemoteURL)
+
+	got, err = env.Repo.ListReposHoldingForgeApp(ctx, "shop", nil)
+	require.NoError(t, err)
+	require.Empty(t, got, "no projects, no repos")
+}

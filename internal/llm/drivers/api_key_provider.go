@@ -26,16 +26,18 @@ var (
 
 // APIKeyProvider manages API keys for drivers
 type APIKeyProvider struct {
-	repo APIKeyStore
+	repo     AccountStore
+	settings SettingsStore
 }
 
 // InitializeAPIKeyProvider initializes or updates the global API key provider.
-// This can be called multiple times (e.g., in tests) to update the repo reference.
-func InitializeAPIKeyProvider(repo APIKeyStore) {
+// This can be called multiple times (e.g., in tests) to update the store references.
+func InitializeAPIKeyProvider(accounts AccountStore, settings SettingsStore) {
 	providerMu.Lock()
 	defer providerMu.Unlock()
 	globalAPIKeyProvider = &APIKeyProvider{
-		repo: repo,
+		repo:     accounts,
+		settings: settings,
 	}
 }
 

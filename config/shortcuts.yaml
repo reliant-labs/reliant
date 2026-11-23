@@ -22,38 +22,52 @@
 # SEQUENCES:
 #   A space-separated binding is a sequence. The first chord arms a prefix and
 #   the next key completes it (1.5s timeout). Sequences are how we get rich
-#   shortcuts in a browser tab: once Cmd+K is captured, the following keystroke
-#   is ours — PROVIDED the browser releases it. The second key may be typed with
-#   Cmd still held (Cmd+K then Cmd+W, VS Code muscle memory), and the browser
-#   judges that held chord before the page sees it. So on the web a sequence's
-#   second key must not make a hard-reserved chord when held: not T, N, W or Q
-#   (Cmd+K Cmd+W would close Reliant's own tab), and not Shift+[ or Shift+]
-#   (Chrome's tab switching). bindings.test.ts enforces this.
+#   shortcuts that work in a browser tab: once Cmd+K is captured, the following
+#   keystroke is ours — PROVIDED the browser releases it. The second key may be
+#   typed with Cmd still held (Cmd+K then Cmd+W, VS Code muscle memory), and
+#   the browser judges that held chord before the page sees it. So a
+#   sequence's second key must not make a hard-reserved chord when held: not
+#   T, N, W or Q (Cmd+K Cmd+W would close Reliant's own tab), and not Shift+[
+#   or Shift+] (Chrome's tab switching). bindings.test.ts enforces this.
 #
-# WEB BINDINGS:
-#   `binding` is the desktop (Electron) chord. `web_binding` overrides it in a
-#   browser tab. Omit web_binding when the chord works in both.
-#
-#   `desktop_only: true` — the shortcut does not exist in a browser tab: no
-#   binding there (a remap does not apply either), absent from the web's
-#   Settings list. For what the browser already provides itself, like
-#   find-in-page; it cannot be combined with web_binding.
-#
-#   Browsers fall into three buckets, and the bucket decides whether an override
-#   is required:
-#     HARD-RESERVED — the page never receives the event; preventDefault cannot
-#       help. Cmd+T, Cmd+N, Cmd+W, Cmd+Shift+T, and on macOS Chrome's tab
-#       switching: Cmd+Shift+[ / ], Cmd+Alt+Left / Right. An override is
-#       MANDATORY. The list is lib/keyboard/reserved.ts, taken from Chromium's
-#       reserved-command set — check it rather than guessing.
-#     HOSTILE — interceptable, but overriding breaks a universal expectation
-#       (Cmd+P print, Cmd+F find, Cmd+L address bar, Cmd+S save). Override
-#       unless the app meaning is clearly the one the user wants in context.
+# ONE BINDING EVERYWHERE:
+#   `binding` is the shortcut on EVERY surface — the desktop app and a browser
+#   tab alike — so a user's muscle memory carries between them. Browser chords
+#   fall into three tiers (lib/keyboard/reserved.ts, taken from Chromium's
+#   reserved-command set — check it rather than guessing), and the tier decides
+#   what a binding may be:
+#     HARD — the page never receives the event; preventDefault cannot help.
+#       Cmd+T, Cmd+N, Cmd+W, Cmd+Q, Cmd+Shift+T/N/W, and on macOS Chrome's tab
+#       switching: Cmd+Shift+[ / ], Cmd+Alt+Left / Right. A hard chord is
+#       NEVER a `binding`: it would be dead in a browser tab. Neither is a
+#       sequence whose second key, typed with Cmd still held, makes one (see
+#       SEQUENCES).
+#     HOSTILE — the page can intercept it, at the cost of the browser's own
+#       meaning (Cmd+P print, Cmd+O open file, Cmd+L address bar, Cmd+F find,
+#       Cmd+, browser settings). A hostile chord IS a fine binding: Reliant
+#       overrides it in the tab, the way VS Code for the web takes Cmd+P. Pick
+#       it when the app's meaning is the one a user of an app like this wants.
 #     SAFE — no meaningful browser claim.
 #
 #   Verify before assuming SAFE: Cmd+Shift+C (DevTools inspect), Cmd+Shift+J
 #   (downloads), Cmd+Shift+B (bookmarks bar), and Cmd+Shift+P (Firefox private
-#   window) all look free but are not.
+#   window) all look free but are not — they are hostile, and overridden.
+#
+#   `desktop_aliases: ["Cmd+T"]` — older chords that ALSO fire in the desktop
+#   app, so moving a shortcut off a hard chord does not break desktop muscle
+#   memory. Shown in Settings as "also"; the desktop menu falls back to one
+#   when the binding cannot be a native accelerator (a sequence). An alias
+#   yields to any binding that claims the same chord, and a user's remap of the
+#   shortcut replaces its aliases along with its binding.
+#
+#   `web_binding` — a different chord in a browser tab. Avoid it: it splits
+#   muscle memory, which is what the rules above exist to prevent.
+#   bindings.test.ts allows one only from an explicit, reasoned list.
+#
+#   `desktop_only: true` — the shortcut does not exist in a browser tab: no
+#   binding there (a remap does not apply either), absent from the web's
+#   Settings list. Only for what the browser already provides itself, with
+#   the same key, like find-in-page; it cannot be combined with web_binding.
 #
 # CONTEXT:
 #   `context` names the focus surface where a shortcut applies. Resolution runs
@@ -92,36 +106,44 @@ shortcuts:
   # File & Window Management
   # ==================================
   # Cmd+T / Cmd+W / Cmd+Shift+T are hard-reserved by every browser — the page
-  # never sees them — so they need web variants. Not Cmd+K T / Cmd+K W: typed
-  # with Cmd still held, those ARE Cmd+T / Cmd+W (see SEQUENCES above).
+  # never sees them — so they are not bindings, and keep working in the
+  # desktop app as desktop_aliases. Not Cmd+K T / Cmd+K W either: typed with
+  # Cmd still held, those ARE Cmd+T / Cmd+W (see SEQUENCES above).
   #
-  # New chat is the most-used of them, so the browser gets one chord rather than
-  # a sequence. Cmd+Alt+N is what VS Code in a browser uses for "new" on macOS
-  # and Linux; it is free in every browser, and on Windows it is not AltGr+N
-  # (which types a character) because the dispatcher leaves Ctrl+Alt alone.
+  # New chat is the most-used of them, so it gets one chord rather than a
+  # sequence. Cmd+Alt+N is what VS Code for the web uses for "new" on macOS
+  # and Linux. In Chrome it is a hostile chord (a split view), which Reliant
+  # overrides. On Windows, Ctrl+Alt is also AltGr: the dispatcher tells AltGr
+  # typing (AltGr+N is "ñ" on US-International) from the shortcut by the key
+  # it produces, and the desktop menu leaves Ctrl+Alt chords to it (see
+  # electron/src/menu-accelerators.js).
   - id: newChat
     name: New Chat
     description: Create a new chat tab
     category: File & Window Management
-    binding: Cmd+T
-    web_binding: Cmd+Alt+N
+    binding: Cmd+Alt+N
+    desktop_aliases: ["Cmd+T"]
     handler: onNewChat
 
+  # Cmd+O is the browser's "open a local file" — never what a Reliant user
+  # means in the app — so the tab is overridden, as in VS Code for the web.
   - id: openProject
     name: Add Project
     description: Add a project by cloning a repository or opening a folder
     category: File & Window Management
     binding: Cmd+O
-    web_binding: Cmd+K O
     handler: onOpenProject
 
+  # X, not W: Cmd+K then Cmd+W, held, would close the browser tab. A single
+  # chord would be nicer, but there is no good free one: Cmd+Alt+W is the
+  # desktop menu's Close All Tabs (and AltGr+W on Windows), and Cmd+Shift+W
+  # closes the browser window.
   - id: closeTab
     name: Close Tab
     description: Close active file viewer tab or window
     category: File & Window Management
-    binding: Cmd+W
-    # X, not W: Cmd+K then Cmd+W, held, would close the browser tab.
-    web_binding: Cmd+K X
+    binding: Cmd+K X
+    desktop_aliases: ["Cmd+W"]
     handler: onCloseTab
 
   - id: openWorkflows
@@ -134,12 +156,14 @@ shortcuts:
   # ==================================
   # Search & Navigation
   # ==================================
+  # Cmd+P is print in a browser. Nobody prints an IDE, and Cmd+P is the quick
+  # open of every editor, so the tab is overridden — VS Code for the web does
+  # the same.
   - id: quickFileOpen
     name: Quick File Open
     description: Open file by name (fuzzy search)
     category: Search & Navigation
     binding: Cmd+P
-    web_binding: Cmd+K P
     handler: onQuickFileOpen
 
   - id: commandPalette
@@ -191,8 +215,13 @@ shortcuts:
     passthrough: true
     handler: onEditorFind
 
+  # chatSearch overrides the browser's Cmd+F wherever a conversation is on
+  # screen, in a tab too: the transcript is virtualized (useTimelineVirtualizer),
+  # so the browser's find would miss every message scrolled out of view.
+  #
   # The rest of Cmd+F: off a conversation and outside the editor, find text on
-  # the page. A browser tab already has that — its own find bar — so this
+  # the page. A browser tab already has that, on the same key — its own find
+  # bar, the same Chromium find-in-page the desktop app's bar wraps — so this
   # exists only in the desktop app, which has no browser chrome to provide one.
   # It sits in `global`, below chatSearch (`chat-view`) and editorFind
   # (`monaco`), so those still win where they apply. Edit › Find in the desktop
@@ -220,12 +249,15 @@ shortcuts:
   # Each is a toggle-ish move: focusing a hidden pane reveals it first, and
   # `focusPrevious` sends the cursor back where it came from when a pane is
   # closed or dismissed. See frontends/web/src/lib/keyboard/focus.ts.
+  #
+  # Cmd+L is the browser's "focus the address bar"; Reliant overrides it in a
+  # tab, because Cmd+L is "go to the chat" in Cursor and the editors like it.
+  # The address bar is still a click (or F6) away.
   - id: focusChat
     name: Focus Chat Input
     description: Move the cursor to the chat composer
     category: Focus
     binding: Cmd+L
-    web_binding: Cmd+K L
     handler: onFocusChat
 
   # The same chord with a selection in the file editor sends the selection to
@@ -237,7 +269,6 @@ shortcuts:
     description: Add the selected code to the chat composer
     category: Chat Control
     binding: Cmd+L
-    web_binding: Cmd+K L
     context: monaco
     handler: onAddSelectionToChat
 
@@ -423,23 +454,24 @@ shortcuts:
   # File Navigation
   # ==================================
   # Cmd+Shift+[ / ] is Chrome's next/previous TAB on macOS, and it is in
-  # Chrome's reserved set: the page never sees it, so in a browser these were
-  # dead. Cmd+K ] / [ keeps the bracket mnemonic; held, Cmd+] / Cmd+[ is
-  # back/forward, which the page is offered first.
+  # Chrome's reserved set: the page never sees it, so in a browser it is dead,
+  # and so is VS Code's other choice, Cmd+Alt+Left / Right. Cmd+K ] / [ keeps
+  # the bracket mnemonic; held, Cmd+] / Cmd+[ is back/forward, which the page
+  # is offered first. The old chords stay in the desktop app.
   - id: nextFileTab
     name: Next File Tab
     description: Switch to the next open file tab
     category: File Navigation
-    binding: Cmd+Shift+]
-    web_binding: Cmd+K ]
+    binding: Cmd+K ]
+    desktop_aliases: ["Cmd+Shift+]"]
     handler: onNextFileTab
 
   - id: prevFileTab
     name: Previous File Tab
     description: Switch to the previous open file tab
     category: File Navigation
-    binding: Cmd+Shift+[
-    web_binding: Cmd+K [
+    binding: Cmd+K [
+    desktop_aliases: ["Cmd+Shift+["]
     handler: onPrevFileTab
 
   # Was Cmd+F, which shadowed every "find" the user actually meant: pressing it
@@ -453,12 +485,14 @@ shortcuts:
     binding: Cmd+K E
     handler: onFocusFileEditor
 
+  # Z for "undo the close". Cmd+Shift+T is the browser's own reopen-tab and
+  # never reaches the page; it stays in the desktop app.
   - id: reopenLastClosedFile
     name: Reopen Last Closed File
     description: Reopen the most recently closed file
     category: File Navigation
-    binding: Cmd+Shift+T
-    web_binding: Cmd+K Z
+    binding: Cmd+K Z
+    desktop_aliases: ["Cmd+Shift+T"]
     handler: onReopenLastClosedFile
 
   # Scoped to the file tree so they never shadow real clipboard operations.
@@ -566,13 +600,14 @@ shortcuts:
   # keyboard-reachable. There is no separate "runner" UI to open — the tab IS
   # the browsable list of npm/cargo/poetry commands.
   #
-  # S ("scripts") on the web: Cmd+K then Cmd+N, held, opens a browser window.
+  # S for "scripts", not N: Cmd+K then Cmd+N, held, opens a browser window.
+  # Held, Cmd+S is the browser's save-page, which the page is offered first.
   - id: runPackageCommand
     name: Package Commands
     description: Show package commands and running processes
     category: Panel Navigation
-    binding: Cmd+K N
-    web_binding: Cmd+K S
+    binding: Cmd+K S
+    desktop_aliases: ["Cmd+K N"]
     handler: onRunPackageCommand
 
   # ==================================

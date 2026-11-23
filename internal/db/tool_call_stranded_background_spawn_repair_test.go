@@ -8,8 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // seedBackgroundSpawnToolCall creates a backgrounded (status 6) spawn

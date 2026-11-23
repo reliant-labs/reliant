@@ -88,14 +88,16 @@ func verifyGate(planPath, dir string) []string {
 	if pl.WebBuild.Full {
 		obliged["webbuild"] = "the plan selected the renderer's release build"
 	}
-	var migration, subdir, web, goFile bool
+	var migration, closedSets, subdir, web, goFile bool
 	for _, f := range pl.Files {
 		p := f.Path
 		switch {
 		case strings.HasPrefix(p, "db/migrations/"):
-			migration = true
+			migration, closedSets = true, true
 		case p == "forge.yaml":
-			migration = true
+			migration, closedSets = true, true
+		case p == "go.mod":
+			closedSets = true
 		}
 		if strings.HasPrefix(p, "frontends/web/") {
 			web = true
@@ -136,6 +138,9 @@ func verifyGate(planPath, dir string) []string {
 	}
 	if migration {
 		obliged["migsafety"] = "a migration or forge.yaml changed"
+	}
+	if closedSets {
+		obliged["closedsets"] = "a migration, go.mod or forge.yaml changed: a forge:closed-set CHECK must list the pinned forge's set"
 	}
 	// Lint is scoped to the changed directories. A diff that moves only a pin
 	// at the root (go.mod, go.sum, forge.yaml) has none: its whole-module

@@ -71,12 +71,13 @@ type QuestionResolveOutput struct {
 // QuestionCreateActivity creates a question record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type QuestionCreateActivity struct {
-	repo QuestionCreateStore
+	repo      QuestionCreateStore
+	questions QuestionsByStep
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo QuestionCreateStore) *QuestionCreateActivity {
-	return &QuestionCreateActivity{repo: repo}
+func NewQuestionCreateActivity(repo QuestionCreateStore, questions QuestionsByStep) *QuestionCreateActivity {
+	return &QuestionCreateActivity{repo: repo, questions: questions}
 }
 
 // Name returns the activity name for registration
@@ -113,7 +114,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		"loopIteration", input.LoopIteration)
 
 	// IDEMPOTENCY: Check if we already created a question for this workflow+step+iteration.
-	existingQuestions, err := a.repo.GetQuestionsByWorkflowStepIteration(ctx, input.WorkflowID, input.StepID, input.LoopIteration)
+	existingQuestions, err := a.questions.ListQuestionsByWorkflowStepIteration(ctx, input.WorkflowID, input.StepID, input.LoopIteration)
 	if err == nil && len(existingQuestions) > 0 {
 		// If tool_call_id is set, find the matching question
 		var match *db.Question

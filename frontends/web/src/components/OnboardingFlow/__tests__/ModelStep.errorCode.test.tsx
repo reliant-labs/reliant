@@ -43,9 +43,9 @@ vi.mock("@/hooks", () => ({
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: mocks.trackEvent }));
-vi.mock("@/hooks/provider-account-queries", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/hooks/provider-account-queries")>()),
-  addProviderApiKey: mocks.updateProvider,
+vi.mock("@/hooks/provider-account-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/provider-account-service-hooks_gen")>()),
+  useAddProviderAPIKey: () => ({ mutateAsync: mocks.updateProvider, isPending: false }),
 }));
 vi.mock("@/hooks/settings-service-hooks_gen", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/settings-service-hooks_gen")>()),

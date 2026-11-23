@@ -229,7 +229,7 @@ func (a *connectorAuth) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		sess, err := a.resolve(r, token)
+		sess, cred, err := a.resolve(r, token)
 		if err != nil {
 			// A consent requirement is NOT an authentication failure, and
 			// saying so matters: a client told "unauthorized" would re-run the
@@ -257,8 +257,10 @@ func (a *connectorAuth) middleware(next http.Handler) http.Handler {
 		// Connector credentials (`rlat_`) are deliberately excluded: a
 		// connector credential grants mcp:connector only, and forwarding it
 		// as the user would only produce a confusing auth failure at the far
-		// end.
-		if !fat.HasFormat(token) {
+		// end. An MCP client's control-plane access token (mcp:oauth) IS
+		// forwarded: it was issued for this endpoint, and control-plane
+		// admits it on ResumeDaemon for the acting user's own daemon only.
+		if cred.forwardsAsCaller() {
 			ctx = withCallerToken(ctx, token)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -280,34 +282,61 @@ func CallerToken(ctx context.Context) string {
 	return token
 }
 
-// resolve turns a bearer token into a session.
-func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, error) {
+// credentialKind is which of the accepted credentials a request presented.
+type credentialKind int
+
+const (
+	// credentialConnector is an `rlat_` connector credential bound to one
+	// grant (mcp:connector).
+	credentialConnector credentialKind = iota
+	// credentialOAuthJWT is an OAuth access token from the deployment's JWT
+	// issuer (Supabase): an OAuth client acting for its user.
+	credentialOAuthJWT
+	// credentialMCPOAuth is an MCP client's OAuth access token from the
+	// control plane (an `rlat_` holding mcp:oauth, audience this endpoint):
+	// an OAuth client acting for its user, like credentialOAuthJWT. Software,
+	// never a person: it carries no authority beyond the user's grant.
+	credentialMCPOAuth
+)
+
+// forwardsAsCaller reports whether the bearer may be forwarded to the
+// control plane as the caller's own token (a workspace resume). Only the
+// OAuth kinds: a connector credential would only fail there.
+func (k credentialKind) forwardsAsCaller() bool {
+	return k == credentialOAuthJWT || k == credentialMCPOAuth
+}
+
+// resolve turns a bearer token into a session, naming which kind of
+// credential it was.
+func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, credentialKind, error) {
 	if fat.HasFormat(token) {
-		grant, err := a.grantForCredential(r.Context(), token)
-		if err != nil {
-			return nil, err
-		}
-		a.touch(r, grant.ID)
-		return sessionForGrant(grant), nil
+		return a.resolveAccessToken(r, token)
 	}
 
 	if a.tokens == nil {
-		return nil, errors.New("no OAuth validator configured")
+		return nil, credentialOAuthJWT, errors.New("no OAuth validator configured")
 	}
 
 	userID, clientID, err := validateOAuthClient(a.tokens, token)
 	if err != nil {
-		return nil, err
+		return nil, credentialOAuthJWT, err
 	}
 	if userID == "" {
-		return nil, errors.New("token carries no subject")
+		return nil, credentialOAuthJWT, errors.New("token carries no subject")
 	}
-	a.logClientHint(r, clientID)
+	sess, err := a.resolveOAuthClient(r, userID, clientID)
+	return sess, credentialOAuthJWT, err
+}
 
-	// An OAuth token identifies a user, not a grant. resolveForUser bridges
-	// the two: the consent choice recorded for the token's client first, a
-	// single unambiguous connector second, and otherwise a consent
-	// requirement rather than a guess.
+// resolveOAuthClient resolves an OAuth client acting for userID to the
+// connector it acts through.
+//
+// An OAuth token identifies a user, not a grant. resolveForUser bridges the
+// two: the consent choice recorded for the token's client first, a single
+// unambiguous connector second, and otherwise a consent requirement rather
+// than a guess.
+func (a *connectorAuth) resolveOAuthClient(r *http.Request, userID, clientID string) (*Session, error) {
+	a.logClientHint(r, clientID)
 	sess, err := resolveForUser(r.Context(), a.store, a.bindings, userID, clientID, a.consentBase)
 	if err != nil {
 		return nil, err
@@ -316,19 +345,51 @@ func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, error)
 	return sess, nil
 }
 
-// grantForCredential resolves a connector credential to its LIVE grant.
+// resolveAccessToken resolves an `rlat_`. Two kinds are accepted, and
+// nothing else:
+//
+//   - a connector credential: mcp:connector, bound to a connector grant
+//     (grantForPrincipal);
+//   - an MCP client's OAuth access token from the control plane, only while
+//     that control plane is a listed authorization server
+//     (OAuthConfig.acceptsAccessTokens), and only when it was issued for
+//     exactly this endpoint (fat.Principal.IsMCPOAuthFor with this
+//     endpoint's RFC 9728 `resource`). It names its client and its user, so
+//     it resolves exactly as an OAuth JWT does.
+//
+// Every other `rlat_` is refused, and reads as an invalid credential: a CLI
+// token (reliant:api), a daemon's wildcard, an org automation or operator
+// token with no acting user, and an mcp:oauth token for another resource
+// (the forge connector, another host) or none.
+func (a *connectorAuth) resolveAccessToken(r *http.Request, token string) (*Session, credentialKind, error) {
+	if a.credentials == nil {
+		return nil, credentialConnector, errors.New("connector credentials are not configured")
+	}
+	p, err := a.credentials.Introspect(r.Context(), token)
+	if err != nil {
+		return nil, credentialConnector, err
+	}
+	if p.Resource != nil && p.Resource.Kind == fat.ResourceConnector {
+		grant, err := a.grantForPrincipal(r.Context(), p)
+		if err != nil {
+			return nil, credentialConnector, err
+		}
+		a.touch(r, grant.ID)
+		return sessionForGrant(grant), credentialConnector, nil
+	}
+	if !a.oauth.acceptsAccessTokens() || !p.IsMCPOAuthFor(a.oauth.resourceURI()) {
+		return nil, credentialConnector, connectorgrant.ErrNotFound
+	}
+	sess, err := a.resolveOAuthClient(r, p.ActingUserID, p.ClientID)
+	return sess, credentialMCPOAuth, err
+}
+
+// grantForPrincipal resolves a connector credential to its LIVE grant.
 //
 // The credential must be a live access token carrying mcp:connector and bound
 // to a connector resource; the grant it names must be live and belong to the
 // token's acting user. All three failures read identically to the caller.
-func (a *connectorAuth) grantForCredential(ctx context.Context, token string) (*connectorgrant.Grant, error) {
-	if a.credentials == nil {
-		return nil, errors.New("connector credentials are not configured")
-	}
-	p, err := a.credentials.Introspect(ctx, token)
-	if err != nil {
-		return nil, err
-	}
+func (a *connectorAuth) grantForPrincipal(ctx context.Context, p *fat.Principal) (*connectorgrant.Grant, error) {
 	if !p.Scopes.Permits(fat.ScopeMCPConnector) || p.Resource == nil || p.Resource.Kind != fat.ResourceConnector {
 		return nil, connectorgrant.ErrNotFound
 	}

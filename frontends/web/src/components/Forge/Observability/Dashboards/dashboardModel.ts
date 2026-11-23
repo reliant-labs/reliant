@@ -32,7 +32,25 @@ export const SOURCE_LABELS: Record<DashboardSource, string> = {
   builtin: "built-in",
 };
 
-export type SourceFilter = "release" | "workspace";
+/**
+ * The Source filter. The gallery's three (U6e): built-in (what forge and
+ * Reliant provide: generated with a release, or built into every project),
+ * from repo (declared under deploy/observability/dashboards), custom (saved
+ * in Reliant). `release` and `workspace` are the list's older values, still
+ * read so an old link keeps its filter.
+ */
+export type SourceFilter = "builtin" | "repo" | "custom" | "release" | "workspace";
+
+export type GalleryBadge = "builtin" | "repo" | "custom";
+
+export const GALLERY_BADGE_LABELS: Record<GalleryBadge, string> = { builtin: "Built-in", repo: "From repo", custom: "Custom" };
+
+/** Where a dashboard came from, in the gallery's three words. */
+export function galleryBadgeOf(d: Pick<DashboardSummary, "source">): GalleryBadge {
+  if (d.source === "repo") return "repo";
+  if (d.source === "workspace") return "custom";
+  return "builtin";
+}
 
 /** Who a dashboard belongs to, as the Owner filter names it: forge, the repo, or its author. */
 export function ownerOf(summary: DashboardSummary): string {
@@ -78,6 +96,7 @@ export function filterIndex(dashboards: readonly DashboardSummary[], filter: Ind
     if (filter.group && groupOf(d) !== filter.group) return false;
     if (filter.source === "release" && d.ref.kind !== "release") return false;
     if (filter.source === "workspace" && d.ref.kind !== "workspace") return false;
+    if ((filter.source === "builtin" || filter.source === "repo" || filter.source === "custom") && galleryBadgeOf(d) !== filter.source) return false;
     if (filter.owner && ownerOf(d) !== filter.owner) return false;
     return true;
   });

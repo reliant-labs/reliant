@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // fixedNow is every fixture row's timestamp: nothing here depends on the
@@ -111,7 +112,7 @@ func (f *orgMachinesFixture) cleanups(t *testing.T, projectID string) []string {
 func TestReconcile_MachineOfOneOrgNeverRecordsAnotherOrgsProject(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 
-	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", f.everythingHere)
+	missing, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", f.everythingHere)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{f.path}, added)
@@ -129,7 +130,7 @@ func TestReconcile_MachineWithNoKnownOrgHoldsOnlyTheDefaultOrg(t *testing.T) {
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: unknown, UserID: f.userID}))
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.globex.ID, unknown, f.path, nil)) // an old cross-org record
 
-	_, _, err := reconcileProjectDaemons(f.ctx, f.repo, unknown, f.userID, f.scope(t, ""), "", f.everythingHere)
+	_, _, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, unknown, f.userID, f.scope(t, ""), "", f.everythingHere)
 	require.NoError(t, err)
 	assert.Contains(t, f.machinesOf(t, f.acme.ID), unknown, "the default org's project is recorded")
 	assert.Contains(t, f.machinesOf(t, f.globex.ID), unknown,
@@ -149,7 +150,7 @@ func TestReconcile_DetachesAnotherOrgsCheckoutIdempotentlyAndRecordsIt(t *testin
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.acme.ID, f.globexMachine, f.path, nil))
 
 	for pass := range 2 {
-		_, _, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", f.everythingHere)
+		_, _, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", f.everythingHere)
 		require.NoError(t, err, "pass %d", pass)
 		assert.Equal(t, []string{acmeMachine}, f.machinesOf(t, f.acme.ID), "pass %d: only the cross-org record goes", pass)
 		assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID), "pass %d", pass)
@@ -158,7 +159,7 @@ func TestReconcile_DetachesAnotherOrgsCheckoutIdempotentlyAndRecordsIt(t *testin
 	p, err := f.repo.GetProject(f.ctx, f.acme.ID)
 	require.NoError(t, err, "the project itself is never deleted")
 	assert.Equal(t, f.path, p.Path)
-	detachments, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.globexMachine)
+	detachments, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.globexMachine)
 	require.NoError(t, err)
 	assert.Empty(t, detachments, "the cleanup is not a user's detach: nothing is recorded to undo")
 }
@@ -295,7 +296,7 @@ func TestReconcile_ProjectMovedOutOfTheMachinesOrgDuringTheProbeIsNotRecorded(t 
 		return projectPathState{Exists: true}, nil
 	}
 
-	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", moveOutDuringProbe)
+	missing, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", moveOutDuringProbe)
 	require.NoError(t, err)
 	assert.Empty(t, added, "a watcher would start for a checkout of another org's project")
 	assert.Empty(t, missing)
@@ -342,7 +343,7 @@ func TestReconcile_LostCloneOfAProjectMovedOutDuringTheProbeIsNotSettled(t *test
 				return projectPathState{Exists: tc.landed}, nil
 			}
 
-			_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", probe)
+			_, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.globexMachine, f.userID, f.scope(t, "globex"), "globex", probe)
 			require.NoError(t, err)
 			if tc.wantAdded {
 				assert.Equal(t, []string{f.path}, added)
@@ -402,7 +403,7 @@ func TestMachineOfAnOrgItsOwnerLeft_CreatesAndResolvesNothing(t *testing.T) {
 	got, err = svc.ensureOwnedProjectForPath(ctx, conn, newPath, nil)
 	require.ErrorIs(t, err, authz.ErrNotOrgMember)
 	assert.Nil(t, got)
-	_, err = f.repo.GetProjectByPathAndUserInScope(ctx, newPath, f.userID, nil)
+	_, err = store.GetProjectByPathAndUserInScope(ctx, f.repo.ORM(), newPath, f.userID, nil)
 	assert.Error(t, err, "a machine whose owner left its org created a project")
 
 	// The connect reconcile records and detaches nothing, folder or not.
@@ -442,7 +443,7 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
 
 		assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID), "the discovery recorded the machine's checkout")
-		record, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		record, synced, err := store.GetProjectMachineConfigRecord(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine)
 		require.NoError(t, err)
 		require.True(t, synced, "the snapshot was dropped until a reconnect")
 		assert.Equal(t, "from the machine", *record.UserConfigYAML)
@@ -453,12 +454,12 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 		svc := newTestService(f.repo)
 		conn := newTestConn(f.userID, f.globexMachine, nil)
 		conn.orgID = "globex"
-		require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil))
+		require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine, f.path, nil))
 
 		require.NoError(t, svc.persistProjectConfigSnapshot(f.ctx, conn, snapshot(f), false))
 
 		assert.Empty(t, f.machinesOf(t, f.globex.ID), "a detached project was recorded on the machine again")
-		_, synced, err := f.repo.GetProjectMachineConfigRecord(f.ctx, f.globex.ID, f.globexMachine)
+		_, synced, err := store.GetProjectMachineConfigRecord(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine)
 		require.NoError(t, err)
 		assert.False(t, synced, "a detached project's snapshot was stored")
 	})

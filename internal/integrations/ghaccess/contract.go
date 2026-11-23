@@ -26,8 +26,11 @@
 // periodically for every user with an enabled GitHub trigger (Run). Webhook
 // revocations cut access between refreshes; a refresh restores what remains.
 //
-// Built by hand, by internal/app's NewGitHubAccess provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewGitHubAccess provider (providers_api.go): New
+// takes positional collaborators, not Deps, and the provider builds it only
+// when RELIANT_GITHUB_WEBHOOK_SECRET is set, over the TokenSource
+// gitHubTokenSource selects (control-plane's delegated token when hosted, a
+// saved connection when self-hosted).
 //
 //forge:provided
 package ghaccess
@@ -52,13 +55,21 @@ type TokenSource interface {
 	Token(ctx context.Context, userID string) (string, error)
 }
 
-// Store is the persistence a refresher needs. *db.Repo satisfies it.
-type Store interface {
+// Grants is where a user's access snapshot is kept.
+// store.IntegrationEventAccessExtStore satisfies it.
+type Grants interface {
 	ReplaceIntegrationAccess(ctx context.Context, userID, integrationID, subjectID string, at time.Time, grants []core.IntegrationAccessGrant) error
+	PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error)
+}
+
+// Refreshes is the lease and outcome of each user's refresh, and who has a
+// trigger to refresh for. store.IntegrationAccessRefreshExtStore satisfies the
+// first three; Owners is store.TriggerExtStore's sibling query, satisfied by
+// store.IntegrationAccessRefreshExtStore too.
+type Refreshes interface {
 	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)
 	ClaimIntegrationAccessRefresh(ctx context.Context, userID, integrationID string, now, leaseUntil, dueBefore time.Time) (bool, error)
-	FinishIntegrationAccessRefresh(ctx context.Context, userID, integrationID string, at time.Time, refreshErr error) error
-	PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error)
+	FinishIntegrationAccessRefresh(ctx context.Context, userID, integrationID string, at time.Time, ok bool, lastError string) error
 }
 
 // Permanent token outcomes: the user has to act (connect, reconnect) before

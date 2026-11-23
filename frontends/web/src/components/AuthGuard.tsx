@@ -19,7 +19,7 @@ interface AuthGuardProps {
   requireEmailVerification?: boolean
   /**
    * Send a signed-out visitor to sign in with `?redirect=<this page>`, so a
-   * deep link ("Open in Reliant" from the forge console, a link in an email)
+   * deep link (a shared console link, a link in an email)
    * lands where it was going instead of on `/`. The sign-in screen honours a
    * same-origin `redirect` through email, OAuth and magic links alike.
    */

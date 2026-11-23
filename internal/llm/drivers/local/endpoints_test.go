@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -48,7 +48,7 @@ func ptr[T any](v T) *T { return &v }
 
 func TestSynthesizeEndpointCapabilityPrecedence(t *testing.T) {
 	cfg := EndpointConfig{
-		ID: "ep-1", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: db.ModelEndpointRouteDirect,
+		ID: "ep-1", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: core.ModelEndpointRouteDirect,
 		Probe: probeWith(
 			&reliantv1.LocalModelInfo{Name: "probed", SupportsChat: true, ContextWindow: 65536, SupportsTools: true, SupportsVision: true},
 			&reliantv1.LocalModelInfo{Name: "overridden", SupportsChat: true, ContextWindow: 65536, SupportsTools: true},
@@ -98,7 +98,7 @@ func TestSynthesizeEndpointCapabilityPrecedence(t *testing.T) {
 
 func TestSynthesizeViaDaemonUsesRelayIDAndLiveness(t *testing.T) {
 	cfg := EndpointConfig{
-		ID: "ep-2", Name: "Home vLLM", BaseURL: "http://10.0.0.5:8000/v1", Route: db.ModelEndpointRouteViaDaemon,
+		ID: "ep-2", Name: "Home vLLM", BaseURL: "http://10.0.0.5:8000/v1", Route: core.ModelEndpointRouteViaDaemon,
 		DaemonID: "d-1", Online: false, Probe: probeWith(chat("m", 8192)),
 	}
 	ms := SynthesizeEndpoint(cfg)
@@ -119,7 +119,7 @@ func TestListModelsMergesDetectedAndConfiguredAndResolveKeepsThemApart(t *testin
 			}},
 		}},
 		endpoints: []EndpointConfig{{
-			ID: "ep-1", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: db.ModelEndpointRouteDirect,
+			ID: "ep-1", Name: "Lab GPU", BaseURL: "https://llm.example.com/v1", Route: core.ModelEndpointRouteDirect,
 			Probe: probeWith(chat("qwen3", 32768), chat("llama", 8192)),
 		}},
 	}
@@ -155,7 +155,7 @@ func TestListModelsMergesDetectedAndConfiguredAndResolveKeepsThemApart(t *testin
 		assert.False(t, IsSelector(models.ModelSelector{ID: "x", Providers: []string{"endpoint:"}}))
 	})
 	t.Run("an offline machine reads as offline, naming the endpoint", func(t *testing.T) {
-		off := []Model{SynthesizeEndpoint(EndpointConfig{ID: "ep-9", Name: "Home", BaseURL: "http://10.0.0.5:8000/v1", Route: db.ModelEndpointRouteViaDaemon, DaemonID: "d-9", Online: false, Probe: probeWith(chat("m", 0))})[0]}
+		off := []Model{SynthesizeEndpoint(EndpointConfig{ID: "ep-9", Name: "Home", BaseURL: "http://10.0.0.5:8000/v1", Route: core.ModelEndpointRouteViaDaemon, DaemonID: "d-9", Online: false, Probe: probeWith(chat("m", 0))})[0]}
 		_, err := Resolve(off, models.ModelSelector{ID: "m@local", Providers: []string{"endpoint:ep-9"}}, "")
 		require.ErrorContains(t, err, "offline")
 		assert.Contains(t, err.Error(), "Home")
@@ -203,7 +203,7 @@ func TestDirectEndpointOnTheWire(t *testing.T) {
 	model := Model{
 		Definition: models.ModelDefinition{ID: "m"},
 		Custom: &CustomEndpoint{
-			ID: "ep-1", Name: "Lab", BaseURL: srv.URL + "/v1", Route: db.ModelEndpointRouteDirect,
+			ID: "ep-1", Name: "Lab", BaseURL: srv.URL + "/v1", Route: core.ModelEndpointRouteDirect,
 			Params: ModelParams{
 				Temperature: ptr(0.3), TopP: ptr(0.9),
 				ExtraBody: map[string]json.RawMessage{
@@ -243,7 +243,7 @@ func TestDirectEndpointSendsStoredCredentials(t *testing.T) {
 	var c captured
 	srv := chatServer(t, &c)
 	model := Model{Definition: models.ModelDefinition{ID: "m"}, Custom: &CustomEndpoint{
-		ID: "ep-1", BaseURL: srv.URL + "/v1", Route: db.ModelEndpointRouteDirect, CredentialConnectionID: "conn-1",
+		ID: "ep-1", BaseURL: srv.URL + "/v1", Route: core.ModelEndpointRouteDirect, CredentialConnectionID: "conn-1",
 	}}
 	rt, err := TransportFor(context.Background(), "u1", &model, nil, &CustomRoutes{
 		Policy:      netguard.Policy{AllowPrivate: true},
@@ -296,7 +296,7 @@ func TestDirectEndpointRefusesPrivateDestinationAtRequestTime(t *testing.T) {
 		return []net.IP{net.ParseIP("93.184.216.34")}, nil
 	}}
 	model := Model{Definition: models.ModelDefinition{ID: "m"}, Custom: &CustomEndpoint{
-		ID: "ep-1", BaseURL: "http://rebind.example.com:" + port + "/v1", Route: db.ModelEndpointRouteDirect,
+		ID: "ep-1", BaseURL: "http://rebind.example.com:" + port + "/v1", Route: core.ModelEndpointRouteDirect,
 	}}
 	// Route the name to loopback exactly where DNS would: below the policy's
 	// own dial guard, which sees only the final IP.
@@ -381,7 +381,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 func TestViaDaemonEndpointUsesRelayWithEndpointIDAndShapesTheBody(t *testing.T) {
 	relay := &recordedRelay{}
 	cfg := EndpointConfig{
-		ID: "ep-2", Name: "Home", BaseURL: "http://10.0.0.5:8000/v1", Route: db.ModelEndpointRouteViaDaemon,
+		ID: "ep-2", Name: "Home", BaseURL: "http://10.0.0.5:8000/v1", Route: core.ModelEndpointRouteViaDaemon,
 		DaemonID: "d-1", Online: true, Probe: probeWith(chat("m", 8192)),
 		Models: []*reliantv1.ModelEndpointModel{{Name: "m", Temperature: ptr(0.2), ExtraBodyJson: `{"min_p":0.05}`}},
 	}

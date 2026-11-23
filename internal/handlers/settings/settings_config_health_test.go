@@ -75,15 +75,15 @@ func TestGetConfigHealth_HealsLegacyKeyAndReportsOnlyOnFailure(t *testing.T) {
 	}
 	db.SeedProviderAccount(t, repo, "test-user", "reliant", "rlnt_abcdef0123456789")
 
-	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(repo, stubMinter{err: errors.New("control-plane 503")}))
+	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(db.TestAccounts(t, repo), repo, stubMinter{err: errors.New("control-plane 503")}))
 	got := reliantError()
 	require.NotNil(t, got)
 	assert.Contains(t, got.Message, "control-plane 503", "failure must say what failed")
 
 	validKey := accesstoken.Prefix + strings.Repeat("a", accesstoken.TokenLen-len(accesstoken.Prefix))
-	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(repo, stubMinter{key: validKey}))
+	drivers.SetReliantKeyHealer(drivers.NewReliantKeyHealer(db.TestAccounts(t, repo), repo, stubMinter{key: validKey}))
 	assert.Nil(t, reliantError(), "healed: no message")
-	accounts, err := repo.ListProviderAccountsWithSecrets(ctx, "test-user")
+	accounts, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, "test-user")
 	require.NoError(t, err)
 	require.Len(t, accounts, 1)
 	assert.Equal(t, validKey, accounts[0].Secrets.Secret)

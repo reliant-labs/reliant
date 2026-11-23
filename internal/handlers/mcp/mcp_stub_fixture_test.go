@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
@@ -35,37 +37,43 @@ const (
 	creatorPath    = "/Users/creator/src/proj"
 )
 
+// ownedStore is the repository and the stored project config of a test project.
+type ownedStore struct {
+	*mcp.MockRepository
+	*mcp.MockProjectConfigs
+}
+
 // ownedProjectRepo is a store where the harness caller (test-user) owns
 // project p-1, checked out at /work on checkoutDaemon, whose stored project-scope MCP configuration is
 // mcpConfigs. Every other project is not found.
-func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.MockRepository {
+func ownedProjectRepo(t *testing.T, mcpConfigs string) *ownedStore {
 	t.Helper()
-	return &mcp.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == "p-1" && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: creatorPath}, nil
-			}
-			// The store's real answer for a project the caller does not own.
-			return nil, core.ErrProjectNotFound
-		},
+	return projectaccesstest.Bound(&ownedStore{MockProjectConfigs: &mcp.MockProjectConfigs{
 		GetProjectMCPConfigsJSONFunc: func(_ context.Context, projectID string) (*string, error) {
 			if projectID != "p-1" {
 				return nil, errors.New("project config not found")
 			}
 			return &mcpConfigs, nil
 		},
+	}, MockRepository: &mcp.MockRepository{
 		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: checkoutDaemon, Path: "/work", InstallState: core.ProjectInstallInstalled}}, nil
 		},
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-	}
+	}}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == "p-1" && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Name: "proj", Path: creatorPath}, nil
+		}
+		// The store's real answer for a project the caller does not own.
+		return nil, core.ErrProjectNotFound
+	})
 }
 
 // newService builds the service over store. router is the caller's daemon;
 // nil builds it without a daemon router.
-func newService(t *testing.T, store mcp.Repository, router mcp.Router) *mcp.Service {
+func newService(t *testing.T, store *ownedStore, router mcp.Router) *mcp.Service {
 	t.Helper()
-	return mcp.NewTestMCP(t, mcp.WithMCPDeps(mcp.Deps{Repo: store, Router: router}))
+	return mcp.NewTestMCP(t, mcp.WithMCPDeps(mcp.Deps{Repo: store, Projects: projectaccesstest.For(store), ProjectConfigs: store, Router: router}))
 }

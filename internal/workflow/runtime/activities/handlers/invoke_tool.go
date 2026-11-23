@@ -8,6 +8,10 @@ import (
 	"sort"
 	"strings"
 
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -16,9 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // An invoke_tool node runs ONE tool because the graph says so, rather than
@@ -45,10 +46,31 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, toolExecutor),
+		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
 	}
+}
+
+// WithToolCallResults gives the tool-execution path the durable-result reader;
+// see ExecuteToolsActivity.WithToolCallResults.
+func (a *InvokeToolActivity) WithToolCallResults(r ToolCallResults) *InvokeToolActivity {
+	a.executeTools.WithToolCallResults(r)
+	return a
+}
+
+// WithRunFunding gives the tool-execution path the run's funding reader; see
+// ExecuteToolsActivity.WithRunFunding.
+func (a *InvokeToolActivity) WithRunFunding(s RunFundingStore) *InvokeToolActivity {
+	a.executeTools.WithRunFunding(s)
+	return a
+}
+
+// WithWorktreeReviver gives the tool-execution path the archived-worktree
+// reviver; see ExecuteToolsActivity.WithWorktreeReviver.
+func (a *InvokeToolActivity) WithWorktreeReviver(r WorktreeReviver) *InvokeToolActivity {
+	a.executeTools.WithWorktreeReviver(r)
+	return a
 }
 
 // WithConfigProvider gives the tool-execution path the worker's project

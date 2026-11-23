@@ -30,14 +30,17 @@ Only runs the user owns can be inspected. To check on a sub-agent you spawned, u
 )
 
 type getRunTool struct {
-	repo    getRunStore
-	threads *threads.Service
+	repo      getRunStore
+	workflows RunWorkflows
+	threads   *threads.Service
 }
 
-func NewGetRunTool(repo getRunStore) Tool {
-	t := &getRunTool{repo: repo}
+// NewGetRunTool builds get_run. workflows reads a finished run's root
+// workflow; nil reports that it cannot be read here.
+func NewGetRunTool(repo getRunStore, workflows RunWorkflows) Tool {
+	t := &getRunTool{repo: repo, workflows: workflows}
 	if repo != nil {
-		t.threads = threads.NewService(repo)
+		t.threads = threads.New(threads.Deps{Repo: repo})
 	}
 	return NewToolWrapper[GetRunParams, ToolResponse](t)
 }
@@ -127,7 +130,10 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 	detail.Nodes = []*pb.RunNodeExecution{}
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
 		if detail.State == "failed" || detail.State == "completed" {
-			root, err := g.repo.GetWorkflow(rctx.Context, *chat.WorkflowID)
+			if g.workflows == nil {
+				return NewTextErrorResponse("Could not read how the run ended: workflows are not available here"), nil
+			}
+			root, err := g.workflows.LoadWorkflow(rctx.Context, *chat.WorkflowID)
 			if err != nil {
 				return NewTextErrorResponse("Could not read how the run ended: " + err.Error()), nil
 			}

@@ -40,8 +40,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -182,4 +184,87 @@ func ProviderAccountOrgs(ctx context.Context, db orm.Context, accountID string) 
 		return "", "", false, fmt.Errorf("read a provider account's orgs: %w", err)
 	}
 	return acctText(row.OrgID), acctText(row.AttributedOrgID), true, nil
+}
+
+// AskChatPersonalFunding records that the chat asks q (State is set to asked). One question per
+// chat: an open question for the same reason and model is kept as it is (its first asked_at,
+// and a keep_waiting answer, stand), so every thread of the chat that meets the case shares
+// it; a different reason or model, or a use_personal answer whose lease is over, asks anew.
+// asked reports a new question.
+func AskChatPersonalFunding(ctx context.Context, db orm.Context, q core.PersonalFunding, now time.Time) (asked bool, err error) {
+	if q.ChatID == "" || q.UserID == "" || q.OrgID == "" {
+		return false, fmt.Errorf("chat, user and org are required to ask")
+	}
+	next := q
+	next.State, next.LeaseUntil, next.AnsweredAt, next.Announced = core.PersonalFundingAsked, nil, nil, false
+	next.AskedAt, next.UpdatedAt = now.UTC(), now.UTC()
+	err = db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		asked = false
+		cur, err := LockChatPersonalFunding(ctx, db, q.ChatID)
+		if err != nil {
+			return err
+		}
+		if cur == nil {
+			// A concurrent first ask of another thread writes the same question.
+			inserted, err := InsertChatPersonalFunding(ctx, db, next)
+			asked = inserted
+			return err
+		}
+		open := (cur.State == core.PersonalFundingAsked || cur.State == core.PersonalFundingKeepWaiting) &&
+			cur.Reason == q.Reason && cur.Model == q.Model && cur.OrgID == q.OrgID && cur.UserID == q.UserID
+		if open {
+			if q.OrgResetAt != nil && (cur.OrgResetAt == nil || !cur.OrgResetAt.Equal(*q.OrgResetAt)) {
+				cur.OrgResetAt, cur.UpdatedAt = q.OrgResetAt, now.UTC()
+				return PutChatPersonalFunding(ctx, db, *cur)
+			}
+			return nil
+		}
+		asked = true
+		return PutChatPersonalFunding(ctx, db, next)
+	})
+	return asked, err
+}
+
+// AnswerChatPersonalFunding records the person's answer to the chat's open question: state is
+// use_personal or keep_waiting. A use_personal answer to a 'limited' question lasts until the
+// org's reset. userID must own the question; core.ErrNoPersonalFundingQuestion when there is
+// none open.
+func AnswerChatPersonalFunding(ctx context.Context, db orm.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error) {
+	if state != core.PersonalFundingUsePersonal && state != core.PersonalFundingKeepWaiting {
+		return nil, svcerr.InvalidArgument("the answer must be to use your own account or to keep waiting")
+	}
+	var out *core.PersonalFunding
+	err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		cur, err := LockOwnChatPersonalFunding(ctx, db, chatID, userID)
+		if err != nil {
+			return err
+		}
+		if cur == nil || cur.State == core.PersonalFundingUsePersonal {
+			return core.ErrNoPersonalFundingQuestion
+		}
+		at := now.UTC()
+		cur.State, cur.AnsweredAt, cur.UpdatedAt, cur.Announced = state, &at, at, false
+		cur.LeaseUntil = nil
+		if state == core.PersonalFundingUsePersonal && cur.Reason == core.PersonalFundingLimited {
+			until := at.Add(time.Hour) // no reset known: look again within the hour
+			if cur.OrgResetAt != nil && cur.OrgResetAt.After(at) {
+				until = *cur.OrgResetAt
+			}
+			cur.LeaseUntil = &until
+		}
+		out = cur
+		return PutChatPersonalFunding(ctx, db, *cur)
+	})
+	return out, err
+}
+
+// GrantChatPersonalFunding writes a use_personal answer the person gave ahead of time (their
+// remembered preference): q is recorded answered at now.
+func GrantChatPersonalFunding(ctx context.Context, db orm.Context, q core.PersonalFunding, now time.Time) error {
+	at := now.UTC()
+	q.State, q.AnsweredAt, q.UpdatedAt = core.PersonalFundingUsePersonal, &at, at
+	if q.AskedAt.IsZero() {
+		q.AskedAt = at
+	}
+	return PutChatPersonalFunding(ctx, db, q)
 }

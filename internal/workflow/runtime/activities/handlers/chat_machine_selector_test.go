@@ -3,10 +3,11 @@ package handlers
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 func TestChatDaemonSelector(t *testing.T) {

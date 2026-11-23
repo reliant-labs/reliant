@@ -30,3 +30,31 @@ func TestUserImageIncludesReferenceAndVisionBytes(t *testing.T) {
 	assert.Contains(t, ref.Text, "save_attachment")
 	assert.Equal(t, message.BinaryContent{MIMEType: "image/jpeg", Data: photo}, result.Parts[1])
 }
+
+// TestUserImageReferenceNamesTypeAndDelegation pins the two facts the image's
+// pixels cannot carry: its stored type (so a PNG is not saved as .jpg) and
+// that a sub-agent cannot see it (so delegated work gets the id, not "the
+// image the user sent").
+func TestUserImageReferenceNamesTypeAndDelegation(t *testing.T) {
+	t.Parallel()
+	ref := userImageReference("att-9", "image/png")
+	assert.Contains(t, ref, "attachment_id=att-9")
+	assert.Contains(t, ref, "image/png")
+	assert.Contains(t, ref, "save_attachment")
+	assert.Contains(t, ref, "sub-agent")
+}
+
+func TestUserDocumentReferenceOffersSave(t *testing.T) {
+	t.Parallel()
+	id := "stored-doc"
+	repo := &MockAttachmentReader{GetAttachmentFunc: func(_ context.Context, _ string) (*db.Attachment, error) {
+		return &db.Attachment{ID: id, Filename: "spec.pdf", MimeType: "application/pdf", Content: []byte("%PDF-1.7")}, nil
+	}}
+	block := &db.MessageContentBlock{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT, Content: &id}
+	part := ContentBlockToPart(context.Background(), "chat", block, repo)
+	text, ok := part.(message.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, text.Text, "read_attachment")
+	assert.Contains(t, text.Text, "save_attachment")
+	assert.Contains(t, text.Text, "attachment_id="+id)
+}

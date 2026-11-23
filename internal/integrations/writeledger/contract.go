@@ -14,11 +14,6 @@
 // Recorder.Wrap decorates the one method both doors share
 // (httpaction.Runner.RunAuthenticated: the workflow action node and the
 // agent's integration tools), so no mutating call can skip the ledger.
-//
-// Built by hand, by internal/app's NewWriteLedger provider
-// (providers_worker.go): never a node compose.go constructs from Deps.
-//
-//forge:provided
 package writeledger
 
 import (
@@ -49,7 +44,14 @@ type Service interface {
 	BeginPush(ctx context.Context, p Push) (*PushIntent, error)
 }
 
-// Pruner deletes old ledger entries. db.IntegrationWriteLedger satisfies it.
+// Reader is the ledger as an echo's attribution reads it. *Ledger satisfies
+// it, and so does internal/triggers' own narrower LedgerReader.
+type Reader interface {
+	GetIntegrationWriteByObject(ctx context.Context, integration, scope, objectKind, objectID string) (*core.IntegrationWrite, error)
+	ListRecentIntegrationWrites(ctx context.Context, integration, scope string, since time.Time, limit int) ([]*core.IntegrationWrite, error)
+}
+
+// Pruner deletes old ledger entries. *Ledger satisfies it.
 type Pruner interface {
 	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
 }
@@ -60,16 +62,21 @@ type Runner interface {
 	RunAuthenticated(ctx context.Context, integration *reliantv1.IntegrationManifest, action *reliantv1.ActionSpec, params map[string]any, src httpaction.CredentialSource, site httpaction.CallSite) (*httpaction.Result, error)
 }
 
-// Store is the ledger a Recorder writes to. db.IntegrationWriteLedger
-// satisfies it.
+// Store is the ledger a Recorder writes to. *Ledger satisfies it.
 type Store interface {
 	CreateIntegrationWrite(ctx context.Context, w *core.IntegrationWrite) error
 	CompleteIntegrationWrite(ctx context.Context, id string, res core.IntegrationWriteResult) (bool, error)
 }
 
-// RunLookup resolves the run a call is made for. *db.Repo satisfies it.
+// WorkflowLoader reads the workflow row a call's run id names.
+// store.WorkflowExtStore satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// RunLookup resolves the chat and trigger a call is made for. *db.Repo
+// satisfies it.
 type RunLookup interface {
-	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
@@ -79,6 +86,9 @@ type RunLookup interface {
 type Deps struct {
 	Store Store
 	Runs  RunLookup
+	// Workflows reads the run a call names. nil treats every run id as the
+	// chat id, as a run whose row is missing is treated.
+	Workflows WorkflowLoader
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 }

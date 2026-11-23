@@ -10,17 +10,19 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // recordReadCounter counts reads of the whole project config record.
 type recordReadCounter struct {
-	*db.Repo
+	ConfigRecordReader
 	reads atomic.Int64
 }
 
-func (c *recordReadCounter) GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error) {
+func (c *recordReadCounter) GetProjectConfigRecord(ctx context.Context, projectID string) (*core.ProjectConfigRecord, error) {
 	c.reads.Add(1)
-	return c.Repo.GetProjectConfigRecord(ctx, projectID)
+	return c.ConfigRecordReader.GetProjectConfigRecord(ctx, projectID)
 }
 
 // The worker's wiring (internal/app NewStoredConfigProvider): a cached provider over the real
@@ -33,12 +35,12 @@ func TestCachedProviderOverRepo_ReadsTheRecordOncePerPush(t *testing.T) {
 	push := func(skillName string) {
 		t.Helper()
 		skills := `[{"skill_path":"` + skillName + `","name":"` + skillName + `","body":"` + strings.Repeat("x", 256<<10) + `"}]`
-		require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+		require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 			ProjectID: "test-project", DaemonID: "daemon-1", ProjectSkillsJSON: &skills,
 		}))
 	}
-	counter := &recordReadCounter{Repo: repo}
-	provider := config.NewCachedStoredConfigProvider(NewRepoConfigStore(counter), counter, 0)
+	counter := &recordReadCounter{ConfigRecordReader: NewORMRecordReader(repo.ORM())}
+	provider := config.NewCachedStoredConfigProvider(NewRepoConfigStore(counter), store.NewProjectConfigExtStore(repo.ORM()), 0)
 	ref := config.ProjectRef{ProjectID: "test-project"}
 
 	push("first")

@@ -181,13 +181,13 @@ type orgView struct {
 func (s *Service) load(ctx context.Context, orgID string, isAdmin bool) (orgView, error) {
 	v := orgView{admin: isAdmin, now: time.Now()}
 	var err error
-	if v.limits, err = s.deps.Store.ListOwnedAccountLimits(ctx, core.OrgAccountOwner(orgID)); err != nil {
+	if v.limits, err = s.deps.Accounts.ListOwnedAccountLimits(ctx, core.OrgAccountOwner(orgID)); err != nil {
 		return orgView{}, svcerr.Wrap(err)
 	}
 	if !isAdmin {
 		return v, nil
 	}
-	grants, err := s.deps.Store.ListOrgAccountGrants(ctx, orgID)
+	grants, err := s.deps.OrgAccounts.ListOrgAccountGrants(ctx, orgID)
 	if err != nil {
 		return orgView{}, svcerr.Wrap(err)
 	}
@@ -263,7 +263,7 @@ func (s *Service) find(ctx context.Context, orgID, accountID string) (core.Provi
 	if accountID == "" {
 		return core.ProviderAccount{}, svcerr.Wrap(svcerr.InvalidArgument("account_id is required"))
 	}
-	accounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, core.OrgAccountOwner(orgID))
+	accounts, err := s.deps.Accounts.ListOwnedProviderAccounts(ctx, core.OrgAccountOwner(orgID))
 	if err != nil {
 		return core.ProviderAccount{}, svcerr.Wrap(err)
 	}

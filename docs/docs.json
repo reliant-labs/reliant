@@ -16,6 +16,9 @@
   "icons": {
     "library": "lucide"
   },
+  "contextual": {
+    "options": ["copy", "view", "mcp", "cursor", "vscode"]
+  },
   "navigation": {
     "tabs": [
       {
@@ -28,7 +31,8 @@
               "getting-started/why-reliant",
               "getting-started/quick-start",
               "getting-started/installation",
-              "getting-started/concepts"
+              "getting-started/concepts",
+              "getting-started/search-docs-from-your-agent"
             ]
           },
           {
@@ -36,6 +40,7 @@
             "pages": [
               "workflows/overview",
               "workflows/workflow-control",
+              "features/chats",
               "features/branching",
               "features/worktrees",
               "features/git-integration",
@@ -98,6 +103,7 @@
                 "group": "Integrations",
                 "pages": [
                   "integrations/overview",
+                  "integrations/connectors",
                   "integrations/github",
                   "integrations/gmail",
                   "integrations/slack",
@@ -134,6 +140,7 @@
             "group": "Account & billing",
             "pages": [
               "account/billing",
+              "account/project-usage",
               "help/privacy"
             ]
           },
@@ -172,7 +179,8 @@
             "group": "Get started",
             "pages": [
               "forge/overview",
-              "forge/quick-start"
+              "forge/quick-start",
+              "forge/migrate-an-existing-app"
             ]
           },
           {
@@ -249,6 +257,15 @@
             ]
           },
           {
+            "group": "See and browse your app",
+            "pages": [
+              "forge/services",
+              "forge/data",
+              "forge/storage",
+              "forge/auth"
+            ]
+          },
+          {
             "group": "Observability",
             "pages": [
               "hosting/observability",
@@ -256,9 +273,17 @@
               "hosting/observability/where-it-goes",
               "hosting/observability/forge-obs",
               "hosting/observability/dashboards-and-alerts",
+              "forge/observability/speed-insights",
+              "forge/observability/product-analytics",
               "hosting/observability/session-timelines",
               "hosting/observability/profiling",
               "hosting/observability/agents"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "forge/security/vulnerabilities"
             ]
           },
           {
@@ -385,6 +410,7 @@
               {
                 "group": "Start a project",
                 "pages": [
+                  "guides/forge/deploy-with-a-coding-agent",
                   "guides/forge/build-go-react-app-connect-rpc",
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",

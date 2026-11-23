@@ -23,6 +23,10 @@ type Deps struct {
 	// Repo reads the caller's daemons, their attachment leases and the
 	// telemetry the gateway keeps on the daemon row.
 	Repo Repository
+	// Pools reads and writes machine labels and pools.
+	Pools Pools
+	// Mirror writes a renamed machine's name onto its registry row.
+	Mirror Mirror
 	// Router reaches the caller's attached daemons. ListDaemons nudges it
 	// to register a local daemon before reading; ClearMachineCaches and the
 	// local-model rpcs relay through it. Without it (cloud mode, where the
@@ -51,6 +55,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("daemon_registry: Deps.Repo is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("daemon_registry: Deps.Pools is required")
+	}
+	if d.Mirror == nil {
+		return fmt.Errorf("daemon_registry: Deps.Mirror is required")
 	}
 	return nil
 }

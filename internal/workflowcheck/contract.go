@@ -24,8 +24,10 @@
 // cancelled (skipped, superseded), timed_out, an engine fault (failure,
 // titled "Reliant could not run this check"), never neutral or skipped.
 //
-// Built by hand, by internal/app's NewWorkflowChecks provider
-// (providers_worker.go): never a node compose.go constructs from Deps.
+// Two instances with different Deps, so never one node: workersetup builds a
+// record-only Service from config (no GitHub) for the fire activities, and
+// internal/app's NewWorkflowCheckSyncer (providers_worker.go) builds one with
+// GitHub, the broker and RunURL, wrapped in the Syncer its consumers take.
 //
 //forge:provided
 package workflowcheck
@@ -66,11 +68,12 @@ type Firing struct {
 	Scope triggerspec.Scope
 }
 
-// Store is what the service reads and writes. *db.Repo satisfies it.
+// Store is what the service reads and writes. store.WorkflowCheckRunExtStore
+// satisfies it.
 type Store interface {
-	// CreateWorkflowCheckRun inserts row; false when the firing already has
+	// InsertWorkflowCheckRun inserts row; false when the firing already has
 	// a check of that name.
-	CreateWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error)
+	InsertWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error)
 	// MarkWorkflowCheckRunsStarted stamps the checks of chatID's launch
 	// firing as started (the first stamp stands) and makes them due.
 	MarkWorkflowCheckRunsStarted(ctx context.Context, chatID string, at time.Time) error

@@ -15,7 +15,7 @@ func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Reque
 	if req.Msg.RecoveryId == "" || req.Msg.IdempotencyKey == "" {
 		return nil, svcerr.InvalidArgument("recovery_id and idempotency_key required")
 	}
-	row, err := s.deps.Repo.GetWorktreeRecovery(ctx, userID, req.Msg.RecoveryId)
+	row, err := s.deps.Recoveries.GetWorktreeRecovery(ctx, userID, req.Msg.RecoveryId)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -23,7 +23,7 @@ func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Repo.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "deletion_requested", req.Msg.IdempotencyKey, ""); err != nil {
+	if err := s.deps.Recoveries.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "deletion_requested", req.Msg.IdempotencyKey, ""); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	// No source filesystem is needed. Any CURRENT owner daemon can perform the
@@ -59,11 +59,11 @@ func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Reque
 			phase = "held"
 			detail = "Exact recovery branch deletion held; check current repository access, policy and ref identity"
 		}
-		if err := s.deps.Repo.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, phase, detail); err != nil {
+		if err := s.deps.Recoveries.CompleteWorktreeRecoveryCheckout(ctx, userID, row.ID, c.RepoID, phase, detail); err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 	}
-	row, err = s.deps.Repo.GetWorktreeRecovery(ctx, userID, row.ID)
+	row, err = s.deps.Recoveries.GetWorktreeRecovery(ctx, userID, row.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

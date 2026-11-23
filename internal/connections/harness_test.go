@@ -18,15 +18,19 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -222,7 +226,7 @@ type env struct {
 	repo      *db.Repo
 	raw       *sql.DB
 	vault     vault.Service
-	store     db.ConnectionStore
+	store     connectionvault.Service
 	gh        *fakeGitHub
 	providers *connections.Registry
 	tokens    *connections.TokenSource
@@ -251,14 +255,14 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	doer := redirectingDoer{target: gh.srv}
 
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, doer)
 	broker := connections.NewBroker(store, v, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	svc := connections.NewService(store, v, providers, tokens, broker, doer)
 	return &env{
 		t: t, repo: repo, raw: raw, vault: v, store: store, gh: gh, providers: providers,
 		tokens: tokens, broker: broker, svc: svc,
-		resolver: connections.NewResolver(repo, store, tokens),
+		resolver: connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens}),
 		now:      time.Now,
 	}
 }

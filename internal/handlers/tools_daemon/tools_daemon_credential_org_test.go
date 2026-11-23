@@ -64,14 +64,9 @@ func connectInOrg(t *testing.T, credentialOrg string) string {
 		UpsertDaemonFunc:           func(context.Context, *db.Daemon) error { return nil },
 		UpsertDaemonAttachmentFunc: func(context.Context, *db.DaemonAttachment) error { return nil },
 		ListProjectsFunc:           func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, nil },
-		// The machine holds no checkouts yet.
-		ListProjectDaemonsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemon, error) { return nil, nil },
-		ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) {
-			return nil, nil
-		},
-		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+		ListDaemonsByUserIDFunc:    func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
 	}
-	svc := newTestService(repo)
+	svc := newTestServiceWithInstalls(repo, noInstalls(), &MockMachineCheckouts{ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) { return nil, nil }})
 	t.Cleanup(svc.Close)
 	ready := &linkReadyOrgs{orgs: make(chan string, 4)}
 	svc.AddConnectionListener(ready)

@@ -9,10 +9,12 @@ import (
 
 	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -96,7 +98,7 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	sinceSeq := req.Msg.SinceSeq
-	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)}
+	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, s.deps.Projects, userID, s.unassignedOrgRecheck)}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -420,7 +422,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	g := new(errgroup.Group)
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.main_window", func(ctx context.Context) error {
-			threadsSvc := threads.NewService(s.deps.Repo)
+			threadsSvc := threads.New(threads.Deps{Repo: s.deps.Repo})
 			// One row past the window answers "is there older history?"
 			// exactly, without a second query.
 			recent, err := threadsSvc.LoadRecentDisplayMessages(ctx, mainThread, snapshotMessageLimit+1)
@@ -486,7 +488,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.siblings", func(ctx context.Context) error {
 			var err error
-			siblingMessages, err = s.deps.Repo.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
+			siblingMessages, err = s.deps.Siblings.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
 			if err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
 					"error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
@@ -570,7 +572,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 	}
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.display_lookups", func(ctx context.Context) error {
-			lookups = messageproto.LoadDisplayLookups(ctx, s.deps.Repo, displayable, messageBlocks)
+			lookups = messageproto.LoadDisplayLookups(ctx, messageproto.NewReader(s.deps.Repo, s.deps.Senders), displayable, messageBlocks)
 			return nil
 		})
 		return nil
@@ -728,8 +730,11 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*re
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.update_heads", func(ctx context.Context) error {
 			var err error
-			updates, err = s.deps.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
-			if err != nil {
+			var source string
+			updates, source, err = s.deps.Heads.SnapshotUpdateHeads(ctx, chatID)
+			if err == nil {
+				trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
+			} else {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", shortID(chatID))
 			}
 			return err
@@ -748,7 +753,7 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*re
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.spawn_tool_calls", func(ctx context.Context) error {
 			var err error
-			spawnCallBy, err = s.deps.Repo.SpawnToolCallIDsByChildThread(ctx, chatID)
+			spawnCallBy, err = s.deps.SpawnCalls.SpawnToolCallIDsByChildThread(ctx, chatID)
 			if err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
 					"error", err, "chatID", shortID(chatID))
@@ -1088,7 +1093,7 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
-		updates, err := s.deps.Repo.GetUserUpdatesSince(ctx, userID, currentSeq, batchSize)
+		updates, err := s.deps.UserLog.UserUpdatesSince(ctx, userID, currentSeq, batchSize)
 		if err != nil {
 			return err
 		}

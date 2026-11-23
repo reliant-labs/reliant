@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	dbstore "github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -97,7 +100,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(),
 		connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
-	store := h.Repo().Connections()
+	store := db.TestConnections(t, h.Repo())
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
 	_, err = connections.NewService(store, v, providers, tokens, broker, nil).CreateAPIKey(ctx, connections.CreateAPIKeyParams{
@@ -105,7 +108,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 		Fields: map[string]string{"api_key": "ghp_test_not_a_real_token"},
 	})
 	require.NoError(t, err)
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(h.Repo(), store, tokens)})
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: h.Repo(), Runs: dbstore.NewWorkflowExtStore(h.Repo().ORM()), Store: store, Tokens: tokens})})
 
 	driver := &promptCaptureDriver{}
 	resolver := func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
@@ -114,7 +117,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), IntegrationCredentials: source})
 	return &nestedAgentFixture{
 		h: h, chat: chat, thread: nested, driver: driver,
-		callLLM: NewCallLLMActivity(h.Repo(), nil, factory, &staticConfigProvider{}, resolver, nil),
+		callLLM: NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}), Spawns: dbstore.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

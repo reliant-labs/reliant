@@ -14,7 +14,7 @@ import (
 // the user's projects, never where each project was created on another one.
 func TestDaemonProjectPaths_AreThisMachinesOwnCheckouts(t *testing.T) {
 	asked := ""
-	repo := &MockRepository{
+	installs := &MockProjectDaemons{
 		ListProjectDaemonsForDaemonFunc: func(_ context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
 			asked = daemonID
 			return []*core.ProjectDaemon{
@@ -25,7 +25,7 @@ func TestDaemonProjectPaths_AreThisMachinesOwnCheckouts(t *testing.T) {
 			}, nil
 		},
 	}
-	got, err := newTestService(repo).daemonProjectPaths(context.Background(), "cloud-box")
+	got, err := newTestServiceWithInstalls(&MockRepository{}, installs).daemonProjectPaths(context.Background(), "cloud-box")
 	require.NoError(t, err)
 	assert.Equal(t, "cloud-box", asked)
 	assert.Equal(t, []string{"/home/workspace/projects/api", "/home/workspace/projects/cp"}, got,

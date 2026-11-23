@@ -62,7 +62,7 @@ func (s *Service) CreateWorktree(
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.getProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -83,7 +83,7 @@ func (s *Service) CreateWorktree(
 			}
 			return nil, err
 		}
-		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
+		sourceWorktree, err = s.getWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
 			logging.WarnContext(ctx, "Source worktree not found, falling back to project paths",
 				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
@@ -132,7 +132,7 @@ func (s *Service) CreateWorktree(
 	// "succeeded, reply dropped" — without this the natural retry produces a
 	// second workspace with a second on-disk checkout.
 	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
-		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
+		existing, err := s.deps.Rows.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create worktree"))
 		}

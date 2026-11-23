@@ -25,7 +25,10 @@ tmp_dir = "tmp/air-worker"
   # watcher (api, worker and gateway run the same binary), with -trimpath, and
   # links the result here atomically. A failed build exits non-zero for every
   # watcher and never replaces this binary.
-  cmd = "scripts/air-build.sh ./cmd/reliant ./tmp/air-worker/reliant"
+  # $FORGE_GO_BUILD_FLAGS is how `forge env up dev` builds it for coverage
+  # (forge.yaml tests.coverage: -cover -covermode=atomic -coverpkg=…, with
+  # GOCOVERDIR=.forge/tests/covdata/dev/<workload>/); unset, nothing changes.
+  cmd = "scripts/air-build.sh ./cmd/reliant ./tmp/air-worker/reliant $FORGE_GO_BUILD_FLAGS"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
   exclude_file = []

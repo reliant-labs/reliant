@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -63,7 +64,7 @@ func TestUsageMeter_TerminalStreamFailureKeepsItsBilledTokens(t *testing.T) {
 	driver := reliantTestDriver(srv.URL)
 	resolved := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
 	exec := func(ctx context.Context, _ string) (string, error) {
-		_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		_, err := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
 		require.ErrorContains(t, err, "upstream reset")
 		return "", nil
 	}

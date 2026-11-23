@@ -8,8 +8,9 @@
  *
  * The numbers are the gateway's, counted per UTC calendar period as the cap
  * counts them. While the caps are only trialled (audit), going over is said
- * to be counted, not refused. A control plane that predates the rpc answers
- * Unimplemented, shown as "not available yet", never as an error.
+ * to be counted, not refused. A control plane that does not serve the rpc (a
+ * self-hosted one) answers Unimplemented, shown as "not available yet", never
+ * as an error.
  */
 
 import Button from "@/components/forge-ui/button";

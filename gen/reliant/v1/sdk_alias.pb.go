@@ -545,6 +545,7 @@ const (
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED                             = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED                             = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED                        = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING                           = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING
 	DiskGuardState_DISK_GUARD_STATE_RECLAIMING                                 = sdk.DiskGuardState_DISK_GUARD_STATE_RECLAIMING
