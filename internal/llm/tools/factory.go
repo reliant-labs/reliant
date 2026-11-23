@@ -60,6 +60,12 @@ type ToolsOptions struct {
 	LaunchedRuns  LaunchedRunCounter
 	WorktreeChats WorktreeChatLister
 	WorkflowSlugs WorkflowSlugChecker
+	// Placement and Workflows are the row reads behind the worktree,
+	// report_bug and get_run tools (daemonplacement.Records and
+	// store.WorkflowExtStore). Optional: nil makes the tool that needs one
+	// report that it is unavailable here, like a nil Repo.
+	Placement PlacementRecords
+	Workflows RunWorkflows
 	// Planning is the plan, task and dependency store behind the planning
 	// tools. Optional: nil makes them report that they are unavailable here,
 	// like a nil Repo.
@@ -290,6 +296,30 @@ func (f *ToolsFactory) planning() toolPlanning {
 // database. A nil *db.Repo converted to an interface is NOT nil, so handing
 // opts.Repo through as is would defeat every tool's "requires a database
 // connection" check and turn an unavailable tool into a nil dereference.
+// placement is opts.Placement as report_bug's role: nil stays a nil
+// interface.
+func (f *ToolsFactory) placement() bugReportMachines {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+// worktreeRecords is opts.Placement as the worktree tool's role.
+func (f *ToolsFactory) worktreeRecords() worktreeRecords {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+func (o *ToolsOptions) workflows() RunWorkflows {
+	if o == nil {
+		return nil
+	}
+	return o.Workflows
+}
+
 func (f *ToolsFactory) store() toolStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
@@ -573,11 +603,11 @@ func (f *ToolsFactory) ListRuns() Tool {
 
 // ReportBug files a Reliant or forge defect with engineering via Sentry.
 func (f *ToolsFactory) ReportBug() Tool {
-	return NewReportBugTool(f.store())
+	return NewReportBugTool(f.store(), f.placement())
 }
 
 func (f *ToolsFactory) GetRun() Tool {
-	return NewGetRunTool(f.store())
+	return NewGetRunTool(f.store(), f.opts.workflows())
 }
 
 func (f *ToolsFactory) ControlRun() Tool {
@@ -683,7 +713,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.worktreeRecords(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools

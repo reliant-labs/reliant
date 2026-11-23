@@ -63,6 +63,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
+	"github.com/reliant-labs/reliant/internal/prrecords"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -597,6 +598,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
 		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Placement:          daemonplacement.NewRecords(repo.ORM()),
+		Workflows:          store.NewWorkflowExtStore(repo.ORM()),
 		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
@@ -1007,8 +1010,12 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return &TriggerDeliveryRelay{relay: webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
-		membership: membership, policies: d.Policies}, nil
+	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil))
+	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
+			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
+	}
+	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }
 
 func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {

@@ -16,7 +16,8 @@ vi.mock("../journeys/fixMyPr", async (importOriginal) => ({
   seedFixMyPr,
 }));
 const createDraftMutate = vi.hoisted(() => vi.fn());
-vi.mock("@/hooks/workflow-library-queries", () => ({
+vi.mock("@/hooks/workflow-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/workflow-service-hooks_gen")>()),
   useCreateWorkflowDraft: () => ({ mutate: createDraftMutate, isPending: false }),
 }));
 vi.mock("../../Automations/dialog/AutomationDialog", () => ({ AutomationDialog: () => null }));
