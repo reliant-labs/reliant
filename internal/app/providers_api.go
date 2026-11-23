@@ -289,9 +289,9 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		OAuthScopes:         d.OAuthScopes,
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
-		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(store.NewHostedHttpActionTicketExtStore(d.DB.ORM()), cp.InternalServiceSecret),
 		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(store.NewLlmOrgUsageDailyExtStore(d.DB.ORM()), cp.InternalServiceSecret),
-		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(store.NewProjectAppEnsureExtStore(d.DB.ORM()), httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
 }
 

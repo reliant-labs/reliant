@@ -1824,7 +1824,7 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 	return pull_request_record.New(pull_request_record.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Store:  g.Database(),
+		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
 	})
 }
