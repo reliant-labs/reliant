@@ -56591,6 +56591,17 @@
     },
     {
       "consumer": "MCP",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -57183,6 +57194,15 @@
     },
     {
       "consumer": "Project",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -57558,6 +57578,17 @@
       ],
       "providers": [
         "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -59144,6 +59175,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.ProjectConfigs",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
@@ -44,7 +45,7 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	stored, err := json.Marshal([]cfg.StoredWorkflow{{Slug: "shared-flow", Name: "shared-flow", YAMLContent: def("from-project")}})
 	require.NoError(t, err)
 	storedJSON := string(stored)
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ID: uuid.NewString(), ProjectID: projectID, DaemonID: "d",
 		ProjectWorkflowsJSON: &storedJSON, PushedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))

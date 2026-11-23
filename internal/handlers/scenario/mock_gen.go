@@ -169,6 +169,32 @@ func (m *MockDrafts) GetUsableWorkflowBySlug(ctx context.Context, userID string,
 // Compile-time check.
 var _ Drafts = (*MockDrafts)(nil)
 
+// forge:section MockProjectConfigs
+// forge:hash=28501c4c11830a4ea5dc37500d5070e2e1d9f801cce0882063a7f6dafe63f54d
+
+// MockProjectConfigs is a test mock for the ProjectConfigs interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectConfigs.<Method>Func not set" error.
+type MockProjectConfigs struct {
+	contractkit.Recorder
+	GetProjectScenariosJSONFunc func(context.Context, string) (*string, error)
+}
+
+// GetProjectScenariosJSON records the call and delegates to GetProjectScenariosJSONFunc when set.
+func (m *MockProjectConfigs) GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error) {
+	m.Recorder.Record("GetProjectScenariosJSON", ctx, projectID)
+	if m.GetProjectScenariosJSONFunc != nil {
+		return m.GetProjectScenariosJSONFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectConfigs", "GetProjectScenariosJSON")
+}
+
+// Compile-time check.
+var _ ProjectConfigs = (*MockProjectConfigs)(nil)
+
 // forge:section MockSender
 // forge:hash=f471c24ab4fdae8127d2f321101151ab57c7c07dacec184da1c4240ca0d7d241
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -18,14 +20,14 @@ func TestProjectConfigVersion(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	if _, err := repo.GetProjectConfigVersion(ctx, "test-project"); !svcerr.IsNotFound(err) {
+	if _, err := store.GetProjectConfigVersion(ctx, repo.ORM(), "test-project"); !svcerr.IsNotFound(err) {
 		t.Fatalf("no record: err = %v; want svcerr.NotFound", err)
 	}
 
 	skills := `[{"name":"a"}]`
 	upsert := func() {
 		t.Helper()
-		if err := repo.UpsertProjectConfigRecord(ctx, &ProjectConfigRecord{
+		if err := store.UpsertProjectConfigRecord(ctx, repo.ORM(), &ProjectConfigRecord{
 			ProjectID: "test-project", DaemonID: "daemon-1", ProjectSkillsJSON: &skills,
 		}); err != nil {
 			t.Fatalf("upsert: %v", err)
@@ -33,7 +35,7 @@ func TestProjectConfigVersion(t *testing.T) {
 	}
 	version := func() string {
 		t.Helper()
-		v, err := repo.GetProjectConfigVersion(ctx, "test-project")
+		v, err := store.GetProjectConfigVersion(ctx, repo.ORM(), "test-project")
 		if err != nil || v == "" {
 			t.Fatalf("GetProjectConfigVersion = %q, %v", v, err)
 		}
