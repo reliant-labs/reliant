@@ -43,7 +43,7 @@ func TestEnsureProjectForApp_CreatesOnceThenReuses(t *testing.T) {
 	t.Cleanup(cleanup)
 	ctx := context.Background()
 
-	first, err := r.EnsureProjectForApp(ctx, ensureInput("org-a", "u1"))
+	first, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput("org-a", "u1"))
 	require.NoError(t, err)
 	assert.True(t, first.Created)
 	p, err := r.GetProject(ctx, first.ProjectID)
@@ -60,7 +60,7 @@ func TestEnsureProjectForApp_CreatesOnceThenReuses(t *testing.T) {
 	assert.Empty(t, daemons)
 	assert.Equal(t, []string{"apps/web=shop"}, forgeApps(t, r, p.ID))
 
-	again, err := r.EnsureProjectForApp(ctx, ensureInput("org-a", "u1"))
+	again, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput("org-a", "u1"))
 	require.NoError(t, err)
 	assert.Equal(t, first.ProjectID, again.ProjectID)
 	assert.False(t, again.Created)
@@ -81,7 +81,7 @@ func TestEnsureProjectForApp_ConcurrentCallsCreateOne(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			res, err := r.EnsureProjectForApp(ctx, ensureInput("org-a", "u1"))
+			res, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput("org-a", "u1"))
 			ids[i], errs[i] = res.ProjectID, err
 		}()
 	}
@@ -104,7 +104,7 @@ func TestEnsureProjectForApp_ReusesAnotherUsersProjectInTheOrg(t *testing.T) {
 	require.NoError(t, r.CreateProject(ctx, &Project{ID: "theirs", Name: "Shop", Path: "/src/shop", UserID: "u2",
 		OrgID: &org, RemoteURL: &remote, IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 
-	res, err := r.EnsureProjectForApp(ctx, ensureInput(org, "u1"))
+	res, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput(org, "u1"))
 	require.NoError(t, err)
 	assert.Equal(t, "theirs", res.ProjectID)
 	assert.False(t, res.Created)
@@ -123,7 +123,7 @@ func TestEnsureProjectForApp_NeverMatchesAnotherOrg(t *testing.T) {
 	require.NoError(t, r.CreateProject(ctx, &Project{ID: "elsewhere", Name: "shop", Path: "/home/workspace/projects/shop", UserID: "u1",
 		OrgID: &other, RemoteURL: &remote, IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 
-	res, err := r.EnsureProjectForApp(ctx, ensureInput("org-a", "u1"))
+	res, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput("org-a", "u1"))
 	require.NoError(t, err)
 	assert.True(t, res.Created)
 	assert.NotEqual(t, "elsewhere", res.ProjectID)
@@ -146,7 +146,7 @@ func TestEnsureProjectForApp_MatchesAnySpellingOfTheRemote(t *testing.T) {
 	require.NoError(t, r.CreateProject(ctx, &Project{ID: "spelled", Name: "Shop", Path: "/src/shop", UserID: "u2",
 		OrgID: &org, RemoteURL: &remote, IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 
-	res, err := r.EnsureProjectForApp(ctx, ensureInput(org, "u1"))
+	res, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput(org, "u1"))
 	require.NoError(t, err)
 	assert.Equal(t, "spelled", res.ProjectID)
 	assert.False(t, res.Created)
@@ -173,7 +173,7 @@ func TestEnsureProjectForApp_ConcurrentRemotesGetDistinctNames(t *testing.T) {
 			defer wg.Done()
 			in := ensureInput("org-a", "u1")
 			in.Remote = fmt.Sprintf("github.com/acme/shop-%d", i)
-			res, err := r.EnsureProjectForApp(ctx, in)
+			res, err := store.EnsureProjectForApp(ctx, r.ORM(), in)
 			ids[i], errs[i] = res.ProjectID, err
 		}()
 	}
