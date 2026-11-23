@@ -498,6 +498,7 @@
         "AccountUsagePoller",
         "AgentRuns",
         "AutomationTokens",
+        "ChangeController",
         "ChatUpdateHub",
         "ConnectionVault",
         "DBRepo",
@@ -53943,6 +53944,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ChangeController",
+      "name": "ChangeController",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/llm/tools.ChangeController",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewChangeController"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Chat",
       "name": "Chat",
       "kind": "component",
@@ -58730,6 +58743,19 @@
       ],
       "providers": [
         "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
+      "field": "ChangeController",
+      "interface": "github.com/reliant-labs/reliant/internal/llm/tools.ChangeController",
+      "methods": [],
+      "candidates": [
+        "ChangeController"
+      ],
+      "providers": [
+        "ChangeController"
       ],
       "resolution": "composition_expression"
     },

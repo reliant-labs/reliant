@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package app
+package changetools
 
 import (
 	"bytes"
@@ -18,12 +18,14 @@ import (
 
 	deployv1 "github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1"
 	"github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1/controlplanev1connect"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
-// changeController is tools.ChangeController for the worker: Forge Changes
+// Controller is tools.ChangeController for the worker: Forge Changes
 // through the control plane's ChangesService. Browser sessions are not agent
 // credentials: until a scoped agent credential contract is wired here, launch,
 // ramp and roll-out fail closed. Other operations use the owner's session.
@@ -38,17 +40,17 @@ import (
 // reaches the move rpcs (internal/controlplane/project_org_move.go). Once the
 // proto is vendored, changesRPC becomes the generated client and nothing
 // above it changes.
-type changeController struct {
-	projects changeProjects
+type Controller struct {
+	projects Projects
 	envs     changeEnvironments
 	rpc      changeRPC
 	// session is the user's live session token (auth.GetUserJWT).
 	session func(userID string) (string, bool)
 }
 
-// changeProjects is how the calling chat's project names its org and forge
+// Projects is how the calling chat's project names its org and forge
 // project, the defaults for a list or a new change.
-type changeProjects interface {
+type Projects interface {
 	GetProject(ctx context.Context, id string) (*core.Project, error)
 }
 
@@ -64,19 +66,29 @@ type changeRPC interface {
 	call(ctx context.Context, jwt, method string, in, out any) error
 }
 
-// newChangeController is nil when self-hosted: Changes live in the control
-// plane, and the tools say so.
-func newChangeController(repo changeProjects, router *WorkerDaemonRouter) tools.ChangeController {
-	if router == nil || router.ControlPlaneURL == "" {
-		return nil
-	}
+// Deps are what a Controller reaches the control plane through.
+type Deps struct {
+	Projects Projects
+	// ControlPlane names the control plane; it must be hosted (the caller
+	// decides that there is no controller when self-hosted).
+	ControlPlane *configv1.ControlPlaneConfig
+	// Session is the user's live session token; nil means auth.GetUserJWT.
+	Session func(userID string) (string, bool)
+}
+
+// New is the controller over the control plane d.ControlPlane names.
+func New(d Deps) Service {
 	httpClient := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second})
-	base := strings.TrimRight(router.ControlPlaneURL, "/")
-	return &changeController{
-		projects: repo,
+	base := strings.TrimRight(controlplane.EndpointFrom(d.ControlPlane).URL, "/")
+	session := d.Session
+	if session == nil {
+		session = auth.GetUserJWT
+	}
+	return &Controller{
+		projects: d.Projects,
 		envs:     controlplanev1connect.NewDeployServiceClient(httpClient, base),
 		rpc:      &changesHTTP{client: httpClient, baseURL: base},
-		session:  auth.GetUserJWT,
+		session:  session,
 	}
 }
 
@@ -141,7 +153,7 @@ func changeErrorOf(resp *http.Response, body []byte) error {
 }
 
 // asUserSession is the user's live session token, or the error a tool shows.
-func (c *changeController) asUserSession(userID string) (string, error) {
+func (c *Controller) asUserSession(userID string) (string, error) {
 	jwt, ok := c.session(userID)
 	if !ok || strings.TrimSpace(jwt) == "" {
 		return "", errors.New("no live sign-in to act as the user: they can do this in the Experiments page of the Forge console, or send a message in this chat to refresh the session")
@@ -151,7 +163,7 @@ func (c *changeController) asUserSession(userID string) (string, error) {
 
 // scope fills an org and forge project the caller left out from the calling
 // chat's project.
-func (c *changeController) scope(ctx context.Context, projectID, orgID, project string) (string, string, error) {
+func (c *Controller) scope(ctx context.Context, projectID, orgID, project string) (string, string, error) {
 	if (orgID == "" || project == "") && projectID != "" && c.projects != nil {
 		if p, err := c.projects.GetProject(ctx, projectID); err == nil && p != nil {
 			if orgID == "" && p.OrgID != nil {
@@ -170,7 +182,7 @@ func (c *changeController) scope(ctx context.Context, projectID, orgID, project 
 
 // environments is the org's environments (one forge project's when project
 // is set), by id.
-func (c *changeController) environments(ctx context.Context, jwt, orgID, project string) (map[string]string, error) {
+func (c *Controller) environments(ctx context.Context, jwt, orgID, project string) (map[string]string, error) {
 	req := &deployv1.ListDeployEnvironmentsRequest{OrgId: &orgID}
 	if project != "" {
 		req.Project = &project
@@ -190,7 +202,7 @@ func (c *changeController) environments(ctx context.Context, jwt, orgID, project
 
 // resolveEnvironment is the id of the environment env names: a name of the
 // project's environments, or one of their ids.
-func (c *changeController) resolveEnvironment(ctx context.Context, jwt, orgID, project, env string) (string, error) {
+func (c *Controller) resolveEnvironment(ctx context.Context, jwt, orgID, project, env string) (string, error) {
 	envs, err := c.environments(ctx, jwt, orgID, project)
 	if err != nil {
 		return "", fmt.Errorf("could not list the environments: %w", err)
@@ -212,7 +224,7 @@ func (c *changeController) resolveEnvironment(ctx context.Context, jwt, orgID, p
 	return "", fmt.Errorf("%s has no environment %q (it has: %s)", where, env, strings.Join(names, ", "))
 }
 
-func (c *changeController) ListChanges(ctx context.Context, userID, projectID string, f tools.ChangeFilter) ([]tools.ChangeSummary, error) {
+func (c *Controller) ListChanges(ctx context.Context, userID, projectID string, f tools.ChangeFilter) ([]tools.ChangeSummary, error) {
 	jwt, err := c.asUserSession(userID)
 	if err != nil {
 		return nil, err
@@ -258,7 +270,7 @@ func (c *changeController) ListChanges(ctx context.Context, userID, projectID st
 	return out, nil
 }
 
-func (c *changeController) GetChange(ctx context.Context, userID, changeID string, events int) (tools.ChangeSummary, []tools.ChangeEvent, error) {
+func (c *Controller) GetChange(ctx context.Context, userID, changeID string, events int) (tools.ChangeSummary, []tools.ChangeEvent, error) {
 	jwt, err := c.asUserSession(userID)
 	if err != nil {
 		return tools.ChangeSummary{}, nil, err
@@ -291,7 +303,7 @@ func (c *changeController) GetChange(ctx context.Context, userID, changeID strin
 	return out, list, nil
 }
 
-func (c *changeController) CreateChange(ctx context.Context, userID, projectID string, in tools.ChangeCreate) (tools.ChangeSummary, error) {
+func (c *Controller) CreateChange(ctx context.Context, userID, projectID string, in tools.ChangeCreate) (tools.ChangeSummary, error) {
 	jwt, err := c.asUserSession(userID)
 	if err != nil {
 		return tools.ChangeSummary{}, err
@@ -335,7 +347,7 @@ var changeMethods = map[string]string{
 	"end_run":      "EndChangeRun",
 }
 
-func (c *changeController) ApplyChange(ctx context.Context, userID string, op tools.ChangeOp) (tools.ChangeSummary, error) {
+func (c *Controller) ApplyChange(ctx context.Context, userID string, op tools.ChangeOp) (tools.ChangeSummary, error) {
 	// Never send an exposure-increasing agent action as a human console
 	// session, even with a step-up code or a prior interactive confirmation.
 	// Block every ramp: deciding whether it increases exposure requires state.
@@ -429,7 +441,7 @@ func changeOpRequest(op tools.ChangeOp) map[string]any {
 	return req
 }
 
-func (c *changeController) RequestChangeApproval(ctx context.Context, userID, changeID string) (tools.ChangeApprovalCode, error) {
+func (c *Controller) RequestChangeApproval(ctx context.Context, userID, changeID string) (tools.ChangeApprovalCode, error) {
 	jwt, err := c.asUserSession(userID)
 	if err != nil {
 		return tools.ChangeApprovalCode{}, err
@@ -444,7 +456,7 @@ func (c *changeController) RequestChangeApproval(ctx context.Context, userID, ch
 	return tools.ChangeApprovalCode{SentTo: resp.SentTo, ExpiresAt: resp.ExpiresAt}, nil
 }
 
-func (c *changeController) GetChangeReadout(ctx context.Context, userID, changeID, runID string) (tools.ChangeReadout, error) {
+func (c *Controller) GetChangeReadout(ctx context.Context, userID, changeID, runID string) (tools.ChangeReadout, error) {
 	jwt, err := c.asUserSession(userID)
 	if err != nil {
 		return tools.ChangeReadout{}, err
