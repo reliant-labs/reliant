@@ -8,7 +8,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/planproto"
 )
 
 // GetPlanByChatId retrieves a plan by chat ID
@@ -25,7 +24,7 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// The owner, or a viewer of a shared chat.
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Chats.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -35,7 +34,7 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// Get plans for this chat (via thread join)
-	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
+	plans, err := s.deps.Plans.ListPlansByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
@@ -46,23 +45,5 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// Return the first plan
-	plan := plans[0]
-	resp := &reliantv1.GetPlanByChatIdResponse{
-		Plan: &reliantv1.Plan{
-			Id:        plan.ID,
-			ChatId:    req.Msg.ChatId,
-			Title:     plan.Title,
-			Status:    planproto.PlanStatus(plan.Status),
-			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		},
-	}
-	if plan.Description != nil {
-		resp.Plan.Description = *plan.Description
-	}
-	if plan.Complexity != nil {
-		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
-	}
-
-	return connect.NewResponse(resp), nil
+	return connect.NewResponse(&reliantv1.GetPlanByChatIdResponse{Plan: planToProto(plans[0], req.Msg.ChatId)}), nil
 }

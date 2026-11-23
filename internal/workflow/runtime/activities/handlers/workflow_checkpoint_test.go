@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // createTestWorkflowRow inserts a root workflow row for checkpoint tests.
@@ -35,7 +37,7 @@ func TestWorkflowCheckpointActivity_UpsertAndRead(t *testing.T) {
 	chatID := createTestChat(t, repo)
 	workflowID := createTestWorkflowRow(t, repo, chatID)
 
-	act := NewWorkflowCheckpointActivity(repo)
+	act := NewWorkflowCheckpointActivity(WorkflowCheckpointDeps{Checkpoints: store.NewWorkflowCheckpointExtStore(repo.ORM())})
 
 	// First write: node entry.
 	out, err := act.Execute(ctx, WorkflowCheckpointInput{
@@ -90,7 +92,7 @@ func TestWorkflowStatus_CheckpointLifecycle(t *testing.T) {
 
 	writeCheckpoint := func(t *testing.T, chatID, workflowID string) {
 		t.Helper()
-		require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &db.WorkflowCheckpoint{
+		require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &db.WorkflowCheckpoint{
 			WorkflowID:    workflowID,
 			ChatID:        chatID,
 			NodeID:        "agent_loop",
@@ -98,7 +100,7 @@ func TestWorkflowStatus_CheckpointLifecycle(t *testing.T) {
 		}))
 	}
 
-	statusAct := NewWorkflowStatusActivity(repo)
+	statusAct := NewWorkflowStatusActivity(workflowStatusDeps(repo))
 
 	// One chat shared across subtests (createTestChat's project path is fixed
 	// per repo); each subtest gets its own workflow row.

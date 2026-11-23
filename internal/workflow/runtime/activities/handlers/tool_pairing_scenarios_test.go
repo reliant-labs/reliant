@@ -20,11 +20,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // requireInvariantHolds is the single assertion every scenario ends with.
@@ -100,7 +101,7 @@ func TestToolPairing_WorkflowCancelledMidToolExecution(t *testing.T) {
 	createMessageWithToolCall(t, repo, chatID, threadID, cwID, 2, "call_cancelled", "bash", `{"command":"ls -la"}`)
 	// Cancellation: no tool message is ever written.
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "workflow cancelled mid-tool-execution")
 
@@ -129,11 +130,11 @@ func TestToolPairing_PauseDuringToolExecution(t *testing.T) {
 
 	// Read twice: pausing and resuming means this history is assembled more than
 	// once, and repeated reads must stay stable rather than compounding repairs.
-	first, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	first, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, first, "pause during tool execution (first read)")
 
-	second, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	second, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, second, "pause during tool execution (second read)")
 
@@ -160,7 +161,7 @@ func TestToolPairing_CrashBetweenAssistantAndResults(t *testing.T) {
 	createToolCallBlockOnMessage(t, repo, asst.ID, "call_crash_3", "grep", `{"pattern":"c"}`, 2)
 	// Crash: no tool message at all, for any of the three calls.
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "crash between saving assistant message and tool results")
 
@@ -192,7 +193,7 @@ func TestToolPairing_PartialBatchSomeToolsSucceeded(t *testing.T) {
 	toolMsg := createMessageWithToolResult(t, repo, chatID, threadID, cwID, 3, "call_ok", "ok output")
 	createToolResultBlockOnMessage(t, repo, toolMsg.ID, "call_failed", "file not found", true, 1)
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "batch where some tools succeeded and others did not")
 
@@ -236,7 +237,7 @@ func TestToolPairing_ForkBetweenCallAndResult(t *testing.T) {
 	childThread, childCW := createThreadWithContextWindow(t, repo, chatID, &parentThread, &forkOrdinal, &parentCW, 0)
 	createMessageWithParts(t, repo, chatID, childThread, childCW, 4, reliantv1.MessageRole_MESSAGE_ROLE_USER, "actually, do something else")
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, childThread, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, childThread, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "fork between a tool call and its result")
 
@@ -245,7 +246,7 @@ func TestToolPairing_ForkBetweenCallAndResult(t *testing.T) {
 
 	// The parent must be untouched: its own history still resolves to the REAL
 	// result, not a synthetic one written by the child's read.
-	parentMsgs, err := LoadMessagesForLLM(ctx, repo, chatID, parentThread, nil)
+	parentMsgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, parentThread, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, parentMsgs, "parent thread after a child forked mid-pair")
 
@@ -275,7 +276,7 @@ func TestToolPairing_ForkAtResultKeepsRealResult(t *testing.T) {
 	childThread, childCW := createThreadWithContextWindow(t, repo, chatID, &parentThread, &forkOrdinal, &parentCW, 0)
 	createMessageWithParts(t, repo, chatID, childThread, childCW, 4, reliantv1.MessageRole_MESSAGE_ROLE_USER, "continue")
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, childThread, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, childThread, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "fork after a completed tool pair")
 
@@ -310,7 +311,7 @@ func TestToolPairing_BackgroundedTool(t *testing.T) {
 	createMessageWithToolResult(t, repo, chatID, threadID, cwID, 3, "call_bg",
 		"Command running in background with ID: bg_1")
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "backgrounded tool")
 
@@ -338,7 +339,7 @@ func TestToolPairing_OrphanedResultWithNoCall(t *testing.T) {
 	// A result with no corresponding call anywhere in the history.
 	createMessageWithToolResult(t, repo, chatID, threadID, cwID, 2, "call_ghost", "output with no call")
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "orphaned tool_result with no matching call")
 
@@ -364,7 +365,7 @@ func TestToolPairing_HealthyConversationIsUnchanged(t *testing.T) {
 	createMessageWithToolResult(t, repo, chatID, threadID, cwID, 3, "call_1", "file1.txt\nfile2.txt")
 	createMessageWithParts(t, repo, chatID, threadID, cwID, 4, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "Two files.")
 
-	msgs, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
+	msgs, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	requireInvariantHolds(t, msgs, "healthy conversation")
 

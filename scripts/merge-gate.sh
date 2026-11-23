@@ -63,7 +63,9 @@
 #              files the diff's own web modules reach (-web-full reached), and
 #              the whole vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
-#              fails it (-test-budget auto)
+#              fails it (-test-budget auto). Recorded (-capture) as lanes short
+#              and web-affected of one forge test run, which never changes
+#              the verdict (scripts/test-capture.sh)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
 #              gen, node configs), incremental on state this checkout wrote,
 #              when the web lane is selected or anything under
@@ -93,6 +95,11 @@
 #              when the plan's web-demo lane is selected: a change in the
 #              bundle's import graph, its build config, or a FULL web lane
 #   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
+#   closedsets forge lint --closed-sets, only when a migration, go.mod or forge.yaml changed: a
+#              CHECK declared forge:closed-set must list exactly the forge set the pin
+#              carries. A pin bump that grows accesstoken.AllScopes (mcp:oauth, mcp:forge)
+#              merged without the widening migration and turned the release gate red
+#              (#3382); the whole-project forge lint that names it is the release gate's.
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
@@ -202,12 +209,23 @@ echo "$slot_wait" >"$L/slot_wait"
 if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; elif [ "$queue" = 1 ]; then echo queue >"$L/tier"; fi
 [ "$skip_golangci" = 1 ] && echo "a golangci (changed) job beside the gate runs it" >"$L/golangci-elsewhere"
 # The pinned forge of the checkout it runs in: FORGE_BIN, a forge on PATH at
-# the pin, `reliant forge`, or `go run …@<pin>` (scripts/forge.sh).
+# the pin, `reliant forge`, or the pin go-installed once (scripts/forge.sh).
 forge=("$PWD/scripts/forge.sh")
 # Paths generators write. A regenerate in --amend mode may change only these.
 gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^frontends/web/src/gen/|^\.forge/|^deploy/observability/|_gen(_test)?\.(go|json|ndjson|ts|k)$|^frontends/web/src/store/shortcutsData\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'
 
 rows=() notes=() fail=0
+# The test phase's lanes are recorded as ONE run of forge's test record
+# (scripts/test-capture.sh, via tools/test-affected run -capture): lane short
+# (the affected Go tests, with coverage) and lane web-affected (the selected
+# vitest files). The record never changes a verdict, and FORGE_TESTS=off (or
+# a forge that cannot begin a run) runs every lane unrecorded. Begun here
+# so the run carries this gate's diff base; .forge/ is gitignored, so it is
+# not a change the generators' no-op judgment or the plan sees.
+if [ "${FORGE_TESTS:-}" != off ] && test_run=$("${forge[@]}" test begin --base "$base" 2>/dev/null) && [ -d "$test_run" ]; then
+  export FORGE_TEST_RUN=$test_run
+  notes+=("tests: recorded as run $test_run (forge test report $(basename "$test_run"))")
+fi
 # phase <name> <cmd>...: run one phase, timed, output to $L/<name>.log.
 # Each phase is recorded in $L/expected BEFORE it launches and leaves its .row
 # only when it finishes, so a phase that was started and cut off (queued past a
@@ -551,7 +569,7 @@ demo_build() {
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
@@ -633,6 +651,12 @@ if [ "$fail" = 0 ]; then
     # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
+  # A forge:closed-set CHECK must list the set the pinned forge carries, so the
+  # lane runs whenever a migration or the pin (go.mod, forge.yaml) moves. It is
+  # not part of the scoped lint above: a pin bump has no directory to scope to.
+  if echo "$files" | grep -qE '^db/migrations/|^go\.mod$|^forge\.yaml$'; then
+    phase closedsets "${forge[@]}" lint --closed-sets --no-fix & pids+=($!)
+  fi
   # A migration below main's newest is never applied and reliant's migrator
   # refuses to start on it (reliant#1399). The check fetches origin/main
   # itself, so it judges main as it is now, not as this clone last saw it.
@@ -691,7 +715,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety closedsets migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

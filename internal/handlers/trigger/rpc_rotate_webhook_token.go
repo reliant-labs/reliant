@@ -141,10 +141,7 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 		// only for a GitHub trigger, which comes through the access-gated path.
 		return "", svcerr.InvalidArgument("an organization's GitHub App can only be the source of a GitHub trigger")
 	}
-	store := s.connections()
-	if store == nil {
-		return "", inboundUnavailable("integration")
-	}
+	store := s.deps.Repo
 	var (
 		conn *core.Connection
 		err  error
@@ -190,10 +187,7 @@ func (s *Service) resolveOptionalTriggerConnection(ctx context.Context, userID, 
 		}
 		return &id, nil
 	}
-	store := s.connections()
-	if store == nil {
-		return nil, nil
-	}
+	store := s.deps.Repo
 	conn, err := store.DefaultConnection(ctx, userID, integration)
 	if err != nil || conn == nil || !authz.CanAccessPersonal(userID, conn.UserID) || conn.Status == core.ConnectionStatusRevoked {
 		return nil, nil
@@ -259,7 +253,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 	switch {
 	case cfg.HMAC == nil:
 		// Signatures off: drop any secret left from an earlier definition.
-		if err := s.deps.Repo.SetTriggerWebhookSecret(ctx, trigger.ID, nil); err != nil {
+		if err := s.deps.WebhookSecrets.SetTriggerWebhookSecret(ctx, trigger.ID, nil); err != nil {
 			return nil, triggerDBError("clear webhook secret", err)
 		}
 	case def.WebhookHmacSecret != nil:
@@ -276,7 +270,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("seal webhook secret failed"))
 		}
-		if err := s.deps.Repo.SetTriggerWebhookSecret(ctx, trigger.ID, sealed); err != nil {
+		if err := s.deps.WebhookSecrets.SetTriggerWebhookSecret(ctx, trigger.ID, sealed); err != nil {
 			return nil, triggerDBError("set webhook secret", err)
 		}
 	}

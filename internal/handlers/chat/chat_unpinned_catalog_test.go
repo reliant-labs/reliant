@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A chat with no pin yet is placed on its machine before a restart's inputs
@@ -70,7 +71,7 @@ func TestInputsAfterClosedRunPinsAnUnpinnedChatBeforeBuilding(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateChat(ctx, chat))
 
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	inputs, err := svc.inputsAfterClosedRun(ctx, chat, workflowName)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID, "the chat is pinned before its inputs are built")

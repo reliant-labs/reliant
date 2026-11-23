@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -20,20 +22,20 @@ func TestListRepos_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	scanned := time.Date(2026, 11, 18, 1, 2, 3, 0, time.UTC)
-	store.ListReposByProjectFunc = func(_ context.Context, projectID string) ([]*core.Repo, error) {
+	repos := &repo.MockRepoLister{ListReposByProjectFunc: func(_ context.Context, projectID string) ([]*core.Repo, error) {
 		return []*core.Repo{
 			{ID: "r-1", ProjectID: projectID, Name: "svc", RelativePath: "svc", ForgeAppsScannedAt: &scanned},
 			// Never scanned (or only by a daemon older than the walk): unknown.
 			{ID: "r-2", ProjectID: projectID, Name: "docs", RelativePath: "docs"},
 		}, nil
-	}
+	}}
 	store.ListRepoForgeAppsByProjectFunc = func(context.Context, string) ([]core.RepoForgeApp, error) {
 		return []core.RepoForgeApp{
 			{RepoID: "r-1", Subpath: "", Name: "svc"},
 			{RepoID: "r-1", Subpath: "frontends/site", Name: "svc-site"},
 		}, nil
 	}
-	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
+	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store, Repos: repos, Projects: projectaccesstest.For(store)}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListReposRequest, pb.ListReposResponse]{
 		{

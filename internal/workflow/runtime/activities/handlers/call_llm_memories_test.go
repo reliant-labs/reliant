@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {

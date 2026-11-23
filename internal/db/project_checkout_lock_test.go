@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,14 +84,14 @@ func TestDetachProjectFromDaemon_HoldsBackWorkspaceInsertsUntilDone(t *testing.T
 
 	// Committed before the detach takes the lock: its guard reads it.
 	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("before", f.elsewhere)))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(ctx, f.pid, f.elsewhere, "/clone", func(lockedCtx context.Context) error {
+	require.NoError(t, store.DetachProjectFromDaemon(ctx, f.repo.ORM(), f.pid, f.elsewhere, "/clone", func(lockedCtx context.Context) error {
 		assert.Equal(t, 1, f.countOn(t, lockedCtx, f.elsewhere), "the guard reads a workspace committed before the lock")
-		return ErrNothingToDetach
+		return core.ErrNothingToDetach
 	}))
 
 	guarded, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
-		done <- f.repo.DetachProjectFromDaemon(ctx, f.pid, f.here, "/clone", func(lockedCtx context.Context) error {
+		done <- store.DetachProjectFromDaemon(ctx, f.repo.ORM(), f.pid, f.here, "/clone", func(lockedCtx context.Context) error {
 			if n := f.countOn(t, lockedCtx, f.here); n != 0 {
 				t.Errorf("the guard read %d workspaces, want 0", n)
 			}

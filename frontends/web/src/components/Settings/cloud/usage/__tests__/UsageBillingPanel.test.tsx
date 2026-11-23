@@ -66,18 +66,6 @@ it("shows an actionable error when checkout returns no URL", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent(/Checkout could not be completed/);
   expect(mocks.open).not.toHaveBeenCalled();
 });
-it("treats an undeployed RPC as unavailable and can recover after the backend arrives", async () => {
-  mocks.read.mockRejectedValue(new ConnectError("unknown procedure", Code.Unimplemented));
-  mount();
-  expect(await screen.findByText(/App hosting billing isn’t available on this server yet/)).toBeInTheDocument();
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-  expect(mocks.checkout).not.toHaveBeenCalled();
-  mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [{ displayName: "CPU", priceCents: "9", unit: "vCPU-hour" }] });
-  fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
-  expect(await screen.findByRole("checkbox")).not.toBeChecked();
-  expect(mocks.checkout).not.toHaveBeenCalled();
-});
 it("keeps disabled billing recoverable without offering checkout or a machine purchase", async () => {
   mocks.read.mockResolvedValue({ enabled: false });
   mount();

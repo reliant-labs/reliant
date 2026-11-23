@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -43,7 +44,7 @@ func (r orgUpdatesRepo) GetLatestUserUpdateSequence(context.Context, string) (in
 	return int64(len(r.log)), nil
 }
 
-func (r orgUpdatesRepo) GetUserUpdatesSince(_ context.Context, _ string, since int64, limit int) ([]db.UserUpdate, error) {
+func (r orgUpdatesRepo) UserUpdatesSince(_ context.Context, _ string, since int64, limit int) ([]db.UserUpdate, error) {
 	var out []db.UserUpdate
 	for _, u := range r.log {
 		if u.SequenceNumber > since && len(out) < limit {
@@ -118,7 +119,7 @@ func orgUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.Use
 // adjusts the service before it serves.
 func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string, tune ...func(*Service)) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})))
 	for _, f := range tune {
 		f(svc)
 	}
@@ -403,7 +404,7 @@ func (r *countingChatRepo) GetChatRow(_ context.Context, id string) (*db.ChatRow
 // recheck, and caches it for good once it has one.
 func TestOrgGate_ReReadsAnUnassignedResourceOncePerRecheck(t *testing.T) {
 	repo := &countingChatRepo{}
-	gate := newOrgGate(repo, raceTestUserID, 3*time.Second)
+	gate := newOrgGate(repo, nil, raceTestUserID, 3*time.Second)
 	clock := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	gate.now = func() time.Time { return clock }
 	ctx := authz.WithMembership(context.Background(), &orgMembers{orgs: map[string]bool{"home": true}, def: "home"})

@@ -40,12 +40,12 @@ var machineStates = []struct {
 
 // The generic dispatcher picks FailedPrecondition for "no machine" too; a
 // pending machine stays Unavailable with its wait marker.
-func TestDispatchConnectError_MachineStates(t *testing.T) {
+func TestError_MachineStates(t *testing.T) {
 	for _, state := range machineStates {
 		t.Run(state.name, func(t *testing.T) {
-			got := DispatchConnectError("pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
-			assert.Equal(t, state.wantCode, connect.CodeOf(got))
-			assert.Contains(t, got.Error(), "daemon command pkg.list_commands failed")
+			got := Error("daemon command pkg.list_commands", fmt.Errorf("resolving daemon for command: %w", state.err))
+			assert.Equal(t, state.wantCode, svcerr.Code(got))
+			assert.Contains(t, svcerr.ToConnect(got).Message(), "daemon command pkg.list_commands failed")
 		})
 	}
 }

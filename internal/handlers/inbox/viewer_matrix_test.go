@@ -14,6 +14,6 @@ func TestInboxServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, Orgs: f.Membership}))
 	viewertest.RunService(t, f, svc, "reliant.v1.InboxService", nil)
 }

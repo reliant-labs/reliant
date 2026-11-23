@@ -32,8 +32,7 @@ import (
 //   - when a create finds its branch held (Finish), for the FAILED rows of
 //     the same branch, after which the create is tried once more.
 //
-// A daemon older than the command answers with an error; both callers then
-// carry on exactly as before.
+// A machine that cannot answer removes nothing; both callers then carry on.
 
 const removeFailedCreateCmd = "worktree.remove_failed_create"
 
@@ -69,8 +68,7 @@ type removeFailedCreateCheckout struct {
 
 type removeFailedCreateResult struct {
 	Checkouts []removeFailedCreateCheckout `json:"checkouts"`
-	// Checked are the repositories the daemon listed; a daemon older than
-	// the field reports none, and so settles nothing.
+	// Checked are the repositories the daemon listed.
 	Checked   []string `json:"checked,omitempty"`
 	Unchecked []string `json:"unchecked,omitempty"`
 }
@@ -89,8 +87,7 @@ func (r removeFailedCreateResult) removed() bool {
 // behind: every checkout locked for them was removed, or none was found, in
 // repoPaths — which must be non-empty, and which the daemon must report it
 // listed, every one. Anything less (a repository it skipped or could not
-// read, an older daemon that does not say what it listed) settles nothing,
-// and the next connect asks again.
+// read) settles nothing, and the next connect asks again.
 func (r removeFailedCreateResult) settled(ids, repoPaths []string) []string {
 	if len(r.Unchecked) > 0 || len(repoPaths) == 0 {
 		return nil
@@ -185,7 +182,7 @@ func sameOwner(a, b *db.Worktree) bool {
 // checkouts its recent FAILED workspaces left behind, and records each
 // workspace with nothing left as cleaned up so it is not asked about again.
 // It returns the number of checkouts removed. Best effort: a machine that
-// does not answer, or a daemon too old to know the command, is logged and
+// does not answer, or answers with an error, is logged and
 // the next connect asks again.
 func RemoveFailedCreatesOn(ctx context.Context, store FailedCreateStore, m Machine, daemonID string) int {
 	if daemonID == "" {
@@ -253,8 +250,8 @@ func RemoveFailedCreatesOn(ctx context.Context, store FailedCreateStore, m Machi
 		failed := byProject[projectID]
 		res, err := removeFailedCreates(ctx, m, repoPaths, failed)
 		if err != nil {
-			// An older daemon has no such command, and a machine that went
-			// away again cannot answer: either way, nothing was removed.
+			// A machine that went away again cannot answer: nothing was
+			// removed.
 			logging.InfoContext(ctx, "failed-create cleanup: the machine did not remove failed creates' checkouts; the next connect asks again",
 				"error", err, "daemonID", daemonID, "projectID", projectID)
 			return removed

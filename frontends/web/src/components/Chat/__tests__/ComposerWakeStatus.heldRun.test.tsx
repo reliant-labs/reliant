@@ -60,7 +60,7 @@ describe("ComposerWakeStatus: a run held for its machine", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Try again/ }));
     expect(state.resume).toHaveBeenCalledWith("d-1");
-    fireEvent.click(screen.getByRole("button", { name: /Manage machines/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Manage sandboxes/ }));
     expect(state.navigate).toHaveBeenCalled();
   });
 

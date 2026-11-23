@@ -213,7 +213,7 @@ func (s *Service) projectsWithAppsListed(ctx context.Context, userID string, sco
 	// Sharing is between people in an org: a machine credential reads its
 	// own projects only, as ListSharedProjects refuses it.
 	if orgID != "" && auth.RequirePerson(ctx, "read what others shared with your organization") == nil {
-		shared, err := s.deps.Repo.ListSharedProjects(ctx, core.SharedProjectFilters{
+		shared, err := s.deps.Shared.ListSharedProjects(ctx, core.SharedProjectFilters{
 			OrgID: orgID, ViewerUserID: userID, Limit: projectsWithAppsLimit,
 		})
 		if err != nil {

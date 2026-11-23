@@ -27,7 +27,7 @@ import (
 // store's NotFound (core.ErrProjectNotFound) if the project doesn't exist or
 // belongs to someone else, Internal if it could not be read.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	return svcerr.WrapOr(err, svcerr.Internal("database error"))
 }
 
@@ -178,7 +178,7 @@ func (s *Service) loadPresetByNameFromDB(ctx context.Context, projectID, name st
 // complete workflows, then the project's synced workflows by name:.
 // No filesystem access — the API server may run in the cloud without disk access.
 func (s *Service) loadWorkflow(ctx context.Context, workflowRef, projectID string) (*reliantv1.Workflow, error) {
-	resolved, err := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
+	resolved, err := workflowsource.Resolve(ctx, workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), workflowsource.Options{
 		UserID: auth.MustGetUserID(ctx), ProjectID: projectID,
 	}, workflowRef)
 	if err != nil {

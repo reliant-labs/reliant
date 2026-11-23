@@ -68,8 +68,8 @@ function status(overrides: Partial<IdentityStatus> = {}): IdentityStatus {
     mailDelivery: "smtp",
     notEnabledReason: "unknown",
     notEnabledMessage: "",
-    ownerEnvironment: null,
-    sharerEnvironments: [],
+    ownerEnvironment: { id: "env-prod", name: "prod", project: "acme" },
+    sharerEnvironments: [{ id: "env-preview", name: "preview-142", project: "acme" }],
     ...overrides,
   };
 }
@@ -116,7 +116,6 @@ function renderTab(api: IdentityApi, props: Partial<Parameters<typeof IdentityTa
           lifecycle="deployed"
           live={LIVE}
           liveLoading={false}
-          envNameById={(id) => ({ "env-prod": "prod", "env-preview": "preview-142" })[id]}
           {...props}
         />
       </IdentityApiProvider>
@@ -373,7 +372,7 @@ describe("IdentityTab", () => {
       <QueryClientProvider client={createTestQueryClient()}>
         <IdentityApiProvider api={api}>
           <ObsReadOnlyProvider value={{ readOnly: true, reason: "Read-only demo" }}>
-            <IdentityTab envName="prod" lifecycle="deployed" live={LIVE} liveLoading={false} envNameById={() => undefined} layout="page" />
+            <IdentityTab envName="prod" lifecycle="deployed" live={LIVE} liveLoading={false} layout="page" />
           </ObsReadOnlyProvider>
         </IdentityApiProvider>
       </QueryClientProvider>

@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=9dac5d044f7d98fe4dab2914fc592985b273aec00f8dd28f1780d8c8dfc41928
+// forge:hash=96e53317a3e2a015427ec241198b280585c01732e250a1e2b46f2561a9e0ed93
 
 // MockService is a test mock for the Service interface.
 //
@@ -49,6 +49,9 @@ type MockService struct {
 	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
+	MintStepKeyFunc                     func(context.Context, StepKeyRequest) (StepKey, error)
+	RevokeStepKeyFunc                   func(context.Context, string) (StepKeyRevocation, error)
+	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
 	ListHostedAppsFunc                  func(context.Context, string, string) ([]HostedApp, error)
 }
 
@@ -266,6 +269,33 @@ func (m *MockService) GetModelListPrices(ctx context.Context, refs []ModelRef) (
 		return m.GetModelListPricesFunc(ctx, refs)
 	}
 	return nil, *new(time.Time), contractkit.MockNotSet("MockService", "GetModelListPrices")
+}
+
+// MintStepKey records the call and delegates to MintStepKeyFunc when set.
+func (m *MockService) MintStepKey(ctx context.Context, r StepKeyRequest) (StepKey, error) {
+	m.Recorder.Record("MintStepKey", ctx, r)
+	if m.MintStepKeyFunc != nil {
+		return m.MintStepKeyFunc(ctx, r)
+	}
+	return StepKey{}, contractkit.MockNotSet("MockService", "MintStepKey")
+}
+
+// RevokeStepKey records the call and delegates to RevokeStepKeyFunc when set.
+func (m *MockService) RevokeStepKey(ctx context.Context, requestID string) (StepKeyRevocation, error) {
+	m.Recorder.Record("RevokeStepKey", ctx, requestID)
+	if m.RevokeStepKeyFunc != nil {
+		return m.RevokeStepKeyFunc(ctx, requestID)
+	}
+	return StepKeyRevocation{}, contractkit.MockNotSet("MockService", "RevokeStepKey")
+}
+
+// HasCoverageBlob records the call and delegates to HasCoverageBlobFunc when set.
+func (m *MockService) HasCoverageBlob(ctx context.Context, token string, orgID string, project string, blobID string) (CoverageBlob, error) {
+	m.Recorder.Record("HasCoverageBlob", ctx, token, orgID, project, blobID)
+	if m.HasCoverageBlobFunc != nil {
+		return m.HasCoverageBlobFunc(ctx, token, orgID, project, blobID)
+	}
+	return CoverageBlob{}, contractkit.MockNotSet("MockService", "HasCoverageBlob")
 }
 
 // ListHostedApps records the call and delegates to ListHostedAppsFunc when set.

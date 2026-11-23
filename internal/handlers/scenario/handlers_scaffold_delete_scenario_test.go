@@ -3,6 +3,8 @@ package scenario_test
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
@@ -16,7 +18,7 @@ func TestDeleteScenario_Generated(t *testing.T) {
 	t.Parallel()
 
 	f := &fixture{}
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(f)}))
+	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(f), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(f))}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteScenarioRequest, pb.DeleteScenarioResponse]{
 		{

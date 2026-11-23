@@ -10,13 +10,15 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Only the chat's owner, signed in as a person, picks the root's provider,
 // and only with a model the server did not substitute: only then is the
-// selection write marked to record their pick (db.WithPersonPick).
+// selection write marked to record their pick (chatselection.WithPersonPick).
 func TestPersonPickContext(t *testing.T) {
 	person := auth.WithCredential(context.Background(), auth.CredentialSession)
 	cli := auth.WithCredential(context.Background(), auth.CredentialAccessToken)
@@ -37,10 +39,10 @@ func TestPersonPickContext(t *testing.T) {
 		{"a chat with no org", person, "alice", noOrg, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pick, ok := db.PersonPickFrom(personPickContext(tc.ctx, tc.sender, tc.chat, tc.chosen))
+			pick, ok := chatselection.PersonPickFrom(personPickContext(tc.ctx, tc.sender, tc.chat, tc.chosen))
 			assert.Equal(t, tc.want, ok)
 			if tc.want {
-				assert.Equal(t, db.PersonPick{UserID: "alice", OrgID: "org-acme"}, pick)
+				assert.Equal(t, chatselection.PersonPick{UserID: "alice", OrgID: "org-acme"}, pick)
 			}
 		})
 	}
@@ -60,7 +62,7 @@ func TestSendMessage_SubstitutedRootModelIsNoPick(t *testing.T) {
 	require.NoError(t, err)
 	moved := modelID(t, temporal.lastStart(t).Inputs["model"])
 	require.True(t, assertAnthropic(moved), "the pin moved onto the person's own Anthropic key, got %q", moved)
-	driver, err := repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
+	driver, err := store.ChatPersonPickDriver(ctx, repo.ORM(), fx.chatID, "org-acme")
 	require.NoError(t, err)
 	assert.Empty(t, driver, "a substituted provider is never the person's pick")
 
@@ -69,12 +71,12 @@ func TestSendMessage_SubstitutedRootModelIsNoPick(t *testing.T) {
 	// advances the selection's version, so the pick is void by construction.
 	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, paramsOf(t, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})))
 	require.NoError(t, err)
-	driver, err = repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
+	driver, err = store.ChatPersonPickDriver(ctx, repo.ORM(), fx.chatID, "org-acme")
 	require.NoError(t, err)
 	require.NotEmpty(t, driver, "the person's own pick")
 	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, pin))
 	require.NoError(t, err)
-	driver, err = repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
+	driver, err = store.ChatPersonPickDriver(ctx, repo.ORM(), fx.chatID, "org-acme")
 	require.NoError(t, err)
 	assert.Empty(t, driver, "the substituted send superseded the pick")
 }
@@ -88,9 +90,9 @@ func TestSendMessage_PersonsRootPickIsRecorded(t *testing.T) {
 	ctx = authz.WithMembership(auth.WithCredential(ctx, auth.CredentialSession), memberOfAcme{})
 	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, paramsOf(t, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})))
 	require.NoError(t, err)
-	driver, err := repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
+	driver, err := store.ChatPersonPickDriver(ctx, repo.ORM(), fx.chatID, "org-acme")
 	require.NoError(t, err)
-	_, want := db.RootModelPick(map[string]any{"model": map[string]any{"id": sonnetOnClaude}})
+	_, want := chatselection.RootModelPick(map[string]any{"model": map[string]any{"id": sonnetOnClaude}})
 	assert.Equal(t, want, driver)
 }
 

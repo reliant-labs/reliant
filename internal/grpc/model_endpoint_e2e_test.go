@@ -23,6 +23,7 @@ import (
 	"time"
 
 	userconfig "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -68,7 +69,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	nc := e2eStartNATS(t)
 
 	authority := tokenauthority.NewMemory()
-	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
@@ -110,10 +111,11 @@ func TestModelEndpointE2E(t *testing.T) {
 	}, 60*time.Second, 500*time.Millisecond, "daemon never published an inventory")
 
 	endpointSvc, err := model_endpoint.New(model_endpoint.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Router: router,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
+		Machines:  repo,
+		Router:    router,
 		// Self-hosted: the operator allows private egress, so loopback is a
 		// legitimate DIRECT target.
 		Network: &configv1.NetworkConfig{AllowPrivateEgress: true},
@@ -167,7 +169,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	}
 
 	spec := &handlers.LocalModelSpec{
-		Directory: local.NewRepoDirectory(repo),
+		Directory: local.NewRepoDirectory(repo, store.NewModelEndpointExtStore(repo.ORM())),
 		Transport: func(userID, daemon, endpoint string) http.RoundTripper {
 			return toolexec.NewLocalModelTransport(router, userID, daemon, endpoint)
 		},
@@ -245,10 +247,11 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
 		hosted, err := model_endpoint.New(model_endpoint.Deps{
-			Logger: slog.Default(),
-			Config: &typedconfig.Config{},
-			Repo:   repo,
-			Router: router,
+			Logger:    slog.Default(),
+			Config:    &typedconfig.Config{},
+			Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
+			Machines:  repo,
+			Router:    router,
 			// Hosted: an empty network block refuses private targets.
 			Network: &configv1.NetworkConfig{},
 		})

@@ -220,6 +220,24 @@ func GetOwnerProviderAccountSealed(ctx context.Context, db orm.Context, owner co
 	return &a, nil
 }
 
+// DeleteUserProviderAccounts deletes the person's own accounts, and returns how many. Their limit
+// state and thread assignments cascade. An org's account is keyed by the org's owner key, which no
+// person's id equals, and owner_kind is checked too: it is never deleted here.
+func DeleteUserProviderAccounts(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*ProviderAccount)(nil)).
+		Where("user_id = ?", userID).Where("owner_kind = ?", core.AccountOwnerUser).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// UserHasProviderAccount reports whether the person owns any account.
+func UserHasProviderAccount(ctx context.Context, db orm.Context, userID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ProviderAccount)(nil)).
+		Where("user_id = ?", userID).Where("owner_kind = ?", core.AccountOwnerUser).Exists(ctx)
+}
+
 // LockUserProviderAccounts serializes writers of one user's accounts for one provider until the
 // transaction ctx carries ends. The key is shared with every release that writes these rows, so
 // its text must never change.
@@ -729,9 +747,8 @@ func ConfirmOrgKeyNotice(ctx context.Context, db orm.Context, orgID, accountID s
 	return err
 }
 
-// ProviderAccountName is what a usage view shows for an account it has an id
-// of: never a secret, a hint or a sign-in's email.
-type ProviderAccountName struct {
+// providerAccountNameRow scans the columns ProviderAccountNames reads.
+type providerAccountNameRow struct {
 	ID       string `bun:"id"`
 	Provider string `bun:"provider"`
 	Label    string `bun:"label"`
@@ -739,18 +756,20 @@ type ProviderAccountName struct {
 }
 
 // ProviderAccountNames returns the provider, label and kind of each account in
-// ids that still exists, keyed by id. A deleted account is absent.
-func ProviderAccountNames(ctx context.Context, db orm.Context, ids []string) (map[string]ProviderAccountName, error) {
-	out := map[string]ProviderAccountName{}
+// ids that still exists, keyed by id. A deleted account is absent. It reads by id with no owner:
+// the caller passes ids it took from rows it was already allowed to read, and no secret, hint or
+// email leaves.
+func ProviderAccountNames(ctx context.Context, db orm.Context, ids []string) (map[string]core.ProviderAccountName, error) {
+	out := map[string]core.ProviderAccountName{}
 	if len(ids) == 0 {
 		return out, nil
 	}
-	var rows []ProviderAccountName
+	var rows []providerAccountNameRow
 	if err := db.Bun().NewRaw(`SELECT id, provider, label, auth_kind FROM provider_accounts WHERE id IN (?)`, bun.List(ids)).Scan(ctx, &rows); err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		out[r.ID] = r
+		out[r.ID] = core.ProviderAccountName{ID: r.ID, Provider: r.Provider, Label: r.Label, AuthKind: r.AuthKind}
 	}
 	return out, nil
 }

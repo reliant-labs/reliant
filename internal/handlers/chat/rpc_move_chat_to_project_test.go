@@ -11,12 +11,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const moveUser = "move-user"
@@ -38,7 +40,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 		t:       t,
 		ctx:     context.WithValue(context.Background(), auth.UserIDContextKey, moveUser),
 		repo:    repo,
-		service: &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)},
+		service: &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
 		now:     time.Now().UTC(),
 	}
 }
@@ -93,7 +95,7 @@ func (f *moveFixture) chatWithRun(projectID, worktreeID string, daemonID *string
 		ID: chatID, UserID: moveUser, Title: "Moving chat", ProjectID: projectID, WorktreeID: &worktreeID,
 		WorkflowID: &chatID, ActiveDaemonID: daemonID, State: db.ChatStateIdle, CreatedAt: f.now, UpdatedAt: f.now,
 	}))
-	_, _, _, err := threads.NewService(f.repo).CreateWorkflowWithThread(f.ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}).CreateWorkflowWithThread(f.ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent",
 			Thread: chatID, Status: status, CreatedAt: f.now,

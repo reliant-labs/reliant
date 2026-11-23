@@ -20,8 +20,7 @@ const FALLBACK_REASON = "This machine is connected but cannot start new processe
 
 /**
  * Why a connected machine cannot do work, or null when it can (or when it is
- * not connected, which its status already explains). Unset health — a daemon
- * that predates the report — is healthy.
+ * not connected, which its status already explains). Unset health is healthy.
  */
 export function degradedReason(daemon: Pick<DaemonInfo, "status" | "health"> | null | undefined): string | null {
   if (!daemon) return null;
@@ -33,7 +32,7 @@ export function degradedReason(daemon: Pick<DaemonInfo, "status" | "health"> | n
 /**
  * The heartbeat's `health_state` ("ok" | "degraded") disagrees with what the
  * cached daemon list says, so the list is stale. A heartbeat without the key
- * (a gateway that predates it) never disagrees.
+ * never disagrees.
  */
 export function heartbeatHealthDisagrees(
   daemon: Pick<DaemonInfo, "status" | "health"> | null | undefined,

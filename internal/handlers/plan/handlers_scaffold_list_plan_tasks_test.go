@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -18,14 +18,14 @@ import (
 func TestListPlanTasks_Generated(t *testing.T) {
 	t.Parallel()
 
-	repo := newPlanRepo()
-	repo.ListTasksByPlanFunc = func(_ context.Context, planID string) ([]*db.Task, error) {
-		return []*db.Task{
+	repo := newPlanMocks()
+	repo.Tasks.ListTasksByPlanFunc = func(_ context.Context, planID string) ([]*core.Task, error) {
+		return []*core.Task{
 			{ID: "task-1", PlanID: planID, Title: "First", Position: 0},
 			{ID: "task-2", PlanID: planID, Title: "Second", Position: 1, ParentTaskID: ptr.Of("task-1")},
 		}, nil
 	}
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListPlanTasksRequest, pb.ListPlanTasksResponse]{
 		{

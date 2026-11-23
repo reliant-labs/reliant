@@ -19,7 +19,7 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 
 // ownedProject is projectBelongsToUser returning the project it read.
 func (s *Service) ownedProject(ctx context.Context, projectID string, userID string) (*db.Project, error) {
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

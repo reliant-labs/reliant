@@ -4,18 +4,23 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   MENU_SHORTCUT_IDS,
+  DEFAULT_ALIASES,
   defaultAccelerators,
   toElectronAccelerator,
   resolveMenuAccelerators,
 } = require("../src/menu-accelerators");
 
-// The desktop binding of every shortcut in config/shortcuts.yaml — the same
-// table the renderer pushes through updateShortcutBindings before any remap.
+const MAC = { platform: "darwin" };
+const WINDOWS = { platform: "win32" };
+const LINUX = { platform: "linux" };
+
 // A line scan rather than a YAML parser: electron/ declares no YAML dependency,
-// and the file's `- id:` / `binding:` shape is regular.
-function yamlDesktopBindings() {
+// and the file's `- id:` / `binding:` / `desktop_aliases: ["..."]` shape is
+// regular.
+function scanYaml() {
   const file = path.join(__dirname, "..", "..", "config", "shortcuts.yaml");
   const bindings = {};
+  const aliases = {};
   let id = null;
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     const idMatch = line.match(/^\s*-\s+id:\s*(\S+)/);
@@ -27,8 +32,21 @@ function yamlDesktopBindings() {
     if (bindingMatch && id) {
       bindings[id] = bindingMatch[1].replace(/^["']|["']$/g, "");
     }
+    const aliasMatch = line.match(/^\s+desktop_aliases:\s*(\[.*\])\s*$/);
+    if (aliasMatch && id) aliases[id] = JSON.parse(aliasMatch[1]);
   }
-  return bindings;
+  return { bindings, aliases };
+}
+
+// The binding of every shortcut in config/shortcuts.yaml — the same table the
+// renderer pushes through updateShortcutBindings before any remap.
+function yamlDesktopBindings() {
+  return scanYaml().bindings;
+}
+
+// Every shortcut's desktop aliases, as the renderer pushes them before any remap.
+function yamlDesktopAliases() {
+  return scanYaml().aliases;
 }
 
 // The menu items whose default chords another context also binds:
@@ -77,14 +95,20 @@ test("the menu's fallback agrees with what config/shortcuts.yaml resolves to", (
   for (const id of MENU_SHORTCUT_IDS) {
     assert.ok(id in yaml, `menu shortcut ${id} is not in config/shortcuts.yaml`);
   }
+  assert.deepStrictEqual(DEFAULT_ALIASES, yamlDesktopAliases());
 
-  assert.deepStrictEqual(defaultAccelerators(), resolveMenuAccelerators(yaml));
+  for (const options of [MAC, WINDOWS, LINUX]) {
+    assert.deepStrictEqual(
+      defaultAccelerators(options),
+      resolveMenuAccelerators(yaml, yamlDesktopAliases(), options),
+    );
+  }
 });
 
 test("defaultAccelerators use CmdOrCtrl so one value serves both platforms", () => {
-  const accelerators = defaultAccelerators();
+  const accelerators = defaultAccelerators(MAC);
 
-  assert.strictEqual(accelerators.newChat, "CmdOrCtrl+T");
+  assert.strictEqual(accelerators.newChat, "CmdOrCtrl+Alt+N");
   assert.strictEqual(accelerators.toggleTerminal, "CmdOrCtrl+J");
   for (const value of Object.values(accelerators).filter(Boolean)) {
     assert.ok(!value.includes("Meta+Control"), `${value} should not be platform-specific`);
@@ -97,12 +121,77 @@ test("a chord the composer and editor use for selection gets no native accelerat
   // the renderer can see where focus is, so it would switch chats in the middle
   // of a selection. registerAccelerator: false is not an option: macOS ignores
   // it, so the item must carry no accelerator at all.
-  for (const accelerators of [defaultAccelerators(), resolveMenuAccelerators(yamlDesktopBindings())]) {
+  for (const accelerators of [
+    defaultAccelerators(MAC),
+    resolveMenuAccelerators(yamlDesktopBindings(), yamlDesktopAliases(), MAC),
+  ]) {
     for (const id of CONTEXT_RESOLVED) {
       assert.strictEqual(accelerators[id], undefined, `${id} must leave its chord to the renderer`);
     }
-    assert.strictEqual(accelerators.newChat, "CmdOrCtrl+T", "a chord nothing else binds is still claimed");
+    assert.strictEqual(accelerators.newChat, "CmdOrCtrl+Alt+N", "a chord nothing else binds is still claimed");
   }
+});
+
+test("an item whose binding is a sequence carries its desktop alias", () => {
+  // Close Tab is Cmd+K X everywhere, which no accelerator can express. The
+  // menu falls back to the Cmd+W alias: the hint stays, and on Windows and
+  // Linux the chord reaches Close Tab rather than the Window menu's Close
+  // role, which also holds Ctrl+W.
+  for (const accelerators of [
+    defaultAccelerators(MAC),
+    resolveMenuAccelerators(yamlDesktopBindings(), yamlDesktopAliases(), LINUX),
+  ]) {
+    assert.strictEqual(accelerators.closeTab, "CmdOrCtrl+W");
+    assert.strictEqual(accelerators.reopenLastClosedFile, "CmdOrCtrl+Shift+T");
+  }
+});
+
+test("the binding wins over an alias when it can be an accelerator", () => {
+  const accelerators = resolveMenuAccelerators(yamlDesktopBindings(), yamlDesktopAliases(), MAC);
+  assert.strictEqual(accelerators.newChat, "CmdOrCtrl+Alt+N");
+});
+
+test("on Windows a Ctrl+Alt chord is never an accelerator: that is AltGr typing", () => {
+  // AltGr+N types ñ on US-International. New Chat falls back to its Ctrl+T
+  // alias; with no alias it has no accelerator and the renderer, which can
+  // tell typing from a shortcut, handles Ctrl+Alt+N.
+  const yaml = yamlDesktopBindings();
+  assert.strictEqual(resolveMenuAccelerators(yaml, yamlDesktopAliases(), WINDOWS).newChat, "CmdOrCtrl+T");
+  assert.strictEqual(resolveMenuAccelerators(yaml, {}, WINDOWS).newChat, undefined);
+  assert.strictEqual(defaultAccelerators(WINDOWS).newChat, "CmdOrCtrl+T");
+  assert.strictEqual(resolveMenuAccelerators(yaml, {}, LINUX).newChat, "CmdOrCtrl+Alt+N");
+});
+
+test("a remap drops the aliases, so the old chord leaves the menu", () => {
+  // The renderer sends no aliases for a remapped shortcut, and a renderer
+  // that predates aliases sends none at all.
+  const yaml = yamlDesktopBindings();
+  const { closeTab, ...rest } = yamlDesktopAliases();
+  assert.ok(closeTab);
+  assert.strictEqual(resolveMenuAccelerators(yaml, rest, MAC).closeTab, undefined);
+  assert.strictEqual(resolveMenuAccelerators(yaml, undefined, MAC).closeTab, undefined);
+});
+
+test("an alias yields to a binding on its chord, as in the renderer", () => {
+  // A user who moves Toggle Terminal onto Cmd+W gets Cmd+W; Close Tab's alias
+  // steps aside instead of making both items give the chord up.
+  const resolved = resolveMenuAccelerators(
+    { ...yamlDesktopBindings(), toggleTerminal: "Cmd+W" },
+    yamlDesktopAliases(),
+    MAC,
+  );
+  assert.strictEqual(resolved.toggleTerminal, "CmdOrCtrl+W");
+  assert.strictEqual(resolved.closeTab, undefined);
+});
+
+test("malformed aliases are ignored", () => {
+  const resolved = resolveMenuAccelerators(
+    yamlDesktopBindings(),
+    { closeTab: "Cmd+W", reopenLastClosedFile: [42, "", "Cmd+Shift+T"] },
+    MAC,
+  );
+  assert.strictEqual(resolved.closeTab, undefined);
+  assert.strictEqual(resolved.reopenLastClosedFile, "CmdOrCtrl+Shift+T");
 });
 
 test("Clear Terminal leaves Cmd+Shift+L to the workflow canvas, and reclaims it once free", () => {
@@ -163,20 +252,25 @@ test("remapping a menu shortcut onto a selection chord takes it off the menu", (
 
 test("two shortcuts on one chord leave it to the renderer", () => {
   // Modifier order does not make two chords different.
-  const resolved = resolveMenuAccelerators({
-    ...yamlDesktopBindings(),
-    switchChat: "Cmd+J",
-    commandPalette: "Shift+Cmd+T",
-  });
+  const resolved = resolveMenuAccelerators(
+    {
+      ...yamlDesktopBindings(),
+      switchChat: "Cmd+J",
+      reopenLastClosedFile: "Cmd+Shift+T",
+      commandPalette: "Shift+Cmd+T",
+    },
+    {},
+    MAC,
+  );
 
   assert.strictEqual(resolved.toggleTerminal, undefined);
   assert.strictEqual(resolved.reopenLastClosedFile, undefined);
 });
 
 test("resolveMenuAccelerators applies a user remap", () => {
-  const resolved = resolveMenuAccelerators({ newChat: "Cmd+Alt+N" });
+  const resolved = resolveMenuAccelerators({ newChat: "Cmd+Shift+Y" }, {}, MAC);
 
-  assert.strictEqual(resolved.newChat, "CmdOrCtrl+Alt+N");
+  assert.strictEqual(resolved.newChat, "CmdOrCtrl+Shift+Y");
 });
 
 test("resolveMenuAccelerators clears the accelerator when remapped to a sequence", () => {

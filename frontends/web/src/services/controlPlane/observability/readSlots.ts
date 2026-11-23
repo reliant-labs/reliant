@@ -15,7 +15,7 @@ export const READ_SLOT_SERVICES: ReadonlySet<string> = new Set([
 
 /**
  * The RPCs that take a server read slot (obsread.Open on the console surface).
- * Mutations, the usage read and the Postgres-only issue reads do not: they
+ * Mutations and the Postgres-only issue reads do not: they
  * must never wait behind a queue of ClickHouse reads. obsClient.test.ts fails
  * when a method of these services is in neither this set nor NO_READ_SLOT_RPCS,
  * so a new RPC must be classified.
@@ -26,7 +26,6 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "listTraces",
   "getTrace",
   "listMetrics",
-  "queryMetric",
   "getMetric",
   "listMetricExemplars",
   "getServiceGraph",
@@ -43,6 +42,10 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   // A ClickHouse read over the env's user events (control-plane
   // rpc_get_user_activity.go opens a read slot); the web does not call it yet.
   "getUserActivity",
+  // Both open a read slot (control-plane rpc_export_pgo_profile.go,
+  // rpc_get_managed_database_metrics.go); the web does not call them yet.
+  "exportPGOProfile",
+  "getManagedDatabaseMetrics",
   // IssuesService
   "listIssues",
   "getIssue",
@@ -56,7 +59,6 @@ export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
 
 /** The methods of the services above that take no read slot. */
 export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
-  "getObservabilityUsage",
   // Postgres, Kubernetes (runtime configs and the release ledger) and the
   // hub's StaticSites; no ClickHouse query.
   "listFrontendReplay",
@@ -68,6 +70,9 @@ export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
   "linkIssueChat",
   "listAssignableUsers",
   "listIssueTimeline",
+  // Postgres only: control-plane admits these without opening a read slot.
+  "declareMaintenanceWindow",
+  "listMaintenanceWindows",
 ]);
 
 /** Whether `<serviceTypeName>/<MethodName>` (the wire names) is a ClickHouse read. */

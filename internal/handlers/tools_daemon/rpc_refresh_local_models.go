@@ -171,7 +171,10 @@ func (s *Service) handleLocalModelInventory(ctx context.Context, conn *daemonCon
 	if encodedJSON == conn.lastInventoryJSON {
 		return
 	}
-	if err := s.deps.Repo.SetDaemonLocalModels(ctx, conn.daemonID, encodedJSON); err != nil {
+	if s.deps.LocalModels == nil {
+		return
+	}
+	if err := s.deps.LocalModels.SetDaemonLocalModels(ctx, conn.daemonID, encodedJSON); err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to store local model inventory", "error", err, "daemonID", conn.daemonID)
 		return
 	}

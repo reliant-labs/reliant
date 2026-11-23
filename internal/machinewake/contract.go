@@ -22,9 +22,10 @@
 // A run's tools never come through here: tool-time traffic does not wake a
 // machine (#406). The run's preflight and the attended send do.
 //
-// Built by hand, by internal/app's apiMountOptions (providers_api.go), and the
-// worktree and file_system handlers: never a node compose.go constructs from
-// Deps.
+// forge:provided because the Service is built per call from each handler's
+// Router (the worktree and file_system handlers derive Resumer by a type
+// assertion on it); the API mounts only NewInterceptor, in apiMountOptions
+// (providers_api.go), which is a connect interceptor, not the Service.
 //
 //forge:provided
 package machinewake

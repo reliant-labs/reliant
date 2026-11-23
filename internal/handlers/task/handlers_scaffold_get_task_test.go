@@ -15,7 +15,7 @@ import (
 func TestGetTask_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: newTaskRepo()}))
+	svc := task.NewTestTask(t, task.WithTaskDeps(newTaskMocks().Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetTaskRequest, pb.GetTaskResponse]{
 		{

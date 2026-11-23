@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
@@ -42,7 +43,7 @@ func (s *Service) ListScenarios(
 	dbScenarioNames := make(map[string]bool)
 
 	// Get the workflow draft ID from the slug
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+	draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
@@ -74,7 +75,7 @@ func (s *Service) ListScenarios(
 
 	// Discover stored project scenarios from DB
 	if hasProject {
-		storedScenarios, err := discoverProjectScenariosFromDB(s.deps.Repo, ctx, projectID, req.Msg.WorkflowSlug)
+		storedScenarios, err := discoverProjectScenariosFromDB(s.deps.ProjectConfigs, ctx, projectID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to discover project scenarios"))
 		}
@@ -98,12 +99,12 @@ func (s *Service) ListScenarios(
 
 // discoverProjectScenariosFromDB loads project scenarios from the stored config record in the DB.
 // Returns scenarios with source="project".
-func discoverProjectScenariosFromDB(repo Repository, ctx context.Context, projectID string, workflowSlug string) ([]*reliantv1.Scenario, error) {
+func discoverProjectScenariosFromDB(configs ProjectConfigs, ctx context.Context, projectID string, workflowSlug string) ([]*reliantv1.Scenario, error) {
 	if projectID == "" || workflowSlug == "" {
 		return nil, nil
 	}
 
-	allScenarios, err := storedProjectScenarios(ctx, repo, projectID)
+	allScenarios, err := storedProjectScenarios(ctx, configs, projectID)
 	if svcerr.IsNotFound(err) {
 		return nil, nil // No config record, no stored scenarios
 	}

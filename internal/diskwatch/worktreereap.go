@@ -59,7 +59,7 @@ import (
 // Mode on is the one setting that does not need the storage reaper: where
 // RELIANT_STORAGE_REAPER leaves the reaper off (a person's own machine, by
 // default), RunReaper still runs the sweep on this schedule, in the same
-// single-flight, and nothing else (runWorktreeSweepAlone). Dry-run and off
+// single-flight, and no other worktree work (reaper.go, runReaperOff). Dry-run and off
 // keep riding the reaper, so no machine starts a pass, or an Inbox item, that
 // it did not have before; and forge's subprocess reap only ever runs with the
 // reaper.
@@ -225,24 +225,6 @@ func (w *Watcher) worktreeTick(ctx context.Context, forgeReap bool) bool {
 func (w *Watcher) worktreeSweepRunsAlone() bool {
 	s := w.worktreeSweep()
 	return s.Run != nil && s.Mode == "on"
-}
-
-// runWorktreeSweepAlone runs the in-process sweep on its own schedule until
-// ctx is done: the storage reaper's poll and the worktree reap's cadence and
-// single-flight, without any cache pass or forge's worktree reap.
-func (w *Watcher) runWorktreeSweepAlone(ctx context.Context) {
-	ticker := time.NewTicker(reaperPollInterval)
-	defer ticker.Stop()
-	for {
-		if ctx.Err() == nil {
-			w.worktreeTick(ctx, false)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
 }
 
 // worktreeReapPass reaps the worktrees of every repository the worktree root

@@ -23,11 +23,11 @@ func (s *Service) ListOrgProviderWorkspaces(
 	if _, err := admin(ctx, orgID); err != nil {
 		return nil, err
 	}
-	bound, err := s.deps.Store.ListOrgProviderWorkspaces(ctx, orgID)
+	bound, err := s.deps.OrgAccounts.ListOrgProviderWorkspaces(ctx, orgID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	seats, err := s.deps.Store.ListOrgSeats(ctx, orgID)
+	seats, err := s.deps.OrgAccounts.ListOrgSeats(ctx, orgID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

@@ -45,8 +45,8 @@ func pickerAnswer(commandType string) ([]byte, error) {
 }
 
 // pickerMachines owns "mine" and "asleep"; "theirs" is another user's.
-func pickerMachines() *MockRepository {
-	return &MockRepository{GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+func pickerMachines() *MockPlacement {
+	return &MockPlacement{GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 		switch id {
 		case "mine", "asleep":
 			return &db.Daemon{ID: id, UserID: fsProxyTestUser}, nil

@@ -18,6 +18,7 @@ import { ChatActivity, type Chat as ProtoChat } from "@/gen/reliant/v1/chat_pb";
 import { convertProtoChat } from "@/hooks/chat-model";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useOrgFeed, useOrgMemberNames, useSharedChats } from "@/hooks/sharing-queries";
+import { useChatProjectFilterIds } from "@/hooks/useChatProjectFilter";
 import { cn } from "@/lib/utils";
 import { openSharedChat } from "@/store/openChat";
 
@@ -28,7 +29,9 @@ interface SharedWithOrgSectionProps {
 export function SharedWithOrgSection({ activeChatId }: SharedWithOrgSectionProps) {
   const { activeOrgId, active } = useActiveOrg();
   useOrgFeed(activeOrgId);
-  const shared = useSharedChats(activeOrgId);
+  // The chat list's project filter narrows this half of the list too.
+  const filtered = useChatProjectFilterIds();
+  const shared = useSharedChats(activeOrgId, filtered);
   const names = useOrgMemberNames(activeOrgId);
   const [open, setOpen] = useState(true);
 

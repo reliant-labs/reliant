@@ -2,6 +2,7 @@
 
 // Package requirements checks a workflow's declared `requires:` before its
 // first node runs: the executables its commands call are on the machine, the
+// vendor agent CLIs it calls are installed and signed in there, the
 // integrations its actions authenticate to resolve for the run's owner, and
 // the checkouts it reads exist and reach their origin. A run that cannot have
 // them fails at once, naming every missing item and its fix, instead of an
@@ -12,8 +13,10 @@
 // does, so a requirement check speaks only to what is ON the machine.
 //
 // Nothing a check does writes: the tool and checkout probe is one read-only
-// shell command (command -v, test -e, git ls-remote, git for-each-ref), and a
-// credential is resolved, never used.
+// shell command (command -v, test -e, git ls-remote, git for-each-ref, each
+// vendor CLI's own status command), and a credential is resolved, never used.
+// A vendor CLI's sign-in is never read: its status command's output stays on
+// the machine, and only a verdict line comes back (internal/vendorcli).
 package requirements
 
 import (
@@ -24,6 +27,7 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/vendorcli"
 )
 
 // UnmetErrType is the Temporal error type of a run whose requirements are not
@@ -32,12 +36,15 @@ const UnmetErrType = "PreflightRequirementsUnmet"
 
 // Problem is one requirement the run cannot have.
 type Problem struct {
-	// Kind is tool, integration or repo.
+	// Kind is tool, cli, integration, repo or project.
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	// Problem says what is wrong, Fix the command or step that fixes it.
 	Problem string `json:"problem"`
 	Fix     string `json:"fix"`
+	// Machine is the machine a cli problem was found on, as
+	// `reliant machine login --machine` names it; empty for other kinds.
+	Machine string `json:"machine,omitempty"`
 }
 
 // Report is what a check found.
@@ -61,12 +68,12 @@ func (r Report) Error() string {
 
 // Empty reports whether there is nothing to check.
 func Empty(req *reliantv1.WorkflowRequirements) bool {
-	return req == nil || (len(req.GetTools()) == 0 && len(req.GetIntegrations()) == 0 && len(req.GetRepos()) == 0)
+	return req == nil || (len(req.GetTools()) == 0 && len(req.GetIntegrations()) == 0 && len(req.GetRepos()) == 0 && len(req.GetCliLogin()) == 0)
 }
 
 // NeedsMachine reports whether checking req needs the run's machine.
 func NeedsMachine(req *reliantv1.WorkflowRequirements) bool {
-	return req != nil && (len(req.GetTools()) > 0 || len(req.GetRepos()) > 0)
+	return req != nil && (len(req.GetTools()) > 0 || len(req.GetRepos()) > 0 || len(req.GetCliLogin()) > 0)
 }
 
 // toolName and repoPath are the names a requirement may use: they are
@@ -90,6 +97,11 @@ func Validate(req *reliantv1.WorkflowRequirements, integrationKnown func(string)
 			out = append(out, fmt.Sprintf("requires.repos: %q is not a path inside the project (\".\" for the root, else e.g. control-plane or services/api)", r))
 		}
 	}
+	for _, v := range req.GetCliLogin() {
+		if _, ok := vendorcli.Lookup(v); !ok {
+			out = append(out, "requires.cli_login: "+vendorcli.UnknownVendorError(v).Error())
+		}
+	}
 	for _, i := range req.GetIntegrations() {
 		if integrationKnown != nil && !integrationKnown(i) {
 			out = append(out, fmt.Sprintf("requires.integrations: %q is not an integration", i))
@@ -108,7 +120,7 @@ func Check(ctx context.Context, req *reliantv1.WorkflowRequirements, machine Mac
 	}
 	if NeedsMachine(req) {
 		if machine == nil {
-			return report, fmt.Errorf("requires: tools and repos need the run's machine, and this run has none")
+			return report, fmt.Errorf("requires: tools, repos and cli_login need the run's machine, and this run has none")
 		}
 		out, code, err := machine.Run(ctx, ProbeCommand(req))
 		if err != nil {
@@ -119,6 +131,7 @@ func Check(ctx context.Context, req *reliantv1.WorkflowRequirements, machine Mac
 			return report, fmt.Errorf("checking requires: on the machine (exit %d): %w", code, perr)
 		}
 		report.Problems = append(report.Problems, problems...)
+		report.Problems = append(report.Problems, cliProblems(req.GetCliLogin(), out, machine.Name())...)
 	}
 	for _, integration := range req.GetIntegrations() {
 		if creds == nil {
@@ -144,8 +157,10 @@ func Check(ctx context.Context, req *reliantv1.WorkflowRequirements, machine Mac
 // finish, and its silence is not "nothing missing".
 const probeDone = "REQUIRES_PROBE_DONE"
 
-// ProbeCommand is the one read-only shell command that checks tools and
-// repos. Each line it prints is `<VERDICT>\t<name>[\t<detail>]`.
+// ProbeCommand is the one read-only shell command that checks tools, repos
+// and vendor CLI sign-ins. Each line it prints is
+// `<VERDICT>\t<name>[\t<detail>]`; the sign-ins' lines are
+// vendorcli.StatusScript's.
 //
 // A repo is checked three ways, each the cause of a failure a run would
 // otherwise hit midway: the directory is a git checkout; `git ls-remote`
@@ -179,6 +194,9 @@ else
   rm -f "$err"
 fi
 `, r)
+	}
+	if len(req.GetCliLogin()) > 0 {
+		sb.WriteString(vendorcli.StatusScript(req.GetCliLogin()))
 	}
 	sb.WriteString("echo " + probeDone + "\n")
 	return sb.String()

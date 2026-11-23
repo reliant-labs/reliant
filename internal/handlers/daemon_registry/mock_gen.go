@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=5890036789ba5252cbe372b09a5236a10f2158a30782d826df3d8136dbf63824
+// forge:hash=70d2273540eefde296ba71f3e2c5b0be5d4999b4319bb67b93b58251ea1af02c
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -35,13 +35,7 @@ type MockRepository struct {
 	ListFreshDaemonAttachmentsForUserFunc func(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error)
 	ListDaemonLocalModelsFunc             func(context.Context, string) (map[string]string, error)
 	ListDaemonStorageStateFunc            func(context.Context, string) (map[string]string, error)
-	SetDaemonLabelsFunc                   func(context.Context, string, string, map[string]string) (bool, error)
-	ListMachinePoolsForUserFunc           func(context.Context, string) ([]*core.MachinePool, error)
-	PutMachinePoolFunc                    func(context.Context, *core.MachinePool) (*core.MachinePool, error)
-	DeleteMachinePoolByNameFunc           func(context.Context, string, string) error
-	ListMachinePoolMembersFunc            func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error)
 	SetDefaultDaemonFunc                  func(context.Context, string, string) error
-	UpsertDaemonIdentityFunc              func(context.Context, db.DaemonIdentity) (bool, error)
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
@@ -89,51 +83,6 @@ func (m *MockRepository) ListDaemonStorageState(ctx context.Context, userID stri
 	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonStorageState")
 }
 
-// SetDaemonLabels records the call and delegates to SetDaemonLabelsFunc when set.
-func (m *MockRepository) SetDaemonLabels(ctx context.Context, userID string, daemonID string, labels map[string]string) (bool, error) {
-	m.Recorder.Record("SetDaemonLabels", ctx, userID, daemonID, labels)
-	if m.SetDaemonLabelsFunc != nil {
-		return m.SetDaemonLabelsFunc(ctx, userID, daemonID, labels)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "SetDaemonLabels")
-}
-
-// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
-func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error) {
-	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
-	if m.ListMachinePoolsForUserFunc != nil {
-		return m.ListMachinePoolsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
-}
-
-// PutMachinePool records the call and delegates to PutMachinePoolFunc when set.
-func (m *MockRepository) PutMachinePool(ctx context.Context, p *core.MachinePool) (*core.MachinePool, error) {
-	m.Recorder.Record("PutMachinePool", ctx, p)
-	if m.PutMachinePoolFunc != nil {
-		return m.PutMachinePoolFunc(ctx, p)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "PutMachinePool")
-}
-
-// DeleteMachinePoolByName records the call and delegates to DeleteMachinePoolByNameFunc when set.
-func (m *MockRepository) DeleteMachinePoolByName(ctx context.Context, userID string, name string) error {
-	m.Recorder.Record("DeleteMachinePoolByName", ctx, userID, name)
-	if m.DeleteMachinePoolByNameFunc != nil {
-		return m.DeleteMachinePoolByNameFunc(ctx, userID, name)
-	}
-	return contractkit.MockNotSet("MockRepository", "DeleteMachinePoolByName")
-}
-
-// ListMachinePoolMembers records the call and delegates to ListMachinePoolMembersFunc when set.
-func (m *MockRepository) ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
-	m.Recorder.Record("ListMachinePoolMembers", ctx, pool, projectID)
-	if m.ListMachinePoolMembersFunc != nil {
-		return m.ListMachinePoolMembersFunc(ctx, pool, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolMembers")
-}
-
 // SetDefaultDaemon records the call and delegates to SetDefaultDaemonFunc when set.
 func (m *MockRepository) SetDefaultDaemon(ctx context.Context, userID string, daemonID string) error {
 	m.Recorder.Record("SetDefaultDaemon", ctx, userID, daemonID)
@@ -143,17 +92,100 @@ func (m *MockRepository) SetDefaultDaemon(ctx context.Context, userID string, da
 	return contractkit.MockNotSet("MockRepository", "SetDefaultDaemon")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockPools
+// forge:hash=546d278923972a504eb48292fbe9b9a812cd02b7563e5c6f7547fdd0162f1299
+
+// MockPools is a test mock for the Pools interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPools.<Method>Func not set" error.
+type MockPools struct {
+	contractkit.Recorder
+	SetDaemonLabelsFunc         func(context.Context, string, string, map[string]string) (bool, error)
+	ListMachinePoolsForUserFunc func(context.Context, string) ([]*core.MachinePool, error)
+	PutMachinePoolFunc          func(context.Context, *core.MachinePool, string, time.Time) (*core.MachinePool, error)
+	DeleteMachinePoolByNameFunc func(context.Context, string, string) error
+	ListMachinePoolMembersFunc  func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error)
+}
+
+// SetDaemonLabels records the call and delegates to SetDaemonLabelsFunc when set.
+func (m *MockPools) SetDaemonLabels(ctx context.Context, userID string, daemonID string, labels map[string]string) (bool, error) {
+	m.Recorder.Record("SetDaemonLabels", ctx, userID, daemonID, labels)
+	if m.SetDaemonLabelsFunc != nil {
+		return m.SetDaemonLabelsFunc(ctx, userID, daemonID, labels)
+	}
+	return false, contractkit.MockNotSet("MockPools", "SetDaemonLabels")
+}
+
+// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
+func (m *MockPools) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error) {
+	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
+	if m.ListMachinePoolsForUserFunc != nil {
+		return m.ListMachinePoolsForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "ListMachinePoolsForUser")
+}
+
+// PutMachinePool records the call and delegates to PutMachinePoolFunc when set.
+func (m *MockPools) PutMachinePool(ctx context.Context, p *core.MachinePool, newID string, now time.Time) (*core.MachinePool, error) {
+	m.Recorder.Record("PutMachinePool", ctx, p, newID, now)
+	if m.PutMachinePoolFunc != nil {
+		return m.PutMachinePoolFunc(ctx, p, newID, now)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "PutMachinePool")
+}
+
+// DeleteMachinePoolByName records the call and delegates to DeleteMachinePoolByNameFunc when set.
+func (m *MockPools) DeleteMachinePoolByName(ctx context.Context, userID string, name string) error {
+	m.Recorder.Record("DeleteMachinePoolByName", ctx, userID, name)
+	if m.DeleteMachinePoolByNameFunc != nil {
+		return m.DeleteMachinePoolByNameFunc(ctx, userID, name)
+	}
+	return contractkit.MockNotSet("MockPools", "DeleteMachinePoolByName")
+}
+
+// ListMachinePoolMembers records the call and delegates to ListMachinePoolMembersFunc when set.
+func (m *MockPools) ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error) {
+	m.Recorder.Record("ListMachinePoolMembers", ctx, pool, projectID)
+	if m.ListMachinePoolMembersFunc != nil {
+		return m.ListMachinePoolMembersFunc(ctx, pool, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockPools", "ListMachinePoolMembers")
+}
+
+// Compile-time check.
+var _ Pools = (*MockPools)(nil)
+
+// forge:section MockMirror
+// forge:hash=d89145264ab636838de3e7bbb30a2a60e384cdfb467a8d29bc308b8173da3e59
+
+// MockMirror is a test mock for the Mirror interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMirror.<Method>Func not set" error.
+type MockMirror struct {
+	contractkit.Recorder
+	UpsertDaemonIdentityFunc func(context.Context, core.DaemonIdentity) (bool, error)
+}
+
 // UpsertDaemonIdentity records the call and delegates to UpsertDaemonIdentityFunc when set.
-func (m *MockRepository) UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error) {
+func (m *MockMirror) UpsertDaemonIdentity(ctx context.Context, id core.DaemonIdentity) (bool, error) {
 	m.Recorder.Record("UpsertDaemonIdentity", ctx, id)
 	if m.UpsertDaemonIdentityFunc != nil {
 		return m.UpsertDaemonIdentityFunc(ctx, id)
 	}
-	return false, contractkit.MockNotSet("MockRepository", "UpsertDaemonIdentity")
+	return false, contractkit.MockNotSet("MockMirror", "UpsertDaemonIdentity")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Mirror = (*MockMirror)(nil)
 
 // forge:section MockMachineNames
 // forge:hash=a078b2e25c969ec6891b3df00c21422e9cb31e1e53fa9b3ee3de7f723f48d06f

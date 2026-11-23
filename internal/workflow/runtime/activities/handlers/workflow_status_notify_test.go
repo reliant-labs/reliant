@@ -89,7 +89,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		input.Thread = chatID + "/child"
 	}
 	var output WorkflowStatusOutput
-	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(h.Repo()).Execute, input, &output))
+	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())).Execute, input, &output))
 	require.True(t, output.Success)
 
 	chat, err := h.Repo().GetChat(ctx, chatID)
@@ -202,7 +202,7 @@ func TestApprovalCreate_MarksScheduleLaunchedChatUnread(t *testing.T) {
 	require.NoError(t, err)
 
 	var output ApprovalCreateOutput
-	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, ApprovalCreateInput{
 		ChatID:             chatID,
 		WorkflowID:         workflowID,
 		TemporalWorkflowID: workflowID,

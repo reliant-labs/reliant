@@ -6,11 +6,15 @@ vi.mock("@/hooks/settings-queries", () => ({
 }));
 
 vi.mock("@/lib/oauth-local", () => ({
-  startOAuthViaDaemon: vi.fn(),
   startOAuthViaLocalServer: vi.fn(),
 }));
 
-import { startOAuthViaDaemon } from "@/lib/oauth-local";
+vi.mock("@/lib/oauth-desktop", () => ({
+  startOAuthViaDesktop: vi.fn(),
+}));
+
+import { startOAuthViaLocalServer } from "@/lib/oauth-local";
+import { startOAuthViaDesktop } from "@/lib/oauth-desktop";
 import { runCodexOAuthFlow } from "@/lib/codex-oauth";
 import { runClaudeOAuthFlow } from "@/lib/claude-oauth";
 
@@ -86,6 +90,7 @@ describe.each([
 
     // Without a code challenge there is nothing to authorize against; opening
     // a browser window here would strand the user on a dead flow.
-    expect(startOAuthViaDaemon).not.toHaveBeenCalled();
+    expect(startOAuthViaLocalServer).not.toHaveBeenCalled();
+    expect(startOAuthViaDesktop).not.toHaveBeenCalled();
   });
 });

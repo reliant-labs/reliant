@@ -13,4 +13,7 @@ type Attachment struct {
 	FileName string
 	MimeType string
 	Content  []byte
+	// Type is the stored attachment type (attachment.AttachmentType). The
+	// history replay reads it to drop media meant only for the user.
+	Type string
 }

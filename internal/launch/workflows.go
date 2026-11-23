@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -183,7 +184,7 @@ func (l *Launcher) ChatSelectionParams(ctx context.Context, chatID, workflowName
 	if chatID == "" {
 		return nil
 	}
-	sel, err := l.repo.GetChatSelection(ctx, chatID)
+	sel, err := l.selections.GetChatSelection(ctx, chatID)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the chat's selection; building the run without it", "chatID", chatID, "error", err)
 		return nil

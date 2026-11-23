@@ -7,6 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/planning"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -42,6 +43,33 @@ type ToolsOptions struct {
 	// tool reports that it is unavailable here (the daemon runtime, catalog
 	// listings).
 	Repo *db.Repo
+	// SpawnQuestions reads the pending questions spawn_status reports agents
+	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
+	// spawn_status report it is unavailable here, like every database tool.
+	SpawnQuestions SpawnQuestions
+	// SpawnTree reads the spawn tree the spawn tools resolve agents through.
+	// store.ToolCallExtStore satisfies it. Optional: nil makes the spawn tools
+	// report they are unavailable here.
+	SpawnTree SpawnTree
+	// Scenarios, LaunchedRuns, WorktreeChats and WorkflowSlugs are the row
+	// stores behind the scenario, start_run, worktree and create_workflow
+	// tools (store.WorkflowScenarioExtStore, TriggerEventExtStore,
+	// ChatExtStore and WorkflowDraftExtStore). Optional: nil makes the tool
+	// that needs one report that it is unavailable here, like a nil Repo.
+	Scenarios     ScenarioStore
+	LaunchedRuns  LaunchedRunCounter
+	WorktreeChats WorktreeChatLister
+	WorkflowSlugs WorkflowSlugChecker
+	// Placement and Workflows are the row reads behind the worktree,
+	// report_bug and get_run tools (daemonplacement.Records and
+	// store.WorkflowExtStore). Optional: nil makes the tool that needs one
+	// report that it is unavailable here, like a nil Repo.
+	Placement PlacementRecords
+	Workflows RunWorkflows
+	// Planning is the plan, task and dependency store behind the planning
+	// tools. Optional: nil makes them report that they are unavailable here,
+	// like a nil Repo.
+	Planning planning.Service
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
@@ -50,6 +78,9 @@ type ToolsOptions struct {
 	// no doorbell, and delivery falls back to the recipient's next loop
 	// boundary (the daemon runtime has no Temporal connection).
 	AgentMessageNotifier AgentMessageNotifier
+	// ProviderBackoff lets spawn_status say which sub-agents are parked on a
+	// provider usage limit. Optional: nil leaves them reading as running.
+	ProviderBackoff providerBackoffReader
 	// SpawnStopper lets spawn_stop reach the workflow running a sub-agent.
 	// Optional: nil means spawn_stop reports that stopping is unavailable
 	// here, which is the honest answer in the daemon runtime (no Temporal
@@ -238,11 +269,83 @@ type toolStore interface {
 	writeScenarioStore
 }
 
+// toolPlanning is every planning role the factory hands its Planning to.
+type toolPlanning interface {
+	addDependencyPlanning
+	addTaskPlanning
+	createPlanPlanning
+	getPlanPlanning
+	listReadyTasksPlanning
+	listTasksPlanning
+	removeDependencyPlanning
+	updatePlanPlanning
+	updateTaskPlanning
+}
+
+// planning is Planning as the planning tools' roles: nil when the factory has
+// none, for the same reason store() is (a nil interface value is not nil
+// once converted).
+func (f *ToolsFactory) planning() toolPlanning {
+	if f.opts == nil || f.opts.Planning == nil {
+		return nil
+	}
+	return f.opts.Planning
+}
+
 // store is Repo as the tools' roles: a nil interface when the factory has no
 // database. A nil *db.Repo converted to an interface is NOT nil, so handing
 // opts.Repo through as is would defeat every tool's "requires a database
 // connection" check and turn an unavailable tool into a nil dereference.
+// placement is opts.Placement as report_bug's role: nil stays a nil
+// interface.
+func (f *ToolsFactory) placement() bugReportMachines {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+// worktreeRecords is opts.Placement as the worktree tool's role.
+func (f *ToolsFactory) worktreeRecords() worktreeRecords {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+func (o *ToolsOptions) workflows() RunWorkflows {
+	if o == nil {
+		return nil
+	}
+	return o.Workflows
+}
+
 func (f *ToolsFactory) store() toolStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+// spawnStatusStore is store() as spawn_status's role: nil when there is no
+// database, so the tool reports itself unavailable rather than dereferencing it.
+func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+// spawnSendStore and spawnStopStore are store() as those tools' roles, nil when
+// there is no database.
+func (f *ToolsFactory) spawnSendStore() spawnSendStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+func (f *ToolsFactory) spawnStopStore() spawnStopStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
@@ -345,6 +448,11 @@ func (f *ToolsFactory) SaveAttachment() Tool {
 	return NewSaveAttachmentTool(f.store())
 }
 
+// PresentImage shows image files from the machine to the user in the chat.
+func (f *ToolsFactory) PresentImage() Tool {
+	return NewPresentImageTool(f.store())
+}
+
 func (f *ToolsFactory) Write() Tool {
 	return NewWriteTool()
 }
@@ -421,28 +529,28 @@ func (f *ToolsFactory) GenerateVideo() Tool {
 
 // Planning tools
 func (f *ToolsFactory) CreatePlan() Tool {
-	return NewCreatePlanTool(f.store())
+	return NewCreatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdatePlan() Tool {
-	return NewUpdatePlanTool(f.store())
+	return NewUpdatePlanTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) GetPlan() Tool {
-	return NewGetPlanTool(f.store())
+	return NewGetPlanTool(f.store(), f.planning())
 }
 
 // Task tools
 func (f *ToolsFactory) ListTasks() Tool {
-	return NewListTasksTool(f.store())
+	return NewListTasksTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) AddTask() Tool {
-	return NewAddTaskTool(f.store())
+	return NewAddTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) UpdateTask() Tool {
-	return NewUpdateTaskTool(f.store())
+	return NewUpdateTaskTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) CreateSubtask() Tool {
@@ -450,15 +558,15 @@ func (f *ToolsFactory) CreateSubtask() Tool {
 }
 
 func (f *ToolsFactory) AddDependency() Tool {
-	return NewAddDependencyTool(f.store())
+	return NewAddDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) RemoveDependency() Tool {
-	return NewRemoveDependencyTool(f.store())
+	return NewRemoveDependencyTool(f.store(), f.planning())
 }
 
 func (f *ToolsFactory) ListReadyTasks() Tool {
-	return NewListReadyTasksTool(f.store())
+	return NewListReadyTasksTool(f.store(), f.planning())
 }
 
 // ListPendingQuestions lists the caller's and its sub-agents' unanswered
@@ -474,19 +582,19 @@ func (f *ToolsFactory) WithdrawQuestion() Tool {
 
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
-	return NewSpawnStatusTool(f.store())
+	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions, Tree: f.opts.SpawnTree, Backoff: f.opts.ProviderBackoff})
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
-	return NewSpawnSendTool(f.store(), f.opts.AgentMessageNotifier)
+	return NewSpawnSendTool(SpawnSendDeps{Store: f.spawnSendStore(), Tree: f.opts.SpawnTree, Notifier: f.opts.AgentMessageNotifier})
 }
 
 func (f *ToolsFactory) SpawnStop() Tool {
-	return NewSpawnStopTool(f.store(), f.opts.SpawnStopper)
+	return NewSpawnStopTool(SpawnStopDeps{Store: f.spawnStopStore(), Tree: f.opts.SpawnTree, Stopper: f.opts.SpawnStopper})
 }
 
 func (f *ToolsFactory) StartRun() Tool {
-	return NewStartRunTool(f.store(), f.opts.RunStarter)
+	return NewStartRunTool(f.store(), f.opts.LaunchedRuns, f.opts.RunStarter)
 }
 
 func (f *ToolsFactory) ListRuns() Tool {
@@ -495,11 +603,11 @@ func (f *ToolsFactory) ListRuns() Tool {
 
 // ReportBug files a Reliant or forge defect with engineering via Sentry.
 func (f *ToolsFactory) ReportBug() Tool {
-	return NewReportBugTool(f.store())
+	return NewReportBugTool(f.store(), f.placement())
 }
 
 func (f *ToolsFactory) GetRun() Tool {
-	return NewGetRunTool(f.store())
+	return NewGetRunTool(f.store(), f.opts.workflows())
 }
 
 func (f *ToolsFactory) ControlRun() Tool {
@@ -605,7 +713,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.worktreeRecords(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools
@@ -626,7 +734,7 @@ func (f *ToolsFactory) MoveCode() Tool {
 
 // Workflow editing tools
 func (f *ToolsFactory) CreateWorkflow() Tool {
-	return NewCreateWorkflowTool(f.store())
+	return NewCreateWorkflowTool(f.store(), f.opts.WorkflowSlugs)
 }
 
 func (f *ToolsFactory) EditWorkflow() Tool {
@@ -676,23 +784,23 @@ func (f *ToolsFactory) ListScenarios() Tool {
 }
 
 func (f *ToolsFactory) ViewScenario() Tool {
-	return NewViewScenarioTool(f.store())
+	return NewViewScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) EditScenario() Tool {
-	return NewEditScenarioTool(f.store())
+	return NewEditScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) WriteScenario() Tool {
-	return NewWriteScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewWriteScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 func (f *ToolsFactory) DeleteScenario() Tool {
-	return NewDeleteScenarioTool(f.store())
+	return NewDeleteScenarioTool(f.store(), f.opts.Scenarios)
 }
 
 func (f *ToolsFactory) RunScenario() Tool {
-	return NewRunScenarioTool(f.store(), f.opts.ScenarioRunner)
+	return NewRunScenarioTool(f.store(), f.opts.Scenarios, f.opts.ScenarioRunner)
 }
 
 // RequestMachine returns request_machine, the no-machine run's way to offer
@@ -787,6 +895,14 @@ Make each question stand on its own. Include enough context for users, as someti
 - Say what you will do by default if nobody answers.
 - Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
 
+Write every question and option as you, the agent, speaking directly to the user, so that "I" and "you" each mean exactly one party:
+- "I", "me", "my" are you, the agent asking. "You", "your" are the person reading and answering.
+- Never call the reader "the user" or "they", and never call yourself "the agent" or "we": they read the question as if you were talking to them.
+- Name anyone else explicitly: "the sub-agent fixing the build", "the PR author", "the reviewer bot", "the owner", not "it", "they" or "you".
+- In option labels and descriptions, say who acts whenever it is not obvious: "I delete the branch" or "You review the diff first", not a bare "Delete the branch".
+- Good: "I found two migrations that conflict. Should I keep yours and drop mine? If you don't answer, I'll keep yours."
+- Bad: "Should the user's migration be kept? The agent will default to keeping it." (Whose migration? Who is "the user"?)
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
@@ -805,7 +921,7 @@ Usage notes:
 						"properties": map[string]interface{}{
 							"question": map[string]interface{}{
 								"type":        "string",
-								"description": "The question to ask, clear, specific and able to stand on its own: the user may see it alone in their inbox or feed, without this chat. Name what it is about (the issue, PR or system, not a bare id), why you are asking now, and the default you will proceed with. No internal shorthand, and no references to \"above\" or earlier messages.",
+								"description": "The question to ask, clear, specific and able to stand on its own: the user may see it alone in their inbox or feed, without this chat. Name what it is about (the issue, PR or system, not a bare id), why you are asking now, and the default you will proceed with. No internal shorthand, and no references to \"above\" or earlier messages. Speak to the reader directly: 'I' is you, the agent, and 'you' is the reader; never 'the user' or 'the agent'.",
 							},
 							"options": map[string]interface{}{
 								"type":        "array",
@@ -821,7 +937,7 @@ Usage notes:
 										},
 										"description": map[string]interface{}{
 											"type":        "string",
-											"description": "What choosing this option means in practice: its consequence and main trade-off. Do not restate the label.",
+											"description": "What choosing this option means in practice: its consequence and main trade-off. Do not restate the label. Say who acts when it is not obvious: 'I'll…' for you, the agent; 'You…' for the reader.",
 										},
 										"preview": map[string]interface{}{
 											"type":        "string",

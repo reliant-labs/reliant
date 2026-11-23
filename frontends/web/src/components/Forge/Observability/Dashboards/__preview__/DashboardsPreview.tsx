@@ -16,7 +16,7 @@
  *   …&dash=release/frontend-web   (funnel, issues, sessions)    …&dash=release/overview
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
  *   …&env=all|staging|dev
- *   …&case=few|ungrouped|empty|read-only|error|loading|not-set-up|no-telemetry|nothing-yet
+ *   …&case=few|empty|read-only|error|loading|not-set-up|no-telemetry|nothing-yet
  *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
  *   /forge-dashboards-preview?page=chart-gallery              every panel chart (ChartGalleryPreview)
@@ -67,7 +67,6 @@ const CASES: { id: string; label: string; options: FixtureOptions & { loading?: 
   { id: "data", label: "the fixture app", options: {} },
   { id: "few", label: "a young app: two dashboards", options: { dashboardsFew: true } },
   { id: "many", label: "control-plane's shape: 16 services, hosted built-ins (…&dash=release/process-admin-api)", options: { dashboardsManyServices: true } },
-  { id: "ungrouped", label: "older control plane: no group field", options: { dashboardsUngrouped: true } },
   { id: "empty", label: "no dashboards yet", options: { dashboardsEmpty: true } },
   { id: "read-only", label: "member, not admin", options: { dashboardsReadOnly: true } },
   { id: "error", label: "dashboards unavailable", options: { dashboardsFailWith: Code.Unavailable } },

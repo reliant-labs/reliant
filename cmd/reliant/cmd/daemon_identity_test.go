@@ -156,8 +156,7 @@ func TestDaemonCommandsFollowTheStoredCredentialsAccount(t *testing.T) {
 // mapping deleted the good credential and opened a browser login.
 func TestDaemonStartFailure_ForeignDaemonIDIsNotATokenProblem(t *testing.T) {
 	conn := &connection{ServerURL: "https://api.reliantapi.com", GatewayURL: "https://gateway.reliantapi.com"}
-	foreign := fmt.Errorf("daemon connection failed (not retrying): %w",
-		connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user")))
+	foreign := fmt.Errorf("daemon connection failed (not retrying): %w", bootstrap.NewForeignDaemonIDError())
 
 	for _, useToken := range []bool{true, false} {
 		failure, reRegister := daemonStartFailure(foreign, useToken, conn)

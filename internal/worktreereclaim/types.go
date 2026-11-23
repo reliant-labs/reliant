@@ -368,6 +368,13 @@ type Result struct {
 	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
 	// whose files (including caches) have all been quiet for the requested floor.
 	RecoverableIdle bool `json:"recoverable_idle,omitempty"`
+	// NotReclaimable (an ACTIVE answer to ProbeRecoverableAfterSeconds that
+	// is neither Landed nor RecoverableIdle) names the first check that
+	// refused it: "unreachable_history: ...", "touched 3h ago", "control-plane:
+	// not retirable whole: protected descendant: secrets". For the server's
+	// log and the row's metadata only; it decides nothing. Absent from a
+	// daemon that predates it.
+	NotReclaimable string `json:"not_reclaimable,omitempty"`
 	// Tombstone (every ACTIVE answer from a daemon that places tombstones)
 	// is the workspace's reclaim tombstone. Its presence is the capability
 	// the server requires before it marks or reclaims anything.

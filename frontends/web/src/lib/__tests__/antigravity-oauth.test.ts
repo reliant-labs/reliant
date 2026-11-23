@@ -4,13 +4,12 @@ vi.mock('@/hooks/settings-queries', () => ({
   completeAntigravityOAuth: vi.fn(),
 }))
 
-vi.mock('@/lib/oauth-local', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/oauth-local')>()),
-  startOAuthViaDaemon: vi.fn(),
+vi.mock('@/lib/oauth-desktop', () => ({
+  startOAuthViaDesktop: vi.fn(),
 }))
 
 import { completeAntigravityOAuth } from '@/hooks/settings-queries'
-import { startOAuthViaDaemon } from '@/lib/oauth-local'
+import { startOAuthViaDesktop } from '@/lib/oauth-desktop'
 import {
   ANTIGRAVITY_OAUTH_STATE_PREFIX,
   runAntigravityOAuthFlow,
@@ -50,12 +49,12 @@ const setCryptoMock = () => {
 
 describe('runAntigravityOAuthFlow', () => {
   const completeAntigravityOAuthMock = vi.mocked(completeAntigravityOAuth)
-  const startOAuthViaDaemonMock = vi.mocked(startOAuthViaDaemon)
+  const startOAuthViaDesktopMock = vi.mocked(startOAuthViaDesktop)
 
   beforeEach(() => {
     vi.clearAllMocks()
     setCryptoMock()
-    // Simulate Electron so the daemon path (which we mock) is taken
+    // Simulate Electron so the desktop receiver (which we mock) is used
     ;(window as any).electronAPI = {}
   })
 
@@ -65,7 +64,7 @@ describe('runAntigravityOAuthFlow', () => {
 
   const echoStateDaemon = () => {
     let capturedUrlTemplate = ''
-    startOAuthViaDaemonMock.mockImplementation(async (urlTemplate: string) => {
+    startOAuthViaDesktopMock.mockImplementation(async (urlTemplate: string) => {
       capturedUrlTemplate = urlTemplate
       const url = new URL(
         urlTemplate.replace('{redirect_uri}', 'http://127.0.0.1:9999/callback'),
@@ -150,7 +149,7 @@ describe('runAntigravityOAuthFlow', () => {
   })
 
   it('still verifies state locally even though the exchange does not carry it', async () => {
-    startOAuthViaDaemonMock.mockResolvedValue({
+    startOAuthViaDesktopMock.mockResolvedValue({
       code: 'test-code',
       state: 'reliant:oauth:antigravity:wrong-state',
       redirectUri: 'http://127.0.0.1:9999/callback',
@@ -165,14 +164,14 @@ describe('runAntigravityOAuthFlow', () => {
     expect(completeAntigravityOAuthMock).not.toHaveBeenCalled()
   })
 
-  it('returns daemon_error when the daemon RPC throws', async () => {
-    startOAuthViaDaemonMock.mockRejectedValue(new Error('Daemon not available'))
+  it('returns daemon_error when the receiver throws', async () => {
+    startOAuthViaDesktopMock.mockRejectedValue(new Error('Receiver not available'))
 
     const result = await runAntigravityOAuthFlow()
     expect(result).toEqual({
       ok: false,
       errorCode: 'daemon_error',
-      message: 'Daemon not available',
+      message: 'Receiver not available',
     })
   })
 

@@ -18,8 +18,7 @@
  *   absent     neither sent nor declared: not offered.
  *
  * Anything uncertain is `available`: no service in view (the all-services
- * scope keeps every option), the answer still loading or failed (a control
- * plane that predates the RPC answers Unimplemented), or a service missing from
+ * scope keeps every option), the answer still loading or failed, or a service missing from
  * a truncated answer. Offering an empty view costs a click; hiding one that
  * has data costs the reader the data.
  *
@@ -49,8 +48,7 @@ export function useSignalsIndex(scope: ObsScope | null, range: RangePreset): Sig
  *
  * True only on a definite answer: the store answered, no service in it emits
  * any signal (one listed only because its release declares signals has sent
- * nothing either), and the list was not truncated. Loading, an error (a control
- * plane that predates GetServiceSignals answers Unimplemented) or no scope are
+ * nothing either), and the list was not truncated. Loading, an error or no scope are
  * all false, so a view falls back to its own window-empty state rather than
  * telling a reader with data that their app is empty.
  */

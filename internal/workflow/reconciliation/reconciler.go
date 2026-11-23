@@ -95,6 +95,10 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	workflows  WorkflowLoader
+	daemons    DaemonReader
+	approvals  Approvals
+	questions  Questions
 	tempClient client.Client
 
 	// owners answers whose chat a pass is working on, so the records it logs
@@ -171,6 +175,10 @@ type Reconciler struct {
 	// completion in this process (see it).
 	approvalFeedRepaired atomic.Bool
 }
+
+// SetApprovals gives the approval sweep the store it reads and closes through;
+// without it the sweep does nothing.
+func (r *Reconciler) SetApprovals(a Approvals) { r.approvals = a }
 
 // SetResetGuard installs the shared reset-attempt guard (see
 // v2workflow.ResetAttemptGuard). Nil-safe: an unset guard always allows resets.
@@ -469,9 +477,11 @@ func DefaultConfig() *ReconcilerConfig {
 	}
 }
 
-// NewReconciler creates a new workflow reconciler. Zero-valued config fields
-// fall back to DefaultConfig values.
-func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
+// New creates a new workflow reconciler. Zero-valued config fields fall back
+// to DefaultConfig values. Plain Deps, not a forge contract package: it is
+// built by hand by the api server's NewWorkflowReconciler provider.
+func New(deps Deps) *Reconciler {
+	repo, tempClient, config := deps.Store, deps.Temporal, deps.Config
 	def := DefaultConfig()
 	if config == nil {
 		config = def
@@ -506,6 +516,9 @@ func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *Recon
 	}
 	return &Reconciler{
 		repo:                    repo,
+		questions:               deps.Questions,
+		workflows:               deps.Workflows,
+		daemons:                 deps.Daemons,
 		tempClient:              tempClient,
 		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
@@ -1902,7 +1915,7 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 // waiting for signal.resume), but log it as an ERROR so the violation is
 // visible instead of silently masking the watchdog.
 func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bool, error) {
-	questions, err := r.repo.ListPendingQuestionsByChat(ctx, wf.ChatID)
+	questions, err := r.questions.ListPendingQuestionsByChat(ctx, wf.ChatID)
 	if err != nil {
 		return false, fmt.Errorf("checking pending question: %w", err)
 	}
@@ -2246,7 +2259,7 @@ const maxWorkflowDepth = 64
 func (r *Reconciler) rootWorkflowID(ctx context.Context, workflowID string) string {
 	id := workflowID
 	for range maxWorkflowDepth {
-		wf, err := r.repo.GetWorkflow(ctx, id)
+		wf, err := r.workflows.LoadWorkflow(ctx, id)
 		if err != nil || wf == nil || wf.ParentID == nil || *wf.ParentID == "" {
 			return id
 		}
@@ -2601,7 +2614,7 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 	if rootID == "" {
 		return false
 	}
-	root, err := r.repo.GetWorkflow(ctx, rootID)
+	root, err := r.workflows.LoadWorkflow(ctx, rootID)
 	if err != nil || root == nil || root.Status != db.Failed() {
 		return false
 	}

@@ -96,6 +96,22 @@ describe("Header terminal toggle", () => {
     expect(hint?.textContent).toMatch(/^Toggle Terminal \(.*J.*\)$/);
   });
 
+  it("carries the workflows tour's anchors: the sidebar toggle, and one box around the terminal and files toggles", () => {
+    render(<Header onToggleChatSidebar={vi.fn()} onToggleTerminal={vi.fn()} onToggleFileBrowser={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Toggle Chat Sidebar" })).toHaveAttribute("data-tour", "header-sidebar-toggle");
+    const pair = document.querySelector("[data-tour='header-panel-toggles']");
+    expect(pair).not.toBeNull();
+    expect(pair).toContainElement(screen.getByRole("button", { name: "Toggle Terminal" }));
+    expect(pair).toContainElement(screen.getByRole("button", { name: "Toggle File Browser" }));
+  });
+
+  it("renders no empty anchor box when neither panel toggle is offered", () => {
+    render(<Header onToggleChatSidebar={vi.fn()} />);
+
+    expect(document.querySelector("[data-tour='header-panel-toggles']")).toBeNull();
+  });
+
   it("drops the empty parentheses when no shortcut is bound", () => {
     SHORTCUTS.current = {};
     render(<Header onToggleTerminal={vi.fn()} />);

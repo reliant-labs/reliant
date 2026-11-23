@@ -47,7 +47,7 @@ func (s *Service) DetachProjectFromDaemon(
 	if projectID == "" || daemonID == "" {
 		return nil, svcerr.InvalidArgument("project_id and daemon_id are required")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -72,7 +72,7 @@ func (s *Service) DetachProjectFromDaemon(
 			return err
 		}
 		if locked == nil {
-			return db.ErrNothingToDetach
+			return core.ErrNothingToDetach
 		}
 		// The detach deletes the row and records its tombstone at row.Path,
 		// read before the lock. A checkout an attach moved in between would
@@ -90,7 +90,7 @@ func (s *Service) DetachProjectFromDaemon(
 		}
 		return s.requireNoWorkspacesOn(txCtx, project, daemonID, machine, "detaching the project from that machine")
 	}
-	if err := s.deps.Repo.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path, guard); err != nil {
+	if err := s.deps.Detachments.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path, guard); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to detach the project from the machine"))
 	}
 	return connect.NewResponse(&pb.DetachProjectFromDaemonResponse{}), nil

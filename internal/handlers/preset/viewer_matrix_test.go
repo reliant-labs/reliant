@@ -3,6 +3,9 @@ package preset
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -14,6 +17,6 @@ func TestPresetServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	viewertest.RunService(t, f, svc, "reliant.v1.PresetService", nil)
 }

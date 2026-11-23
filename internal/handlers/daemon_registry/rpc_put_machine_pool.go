@@ -2,6 +2,9 @@ package daemon_registry
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -43,7 +46,7 @@ func (s *Service) PutMachinePool(
 	if err := machinepool.NormalizeSpec(pool); err != nil {
 		return nil, err
 	}
-	stored, err := s.deps.Repo.PutMachinePool(ctx, pool)
+	stored, err := s.deps.Pools.PutMachinePool(ctx, pool, uuid.NewString(), time.Now().UTC())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to write the machine pool"))
 	}

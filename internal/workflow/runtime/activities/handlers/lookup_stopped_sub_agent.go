@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -19,14 +19,15 @@ type LookupStoppedSubAgentInput struct {
 // LookupStoppedSubAgentOutput is the sub-agent on the thread if it stopped on
 // a failure, and nothing if it did not.
 type LookupStoppedSubAgentOutput struct {
-	Agent  *db.StoppedSpawnAgent   `json:"agent,omitempty"`
-	Agents []*db.StoppedSpawnAgent `json:"agents,omitempty"`
+	Agent  *core.StoppedSpawnAgent   `json:"agent,omitempty"`
+	Agents []*core.StoppedSpawnAgent `json:"agents,omitempty"`
 }
 
-// stoppedSubAgentReader is the one read this activity makes.
-type stoppedSubAgentReader interface {
-	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
-	ListStoppedSpawnAgents(ctx context.Context, chatID string) ([]*db.StoppedSpawnAgent, error)
+// StoppedSubAgentReader is the one read this activity makes.
+// store.ToolCallExtStore satisfies it.
+type StoppedSubAgentReader interface {
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error)
+	ListStoppedSpawnAgents(ctx context.Context, chatID string) ([]*core.StoppedSpawnAgent, error)
 }
 
 // LookupStoppedSubAgentActivity answers, from durable rows, whether a thread
@@ -37,11 +38,11 @@ type stoppedSubAgentReader interface {
 // that completed, or died and was restarted), or before executions recorded
 // stopped agents at all. See runtime/subagent_resume.go.
 type LookupStoppedSubAgentActivity struct {
-	repo stoppedSubAgentReader
+	repo StoppedSubAgentReader
 }
 
 // NewLookupStoppedSubAgentActivity creates a LookupStoppedSubAgentActivity.
-func NewLookupStoppedSubAgentActivity(repo stoppedSubAgentReader) *LookupStoppedSubAgentActivity {
+func NewLookupStoppedSubAgentActivity(repo StoppedSubAgentReader) *LookupStoppedSubAgentActivity {
 	return &LookupStoppedSubAgentActivity{repo: repo}
 }
 

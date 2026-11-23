@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // --- fakes for the injected collaborators ---
@@ -196,7 +197,7 @@ func TestRunTools_RejectARunTheUserDoesNotOwn(t *testing.T) {
 		tool Tool
 		call func(runID string) any
 	}{
-		{GetRunToolName, NewGetRunTool(repo), func(id string) any { return GetRunParams{RunID: id} }},
+		{GetRunToolName, NewGetRunTool(repo, store.NewWorkflowExtStore(repo.ORM())), func(id string) any { return GetRunParams{RunID: id} }},
 		{ControlRunToolName, NewControlRunTool(repo, ctl), func(id string) any { return ControlRunParams{RunID: id, Action: "cancel"} }},
 		{SendToRunToolName, NewSendToRunTool(repo, ctl), func(id string) any { return SendToRunParams{RunID: id, Message: "hi"} }},
 	}
@@ -510,7 +511,7 @@ func TestGetRun_ReportsStateWorkflowAndLastAssistantMessage(t *testing.T) {
 	seedMessage(t, repo, context.Background(), target, target, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "first draft")
 	seedMessage(t, repo, context.Background(), target, target, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "found 3 issues")
 
-	resp := callRunTool(t, NewGetRunTool(repo), callerRC(callerID, "tc"), GetRunToolName, GetRunParams{RunID: target})
+	resp := callRunTool(t, NewGetRunTool(repo, store.NewWorkflowExtStore(repo.ORM())), callerRC(callerID, "tc"), GetRunToolName, GetRunParams{RunID: target})
 	require.False(t, resp.IsError, resp.Content)
 
 	var detail RunDetail

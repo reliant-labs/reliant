@@ -161,7 +161,7 @@ func (s *Service) activationRow(ctx context.Context, userID string, def *reliant
 	} else if def.ConnectionId != nil && ghdelegated.IsOrgAppConnectionID(*def.ConnectionId) {
 		// Only a binding needs the org this early; the write decides it for
 		// everything else.
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
+		project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
 		if err != nil {
 			return nil, triggerDBError("get project", err)
 		}

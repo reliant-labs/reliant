@@ -13,7 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// No row reaches Repo: every one is refused first.
+// No row reaches the store: every one is refused first.
 func TestUploadAttachment_Generated(t *testing.T) {
 	t.Parallel()
 

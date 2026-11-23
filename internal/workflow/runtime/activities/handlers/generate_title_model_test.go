@@ -15,9 +15,10 @@ package handlers
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // titleProviders is every provider a user can configure and which the catalog

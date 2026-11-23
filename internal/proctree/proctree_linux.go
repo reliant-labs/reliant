@@ -136,6 +136,8 @@ func makeCommandsCgroup(root, name string, shared int) (string, error) {
 // enabling controllers for the children of a cgroup that has processes — the
 // daemon's. The cloud entrypoint sets this up: the daemon in /daemon/self,
 // /daemon delegated (docker/workspace-docker-entrypoint.sh in control-plane).
+// A systemd unit with Delegate=yes and DelegateSubgroup=self makes the same
+// layout, but without pids enabled; delegatedDir enables it.
 func delegatedRoot() (dir, why string) {
 	data, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
@@ -154,20 +156,49 @@ func delegatedRoot() (dir, why string) {
 	if own == "/" || parent == "/" {
 		return "", fmt.Sprintf("the daemon's cgroup %s has no delegated parent", own)
 	}
-	dir = filepath.Join(cgroupFS, parent)
+	return delegatedDir(filepath.Join(cgroupFS, parent))
+}
+
+// delegatedDir is delegatedRoot's verdict on dir, the parent of the daemon's
+// cgroup: dir itself when it is delegated to this user and enables the pids
+// controller for its children. A delegated dir that does not yet enable it
+// gets it enabled here. systemd leaves a delegated unit's subtree_control
+// empty (Delegate=yes, DelegateSubgroup=self), so a self-hosted daemon's
+// unit would otherwise need a step of its own to write it. The write is
+// refused (EBUSY) while dir itself holds a process, such as one a previous
+// run of the unit left behind; dir is then not used, as before.
+func delegatedDir(dir string) (string, string) {
 	ctl, err := os.ReadFile(filepath.Join(dir, "cgroup.subtree_control"))
 	if err != nil {
 		return "", fmt.Sprintf("cgroup %s is not readable: %v", dir, err)
-	}
-	if !strings.Contains(" "+strings.TrimSpace(string(ctl))+" ", " pids ") {
-		return "", fmt.Sprintf("cgroup %s does not enable the pids controller for its children", dir)
 	}
 	for _, p := range []string{dir, filepath.Join(dir, "cgroup.procs")} {
 		if err := unix.Access(p, unix.W_OK); err != nil {
 			return "", fmt.Sprintf("cgroup %s is not delegated to this user (%s: %v)", dir, filepath.Base(p), err)
 		}
 	}
+	if enablesPids(ctl) {
+		return dir, ""
+	}
+	if err := enableSubtreePids(dir); err != nil {
+		return "", fmt.Sprintf("cgroup %s does not enable the pids controller for its children, and enabling it failed: %v", dir, err)
+	}
+	if ctl, err = os.ReadFile(filepath.Join(dir, "cgroup.subtree_control")); err != nil || !enablesPids(ctl) {
+		return "", fmt.Sprintf("cgroup %s does not enable the pids controller for its children", dir)
+	}
+	logging.Info("proctree: enabled the pids controller for the children of the daemon's delegated cgroup", "dir", dir)
 	return dir, ""
+}
+
+// enablesPids reports whether a cgroup.subtree_control's content lists pids.
+func enablesPids(ctl []byte) bool {
+	return strings.Contains(" "+strings.TrimSpace(string(ctl))+" ", " pids ")
+}
+
+// enableSubtreePids enables the pids controller for dir's children. A var so
+// a test can run delegatedDir over plain files.
+var enableSubtreePids = func(dir string) error {
+	return os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+pids"), 0)
 }
 
 func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {

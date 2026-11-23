@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -18,11 +20,11 @@ import (
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
 )
 
-// scheduling records each ScheduleProjectDeletion on store, answering as
-// db.Repo does for a project that was not scheduled.
-func scheduling(store *project.MockRepository) *[]string {
+// scheduling records each ScheduleProjectDeletion on purges, answering as
+// projectpurge does for a project that was not scheduled.
+func scheduling(store *project.MockRepository, purges *project.MockProjectPurges) *[]string {
 	var scheduled []string
-	store.ScheduleProjectDeletionFunc = func(_ context.Context, id, by string, after time.Time, _ core.ProjectDecision) (core.ProjectDeletion, error) {
+	purges.ScheduleProjectDeletionFunc = func(_ context.Context, id, by string, after time.Time, _ core.ProjectDecision) (core.ProjectDeletion, error) {
 		scheduled = append(scheduled, id+" by "+by)
 		return core.ProjectDeletion{DeleteAfter: after}, nil
 	}
@@ -36,9 +38,10 @@ func TestDeleteProject_Generated(t *testing.T) {
 	t.Parallel()
 
 	store := ownedProjectRepo(t)
-	scheduled := scheduling(store)
+	purges := &project.MockProjectPurges{}
+	scheduled := scheduling(store, purges)
 	now := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Now: func() time.Time { return now }}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Now: func() time.Time { return now }}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
 		{
@@ -95,7 +98,8 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 	t.Parallel()
 
 	store := ownedProjectRepo(t)
-	scheduled := scheduling(store)
+	purges := &project.MockProjectPurges{}
+	scheduled := scheduling(store, purges)
 	store.ListProjectDaemonsForProjectFunc = func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 		return []*core.ProjectDaemon{
 			{ProjectID: projectID, DaemonID: "laptop", Path: "/work/a", InstallState: core.ProjectInstallInstalled},
@@ -123,11 +127,11 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 			mu.Lock()
 			removes = append(removes, daemonID+":"+p["path"])
 			mu.Unlock()
-			return []byte(`{"success":true}`), nil
+			return json.Marshal(map[string]any{"success": true, "op_id": p["op_id"], "op_state": "done"})
 		}
 		return []byte(`{}`), nil
 	})
-	svc := newService(t, store, router)
+	svc := newServicePurges(t, store, purges, router)
 
 	resp, err := svc.DeleteProject(project.AuthedContext(t), connect.NewRequest(&pb.DeleteProjectRequest{ProjectId: "p-1", RemoveFromMachines: true}))
 	if err != nil {

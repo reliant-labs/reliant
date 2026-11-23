@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -51,13 +54,9 @@ func (d *usageDriver) StreamResponse(ctx context.Context, prompts []string, mess
 
 func newAnalyticsCallLLM(t *testing.T, h *IdempotencyTestHelper, driver llm.Driver, rec *productEventRecorder) *CallLLMActivity {
 	t.Helper()
-	activity := NewCallLLMActivity(
-		h.Repo(), nil, nil, &staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
-			return driver, nil
-		},
-		nil,
-	)
+	activity := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	}, MCPBinder: nil})
 	activity.trackerFor = rec.trackerFor
 	return activity
 }

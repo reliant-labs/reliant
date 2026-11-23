@@ -46,3 +46,27 @@ describe("sidebarProjectPrefs", () => {
     expect(settings).toEqual({});
   });
 });
+
+describe("sidebarProjectPrefs: the remembered chat filter (additive `filter`)", () => {
+  it("reads and writes an org's filter, and an empty one stores nothing", () => {
+    const read = parseSidebarProjectSettings(JSON.stringify({ o1: { pinned: ["p"], filter: ["a", "b", "a", ""] } }));
+    expect(sidebarProjectPrefsFor(read, "o1").filter).toEqual(["a", "b"]);
+    expect(sidebarProjectPrefsFor(read, "o2").filter).toEqual([]);
+
+    const written = withSidebarProjectChange(read, "o1", { kind: "filter", projectIds: ["c", "d"] });
+    expect(written.o1).toEqual({ pinned: ["p"], filter: ["c", "d"] });
+    const cleared = withSidebarProjectChange(written, "o1", { kind: "filter", projectIds: [] });
+    expect(cleared.o1).toEqual({ pinned: ["p"] });
+  });
+
+  it("an old build's value (no filter) still loads, with no filter", () => {
+    const old = parseSidebarProjectSettings(JSON.stringify({ o1: { pinned: ["p"], hidden: ["h"], show_all: true } }));
+    expect(sidebarProjectPrefsFor(old, "o1")).toMatchObject({ showAll: true, filter: [] });
+  });
+
+  it("keeps keys this build does not know on every change", () => {
+    const read = parseSidebarProjectSettings(JSON.stringify({ o1: { pinned: ["p"], future: { x: 1 } } }));
+    const written = withSidebarProjectChange(read, "o1", { kind: "pin", projectId: "q", on: true });
+    expect(written.o1).toEqual({ pinned: ["p", "q"], future: { x: 1 } });
+  });
+});

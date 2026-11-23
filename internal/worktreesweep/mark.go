@@ -79,7 +79,7 @@ func (s *Sweeper) markGraceFor(wt *core.Worktree) time.Duration {
 	return s.marks.grace
 }
 
-// MarkStore records reclaim marks.
+// MarkStore records reclaim marks. store.WorktreeExtStore satisfies it.
 type MarkStore interface {
 	WorktreeRunActivities(ctx context.Context, ids []string) (map[string]core.WorktreeRunActivity, error)
 	MarkWorktreeForReclaim(ctx context.Context, id, markID string, quietSince time.Time, use *time.Time, reason string) (bool, error)
@@ -91,6 +91,7 @@ type MarkStore interface {
 //
 // The two decisions take the person: whether they still own the worktree is
 // decided under the same lock as the decision, never by the earlier list.
+// store.WorktreeExtStore satisfies it.
 type MarkDecisionStore interface {
 	ListMarkedWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
 	ClearWorktreeMarkForUser(ctx context.Context, userID, id, markID string) (bool, error)

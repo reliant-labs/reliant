@@ -237,7 +237,329 @@ func (x IssueActor_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IssueActor_Kind.Descriptor instead.
 func (IssueActor_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30, 0}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{35, 0}
+}
+
+// MaintenanceWindow is planned maintenance an org declared.
+type MaintenanceWindow struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// Unset: every environment of the org.
+	EnvId    string                 `protobuf:"bytes,3,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	StartsAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=starts_at,json=startsAt,proto3" json:"starts_at,omitempty"`
+	EndsAt   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ends_at,json=endsAt,proto3" json:"ends_at,omitempty"`
+	Reason   string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Who declared it: a user id, or a machine credential's id.
+	CreatedBy     string                 `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MaintenanceWindow) Reset() {
+	*x = MaintenanceWindow{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MaintenanceWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MaintenanceWindow) ProtoMessage() {}
+
+func (x *MaintenanceWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MaintenanceWindow.ProtoReflect.Descriptor instead.
+func (*MaintenanceWindow) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *MaintenanceWindow) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MaintenanceWindow) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *MaintenanceWindow) GetEnvId() string {
+	if x != nil {
+		return x.EnvId
+	}
+	return ""
+}
+
+func (x *MaintenanceWindow) GetStartsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartsAt
+	}
+	return nil
+}
+
+func (x *MaintenanceWindow) GetEndsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndsAt
+	}
+	return nil
+}
+
+func (x *MaintenanceWindow) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *MaintenanceWindow) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *MaintenanceWindow) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type DeclareMaintenanceWindowRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// The environment the maintenance affects. Unset: every environment.
+	EnvId    *string                `protobuf:"bytes,2,opt,name=env_id,json=envId,proto3,oneof" json:"env_id,omitempty"`
+	StartsAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=starts_at,json=startsAt,proto3" json:"starts_at,omitempty"`
+	EndsAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=ends_at,json=endsAt,proto3" json:"ends_at,omitempty"`
+	// What is planned, for the people triaging: "reliant-pg availability patch".
+	Reason        string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclareMaintenanceWindowRequest) Reset() {
+	*x = DeclareMaintenanceWindowRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclareMaintenanceWindowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclareMaintenanceWindowRequest) ProtoMessage() {}
+
+func (x *DeclareMaintenanceWindowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclareMaintenanceWindowRequest.ProtoReflect.Descriptor instead.
+func (*DeclareMaintenanceWindowRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DeclareMaintenanceWindowRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *DeclareMaintenanceWindowRequest) GetEnvId() string {
+	if x != nil && x.EnvId != nil {
+		return *x.EnvId
+	}
+	return ""
+}
+
+func (x *DeclareMaintenanceWindowRequest) GetStartsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartsAt
+	}
+	return nil
+}
+
+func (x *DeclareMaintenanceWindowRequest) GetEndsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndsAt
+	}
+	return nil
+}
+
+func (x *DeclareMaintenanceWindowRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type DeclareMaintenanceWindowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Window        *MaintenanceWindow     `protobuf:"bytes,1,opt,name=window,proto3" json:"window,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclareMaintenanceWindowResponse) Reset() {
+	*x = DeclareMaintenanceWindowResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclareMaintenanceWindowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclareMaintenanceWindowResponse) ProtoMessage() {}
+
+func (x *DeclareMaintenanceWindowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclareMaintenanceWindowResponse.ProtoReflect.Descriptor instead.
+func (*DeclareMaintenanceWindowResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DeclareMaintenanceWindowResponse) GetWindow() *MaintenanceWindow {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+type ListMaintenanceWindowsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// Windows that end at or after this. Unset: now.
+	Since         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=since,proto3,oneof" json:"since,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMaintenanceWindowsRequest) Reset() {
+	*x = ListMaintenanceWindowsRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMaintenanceWindowsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMaintenanceWindowsRequest) ProtoMessage() {}
+
+func (x *ListMaintenanceWindowsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMaintenanceWindowsRequest.ProtoReflect.Descriptor instead.
+func (*ListMaintenanceWindowsRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListMaintenanceWindowsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListMaintenanceWindowsRequest) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+type ListMaintenanceWindowsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Windows       []*MaintenanceWindow   `protobuf:"bytes,1,rep,name=windows,proto3" json:"windows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMaintenanceWindowsResponse) Reset() {
+	*x = ListMaintenanceWindowsResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMaintenanceWindowsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMaintenanceWindowsResponse) ProtoMessage() {}
+
+func (x *ListMaintenanceWindowsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMaintenanceWindowsResponse.ProtoReflect.Descriptor instead.
+func (*ListMaintenanceWindowsResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListMaintenanceWindowsResponse) GetWindows() []*MaintenanceWindow {
+	if x != nil {
+		return x.Windows
+	}
+	return nil
 }
 
 // IssueTimeRange is a half-open range [start, end). Both ends are required when
@@ -252,7 +574,7 @@ type IssueTimeRange struct {
 
 func (x *IssueTimeRange) Reset() {
 	*x = IssueTimeRange{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[0]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +586,7 @@ func (x *IssueTimeRange) String() string {
 func (*IssueTimeRange) ProtoMessage() {}
 
 func (x *IssueTimeRange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[0]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +599,7 @@ func (x *IssueTimeRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueTimeRange.ProtoReflect.Descriptor instead.
 func (*IssueTimeRange) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{0}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *IssueTimeRange) GetStart() *timestamppb.Timestamp {
@@ -325,7 +647,7 @@ type IssueScope struct {
 
 func (x *IssueScope) Reset() {
 	*x = IssueScope{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[1]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +659,7 @@ func (x *IssueScope) String() string {
 func (*IssueScope) ProtoMessage() {}
 
 func (x *IssueScope) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[1]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +672,7 @@ func (x *IssueScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueScope.ProtoReflect.Descriptor instead.
 func (*IssueScope) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{1}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *IssueScope) GetOrgId() string {
@@ -466,7 +788,7 @@ type ListIssuesRequest struct {
 
 func (x *ListIssuesRequest) Reset() {
 	*x = ListIssuesRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[2]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +800,7 @@ func (x *ListIssuesRequest) String() string {
 func (*ListIssuesRequest) ProtoMessage() {}
 
 func (x *ListIssuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[2]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +813,7 @@ func (x *ListIssuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuesRequest.ProtoReflect.Descriptor instead.
 func (*ListIssuesRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{2}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListIssuesRequest) GetScope() *IssueScope {
@@ -635,7 +957,7 @@ type ListIssuesResponse struct {
 
 func (x *ListIssuesResponse) Reset() {
 	*x = ListIssuesResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[3]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +969,7 @@ func (x *ListIssuesResponse) String() string {
 func (*ListIssuesResponse) ProtoMessage() {}
 
 func (x *ListIssuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[3]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,7 +982,7 @@ func (x *ListIssuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuesResponse.ProtoReflect.Descriptor instead.
 func (*ListIssuesResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{3}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListIssuesResponse) GetIssues() []*v1.Issue {
@@ -712,7 +1034,7 @@ type GetIssueRequest struct {
 
 func (x *GetIssueRequest) Reset() {
 	*x = GetIssueRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[4]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +1046,7 @@ func (x *GetIssueRequest) String() string {
 func (*GetIssueRequest) ProtoMessage() {}
 
 func (x *GetIssueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[4]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +1059,7 @@ func (x *GetIssueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssueRequest.ProtoReflect.Descriptor instead.
 func (*GetIssueRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{4}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetIssueRequest) GetIssueId() string {
@@ -819,7 +1141,7 @@ type GetIssueResponse struct {
 
 func (x *GetIssueResponse) Reset() {
 	*x = GetIssueResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[5]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -831,7 +1153,7 @@ func (x *GetIssueResponse) String() string {
 func (*GetIssueResponse) ProtoMessage() {}
 
 func (x *GetIssueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[5]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -844,7 +1166,7 @@ func (x *GetIssueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssueResponse.ProtoReflect.Descriptor instead.
 func (*GetIssueResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{5}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetIssueResponse) GetIssue() *v1.Issue {
@@ -942,7 +1264,7 @@ type IssueEvent struct {
 
 func (x *IssueEvent) Reset() {
 	*x = IssueEvent{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[6]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1276,7 @@ func (x *IssueEvent) String() string {
 func (*IssueEvent) ProtoMessage() {}
 
 func (x *IssueEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[6]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1289,7 @@ func (x *IssueEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueEvent.ProtoReflect.Descriptor instead.
 func (*IssueEvent) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{6}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *IssueEvent) GetTimestamp() *timestamppb.Timestamp {
@@ -1077,7 +1399,7 @@ type IssueFrame struct {
 
 func (x *IssueFrame) Reset() {
 	*x = IssueFrame{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[7]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1089,7 +1411,7 @@ func (x *IssueFrame) String() string {
 func (*IssueFrame) ProtoMessage() {}
 
 func (x *IssueFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[7]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1102,7 +1424,7 @@ func (x *IssueFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueFrame.ProtoReflect.Descriptor instead.
 func (*IssueFrame) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{7}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *IssueFrame) GetFunction() string {
@@ -1155,7 +1477,7 @@ type IssueVersionBreakdown struct {
 
 func (x *IssueVersionBreakdown) Reset() {
 	*x = IssueVersionBreakdown{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[8]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1167,7 +1489,7 @@ func (x *IssueVersionBreakdown) String() string {
 func (*IssueVersionBreakdown) ProtoMessage() {}
 
 func (x *IssueVersionBreakdown) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[8]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1502,7 @@ func (x *IssueVersionBreakdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueVersionBreakdown.ProtoReflect.Descriptor instead.
 func (*IssueVersionBreakdown) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{8}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *IssueVersionBreakdown) GetVersion() string {
@@ -1240,7 +1562,7 @@ type IssueReleaseRef struct {
 
 func (x *IssueReleaseRef) Reset() {
 	*x = IssueReleaseRef{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[9]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1252,7 +1574,7 @@ func (x *IssueReleaseRef) String() string {
 func (*IssueReleaseRef) ProtoMessage() {}
 
 func (x *IssueReleaseRef) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[9]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1265,7 +1587,7 @@ func (x *IssueReleaseRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueReleaseRef.ProtoReflect.Descriptor instead.
 func (*IssueReleaseRef) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{9}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *IssueReleaseRef) GetVersion() string {
@@ -1325,7 +1647,7 @@ type ListIssueEventsRequest struct {
 
 func (x *ListIssueEventsRequest) Reset() {
 	*x = ListIssueEventsRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[10]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1337,7 +1659,7 @@ func (x *ListIssueEventsRequest) String() string {
 func (*ListIssueEventsRequest) ProtoMessage() {}
 
 func (x *ListIssueEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[10]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1350,7 +1672,7 @@ func (x *ListIssueEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssueEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListIssueEventsRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{10}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListIssueEventsRequest) GetIssueId() string {
@@ -1438,7 +1760,7 @@ type ListIssueEventsResponse struct {
 
 func (x *ListIssueEventsResponse) Reset() {
 	*x = ListIssueEventsResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[11]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1450,7 +1772,7 @@ func (x *ListIssueEventsResponse) String() string {
 func (*ListIssueEventsResponse) ProtoMessage() {}
 
 func (x *ListIssueEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[11]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1463,7 +1785,7 @@ func (x *ListIssueEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssueEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListIssueEventsResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{11}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListIssueEventsResponse) GetEvents() []*IssueEvent {
@@ -1500,7 +1822,7 @@ type IssueResolveIn struct {
 
 func (x *IssueResolveIn) Reset() {
 	*x = IssueResolveIn{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[12]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1512,7 +1834,7 @@ func (x *IssueResolveIn) String() string {
 func (*IssueResolveIn) ProtoMessage() {}
 
 func (x *IssueResolveIn) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[12]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1525,7 +1847,7 @@ func (x *IssueResolveIn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueResolveIn.ProtoReflect.Descriptor instead.
 func (*IssueResolveIn) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{12}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *IssueResolveIn) GetKind() IssueResolveKind {
@@ -1561,7 +1883,7 @@ type UpdateIssueStatusRequest struct {
 
 func (x *UpdateIssueStatusRequest) Reset() {
 	*x = UpdateIssueStatusRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[13]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1573,7 +1895,7 @@ func (x *UpdateIssueStatusRequest) String() string {
 func (*UpdateIssueStatusRequest) ProtoMessage() {}
 
 func (x *UpdateIssueStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[13]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1586,7 +1908,7 @@ func (x *UpdateIssueStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIssueStatusRequest.ProtoReflect.Descriptor instead.
 func (*UpdateIssueStatusRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{13}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateIssueStatusRequest) GetIssueId() string {
@@ -1640,7 +1962,7 @@ type UpdateIssueStatusResponse struct {
 
 func (x *UpdateIssueStatusResponse) Reset() {
 	*x = UpdateIssueStatusResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[14]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1652,7 +1974,7 @@ func (x *UpdateIssueStatusResponse) String() string {
 func (*UpdateIssueStatusResponse) ProtoMessage() {}
 
 func (x *UpdateIssueStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[14]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1665,7 +1987,7 @@ func (x *UpdateIssueStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIssueStatusResponse.ProtoReflect.Descriptor instead.
 func (*UpdateIssueStatusResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{14}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *UpdateIssueStatusResponse) GetIssue() *v1.Issue {
@@ -1693,7 +2015,7 @@ type IssueComment struct {
 
 func (x *IssueComment) Reset() {
 	*x = IssueComment{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1705,7 +2027,7 @@ func (x *IssueComment) String() string {
 func (*IssueComment) ProtoMessage() {}
 
 func (x *IssueComment) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1718,7 +2040,7 @@ func (x *IssueComment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueComment.ProtoReflect.Descriptor instead.
 func (*IssueComment) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{15}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *IssueComment) GetId() string {
@@ -1773,7 +2095,7 @@ type AddIssueCommentRequest struct {
 
 func (x *AddIssueCommentRequest) Reset() {
 	*x = AddIssueCommentRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1785,7 +2107,7 @@ func (x *AddIssueCommentRequest) String() string {
 func (*AddIssueCommentRequest) ProtoMessage() {}
 
 func (x *AddIssueCommentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1798,7 +2120,7 @@ func (x *AddIssueCommentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddIssueCommentRequest.ProtoReflect.Descriptor instead.
 func (*AddIssueCommentRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{16}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AddIssueCommentRequest) GetIssueId() string {
@@ -1824,7 +2146,7 @@ type AddIssueCommentResponse struct {
 
 func (x *AddIssueCommentResponse) Reset() {
 	*x = AddIssueCommentResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1836,7 +2158,7 @@ func (x *AddIssueCommentResponse) String() string {
 func (*AddIssueCommentResponse) ProtoMessage() {}
 
 func (x *AddIssueCommentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1849,7 +2171,7 @@ func (x *AddIssueCommentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddIssueCommentResponse.ProtoReflect.Descriptor instead.
 func (*AddIssueCommentResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{17}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AddIssueCommentResponse) GetComment() *IssueComment {
@@ -1871,7 +2193,7 @@ type UpdateIssueCommentRequest struct {
 
 func (x *UpdateIssueCommentRequest) Reset() {
 	*x = UpdateIssueCommentRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1883,7 +2205,7 @@ func (x *UpdateIssueCommentRequest) String() string {
 func (*UpdateIssueCommentRequest) ProtoMessage() {}
 
 func (x *UpdateIssueCommentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1896,7 +2218,7 @@ func (x *UpdateIssueCommentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIssueCommentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateIssueCommentRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{18}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateIssueCommentRequest) GetIssueId() string {
@@ -1929,7 +2251,7 @@ type UpdateIssueCommentResponse struct {
 
 func (x *UpdateIssueCommentResponse) Reset() {
 	*x = UpdateIssueCommentResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1941,7 +2263,7 @@ func (x *UpdateIssueCommentResponse) String() string {
 func (*UpdateIssueCommentResponse) ProtoMessage() {}
 
 func (x *UpdateIssueCommentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1954,7 +2276,7 @@ func (x *UpdateIssueCommentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIssueCommentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateIssueCommentResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{19}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *UpdateIssueCommentResponse) GetComment() *IssueComment {
@@ -1975,7 +2297,7 @@ type DeleteIssueCommentRequest struct {
 
 func (x *DeleteIssueCommentRequest) Reset() {
 	*x = DeleteIssueCommentRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1987,7 +2309,7 @@ func (x *DeleteIssueCommentRequest) String() string {
 func (*DeleteIssueCommentRequest) ProtoMessage() {}
 
 func (x *DeleteIssueCommentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2000,7 +2322,7 @@ func (x *DeleteIssueCommentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteIssueCommentRequest.ProtoReflect.Descriptor instead.
 func (*DeleteIssueCommentRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{20}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteIssueCommentRequest) GetIssueId() string {
@@ -2025,7 +2347,7 @@ type DeleteIssueCommentResponse struct {
 
 func (x *DeleteIssueCommentResponse) Reset() {
 	*x = DeleteIssueCommentResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2037,7 +2359,7 @@ func (x *DeleteIssueCommentResponse) String() string {
 func (*DeleteIssueCommentResponse) ProtoMessage() {}
 
 func (x *DeleteIssueCommentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2050,7 +2372,7 @@ func (x *DeleteIssueCommentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteIssueCommentResponse.ProtoReflect.Descriptor instead.
 func (*DeleteIssueCommentResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{21}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{26}
 }
 
 type AssignIssueRequest struct {
@@ -2068,7 +2390,7 @@ type AssignIssueRequest struct {
 
 func (x *AssignIssueRequest) Reset() {
 	*x = AssignIssueRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2080,7 +2402,7 @@ func (x *AssignIssueRequest) String() string {
 func (*AssignIssueRequest) ProtoMessage() {}
 
 func (x *AssignIssueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2093,7 +2415,7 @@ func (x *AssignIssueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignIssueRequest.ProtoReflect.Descriptor instead.
 func (*AssignIssueRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{22}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AssignIssueRequest) GetIssueId() string {
@@ -2126,7 +2448,7 @@ type AssignIssueResponse struct {
 
 func (x *AssignIssueResponse) Reset() {
 	*x = AssignIssueResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2138,7 +2460,7 @@ func (x *AssignIssueResponse) String() string {
 func (*AssignIssueResponse) ProtoMessage() {}
 
 func (x *AssignIssueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2151,7 +2473,7 @@ func (x *AssignIssueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignIssueResponse.ProtoReflect.Descriptor instead.
 func (*AssignIssueResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{23}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AssignIssueResponse) GetIssue() *v1.Issue {
@@ -2174,7 +2496,7 @@ type LinkIssueChatRequest struct {
 
 func (x *LinkIssueChatRequest) Reset() {
 	*x = LinkIssueChatRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2186,7 +2508,7 @@ func (x *LinkIssueChatRequest) String() string {
 func (*LinkIssueChatRequest) ProtoMessage() {}
 
 func (x *LinkIssueChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2199,7 +2521,7 @@ func (x *LinkIssueChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkIssueChatRequest.ProtoReflect.Descriptor instead.
 func (*LinkIssueChatRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{24}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *LinkIssueChatRequest) GetIssueId() string {
@@ -2238,7 +2560,7 @@ type IssueChatLink struct {
 
 func (x *IssueChatLink) Reset() {
 	*x = IssueChatLink{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2250,7 +2572,7 @@ func (x *IssueChatLink) String() string {
 func (*IssueChatLink) ProtoMessage() {}
 
 func (x *IssueChatLink) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2263,7 +2585,7 @@ func (x *IssueChatLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueChatLink.ProtoReflect.Descriptor instead.
 func (*IssueChatLink) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{25}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *IssueChatLink) GetIssueId() string {
@@ -2312,7 +2634,7 @@ type LinkIssueChatResponse struct {
 
 func (x *LinkIssueChatResponse) Reset() {
 	*x = LinkIssueChatResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2324,7 +2646,7 @@ func (x *LinkIssueChatResponse) String() string {
 func (*LinkIssueChatResponse) ProtoMessage() {}
 
 func (x *LinkIssueChatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2337,7 +2659,7 @@ func (x *LinkIssueChatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkIssueChatResponse.ProtoReflect.Descriptor instead.
 func (*LinkIssueChatResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{26}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *LinkIssueChatResponse) GetLink() *IssueChatLink {
@@ -2369,7 +2691,7 @@ type ListIssueTimelineRequest struct {
 
 func (x *ListIssueTimelineRequest) Reset() {
 	*x = ListIssueTimelineRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2381,7 +2703,7 @@ func (x *ListIssueTimelineRequest) String() string {
 func (*ListIssueTimelineRequest) ProtoMessage() {}
 
 func (x *ListIssueTimelineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2394,7 +2716,7 @@ func (x *ListIssueTimelineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssueTimelineRequest.ProtoReflect.Descriptor instead.
 func (*ListIssueTimelineRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{27}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListIssueTimelineRequest) GetIssueId() string {
@@ -2434,7 +2756,7 @@ type ListAssignableUsersRequest struct {
 
 func (x *ListAssignableUsersRequest) Reset() {
 	*x = ListAssignableUsersRequest{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2446,7 +2768,7 @@ func (x *ListAssignableUsersRequest) String() string {
 func (*ListAssignableUsersRequest) ProtoMessage() {}
 
 func (x *ListAssignableUsersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2459,7 +2781,7 @@ func (x *ListAssignableUsersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssignableUsersRequest.ProtoReflect.Descriptor instead.
 func (*ListAssignableUsersRequest) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListAssignableUsersRequest) GetOrgId() string {
@@ -2502,7 +2824,7 @@ type ListAssignableUsersResponse struct {
 
 func (x *ListAssignableUsersResponse) Reset() {
 	*x = ListAssignableUsersResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2514,7 +2836,7 @@ func (x *ListAssignableUsersResponse) String() string {
 func (*ListAssignableUsersResponse) ProtoMessage() {}
 
 func (x *ListAssignableUsersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2527,7 +2849,7 @@ func (x *ListAssignableUsersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssignableUsersResponse.ProtoReflect.Descriptor instead.
 func (*ListAssignableUsersResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{29}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListAssignableUsersResponse) GetUsers() []*v1.IssueUser {
@@ -2559,7 +2881,7 @@ type IssueActor struct {
 
 func (x *IssueActor) Reset() {
 	*x = IssueActor{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2571,7 +2893,7 @@ func (x *IssueActor) String() string {
 func (*IssueActor) ProtoMessage() {}
 
 func (x *IssueActor) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2584,7 +2906,7 @@ func (x *IssueActor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueActor.ProtoReflect.Descriptor instead.
 func (*IssueActor) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *IssueActor) GetKind() IssueActor_Kind {
@@ -2624,7 +2946,7 @@ type IssueStatusEntry struct {
 
 func (x *IssueStatusEntry) Reset() {
 	*x = IssueStatusEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2636,7 +2958,7 @@ func (x *IssueStatusEntry) String() string {
 func (*IssueStatusEntry) ProtoMessage() {}
 
 func (x *IssueStatusEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2649,7 +2971,7 @@ func (x *IssueStatusEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStatusEntry.ProtoReflect.Descriptor instead.
 func (*IssueStatusEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{31}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *IssueStatusEntry) GetFrom() v1.IssueStatus {
@@ -2690,7 +3012,7 @@ type IssueCommentEntry struct {
 
 func (x *IssueCommentEntry) Reset() {
 	*x = IssueCommentEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2702,7 +3024,7 @@ func (x *IssueCommentEntry) String() string {
 func (*IssueCommentEntry) ProtoMessage() {}
 
 func (x *IssueCommentEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2715,7 +3037,7 @@ func (x *IssueCommentEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueCommentEntry.ProtoReflect.Descriptor instead.
 func (*IssueCommentEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{32}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *IssueCommentEntry) GetComment() *IssueComment {
@@ -2738,7 +3060,7 @@ type IssueAssignmentEntry struct {
 
 func (x *IssueAssignmentEntry) Reset() {
 	*x = IssueAssignmentEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2750,7 +3072,7 @@ func (x *IssueAssignmentEntry) String() string {
 func (*IssueAssignmentEntry) ProtoMessage() {}
 
 func (x *IssueAssignmentEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2763,7 +3085,7 @@ func (x *IssueAssignmentEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueAssignmentEntry.ProtoReflect.Descriptor instead.
 func (*IssueAssignmentEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{33}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *IssueAssignmentEntry) GetFrom() *v1.IssueUser {
@@ -2790,7 +3112,7 @@ type IssueChatEntry struct {
 
 func (x *IssueChatEntry) Reset() {
 	*x = IssueChatEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2802,7 +3124,7 @@ func (x *IssueChatEntry) String() string {
 func (*IssueChatEntry) ProtoMessage() {}
 
 func (x *IssueChatEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2815,7 +3137,7 @@ func (x *IssueChatEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueChatEntry.ProtoReflect.Descriptor instead.
 func (*IssueChatEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{34}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *IssueChatEntry) GetLink() *IssueChatLink {
@@ -2847,7 +3169,7 @@ type IssueTimelineEntry struct {
 
 func (x *IssueTimelineEntry) Reset() {
 	*x = IssueTimelineEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2859,7 +3181,7 @@ func (x *IssueTimelineEntry) String() string {
 func (*IssueTimelineEntry) ProtoMessage() {}
 
 func (x *IssueTimelineEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2872,7 +3194,7 @@ func (x *IssueTimelineEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueTimelineEntry.ProtoReflect.Descriptor instead.
 func (*IssueTimelineEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{35}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *IssueTimelineEntry) GetId() string {
@@ -2988,7 +3310,7 @@ type ListIssueTimelineResponse struct {
 
 func (x *ListIssueTimelineResponse) Reset() {
 	*x = ListIssueTimelineResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3000,7 +3322,7 @@ func (x *ListIssueTimelineResponse) String() string {
 func (*ListIssueTimelineResponse) ProtoMessage() {}
 
 func (x *ListIssueTimelineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3013,7 +3335,7 @@ func (x *ListIssueTimelineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssueTimelineResponse.ProtoReflect.Descriptor instead.
 func (*ListIssueTimelineResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{36}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListIssueTimelineResponse) GetEntries() []*IssueTimelineEntry {
@@ -3041,7 +3363,33 @@ var File_services_issues_v1_issues_proto protoreflect.FileDescriptor
 
 const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"p\n" +
+	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb1\x02\n" +
+	"\x11MaintenanceWindow\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x15\n" +
+	"\x06env_id\x18\x03 \x01(\tR\x05envId\x127\n" +
+	"\tstarts_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bstartsAt\x123\n" +
+	"\aends_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06endsAt\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\a \x01(\tR\tcreatedBy\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xe5\x01\n" +
+	"\x1fDeclareMaintenanceWindowRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
+	"\x06env_id\x18\x02 \x01(\tH\x00R\x05envId\x88\x01\x01\x127\n" +
+	"\tstarts_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bstartsAt\x123\n" +
+	"\aends_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06endsAt\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reasonB\t\n" +
+	"\a_env_id\"^\n" +
+	" DeclareMaintenanceWindowResponse\x12:\n" +
+	"\x06window\x18\x01 \x01(\v2\".controlplane.v1.MaintenanceWindowR\x06window\"w\n" +
+	"\x1dListMaintenanceWindowsRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x125\n" +
+	"\x05since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x05since\x88\x01\x01B\b\n" +
+	"\x06_since\"^\n" +
+	"\x1eListMaintenanceWindowsResponse\x12<\n" +
+	"\awindows\x18\x01 \x03(\v2\".controlplane.v1.MaintenanceWindowR\awindows\"p\n" +
 	"\x0eIssueTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xb2\x02\n" +
@@ -3319,7 +3667,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x1eISSUE_RESOLVE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_RESOLVE_KIND_NOW\x10\x01\x12#\n" +
 	"\x1fISSUE_RESOLVE_KIND_NEXT_RELEASE\x10\x02\x12\x1e\n" +
-	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xe5\b\n" +
+	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xe1\n" +
+	"\n" +
 	"\rIssuesService\x12U\n" +
 	"\n" +
 	"ListIssues\x12\".controlplane.v1.ListIssuesRequest\x1a#.controlplane.v1.ListIssuesResponse\x12O\n" +
@@ -3332,7 +3681,9 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\vAssignIssue\x12#.controlplane.v1.AssignIssueRequest\x1a$.controlplane.v1.AssignIssueResponse\x12^\n" +
 	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12p\n" +
 	"\x13ListAssignableUsers\x12+.controlplane.v1.ListAssignableUsersRequest\x1a,.controlplane.v1.ListAssignableUsersResponse\x12j\n" +
-	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponseB\xd3\x01\n" +
+	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponse\x12\x7f\n" +
+	"\x18DeclareMaintenanceWindow\x120.controlplane.v1.DeclareMaintenanceWindowRequest\x1a1.controlplane.v1.DeclareMaintenanceWindowResponse\x12y\n" +
+	"\x16ListMaintenanceWindows\x12..controlplane.v1.ListMaintenanceWindowsRequest\x1a/.controlplane.v1.ListMaintenanceWindowsResponseB\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vIssuesProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/issues/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -3348,141 +3699,158 @@ func file_services_issues_v1_issues_proto_rawDescGZIP() []byte {
 }
 
 var file_services_issues_v1_issues_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_services_issues_v1_issues_proto_goTypes = []any{
-	(IssueSort)(0),                      // 0: controlplane.v1.IssueSort
-	(IssueStatusChange)(0),              // 1: controlplane.v1.IssueStatusChange
-	(IssueResolveKind)(0),               // 2: controlplane.v1.IssueResolveKind
-	(IssueActor_Kind)(0),                // 3: controlplane.v1.IssueActor.Kind
-	(*IssueTimeRange)(nil),              // 4: controlplane.v1.IssueTimeRange
-	(*IssueScope)(nil),                  // 5: controlplane.v1.IssueScope
-	(*ListIssuesRequest)(nil),           // 6: controlplane.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),          // 7: controlplane.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),             // 8: controlplane.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),            // 9: controlplane.v1.GetIssueResponse
-	(*IssueEvent)(nil),                  // 10: controlplane.v1.IssueEvent
-	(*IssueFrame)(nil),                  // 11: controlplane.v1.IssueFrame
-	(*IssueVersionBreakdown)(nil),       // 12: controlplane.v1.IssueVersionBreakdown
-	(*IssueReleaseRef)(nil),             // 13: controlplane.v1.IssueReleaseRef
-	(*ListIssueEventsRequest)(nil),      // 14: controlplane.v1.ListIssueEventsRequest
-	(*ListIssueEventsResponse)(nil),     // 15: controlplane.v1.ListIssueEventsResponse
-	(*IssueResolveIn)(nil),              // 16: controlplane.v1.IssueResolveIn
-	(*UpdateIssueStatusRequest)(nil),    // 17: controlplane.v1.UpdateIssueStatusRequest
-	(*UpdateIssueStatusResponse)(nil),   // 18: controlplane.v1.UpdateIssueStatusResponse
-	(*IssueComment)(nil),                // 19: controlplane.v1.IssueComment
-	(*AddIssueCommentRequest)(nil),      // 20: controlplane.v1.AddIssueCommentRequest
-	(*AddIssueCommentResponse)(nil),     // 21: controlplane.v1.AddIssueCommentResponse
-	(*UpdateIssueCommentRequest)(nil),   // 22: controlplane.v1.UpdateIssueCommentRequest
-	(*UpdateIssueCommentResponse)(nil),  // 23: controlplane.v1.UpdateIssueCommentResponse
-	(*DeleteIssueCommentRequest)(nil),   // 24: controlplane.v1.DeleteIssueCommentRequest
-	(*DeleteIssueCommentResponse)(nil),  // 25: controlplane.v1.DeleteIssueCommentResponse
-	(*AssignIssueRequest)(nil),          // 26: controlplane.v1.AssignIssueRequest
-	(*AssignIssueResponse)(nil),         // 27: controlplane.v1.AssignIssueResponse
-	(*LinkIssueChatRequest)(nil),        // 28: controlplane.v1.LinkIssueChatRequest
-	(*IssueChatLink)(nil),               // 29: controlplane.v1.IssueChatLink
-	(*LinkIssueChatResponse)(nil),       // 30: controlplane.v1.LinkIssueChatResponse
-	(*ListIssueTimelineRequest)(nil),    // 31: controlplane.v1.ListIssueTimelineRequest
-	(*ListAssignableUsersRequest)(nil),  // 32: controlplane.v1.ListAssignableUsersRequest
-	(*ListAssignableUsersResponse)(nil), // 33: controlplane.v1.ListAssignableUsersResponse
-	(*IssueActor)(nil),                  // 34: controlplane.v1.IssueActor
-	(*IssueStatusEntry)(nil),            // 35: controlplane.v1.IssueStatusEntry
-	(*IssueCommentEntry)(nil),           // 36: controlplane.v1.IssueCommentEntry
-	(*IssueAssignmentEntry)(nil),        // 37: controlplane.v1.IssueAssignmentEntry
-	(*IssueChatEntry)(nil),              // 38: controlplane.v1.IssueChatEntry
-	(*IssueTimelineEntry)(nil),          // 39: controlplane.v1.IssueTimelineEntry
-	(*ListIssueTimelineResponse)(nil),   // 40: controlplane.v1.ListIssueTimelineResponse
-	nil,                                 // 41: controlplane.v1.IssueEvent.AttributesEntry
-	(*timestamppb.Timestamp)(nil),       // 42: google.protobuf.Timestamp
-	(v1.IssueStatus)(0),                 // 43: controlplane.v1.IssueStatus
-	(v1.IssuePlatform)(0),               // 44: controlplane.v1.IssuePlatform
-	(*v1.Issue)(nil),                    // 45: controlplane.v1.Issue
-	(*v1.InstanceScope)(nil),            // 46: controlplane.v1.InstanceScope
-	(*v1.ClientContext)(nil),            // 47: controlplane.v1.ClientContext
-	(*v1.IssueUser)(nil),                // 48: controlplane.v1.IssueUser
+	(IssueSort)(0),                           // 0: controlplane.v1.IssueSort
+	(IssueStatusChange)(0),                   // 1: controlplane.v1.IssueStatusChange
+	(IssueResolveKind)(0),                    // 2: controlplane.v1.IssueResolveKind
+	(IssueActor_Kind)(0),                     // 3: controlplane.v1.IssueActor.Kind
+	(*MaintenanceWindow)(nil),                // 4: controlplane.v1.MaintenanceWindow
+	(*DeclareMaintenanceWindowRequest)(nil),  // 5: controlplane.v1.DeclareMaintenanceWindowRequest
+	(*DeclareMaintenanceWindowResponse)(nil), // 6: controlplane.v1.DeclareMaintenanceWindowResponse
+	(*ListMaintenanceWindowsRequest)(nil),    // 7: controlplane.v1.ListMaintenanceWindowsRequest
+	(*ListMaintenanceWindowsResponse)(nil),   // 8: controlplane.v1.ListMaintenanceWindowsResponse
+	(*IssueTimeRange)(nil),                   // 9: controlplane.v1.IssueTimeRange
+	(*IssueScope)(nil),                       // 10: controlplane.v1.IssueScope
+	(*ListIssuesRequest)(nil),                // 11: controlplane.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),               // 12: controlplane.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),                  // 13: controlplane.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),                 // 14: controlplane.v1.GetIssueResponse
+	(*IssueEvent)(nil),                       // 15: controlplane.v1.IssueEvent
+	(*IssueFrame)(nil),                       // 16: controlplane.v1.IssueFrame
+	(*IssueVersionBreakdown)(nil),            // 17: controlplane.v1.IssueVersionBreakdown
+	(*IssueReleaseRef)(nil),                  // 18: controlplane.v1.IssueReleaseRef
+	(*ListIssueEventsRequest)(nil),           // 19: controlplane.v1.ListIssueEventsRequest
+	(*ListIssueEventsResponse)(nil),          // 20: controlplane.v1.ListIssueEventsResponse
+	(*IssueResolveIn)(nil),                   // 21: controlplane.v1.IssueResolveIn
+	(*UpdateIssueStatusRequest)(nil),         // 22: controlplane.v1.UpdateIssueStatusRequest
+	(*UpdateIssueStatusResponse)(nil),        // 23: controlplane.v1.UpdateIssueStatusResponse
+	(*IssueComment)(nil),                     // 24: controlplane.v1.IssueComment
+	(*AddIssueCommentRequest)(nil),           // 25: controlplane.v1.AddIssueCommentRequest
+	(*AddIssueCommentResponse)(nil),          // 26: controlplane.v1.AddIssueCommentResponse
+	(*UpdateIssueCommentRequest)(nil),        // 27: controlplane.v1.UpdateIssueCommentRequest
+	(*UpdateIssueCommentResponse)(nil),       // 28: controlplane.v1.UpdateIssueCommentResponse
+	(*DeleteIssueCommentRequest)(nil),        // 29: controlplane.v1.DeleteIssueCommentRequest
+	(*DeleteIssueCommentResponse)(nil),       // 30: controlplane.v1.DeleteIssueCommentResponse
+	(*AssignIssueRequest)(nil),               // 31: controlplane.v1.AssignIssueRequest
+	(*AssignIssueResponse)(nil),              // 32: controlplane.v1.AssignIssueResponse
+	(*LinkIssueChatRequest)(nil),             // 33: controlplane.v1.LinkIssueChatRequest
+	(*IssueChatLink)(nil),                    // 34: controlplane.v1.IssueChatLink
+	(*LinkIssueChatResponse)(nil),            // 35: controlplane.v1.LinkIssueChatResponse
+	(*ListIssueTimelineRequest)(nil),         // 36: controlplane.v1.ListIssueTimelineRequest
+	(*ListAssignableUsersRequest)(nil),       // 37: controlplane.v1.ListAssignableUsersRequest
+	(*ListAssignableUsersResponse)(nil),      // 38: controlplane.v1.ListAssignableUsersResponse
+	(*IssueActor)(nil),                       // 39: controlplane.v1.IssueActor
+	(*IssueStatusEntry)(nil),                 // 40: controlplane.v1.IssueStatusEntry
+	(*IssueCommentEntry)(nil),                // 41: controlplane.v1.IssueCommentEntry
+	(*IssueAssignmentEntry)(nil),             // 42: controlplane.v1.IssueAssignmentEntry
+	(*IssueChatEntry)(nil),                   // 43: controlplane.v1.IssueChatEntry
+	(*IssueTimelineEntry)(nil),               // 44: controlplane.v1.IssueTimelineEntry
+	(*ListIssueTimelineResponse)(nil),        // 45: controlplane.v1.ListIssueTimelineResponse
+	nil,                                      // 46: controlplane.v1.IssueEvent.AttributesEntry
+	(*timestamppb.Timestamp)(nil),            // 47: google.protobuf.Timestamp
+	(v1.IssueStatus)(0),                      // 48: controlplane.v1.IssueStatus
+	(v1.IssuePlatform)(0),                    // 49: controlplane.v1.IssuePlatform
+	(*v1.Issue)(nil),                         // 50: controlplane.v1.Issue
+	(*v1.InstanceScope)(nil),                 // 51: controlplane.v1.InstanceScope
+	(*v1.ClientContext)(nil),                 // 52: controlplane.v1.ClientContext
+	(*v1.IssueUser)(nil),                     // 53: controlplane.v1.IssueUser
 }
 var file_services_issues_v1_issues_proto_depIdxs = []int32{
-	42, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
-	42, // 1: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
-	4,  // 2: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
-	5,  // 3: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
-	43, // 4: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
-	44, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
-	0,  // 6: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
-	45, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
-	46, // 8: controlplane.v1.ListIssuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	4,  // 9: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	45, // 10: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
-	10, // 11: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
-	11, // 12: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
-	12, // 13: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
-	13, // 14: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
-	46, // 15: controlplane.v1.GetIssueResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	42, // 16: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
-	41, // 17: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
-	47, // 18: controlplane.v1.IssueEvent.client:type_name -> controlplane.v1.ClientContext
-	42, // 19: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
-	42, // 20: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
-	42, // 21: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
-	4,  // 22: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	10, // 23: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
-	46, // 24: controlplane.v1.ListIssueEventsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 25: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
-	1,  // 26: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
-	16, // 27: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
-	42, // 28: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
-	45, // 29: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
-	48, // 30: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
-	42, // 31: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
-	42, // 32: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 33: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	19, // 34: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	45, // 35: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
-	48, // 36: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
-	42, // 37: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
-	29, // 38: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
-	48, // 39: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
-	3,  // 40: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
-	43, // 41: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
-	43, // 42: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
-	42, // 43: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
-	19, // 44: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
-	48, // 45: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
-	48, // 46: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
-	29, // 47: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
-	42, // 48: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	34, // 49: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
-	35, // 50: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
-	36, // 51: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
-	37, // 52: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
-	38, // 53: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
-	39, // 54: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
-	6,  // 55: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
-	8,  // 56: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
-	14, // 57: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
-	17, // 58: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
-	20, // 59: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
-	22, // 60: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
-	24, // 61: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
-	26, // 62: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
-	28, // 63: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
-	32, // 64: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
-	31, // 65: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
-	7,  // 66: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
-	9,  // 67: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
-	15, // 68: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
-	18, // 69: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
-	21, // 70: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
-	23, // 71: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
-	25, // 72: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
-	27, // 73: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
-	30, // 74: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
-	33, // 75: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
-	40, // 76: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
-	66, // [66:77] is the sub-list for method output_type
-	55, // [55:66] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	47, // 0: controlplane.v1.MaintenanceWindow.starts_at:type_name -> google.protobuf.Timestamp
+	47, // 1: controlplane.v1.MaintenanceWindow.ends_at:type_name -> google.protobuf.Timestamp
+	47, // 2: controlplane.v1.MaintenanceWindow.created_at:type_name -> google.protobuf.Timestamp
+	47, // 3: controlplane.v1.DeclareMaintenanceWindowRequest.starts_at:type_name -> google.protobuf.Timestamp
+	47, // 4: controlplane.v1.DeclareMaintenanceWindowRequest.ends_at:type_name -> google.protobuf.Timestamp
+	4,  // 5: controlplane.v1.DeclareMaintenanceWindowResponse.window:type_name -> controlplane.v1.MaintenanceWindow
+	47, // 6: controlplane.v1.ListMaintenanceWindowsRequest.since:type_name -> google.protobuf.Timestamp
+	4,  // 7: controlplane.v1.ListMaintenanceWindowsResponse.windows:type_name -> controlplane.v1.MaintenanceWindow
+	47, // 8: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
+	47, // 9: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
+	9,  // 10: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
+	10, // 11: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
+	48, // 12: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
+	49, // 13: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
+	0,  // 14: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
+	50, // 15: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
+	51, // 16: controlplane.v1.ListIssuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	9,  // 17: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	50, // 18: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
+	15, // 19: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
+	16, // 20: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
+	17, // 21: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
+	18, // 22: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
+	51, // 23: controlplane.v1.GetIssueResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	47, // 24: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
+	46, // 25: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
+	52, // 26: controlplane.v1.IssueEvent.client:type_name -> controlplane.v1.ClientContext
+	47, // 27: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
+	47, // 28: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
+	47, // 29: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
+	9,  // 30: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	15, // 31: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
+	51, // 32: controlplane.v1.ListIssueEventsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	2,  // 33: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
+	1,  // 34: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
+	21, // 35: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
+	47, // 36: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
+	50, // 37: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
+	53, // 38: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
+	47, // 39: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
+	47, // 40: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 41: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	24, // 42: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	50, // 43: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
+	53, // 44: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
+	47, // 45: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
+	34, // 46: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
+	53, // 47: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
+	3,  // 48: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
+	48, // 49: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
+	48, // 50: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
+	47, // 51: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
+	24, // 52: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
+	53, // 53: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
+	53, // 54: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
+	34, // 55: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
+	47, // 56: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	39, // 57: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
+	40, // 58: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
+	41, // 59: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
+	42, // 60: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
+	43, // 61: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
+	44, // 62: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
+	11, // 63: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
+	13, // 64: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
+	19, // 65: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
+	22, // 66: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
+	25, // 67: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
+	27, // 68: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
+	29, // 69: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
+	31, // 70: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
+	33, // 71: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
+	37, // 72: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
+	36, // 73: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
+	5,  // 74: controlplane.v1.IssuesService.DeclareMaintenanceWindow:input_type -> controlplane.v1.DeclareMaintenanceWindowRequest
+	7,  // 75: controlplane.v1.IssuesService.ListMaintenanceWindows:input_type -> controlplane.v1.ListMaintenanceWindowsRequest
+	12, // 76: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
+	14, // 77: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
+	20, // 78: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
+	23, // 79: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
+	26, // 80: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
+	28, // 81: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
+	30, // 82: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
+	32, // 83: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
+	35, // 84: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
+	38, // 85: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
+	45, // 86: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
+	6,  // 87: controlplane.v1.IssuesService.DeclareMaintenanceWindow:output_type -> controlplane.v1.DeclareMaintenanceWindowResponse
+	8,  // 88: controlplane.v1.IssuesService.ListMaintenanceWindows:output_type -> controlplane.v1.ListMaintenanceWindowsResponse
+	76, // [76:89] is the sub-list for method output_type
+	63, // [63:76] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_services_issues_v1_issues_proto_init() }
@@ -3491,11 +3859,13 @@ func file_services_issues_v1_issues_proto_init() {
 		return
 	}
 	file_services_issues_v1_issues_proto_msgTypes[1].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[2].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[10].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[13].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[28].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[35].OneofWrappers = []any{
+	file_services_issues_v1_issues_proto_msgTypes[3].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[6].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[7].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[15].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[18].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[33].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[40].OneofWrappers = []any{
 		(*IssueTimelineEntry_Status)(nil),
 		(*IssueTimelineEntry_Comment)(nil),
 		(*IssueTimelineEntry_Assignment)(nil),
@@ -3507,7 +3877,7 @@ func file_services_issues_v1_issues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_issues_v1_issues_proto_rawDesc), len(file_services_issues_v1_issues_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   38,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

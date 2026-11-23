@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -73,8 +75,12 @@ func (s *fakeAlertingStore) ListAllWorkflowTriggerActivations(context.Context) (
 	*s.listed = append(*s.listed, "activations")
 	return s.activations, nil
 }
-func (s *fakeAlertingStore) TryAdvisoryLock(context.Context, int64) (func(), bool, error) {
-	return func() {}, !s.locked, nil
+
+// fakeAlertingLocker is the leader election: held means another replica has it.
+type fakeAlertingLocker struct{ held *bool }
+
+func (l fakeAlertingLocker) TryLock(context.Context, dblock.Key) (func(), bool, error) {
+	return func() {}, !*l.held, nil
 }
 
 func alertingTrigger(id string, enabled bool, updated time.Time) *core.Trigger {
@@ -88,7 +94,7 @@ func newAlertingFixture() (*Alerting, *fakeReceivers, *fakeAlertingStore) {
 		project: &core.Project{ID: "p", ForgeProjectName: ptr.Of("shop"), RemoteURL: ptr.Of("git@github.com:acme/shop.git")},
 		repos:   []*core.Repo{{RemoteURL: ptr.Of("git@github.com:acme/shop.git")}, {RemoteURL: ptr.Of("https://github.com/acme/infra")}, {}},
 	}
-	a := NewAlerting(rec, st, "https://api.example.com/")
+	a := NewAlerting(AlertingDeps{Receivers: rec, Store: st, Locker: fakeAlertingLocker{held: &st.locked}, PublicURL: "https://api.example.com/"})
 	a.now = func() time.Time { return time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC) }
 	return a, rec, st
 }

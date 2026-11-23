@@ -11,8 +11,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// ChatReader reads what placing a run needs about its chat. *db.Repo
-// implements it.
+// ChatReader reads what placing a run needs about its chat.
+// store.RunMachinePlacementExtStore implements it.
 type ChatReader interface {
 	GetRunPlacementChat(ctx context.Context, chatID string) (*core.RunPlacementChat, error)
 }

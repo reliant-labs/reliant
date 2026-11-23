@@ -64,7 +64,7 @@ func (s *Service) orgKeyItems(ctx context.Context, userID string) ([]*reliantv1.
 	if s.deps.MyOrgs == nil || jwt == "" {
 		return nil, nil
 	}
-	any, err := s.deps.Repo.HasRejectedOrgKeys(ctx)
+	any, err := s.deps.OrgKeys.HasRejectedOrgKeys(ctx)
 	if err != nil || !any {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *Service) orgKeyItems(ctx context.Context, userID string) ([]*reliantv1.
 	if err != nil || len(orgIDs) == 0 {
 		return nil, err
 	}
-	keys, err := s.deps.Repo.ListRejectedOrgKeysIn(ctx, orgIDs)
+	keys, err := s.deps.OrgKeys.ListRejectedOrgKeysIn(ctx, orgIDs)
 	if err != nil {
 		return nil, err
 	}

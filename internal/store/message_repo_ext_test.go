@@ -226,10 +226,6 @@ func TestMessageWrites_RoundTripAcrossLayers(t *testing.T) {
 	if other, err := store.FindMessageByActivity(ctx, f.env.ORM, f.chat, "wf-other", "act-n5"); err != nil || other != nil {
 		t.Fatalf("FindMessageByActivity(other workflow) = %v, %v; want nil", other, err)
 	}
-	twin, err := f.env.Repo.GetMessageByWorkflowAndActivityID(ctx, f.chat, "wf-"+f.node, "act-n5")
-	if err != nil || twin == nil || twin.ID != "n5" {
-		t.Fatalf("Repo.GetMessageByWorkflowAndActivityID = %v, %v; want n5", twin, err)
-	}
 }
 
 func TestMessageReads_AgreeWithRepository(t *testing.T) {
@@ -272,9 +268,6 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	if sib, _ = store.ListRecentTranscriptSiblingMessages(ctx, o, f.chat, f.node, 0, 2); ids(sib) != "[m4 m7]" {
 		t.Fatalf("siblings of the node thread, limit 2 = %s; want [m4 m7]", ids(sib))
 	}
-	if twin, _ := f.env.Repo.ListRecentTranscriptSiblingMessages(ctx, f.chat, f.main, 0, 10); ids(twin) != "[n2 n5]" {
-		t.Fatalf("Repo siblings = %s; want [n2 n5]", ids(twin))
-	}
 
 	// Latest message and latest turn: m7 is a system note, so the latest
 	// TURN is m4, a user message — the thread awaits a reply.
@@ -286,9 +279,6 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	}
 	if awaits, err := f.env.Repo.ThreadAwaitsReply(ctx, f.main); err != nil || !awaits {
 		t.Fatalf("Repo.ThreadAwaitsReply = %v, %v; want true", awaits, err)
-	}
-	if latest, err := f.env.Repo.IsLatestTurnInThread(ctx, f.main, "m4"); err != nil || !latest {
-		t.Fatalf("Repo.IsLatestTurnInThread(m4) = %v, %v; want true", latest, err)
 	}
 	if none, err := store.LatestMessageInThread(ctx, o, "no-thread"); err != nil || none != nil {
 		t.Fatalf("LatestMessageInThread(empty) = %v, %v; want nil", none, err)

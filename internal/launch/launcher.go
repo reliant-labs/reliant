@@ -30,6 +30,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -56,12 +58,17 @@ type RunRecorder interface {
 // greenfield probe included — happens inside the run, so a launch costs a
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
-	repo      Store
-	temporal  TemporalStarter
-	runs      RunRecorder
-	threads   ThreadCreator
-	taskQueue string
-	pinner    ChatPinner
+	repo        Store
+	workflows   WorkflowLoader
+	worktrees   WorktreeReader
+	projectRows ProjectReader
+	projects    projectaccess.Service
+	selections  chatselection.Store
+	temporal    TemporalStarter
+	runs        RunRecorder
+	threads     ThreadCreator
+	taskQueue   TaskQueue
+	pinner      ChatPinner
 	// sources reads an org-accounts-only launch's sources
 	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
 	sources orgSources
@@ -106,37 +113,21 @@ type ChatPinner interface {
 	Pin(ctx context.Context, chat *db.Chat)
 }
 
-// LauncherOption configures a Launcher.
-type LauncherOption func(*Launcher)
-
-// WithChatPinner makes every run this launcher starts pin an unpinned chat
-// first. Without it a launch pins nothing: the chat runs wherever default
-// resolution points on each call.
-func WithChatPinner(p ChatPinner) LauncherOption {
-	return func(l *Launcher) { l.pinner = p }
-}
-
-// NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
-// queue runs execute on.
-func NewLauncher(
-	repo Store,
-	threadCreator ThreadCreator,
-	temporal TemporalStarter,
-	runRecorder RunRecorder,
-	taskQueue string,
-	opts ...LauncherOption,
-) *Launcher {
-	l := &Launcher{
-		repo:      repo,
-		temporal:  temporal,
-		runs:      runRecorder,
-		threads:   threadCreator,
-		taskQueue: taskQueue,
+// New builds a launcher over its Deps.
+func New(deps Deps) *Launcher {
+	return &Launcher{
+		repo:        deps.Store,
+		workflows:   deps.Workflows,
+		worktrees:   deps.Worktrees,
+		projectRows: deps.ProjectRows,
+		projects:    deps.Projects,
+		selections:  deps.Selections,
+		temporal:    deps.Temporal,
+		runs:        deps.Runs,
+		threads:     deps.Threads,
+		taskQueue:   deps.TaskQueue,
+		pinner:      deps.Pinner,
 	}
-	for _, opt := range opts {
-		opt(l)
-	}
-	return l
 }
 
 // errEventExists aborts the session transaction when another launch recorded
@@ -161,6 +152,10 @@ type seedContent struct {
 // when the event and chat are committed but the run never started, calling
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
+	if spec.FiringTraceParent == "" {
+		// The caller's span, before launch.Launch becomes the current one.
+		spec.FiringTraceParent = telemetry.TraceParentOf(trace.SpanContextFromContext(ctx))
+	}
 	ctx, span := otel.Tracer("reliant.launch").Start(ctx, "launch.Launch",
 		trace.WithAttributes(attribute.String("launch.kind", string(ev.Kind)), attribute.Bool("launch.pinned", spec.CatalogPin != "")))
 	defer span.End()
@@ -305,7 +300,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	// Verify user owns the project and get project details
-	project, err := l.repo.GetProjectWithUserCheck(ctx, spec.ProjectID, userID)
+	project, err := l.projects.GetProjectWithUserCheck(ctx, spec.ProjectID, userID)
 	if err != nil {
 		return nil, projectLookupError(err)
 	}
@@ -410,7 +405,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// The main checkout carries no daemon and is where every no-machine chat
 	// binds (research/NO_MACHINE_CHATS.md).
 	if spec.NoMachine && spec.WorktreeID != nil && *spec.WorktreeID != "" {
-		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
+		if wt, wtErr := l.worktrees.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
 			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
 		}
 	}
@@ -419,7 +414,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// StartChat refuses this first, naming the machine; this covers every
 	// other caller of Launch.
 	if spec.DaemonID != "" {
-		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil {
+		if wt, wtErr := l.worktrees.GetWorktree(ctx, *worktreeID); wtErr == nil {
 			if _, conflict := daemonplacement.WorkspaceMachineConflict(wt, spec.DaemonID); conflict {
 				return nil, &ValidationError{
 					Kind:   ValidationFailedPrecondition,
@@ -709,7 +704,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if workflowID == "" {
 		return nil, &ValidationError{Kind: ValidationFailedPrecondition, Reason: "chat has no root workflow"}
 	}
-	root, err := l.repo.GetWorkflow(ctx, workflowID)
+	root, err := l.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || root == nil {
 		return nil, &InternalError{Reason: "failed to check workflow status", Err: err}
 	}
@@ -755,7 +750,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	noMachine := chat.NoMachine && spec.DaemonID == ""
 
-	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
+	project, err := l.projects.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
 	if err != nil {
 		return nil, projectLookupError(err)
 	}
@@ -814,7 +809,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)
 		}
-		curRoot, err := l.repo.GetWorkflow(txCtx, workflowID)
+		curRoot, err := l.workflows.LoadWorkflow(txCtx, workflowID)
 		if err != nil || curRoot == nil {
 			return fmt.Errorf("failed to reload workflow: %w", err)
 		}
@@ -1063,7 +1058,7 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	}
 
 	if workflowID := chat.MainThreadID(); workflowID != "" {
-		if root, err := l.repo.GetWorkflow(ctx, workflowID); err == nil && root != nil && root.Status == db.Pending() {
+		if root, err := l.workflows.LoadWorkflow(ctx, workflowID); err == nil && root != nil && root.Status == db.Pending() {
 			spec.ChatID = chat.ID
 			spec.ProjectID = chat.ProjectID
 			spec.WorktreeID = nil
@@ -1375,7 +1370,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// they are continuations, not launches.
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                l.taskQueue,
+		TaskQueue:                string(l.taskQueue),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		Memo:                     map[string]interface{}{"trigger_event_id": p.eventID},
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
@@ -1428,12 +1423,13 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// Injected after validation for the same reason as unattended.
 	initialData[v2.InputKeyLaunchRun] = true
 
+	runCtx, trigger := runTraceContext(ctx, p.trigger, p.spec.FiringTraceParent)
 	workflowInput := v2.WorkflowInput{
 		ChatID:       chatID,
 		WorkflowName: p.workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
-		Trigger:      p.trigger,
+		Trigger:      trigger,
 		// The run asks the daemon whether the directory holds code, before
 		// its first LLM call (runtime.runGreenfieldProbe) — not this
 		// request, which must not wait on a machine that may be asleep. A
@@ -1446,7 +1442,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// already exists, and neither needs the other's result: serially they
 	// were two Temporal round trips on every launch. Joined before returning
 	// so it never outlives the request's context.
-	titleStarted := l.startTitleGeneration(ctx, p)
+	titleStarted := l.startTitleGeneration(runCtx, p)
 	defer func() { <-titleStarted }()
 
 	// The root start stays synchronous. Returning before Temporal accepted
@@ -1457,7 +1453,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// accepted long after its durable stamp. Capacity recovery and the
 	// stranded-start sweep wait core.StartAttemptBound past that stamp
 	// before treating the start as no longer in flight.
-	startCtx, cancelStart := context.WithDeadline(ctx, p.attemptAt.Add(core.StartAttemptDeadline))
+	startCtx, cancelStart := context.WithDeadline(runCtx, p.attemptAt.Add(core.StartAttemptDeadline))
 	workflowRun, err := l.temporal.ExecuteWorkflow(startCtx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	cancelStart()
 	if err != nil && p.spec.RecordExecution != nil {
@@ -1555,7 +1551,7 @@ func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-ch
 		}()
 		options := client.StartWorkflowOptions{
 			ID:                       fmt.Sprintf("generate-title-%s", chatID),
-			TaskQueue:                l.taskQueue,
+			TaskQueue:                string(l.taskQueue),
 			WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		}
 		input := map[string]interface{}{
@@ -1644,9 +1640,9 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	// start records none.
 	if _, picked := patch["model"]; picked && chat.OrgID != nil && *chat.OrgID != "" &&
 		userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
-		ctx = db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
+		ctx = chatselection.WithPersonPick(ctx, chatselection.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 	}
-	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+	if _, err := chatselection.NewInstrumented(chatselection.Deps{Store: l.selections}).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
 	}
 	return nil

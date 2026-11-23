@@ -163,9 +163,8 @@ describe("workflows journey: the end", () => {
     expect(outro.onComplete).toBe(layoutActions.collapseAll);
     expect(outro.targets?.map((t) => t.selector)).toEqual([
       "[data-onboarding='chat-input']",
-      "[aria-label='Toggle Chat Sidebar']",
-      "[aria-label='Toggle File Browser']",
-      "[aria-label='Toggle Terminal']",
+      "[data-tour='header-sidebar-toggle']",
+      "[data-tour='header-panel-toggles']",
     ]);
     setTourShell("forge");
     expect(activeJourneySteps("workflows").map((s) => s.id)).not.toContain("wf-outro-layout");

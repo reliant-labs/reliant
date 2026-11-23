@@ -4,7 +4,7 @@
 // build wrapper) both call it, so they cannot disagree about how the KCL is
 // evaluated.
 //
-// ## Why `kcl run` alone cannot do it
+// ## Why `kcl run` cannot do it
 //
 // control-plane's `deploy/kcl/desktop_release.k` reaches `import forge`, and a
 // forge project declares no `forge` dependency in kcl.mod: the module is
@@ -13,23 +13,27 @@
 // own"). A bare `kcl run` fails with `CannotFindModule: forge` on a clean
 // machine, and on a laptop it may silently resolve a stale global
 // `~/.kcl/kpm/forge_kcl` left by an older forge — rendering a DIFFERENT module
-// than control-plane deploys with, while still reporting success. The wrapper
-// kept a bare `kcl run` after the gate moved off it, which is how its tests
-// went red the moment that stale global copy was gone.
+// than control-plane deploys with, while still reporting success.
+//
+// Not even `kcl run -E forge=<the module forge materialized>` can: forge's
+// module imports `kcl_plugin.forge` (telemetry.k), a KCL plugin the forge
+// binary registers in its own evaluator, which the stock `kcl` CLI does not
+// have ("the plugin package `kcl_plugin.forge` is not found, please confirm
+// if plugin mode is enabled"). Only a forge evaluation renders it.
 //
 // ## How it renders
 //
-// 1. `forge env kcl eval` (or `reliant forge env kcl eval`, when no forge is on PATH)
-//    evaluates the entrypoint with control-plane's pinned forge, which materializes forge's KCL module into FORGE_KCL_MODULE_CACHE.
-//    Pointing that at a scratch dir means the module used is exactly the one
-//    this forge supplies, never whatever happens to be cached already.
-// 2. `kcl run -E forge=<that module>` renders the same file again for the
-//    output. `forge env kcl eval` sorts object keys, and the committed
-//    release.config.json keeps the KCL's declaration order — the drift gate
-//    compares it byte for byte.
+// `forge env kcl eval --format json` (or `reliant forge env kcl eval`, when no
+// forge is on PATH), run in the control-plane checkout, so either hands the
+// command to the forge control-plane pins. `--format json` prints the document
+// the way `kcl run --format json` does — keys in the order the KCL declares
+// them, never alphabetised — so the committed release.config.json, which
+// keeps that order, still compares byte for byte. FORGE_KCL_MODULE_CACHE points
+// at a scratch dir, so the module used is exactly the one this forge supplies,
+// never whatever happens to be cached already.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,9 +51,9 @@ function run(command, args, options) {
  * `controlPlaneDir`.
  *
  * Returns `{ config }`, or `{ unavailable }` naming why the KCL cannot be
- * reached at all (no checkout, no forge, no kcl) — the fork case, where the
- * committed file is legitimately authoritative. Throws
- * ReleaseConfigRenderError when the KCL is reachable and fails to render.
+ * reached at all (no checkout, no forge) — the fork case, where the committed
+ * file is legitimately authoritative. Throws ReleaseConfigRenderError when the
+ * KCL is reachable and fails to render.
  */
 export function renderReleaseConfig(controlPlaneDir, env) {
   if (!existsSync(join(controlPlaneDir, KCL_ENTRYPOINT))) {
@@ -61,46 +65,30 @@ export function renderReleaseConfig(controlPlaneDir, env) {
   try {
     // forge on PATH, else `reliant forge`: run in the checkout, either hands
     // the command to the forge control-plane pins.
-    let rendered = false;
     for (const [command, ...route] of [["forge"], ["reliant", "forge"]]) {
+      let out;
       try {
-        run(command, [...route, "env", "kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config"], {
-          cwd: controlPlaneDir,
-          env: { ...process.env, FORGE_KCL_MODULE_CACHE: moduleCache, FORGE_SILENCE_EXPERIMENTAL: "1" },
-        });
-        rendered = true;
-        break;
+        out = run(
+          command,
+          [...route, "env", "kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config", "--format", "json"],
+          {
+            cwd: controlPlaneDir,
+            env: { ...process.env, FORGE_KCL_MODULE_CACHE: moduleCache, FORGE_SILENCE_EXPERIMENTAL: "1" },
+          },
+        );
       } catch (err) {
         if (err.code === "ENOENT") continue;
         throw new ReleaseConfigRenderError(`forge env kcl eval failed for env=${env}:\n${err.stderr || err.message}`);
       }
+      try {
+        return { config: JSON.parse(out) };
+      } catch (err) {
+        throw new ReleaseConfigRenderError(
+          `forge env kcl eval --format json printed no JSON for env=${env} (${err.message}):\n${out}`,
+        );
+      }
     }
-    if (!rendered) return { unavailable: "neither forge nor reliant is installed" };
-
-    // The module lands in <cache>/<content-hash>/, with `.complete` written last.
-    const forgeModule = existsSync(moduleCache)
-      ? readdirSync(moduleCache, { withFileTypes: true })
-          .filter((e) => e.isDirectory() && existsSync(join(moduleCache, e.name, ".complete")))
-          .map((e) => join(moduleCache, e.name))[0]
-      : undefined;
-    if (!forgeModule) {
-      throw new ReleaseConfigRenderError(`forge rendered the KCL but left no complete KCL module in ${moduleCache}`);
-    }
-
-    // The JSON goes to a file, not stdout: kcl prints "waiting for package-cache
-    // lock..." to stdout while another kcl holds the shared package cache.
-    const out = join(scratch, "release_config.json");
-    try {
-      run(
-        "kcl",
-        ["run", KCL_ENTRYPOINT, "-E", `forge=${forgeModule}`, "-D", `env=${env}`, "-S", "release_config", "--format", "json", "-o", out],
-        { cwd: controlPlaneDir },
-      );
-    } catch (err) {
-      if (err.code === "ENOENT") return { unavailable: "kcl is not installed" };
-      throw new ReleaseConfigRenderError(`kcl render failed for env=${env}:\n${err.stderr || err.message}`);
-    }
-    return { config: JSON.parse(readFileSync(out, "utf8")) };
+    return { unavailable: "neither forge nor reliant is installed" };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
