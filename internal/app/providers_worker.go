@@ -279,16 +279,17 @@ func newWorkerCatalogSearch(conns catalogindex.ConnectionLister, creds httpactio
 	return catalogindex.NewService(idx, conns, delegated), nil
 }
 
-// WriteLedgerDeps is where integration writes are recorded.
-type WriteLedgerDeps struct {
+// WriteLedgerStoreDeps is where integration writes are recorded.
+type WriteLedgerStoreDeps struct {
 	DB *db.Repo
 }
 
-// NewWriteLedger records every mutating integration call, from the action
-// node or an agent tool, before it is made, so the event it causes can be
-// attributed.
-func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB}), nil
+// NewWriteLedgerStore is the integration_writes table the write ledger
+// (writeledger.Service, which compose.go builds) records every mutating
+// integration call in, from the action node or an agent tool, before it is
+// made, so the event it causes can be attributed.
+func NewWriteLedgerStore(d WriteLedgerStoreDeps) (writeledger.Store, error) {
+	return newWriteLedger(d.DB), nil
 }
 
 // newWriteLedger is the integration write ledger over repo's database.

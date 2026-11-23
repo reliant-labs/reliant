@@ -18,7 +18,7 @@
 // PullRequestRecordService and the `reliant pr-record diff` report, and
 // nothing decides anything from them yet.
 //
-//forge:provided
+//forge:not-a-component: the projector (New) is unwired until the durable delivery inbox feeds it (#3094 phase 1); nothing outside tests builds it, and the package's live uses are its pure functions and types (Classify, HeadVerdict, Policy) in the PullRequestRecord handler and `reliant pr-record diff`
 package prrecords
 
 import (

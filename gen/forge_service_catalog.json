@@ -504,6 +504,7 @@
         "Database",
         "DebugServer",
         "IntegrationSettings",
+        "IntegrationsWriteledger",
         "LedgerRetention",
         "NATSConn",
         "OrgAccounts",
@@ -540,8 +541,8 @@
         "WorkerTrigger",
         "WorkflowCheckSyncer",
         "WorkflowEventRelay",
-        "WriteLedger",
-        "WriteLedgerPrune"
+        "WriteLedgerPrune",
+        "WriteLedgerStore"
       ],
       "serves": [],
       "clients": [],
@@ -54327,6 +54328,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "IntegrationsWriteledger",
+      "name": "IntegrationsWriteledger",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
+      "source": {
+        "path": "internal/integrations/writeledger/recorder.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.MockService",
+          "source": {
+            "path": "internal/integrations/writeledger/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.Recorder",
+          "source": {
+            "path": "internal/integrations/writeledger/recorder.go",
+            "symbol": "Recorder"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.forgeMiddlewareService",
+          "source": {
+            "path": "internal/integrations/writeledger/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "JetStream",
       "name": "JetStream",
       "kind": "provider",
@@ -55628,18 +55666,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "WriteLedger",
-      "name": "WriteLedger",
-      "kind": "provider",
-      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewWriteLedger"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "WriteLedgerPrune",
       "name": "WriteLedgerPrune",
       "kind": "provider",
@@ -55647,6 +55673,18 @@
       "source": {
         "path": "internal/app/providers_worker.go",
         "symbol": "NewWriteLedgerPrune"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "WriteLedgerStore",
+      "name": "WriteLedgerStore",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Store",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWriteLedgerStore"
       },
       "methods": [],
       "implementation_candidates": []
@@ -56562,6 +56600,32 @@
       ],
       "providers": [
         "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
+      "field": "Runs",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.RunLookup",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Store",
+      "methods": [],
+      "candidates": [
+        "WriteLedgerStore"
+      ],
+      "providers": [
+        "WriteLedgerStore"
       ],
       "resolution": "composition_expression"
     },
@@ -58141,10 +58205,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     },
@@ -58752,10 +58816,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     },
@@ -59046,10 +59110,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     }

@@ -14,11 +14,6 @@
 // Recorder.Wrap decorates the one method both doors share
 // (httpaction.Runner.RunAuthenticated: the workflow action node and the
 // agent's integration tools), so no mutating call can skip the ledger.
-//
-// Built by hand, by internal/app's NewWriteLedger provider
-// (providers_worker.go): never a node compose.go constructs from Deps.
-//
-//forge:provided
 package writeledger
 
 import (
