@@ -100,7 +100,7 @@ func TestCallLLM_OpensTheAgentTurnAndRecordsItsTraceParent(t *testing.T) {
 func TestExecuteTools_OpensEachCallUnderTheTurnThatAskedForIt(t *testing.T) {
 	rec := recordHandlerSpans(t)
 	h, chatID := newValidationChat(t)
-	activity := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), newMockToolExecutor())
+	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor())
 
 	// The asking turn, as CallLLM recorded it.
 	_, turn := otel.Tracer("test").Start(context.Background(), "invoke_agent general")

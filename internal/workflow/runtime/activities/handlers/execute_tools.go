@@ -123,8 +123,14 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	}
 	tec.chat = chat
 
+	// Missing workspace storage must use the same graceful failure path as
+	// a project lookup error, rather than panicking in no-database setups.
+	if a.rows == nil {
+		return nil, "Failed to load project: workspace storage is unavailable"
+	}
+
 	// Load project
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return nil, fmt.Sprintf("Failed to load project: %v", err)
 	}
@@ -140,7 +146,7 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	// Load nested repos. Failures degrade gracefully: tools fall back to
 	// single-repo behavior when repos is empty.
-	if repos, err := a.repo.ListReposByProject(ctx, project.ID); err == nil {
+	if repos, err := a.rows.ListReposByProject(ctx, project.ID); err == nil {
 		tec.repos = repos
 	}
 
@@ -166,7 +172,7 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{}, false, nil
 	}
 
-	worktree, err := a.repo.GetWorktree(ctx, *worktreeID)
+	worktree, err := a.rows.GetWorktree(ctx, *worktreeID)
 	if err != nil {
 		if threadBound {
 			return nil, true, fmt.Errorf("this agent's workspace %s could not be loaded: %w", *worktreeID, err)
@@ -275,6 +281,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	rows         WorkspaceRows
 	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
 	// results reads the durable result of a finished tool call. Set by
@@ -340,9 +347,10 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity; toolCalls is the
 // tool-call records it reads and writes (NewToolCalls).
-func NewExecuteToolsActivity(repo ExecuteToolsStore, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+func NewExecuteToolsActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         repo,
+		rows:         rows,
 		toolCalls:    toolCalls,
 		toolExecutor: toolExecutor,
 	}

@@ -193,7 +193,7 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 	mockExecutor := newMockToolExecutor()
 
 	// Create activity
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -269,7 +269,7 @@ func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
 	// Create mock executor with side effect tracking
 	mockExecutor := newMockToolExecutor()
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -347,7 +347,7 @@ func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
 	}
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,
@@ -430,7 +430,7 @@ func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
 		}
 	}
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,
@@ -482,7 +482,7 @@ func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	// With the new implementation, tool info comes from ToolCall struct directly.
 	// Even without a block in DB, the tool can execute with valid ToolCall data.
@@ -554,7 +554,7 @@ func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
 	require.NoError(t, err)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -625,7 +625,7 @@ func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
 	require.NoError(t, err)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -689,7 +689,7 @@ func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
 	mockExecutor := newMockToolExecutor()
 	mockExecutor.SetError(toolCallID, fmt.Errorf("executor failed: connection timeout"))
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -738,7 +738,7 @@ func TestExecuteToolsActivity_EmptyToolCalls(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,
