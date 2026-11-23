@@ -55702,6 +55702,15 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "Account",
+      "field": "Purger",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/account.Purger",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "AccountRecorder",
       "field": "Accounts",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
@@ -56866,6 +56875,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgUsage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
       ],
       "resolution": "composition_expression"
     },
@@ -58478,6 +58500,19 @@
     },
     {
       "consumer": "Usage",
+      "field": "Accounts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.AccountNames",
+      "methods": [],
+      "candidates": [
+        "ProviderAccounts"
+      ],
+      "providers": [
+        "ProviderAccounts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Usage",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
       "methods": [],
@@ -58917,6 +58952,14 @@
     {
       "code": "binding_unresolved",
       "component": "Account.ControlPlane",
+      "source": {
+        "path": "internal/handlers/account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Account.Purger",
       "source": {
         "path": "internal/handlers/account/service.go",
         "symbol": "New"

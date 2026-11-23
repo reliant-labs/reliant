@@ -20,6 +20,7 @@ package connectionvault
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -235,4 +236,40 @@ func (s *service) AppendConnectionEvent(ctx context.Context, ev core.ConnectionE
 
 func (s *service) ListConnectionEvents(ctx context.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error) {
 	return store.ListConnectionEvents(ctx, s.deps.DB, userID, id, limit, beforeID)
+}
+
+var errEmptyUserID = errors.New("user id cannot be empty")
+
+// PurgeUser deletes the person's OAuth flows, audit events and personal connections (their secrets
+// cascade) and returns how many rows went, for the account purge. An org's connections, whose
+// user_id is only the admin who made them, are the org's and stay. It joins the transaction ctx
+// carries, so the purge stays all-or-nothing.
+func (s *service) PurgeUser(ctx context.Context, userID string) (int64, error) {
+	if userID == "" {
+		return 0, errEmptyUserID
+	}
+	var total int64
+	for _, step := range []struct {
+		what string
+		del  func(context.Context, orm.Context, string) (int64, error)
+	}{
+		{"oauth flows", store.DeleteUserOAuthFlows},
+		{"connection events", store.DeleteUserConnectionEvents},
+		{"connections", store.DeleteUserConnections},
+	} {
+		n, err := step.del(ctx, s.deps.DB, userID)
+		if err != nil {
+			return 0, fmt.Errorf("delete the user's %s: %w", step.what, err)
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// UserHasCredentials reports whether the person has a live personal connection.
+func (s *service) UserHasCredentials(ctx context.Context, userID string) (bool, error) {
+	if userID == "" {
+		return false, errEmptyUserID
+	}
+	return store.UserHasConnection(ctx, s.deps.DB, userID)
 }
