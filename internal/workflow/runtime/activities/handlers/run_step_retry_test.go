@@ -34,7 +34,7 @@ func runStepActivityTimed(t *testing.T, executor RunExecutor, machines MachineOb
 	t.Helper()
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
-	act := NewExecuteRunStepActivity(repo, nil, executor)
+	act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, executor)
 	if machines != nil {
 		act = act.WithMachineObserver(machines)
 	}

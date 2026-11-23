@@ -46,9 +46,9 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, toolCalls, toolExecutor),
+		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
 	}
 }
 

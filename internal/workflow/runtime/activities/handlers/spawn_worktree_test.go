@@ -215,7 +215,7 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	require.NoError(t, err)
 	project, err := f.repo.GetProject(ctx, f.projectID)
 	require.NoError(t, err)
-	a := &ExecuteToolsActivity{repo: f.repo}
+	a := &ExecuteToolsActivity{repo: f.repo, rows: workspaceRowsOf(f.repo)}
 
 	spawned := f.spawn(t, "feature-x", "")
 	info, _, err := a.loadWorktreeInfo(ctx, chat, project, spawned.ThreadID)
@@ -265,7 +265,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(f.repo, toolCallsOf(f.repo), exec)
+		act := NewExecuteToolsActivity(f.repo, workspaceRowsOf(f.repo), toolCallsOf(f.repo), exec)
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -393,7 +393,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(f.repo, toolCallsOf(f.repo), executor)
+	a := NewExecuteToolsActivity(f.repo, workspaceRowsOf(f.repo), toolCallsOf(f.repo), executor)
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

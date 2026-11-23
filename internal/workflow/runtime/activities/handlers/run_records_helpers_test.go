@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -32,6 +33,16 @@ func approvalCreateDeps(repo ApprovalCreateStore) ApprovalCreateDeps {
 		d.Approvals = store.NewApprovalExtStore(o.ORM())
 	}
 	return d
+}
+
+// workspaceRowsOf is the workspace rows over repo's ORM handle: a *db.Repo, or
+// a fake embedding one. Anything else (a mock store, nil) has no database, so
+// there are no rows to read.
+func workspaceRowsOf(repo any) WorkspaceRows {
+	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
+		return NewWorkspaceRows(o.ORM())
+	}
+	return nil
 }
 
 // toolCallsOf is the tool-call roles over repo's ORM handle: a *db.Repo, or a

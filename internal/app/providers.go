@@ -55,6 +55,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -459,7 +460,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(d.ProviderAccounts, repo)
 	healer := drivers.InstallReliantKeyHealer(d.ProviderAccounts, repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
-	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, repo)
+	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, store.NewUserAppSessionExtStore(repo.ORM()))
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 

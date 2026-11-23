@@ -16,7 +16,6 @@ import (
 type Repository interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType pb.ChatUpdateType, entityID string, data string) error
 
 	GetApproval(ctx context.Context, id string) (*db.Approval, error)
@@ -27,6 +26,12 @@ type Repository interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
+}
+
+// Chats reads the chat an approval belongs to, so the caller's right to act on
+// it can be judged. store.ChatExtStore satisfies it.
+type Chats interface {
+	GetChatRow(ctx context.Context, id string) (*core.ChatRow, error)
 }
 
 // Signaler signals a workflow run, resetting an interrupted one so the

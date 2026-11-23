@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +69,7 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	}))
 
 	router := &toolexectest.Recorder{}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{ToolCallId: toolCallID}))
 	require.NoError(t, err)
