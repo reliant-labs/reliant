@@ -1,0 +1,54 @@
+{
+  "schema": "forge.obs.metric/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "metric": {
+    "name": "rpc.server.calls",
+    "type": "sum",
+    "unit": "{call}",
+    "monotonic": true,
+    "temporality": "cumulative",
+    "services": [
+      "api"
+    ],
+    "service_count": 1,
+    "last_seen": "2026-10-22T11:59:00Z",
+    "series_estimate": 2,
+    "queryable": true,
+    "builtin": true,
+    "seen": true
+  },
+  "interval_seconds": 60,
+  "attributes": [
+    {
+      "key": "status",
+      "distinct_estimate": 3
+    },
+    {
+      "key": "rpc.method",
+      "distinct_estimate": 2
+    },
+    {
+      "key": "k8s.pod.name",
+      "resource": true,
+      "distinct_estimate": 400,
+      "high_cardinality": true
+    }
+  ],
+  "suggested_breakdowns": [
+    "status",
+    "rpc.method"
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs metrics query dev rpc.server.calls --group-by status",
+    "forge obs metrics query dev rpc.server.calls"
+  ]
+}

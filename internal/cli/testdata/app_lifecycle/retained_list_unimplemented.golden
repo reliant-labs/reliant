@@ -1,0 +1,4 @@
+--- stdout
+--- error
+https://cp.example does not serve DeployService/ListRetainedDatabases: it is an older control plane with no retained databases to list or purge
+fix: a database kept by `forge env delete --keep-data` there is managed by the platform operator

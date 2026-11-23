@@ -1,0 +1,159 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+name: E2E Tests
+
+# E2E is expensive (environment stand-up) so it is opt-in on PRs:
+# - Push to main: always run
+# - Pull request: only when labeled `run-e2e`
+# - Manual: always available via workflow_dispatch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+# Cancel the run in progress on a pull request only; on main it always
+# finishes and a newer push supersedes the pending one (ci.yml says why). The
+# event keeps a dispatch out of the push group.
+concurrency:
+  group: e2e-${{"{{"}} github.event_name {{"}}"}}-${{"{{"}} github.ref {{"}}"}}
+  cancel-in-progress: ${{"{{"}} github.event_name == 'pull_request' {{"}}"}}
+
+# Go version is read from go.mod via setup-go's `go-version-file` input
+# so CI and the project stay in sync without a separate env var that drifts.
+
+jobs:
+  e2e:
+    # Label-gate PRs so routine PRs don't pay the e2e cost. Non-PR events
+    # (push to main, workflow_dispatch) always run.
+    if: ${{"{{"}} github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-e2e') {{"}}"}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+{{- if .HasFrontends}}
+
+{{- if and .FrontendPath (eq .Frontend.PM "pnpm")}}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: "{{.FrontendPath}}/package.json"
+{{- end}}
+
+      - uses: actions/setup-node@v4
+        with:
+{{- if .FrontendPath}}
+          node-version-file: "{{.FrontendPath}}/package.json"
+          cache: "{{.Frontend.PM}}"
+          cache-dependency-path: "{{.FrontendPath}}/{{.Frontend.Lockfile}}"
+{{- else}}
+          node-version: "20"
+{{- end}}
+{{- end}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+
+      - name: Install dependencies
+        run: task deps
+{{- if eq .Runtime "docker-compose"}}
+
+      - name: Build binary
+        run: task build
+
+      # No "start infrastructure" step: each e2e/<svc> harness (main_test.go)
+      # starts its OWN dependencies from e2e/<svc>/docker-compose.e2e.yml,
+      # builds the binary, runs the service on a free port, and tears it all
+      # down. The root docker-compose.yml is the DEV stack — an air hot-reload
+      # container that compiles from scratch on first start (~2 min cold),
+      # longer than its healthcheck allows, so `up --wait` reported it
+      # unhealthy — and nothing in the e2e suite talks to it.
+      - name: Run E2E tests
+        run: task test:e2e
+        env:
+          E2E: "true"
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            e2e/**/*.log
+            /tmp/e2e-*
+{{- else if eq .Runtime "k3d"}}
+
+      - name: Install forge
+        # The version comes from the project at run time — go.mod's forge, the
+        # one this code compiles against — so bumping forge in go.mod is the
+        # whole upgrade. Only a module whose go.mod does not require forge at
+        # all (a CLI or library) uses forge.yaml's forge_version. A `replace`
+        # of forge, a lookup that fails, or a pin no proxy can serve fails
+        # this step by name; it never falls back to a different forge.
+{{installForgeRun 8}}
+
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      # Everything below goes through forge — never a raw KCL render piped to
+      # kubectl, which cannot resolve kcl_plugin.forge and skips the declared
+      # context binding. This requires the project to declare an `e2e`
+      # environment (deploy/kcl/e2e/main.k). Create one on the local cluster:
+      #   forge env new e2e --runtime cluster
+      # then point its ClusterTarget at the k3d cluster and the k3d registry
+      # its deploy/k3d.yaml creates, in place of the REPLACE_ME values.
+      - name: Create the e2e cluster
+        # Ensures every cluster the e2e env's KCL declares (CIDRs, API port,
+        # registry) exactly as its deploy expects them.
+        run: forge cluster up e2e --wait
+
+      - name: Build images
+        # Builds what the e2e env declares, renders its frontend config.js
+        # into the build, and pushes each image to the reference its own
+        # workload declares (the cluster-local registry, for this env).
+        run: forge env build e2e --push
+
+      - name: Deploy to the cluster
+        # Applies to the context the e2e env declares and waits for every
+        # workload to become ready.
+        # CI has no TTY; --yes is "I read the plan", and the plan is printed
+        # above. Without it forge exits 5, plan_unconfirmed.
+        run: forge env deploy e2e --yes
+
+      - name: Run E2E tests
+        run: task test:e2e
+        env:
+          E2E: "true"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          kubectl logs -n {{.ProjectName}}-e2e -l app.kubernetes.io/part-of={{.ProjectName}} --tail=200 --all-containers
+          kubectl describe pods -n {{.ProjectName}}-e2e -l app.kubernetes.io/part-of={{.ProjectName}}
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            e2e/**/*.log
+            /tmp/e2e-*
+
+      - name: Cleanup
+        if: always()
+        run: k3d cluster delete e2e
+{{- end}}

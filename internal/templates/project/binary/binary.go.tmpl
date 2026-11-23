@@ -1,0 +1,86 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Binary runtime body; canonical pattern in `forge skill load binaries`.
+// Runtime body for the {{.Name}} binary. The cobra entry point lives
+// in cmd/{{.Package}}.go and delegates here via Runner.Run.
+//
+// The default scaffold is a long-running process that blocks until
+// ctx is cancelled (typically by SIGINT/SIGTERM in production).
+// Replace the body of Run with your binary's actual loop —
+// reverse-proxy serve, NATS-consumer dispatch, sweeper tick, etc.
+//
+// Patterns the scaffold deliberately solves (so you don't have to):
+//   - Construction-time validateDeps gate (in contract.go::New).
+//   - Graceful-shutdown via ctx — the cobra adapter wires SIGINT
+//     into ctx and Run is the propagation point.
+//   - Compile-time interface compliance (`var _ Service = (*Runner)(nil)`).
+package {{.Package}}
+
+import (
+	"context"
+)
+
+// Runner is the concrete Service implementation. Hold all binary-
+// specific runtime state on this struct (caches, connections,
+// goroutine wait groups). The cobra adapter constructs one Runner
+// per process via New(deps) and calls Run once.
+type Runner struct {
+	deps Deps
+}
+
+// Compile-time check: Runner must implement Service.
+var _ Service = (*Runner)(nil)
+
+// Name returns the binary identifier used in structured logs.
+func (r *Runner) Name() string { return "{{.Name}}" }
+
+// Run blocks until ctx is cancelled. Implement your runtime loop
+// here. The default body is a "wait for shutdown" placeholder so a
+// freshly scaffolded binary builds and exits cleanly on Ctrl-C.
+//
+// Common shapes. An HTTP/proxy server:
+//
+//	srv := &http.Server{Addr: ":" + r.deps.Config.Port, Handler: ...}
+//	errCh := make(chan error, 1)
+//	go func() { errCh <- srv.ListenAndServe() }()
+//	select {
+//	case <-ctx.Done():
+//		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+//		defer cancel()
+//		return srv.Shutdown(shutdownCtx)
+//	case err := <-errCh:
+//		return err
+//	}
+//
+// A NATS / queue consumer loop:
+//
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			return nil
+//		case msg := <-r.deps.NATS.Messages():
+//			r.handle(ctx, msg)
+//		}
+//	}
+//
+// A periodic ticker:
+//
+//	t := time.NewTicker(r.interval)
+//	defer t.Stop()
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			return nil
+//		case <-t.C:
+//			r.tick(ctx)
+//		}
+//	}
+func (r *Runner) Run(ctx context.Context) error {
+	r.deps.Logger.InfoContext(ctx, "{{.Name}} runtime entered (placeholder Run body)")
+
+	// TODO: Implement your binary's runtime loop. The placeholder body
+	// blocks on ctx so the scaffold compiles and exits cleanly on
+	// shutdown signal.
+	<-ctx.Done()
+	r.deps.Logger.InfoContext(ctx, "{{.Name}} runtime ctx cancelled, exiting")
+	return nil
+}
