@@ -38,7 +38,7 @@ func accessTrigger(t *testing.T, repo *Repo, userID, integration string, enabled
 
 func routedIDs(t *testing.T, repo *Repo, integration, account, resource string, freshAfter time.Time) []string {
 	t.Helper()
-	got, err := repo.ListAccessRoutedTriggers(context.Background(), integration, account, resource, freshAfter)
+	got, err := store.ListAccessRoutedTriggers(context.Background(), repo.ORM(), integration, account, resource, freshAfter)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(got))
 	for _, tr := range got {

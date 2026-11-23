@@ -17,9 +17,10 @@
 // generate` writes a mock of Service into mock_gen.go; adapter tests stand up
 // an httptest server.
 //
-// Built by hand, by internal/app's providers (providers_api.go,
-// providers_worker.go) and internal/mcpserver: never a node compose.go
-// constructs from Deps.
+// Built per consumer, by internal/app's providers (providers_api.go,
+// providers_worker.go) and internal/mcpserver: each wants a different Sign
+// (user bearer vs internal service) and a nil client when self-hosted, and
+// one graph node per type cannot be both.
 //
 //forge:provided
 package controlplane

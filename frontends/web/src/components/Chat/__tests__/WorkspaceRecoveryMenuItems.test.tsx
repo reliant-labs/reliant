@@ -17,7 +17,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/worktree-actions", () => ({
-  recreateWorktree: (id: string) => state.recreate(id),
+  refreshAfterArchiveChange: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/toast-manager", () => ({
   toast: { success: state.success, error: state.error },
@@ -47,9 +47,13 @@ beforeEach(() => {
   state.update.mockReset();
   state.success.mockReset();
   state.error.mockReset();
-  // `state.update(request)` answers UpdateChat with the chat it updated.
+  // `state.update(request)` answers UpdateChat with the chat it updated;
+  // `state.recreate(worktreeId)` answers RecreateWorktree.
   setTransport(
-    mockTransport({ "ChatService.UpdateChat": async (req: unknown) => ({ chat: await state.update(req) }) }),
+    mockTransport({
+      "ChatService.UpdateChat": async (req: unknown) => ({ chat: await state.update(req) }),
+      "WorktreeService.RecreateWorktree": (req: unknown) => state.recreate((req as { worktreeId: string }).worktreeId),
+    }),
   );
 });
 

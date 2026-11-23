@@ -14,7 +14,7 @@
 // Built by hand, by internal/app's NewConnectionVault provider (providers.go): never a node
 // compose.go constructs from Deps.
 //
-//forge:provided
+// (exp)
 package connectionvault
 
 import (

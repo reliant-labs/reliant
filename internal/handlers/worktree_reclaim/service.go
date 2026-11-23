@@ -26,10 +26,15 @@ import (
 // decision 2026-11-10). The daemon, not this server, removes it, capture
 // first and every check made again.
 
-// Repository is what the service reads: the caller's machine, its stored
+// Daemons reads the machine a decision is for (store.DaemonExtStore in
+// production). It checks no owner: the rpc checks the row against the caller.
+type Daemons interface {
+	GetDaemon(ctx context.Context, id string) (*core.Daemon, error)
+}
+
+// Repository is what the service reads besides the machine: its stored
 // report, and whether it is connected.
 type Repository interface {
-	GetDaemon(ctx context.Context, id string) (*core.Daemon, error)
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	// GetLiveChatIDForWorktree is a non-archived chat bound to a Reliant
@@ -51,6 +56,8 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 	Repo   Repository
+	// Daemons reads the caller's machine.
+	Daemons Daemons
 	// Sender reaches the machine's daemon. nil when no daemon router is
 	// wired; DecideWorktreeReclaim then reports unavailable.
 	// forge:optional-dep
@@ -68,6 +75,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree_reclaim: Deps.Repo is required")
+	}
+	if d.Daemons == nil {
+		return fmt.Errorf("worktree_reclaim: Deps.Daemons is required")
 	}
 	return nil
 }

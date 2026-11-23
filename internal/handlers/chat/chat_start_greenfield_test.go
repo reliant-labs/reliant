@@ -87,10 +87,13 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	router := newCodePresenceHangingRouter(t, e.router)
 	e.svc = &Service{
 		deps: Deps{
-			Repo:   e.repo,
-			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
+			Repo:        e.repo,
+			Workflows:   store.NewWorkflowExtStore(e.repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(e.repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(e.repo.ORM()),
+			Spawns:      store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
 		}, threads: threads.New(threads.Deps{Repo: e.repo}),
-		runs: runs.New(runs.Deps{Repo: e.repo, Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: e.repo, Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 
 	type outcome struct {
@@ -165,10 +168,13 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	}}
 	svc := &Service{
 		deps: Deps{
-			Repo:   repo,
-			Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
+			Repo:        repo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Spawns:      store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 	return svc, router, temporal, repo, ctx, fx
 }

@@ -19,8 +19,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/changetools"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/connectionproposer"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -61,6 +63,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
+	"github.com/reliant-labs/reliant/internal/prrecords"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -208,13 +211,13 @@ func checkExecutors() error {
 // vault key with the api-server: the worker is the only process that reads
 // secrets, and the only one besides the api-server that writes them (on
 // refresh).
-func newWorkerConnectionResolver(repo *db.Repo, store connectionvault.Service, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
+func newWorkerConnectionResolver(repo *db.Repo, vaultStore connectionvault.Service, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	tokens := connections.NewTokenSource(store, keys, providers, nil)
-	return connections.NewResolver(repo, store, tokens), nil
+	tokens := connections.NewTokenSource(vaultStore, keys, providers, nil)
+	return connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
 }
 
 // newWorkerIntegrationCredentials is the credential source integration
@@ -288,7 +291,7 @@ type WriteLedgerDeps struct {
 // node or an agent tool, before it is made, so the event it causes can be
 // attributed.
 func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB}), nil
+	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())}), nil
 }
 
 // newWriteLedger is the integration write ledger over repo's database.
@@ -321,7 +324,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -340,14 +343,17 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:      d.DB,
-		Projects:   d.Projects,
-		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:    threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:   d.Temporal.Client,
-		Runs:       d.Runs,
-		TaskQueue:  v2workflow.SharedTaskQueue,
-		Pinner:     pinner,
+		Store:       d.DB,
+		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
+		Projects:    d.Projects,
+		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:     threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:    d.Temporal.Client,
+		Runs:        d.Runs,
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Pinner:      pinner,
 	}), nil
 }
 
@@ -374,6 +380,9 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
 		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
@@ -412,6 +421,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Chats:     d.Chats.Service,
@@ -535,6 +545,29 @@ type WorkerToolsFactoryDeps struct {
 	// and pool tools write through (machinePoolAdmin).
 	Logger *slog.Logger
 	Config *config.Config
+	// ChangeController runs Forge Changes for list_changes / get_change /
+	// manage_change; nil when self-hosted.
+	ChangeController tools.ChangeController
+}
+
+// ChangeControllerDeps are what NewChangeController reads.
+type ChangeControllerDeps struct {
+	DB           *db.Repo
+	ControlPlane *configv1.ControlPlaneConfig
+}
+
+// NewChangeController is nil when self-hosted: Changes live in the control
+// plane, and the tools say so.
+//
+//forge:root-only worker
+func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
+	if !ControlPlaneEndpoint(d.ControlPlane).Hosted() {
+		return nil
+	}
+	return changetools.NewInstrumented(changetools.Deps{
+		Projects:     store.NewProjectExtStore(d.DB.ORM()),
+		ControlPlane: d.ControlPlane,
+	})
 }
 
 // NewWorkerToolsFactory builds the factory.
@@ -566,6 +599,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
 		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Placement:          daemonplacement.NewRecords(repo.ORM()),
+		Workflows:          store.NewWorkflowExtStore(repo.ORM()),
 		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
@@ -601,13 +636,15 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(newMachineRegistry(repo.ORM()), store.NewMachinePoolExtStore(repo.ORM()), d.Router, registry),
+		MachineController: newMachineController(repo, d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
-		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
+		ChangeController: d.ChangeController,
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
-		ConnectionProposer: newConnectionProposer(repo, d.ConnectionVault, d.Membership),
+		ConnectionProposer: connectionproposer.New(connectionproposer.Deps{
+			Approvals: store.NewApprovalExtStore(repo.ORM()), Connections: d.ConnectionVault, Roles: d.Membership,
+		}),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -974,8 +1011,12 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil)),
-		membership: membership, policies: d.Policies}, nil
+	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(repo, nil))
+	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
+			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
+	}
+	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }
 
 func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
