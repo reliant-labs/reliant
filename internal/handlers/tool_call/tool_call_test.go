@@ -70,7 +70,7 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	}))
 
 	router := &toolexectest.Recorder{}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{ToolCallId: toolCallID}))
 	require.NoError(t, err)

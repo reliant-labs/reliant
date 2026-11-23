@@ -23,14 +23,11 @@ func TestGetRunProjectsPreNodeFailure(t *testing.T) {
 		},
 	}
 	repo := &run.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "test-user"}, nil
-		},
 		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 			return nil, nil
 		},
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, ChatViews: ownedChatViews()}))
 	resp, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "root"}))
 	require.NoError(t, err)
 	require.Empty(t, resp.Msg.Nodes, "failure happened before any node started")
@@ -44,9 +41,6 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 		},
 	}
 	repo := &run.MockRepository{
-		GetChatFunc: func(ctx context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "test-user"}, nil
-		},
 		ListRunNodeExecutionsFunc: func(_ context.Context, id string, limit int) ([]*db.StepExecution, error) {
 			require.Equal(t, "root", id)
 			require.Equal(t, rundiagnostics.RecordLimit+1, limit)
@@ -57,7 +51,7 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 			return rows, nil
 		},
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, ChatViews: ownedChatViews()}))
 	resp, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "root"}))
 	require.NoError(t, err)
 	require.True(t, resp.Msg.NodesTruncated)
@@ -65,4 +59,11 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 	require.Equal(t, "failed", resp.Msg.Nodes[0].Status)
 	require.Equal(t, "[REDACTED: credential-bearing diagnostic omitted]", resp.Msg.Nodes[0].StderrTail)
 	require.Equal(t, "failed build", resp.Msg.Nodes[0].StdoutTail)
+}
+
+// ownedChatViews reads every chat as the test user's.
+func ownedChatViews() *run.MockChatViews {
+	return &run.MockChatViews{GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		return &db.Chat{ID: id, UserID: "test-user"}, nil
+	}}
 }

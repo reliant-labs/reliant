@@ -1603,38 +1603,11 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 	return store.ListAttachedDaemonIDsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
-func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {
-	if record == nil {
-		return fmt.Errorf("project config record cannot be nil")
-	}
-	if record.ID == "" {
-		record.ID = uuid.New().String()
-	}
-	if record.ProjectID == "" {
-		return fmt.Errorf("project ID cannot be empty")
-	}
-	if record.DaemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-
-	return store.UpsertProjectConfigRecord(ctx, r.ORM(), record)
-}
-
-// GetProjectConfigRecord reads the project's whole config record, or
-// svcerr.NotFound. A caller that needs one part of it reads that
-// column instead (see store.GetProjectConfigRecord).
-func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
-}
-
 // GetProjectWorkflowsJSON reads one column of the project config record: the
 // synced .reliant/workflows. It returns svcerr.NotFound when the
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
-// GetProjectConfigRecord whenever that column is all a caller needs: the full
-// row carries every indexed skill body and can run to tens of MB.
+// store.GetProjectConfigRecord whenever that column is all a caller needs: the
+// full row carries every indexed skill body and can run to tens of MB.
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1650,16 +1623,6 @@ func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*st
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
-}
-
-// GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. It returns svcerr.NotFound when the
-// project has no record.
-func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectMCPConfigsJSON(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {

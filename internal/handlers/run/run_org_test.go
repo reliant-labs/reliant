@@ -36,11 +36,12 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 	acme := "acme"
 	chat := &db.Chat{ID: "c-1", UserID: "test-user", OrgID: &acme}
 	runs := []*db.Workflow{{ID: "w-1", ChatID: "c-1"}}
+	chatRows := &run.MockChatRows{GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: "c-1", UserID: "test-user", OrgID: &acme}, nil
+	}}
+	chatViews := &run.MockChatViews{GetChatFunc: func(context.Context, string) (*db.Chat, error) { return chat, nil }}
 	repo := &run.MockRepository{
-		GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) {
-			return &db.ChatRow{ID: "c-1", UserID: "test-user", OrgID: &acme}, nil
-		},
-		GetChatFunc:            func(context.Context, string) (*db.Chat, error) { return chat, nil },
+
 		ListRootWorkflowsFunc:  func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 		ListChildWorkflowsFunc: func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 	}
@@ -48,7 +49,7 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 	workflows := &run.MockWorkflowLoader{
 		LoadWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return runs[0], nil },
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, ChatRows: chatRows, ChatViews: chatViews, Orgs: resolver}))
 	// A request through a listener carries the membership authz decides with.
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }

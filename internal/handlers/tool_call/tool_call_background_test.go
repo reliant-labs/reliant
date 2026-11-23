@@ -69,7 +69,7 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
@@ -95,7 +95,7 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{BackgroundErr: errors.New("daemon offline")}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	_, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,

@@ -71,11 +71,9 @@ func TestGetRun_ForeignRunIsNotFound(t *testing.T) {
 		LoadWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			return &db.Workflow{ID: id, ChatID: "chat-1"}, nil
 		},
-	}, Repo: &run.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "someone-else"}, nil
-		},
-	}}))
+	}, ChatViews: &run.MockChatViews{GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		return &db.Chat{ID: id, UserID: "someone-else"}, nil
+	}}}))
 	_, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "run-1"}))
 	requireClientReads(t, err, connect.CodeNotFound)
 	require.Equal(t, "run not found", svcerr.ToConnect(err).Message())

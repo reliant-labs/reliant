@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
+	"github.com/reliant-labs/reliant/internal/store"
 	workflowpkg "github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -51,7 +52,7 @@ func setupTestApprovalService(t *testing.T) (*Service, *db.Repo) {
 
 	repo := db.NewTestRepo(t)
 	// The harness stubs Signals: these tests resolve approvals no run waits on.
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM())}))
 	return service, repo
 }
 
@@ -63,7 +64,7 @@ func setupTestApprovalServiceWithMockClient(t *testing.T) (*Service, *db.Repo, *
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
 	pauseService := workflowpkg.NewPauseService(mockClient, repo)
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Signals: pauseService}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Signals: pauseService}))
 	return service, repo, mockClient
 }
 

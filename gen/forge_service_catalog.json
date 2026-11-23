@@ -55752,6 +55752,19 @@
     },
     {
       "consumer": "Approval",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Approval",
       "field": "Connections",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.ProposalConnections",
       "methods": [],
@@ -56591,6 +56604,17 @@
     },
     {
       "consumer": "MCP",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "MCP",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -56639,6 +56663,19 @@
       ],
       "providers": [
         "JetStream"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Message",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/message.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56771,6 +56808,19 @@
       ],
       "providers": [
         "OrgPolicyAttendance"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57183,6 +57233,15 @@
     },
     {
       "consumer": "Project",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -57495,6 +57554,32 @@
     },
     {
       "consumer": "Run",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Chat",
       "methods": [],
@@ -57569,6 +57654,17 @@
       ],
       "providers": [
         "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "ProjectConfigs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.ProjectConfigs",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -58120,6 +58216,19 @@
       ],
       "providers": [
         "JetStream"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolCall",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tool_call.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -59166,6 +59275,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.MoveFacts",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.ProjectConfigs",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

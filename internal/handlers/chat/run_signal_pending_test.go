@@ -61,6 +61,8 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 		Config:    &typedconfig.Config{},
 		Repo:      repo,
 		Workflows: store.NewWorkflowExtStore(repo.ORM()),
+		ChatRows:  store.NewChatExtStore(repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
 		Chats:     chats,
 	})
 	require.NoError(t, err)

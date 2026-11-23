@@ -1079,6 +1079,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
 	})
@@ -1174,6 +1175,8 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Config:    g.Cfg,
 		Repo:      g.Database(),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Chats:     g.Chat(),
 		Orgs:      g.OrgResolver(),
 	})
@@ -1302,11 +1305,12 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1316,6 +1320,7 @@ func (g *Graph) newMessage() (*message.Service, error) {
 		Logger:  g.Log,
 		Config:  g.Cfg,
 		Repo:    g.Database(),
+		Chats:   store.NewChatExtStore(g.Database().ORM()),
 		Senders: store.NewThreadExtStore(g.Database().ORM()),
 	})
 }
@@ -1398,18 +1403,19 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
-		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
-		Purges:       projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Lookups:      store.NewProjectExtStore(o),
-		Installs:     store.NewProjectDaemonExtStore(o),
-		Detachments:  store.NewProjectDaemonDetachmentExtStore(o),
-		Ledger:       store.NewProjectOrgMoveExtStore(o),
-		Shared:       store.NewShareEventExtStore(o),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Purges:         projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
+		ProjectConfigs: store.NewProjectConfigExtStore(o),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Lookups:        store.NewProjectExtStore(o),
+		Installs:       store.NewProjectDaemonExtStore(o),
+		Detachments:    store.NewProjectDaemonDetachmentExtStore(o),
+		Ledger:         store.NewProjectOrgMoveExtStore(o),
+		Shared:         store.NewShareEventExtStore(o),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
+		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil
 		// self-hosted, where it lists them as unavailable.
 		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
@@ -1477,12 +1483,13 @@ func (g *Graph) newRepo() (*repo.Service, error) {
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Drafts:   g.Workflowdrafts(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Drafts:         g.Workflowdrafts(),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1566,6 +1573,7 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 		Config:    g.Cfg,
 		Repo:      g.Database(),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Chats:     store.NewChatExtStore(g.Database().ORM()),
 		Temporal:  g.TemporalClient().Client,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
 	})
@@ -1769,6 +1777,7 @@ func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
 		Logger:     g.Log,
 		Config:     g.Cfg,
 		Store:      g.Database(),
+		Chats:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Now:        nil, // optional — no provider
 		Attendance: g.OrgPolicyAttendance(),
 	})

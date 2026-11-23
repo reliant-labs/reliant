@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // project_machine_catalogs holds each machine's own synced project config
@@ -390,4 +391,34 @@ func MachineCatalogFromRow(row *ProjectMachineCatalog) (config.MachineCatalog, [
 	}
 	removed, err := config.ParseRemovedCatalogFiles(row.RemovedJSON)
 	return c, removed, err
+}
+
+// GetProjectMachineConfigRecord reads one machine's own snapshot of a project
+// as a config record: what a run on that machine reads its skills, memories,
+// MCP servers and config from. synced is false when the machine has never
+// synced a whole snapshot of the project (no row, or one written before the
+// row carried the config), which is not the same as having synced nothing.
+func GetProjectMachineConfigRecord(ctx context.Context, db orm.Context, projectID, daemonID string) (*core.ProjectConfigRecord, bool, error) {
+	if projectID == "" || daemonID == "" {
+		return nil, false, fmt.Errorf("project ID and daemon ID are required")
+	}
+	row, err := GetProjectMachineConfig(ctx, db, projectID, daemonID)
+	if err != nil || row == nil || !row.Synced {
+		return nil, false, err
+	}
+	return &core.ProjectConfigRecord{
+		ProjectID:            row.ProjectID,
+		DaemonID:             row.DaemonID,
+		UserConfigYAML:       row.UserConfigYAML,
+		ProjectConfigYAML:    row.ProjectConfigYAML,
+		LocalConfigYAML:      row.LocalConfigYAML,
+		GlobalMemoryMD:       row.GlobalMemoryMD,
+		ProjectMemoryMD:      row.ProjectMemoryMD,
+		MCPConfigs:           row.MCPConfigs,
+		ProjectScenariosJSON: row.ScenariosJSON,
+		ProjectSkillsJSON:    row.SkillsJSON,
+		RepoMemoriesJSON:     row.RepoMemoriesJSON,
+		RuntimeType:          row.RuntimeType,
+		PushedAt:             row.PushedAt,
+	}, true, nil
 }

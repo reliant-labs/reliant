@@ -25,6 +25,10 @@ type Deps struct {
 	Repo Repository
 	// Workflows reads the run an rpc names.
 	Workflows WorkflowLoader
+	// ChatRows and ChatViews read the chat a run belongs to (store.ChatExtStore,
+	// store.ChatsWithActivityExtStore).
+	ChatRows  ChatRows
+	ChatViews ChatViews
 	// Chats is the chat service every run rpc delegates to. Taking the chat
 	// service rather than reconstructing its dependencies is the point: a
 	// second construction path would be a second set of behaviors to keep
@@ -56,6 +60,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("run: Deps.Chats is required")
+	}
+	if d.ChatRows == nil {
+		return fmt.Errorf("run: Deps.ChatRows is required")
+	}
+	if d.ChatViews == nil {
+		return fmt.Errorf("run: Deps.ChatViews is required")
 	}
 	return nil
 }

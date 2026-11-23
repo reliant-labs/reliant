@@ -36,7 +36,7 @@ func (s *Service) runOwnedBy(ctx context.Context, userID, runID string) (*core.W
 		return nil, nil, svcerr.NotFound("run")
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, run.ChatID)
+	chat, err := s.deps.ChatViews.GetChat(ctx, run.ChatID)
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get run"))
 	}
