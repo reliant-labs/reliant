@@ -87,7 +87,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(c.h.Repo(), toolCallsOf(c.h.Repo()), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(c.h.Repo(), workspaceRowsOf(c.h.Repo()), toolCallsOf(c.h.Repo()), executor).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},

@@ -58,14 +58,17 @@ type RunRecorder interface {
 // greenfield probe included — happens inside the run, so a launch costs a
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
-	repo       Store
-	projects   projectaccess.Service
-	selections chatselection.Store
-	temporal   TemporalStarter
-	runs       RunRecorder
-	threads    ThreadCreator
-	taskQueue  TaskQueue
-	pinner     ChatPinner
+	repo        Store
+	workflows   WorkflowLoader
+	worktrees   WorktreeReader
+	projectRows ProjectReader
+	projects    projectaccess.Service
+	selections  chatselection.Store
+	temporal    TemporalStarter
+	runs        RunRecorder
+	threads     ThreadCreator
+	taskQueue   TaskQueue
+	pinner      ChatPinner
 	// sources reads an org-accounts-only launch's sources
 	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
 	sources orgSources
@@ -113,14 +116,17 @@ type ChatPinner interface {
 // New builds a launcher over its Deps.
 func New(deps Deps) *Launcher {
 	return &Launcher{
-		repo:       deps.Store,
-		projects:   deps.Projects,
-		selections: deps.Selections,
-		temporal:   deps.Temporal,
-		runs:       deps.Runs,
-		threads:    deps.Threads,
-		taskQueue:  deps.TaskQueue,
-		pinner:     deps.Pinner,
+		repo:        deps.Store,
+		workflows:   deps.Workflows,
+		worktrees:   deps.Worktrees,
+		projectRows: deps.ProjectRows,
+		projects:    deps.Projects,
+		selections:  deps.Selections,
+		temporal:    deps.Temporal,
+		runs:        deps.Runs,
+		threads:     deps.Threads,
+		taskQueue:   deps.TaskQueue,
+		pinner:      deps.Pinner,
 	}
 }
 
@@ -399,7 +405,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// The main checkout carries no daemon and is where every no-machine chat
 	// binds (research/NO_MACHINE_CHATS.md).
 	if spec.NoMachine && spec.WorktreeID != nil && *spec.WorktreeID != "" {
-		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
+		if wt, wtErr := l.worktrees.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
 			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
 		}
 	}
@@ -408,7 +414,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// StartChat refuses this first, naming the machine; this covers every
 	// other caller of Launch.
 	if spec.DaemonID != "" {
-		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil {
+		if wt, wtErr := l.worktrees.GetWorktree(ctx, *worktreeID); wtErr == nil {
 			if _, conflict := daemonplacement.WorkspaceMachineConflict(wt, spec.DaemonID); conflict {
 				return nil, &ValidationError{
 					Kind:   ValidationFailedPrecondition,
@@ -698,7 +704,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if workflowID == "" {
 		return nil, &ValidationError{Kind: ValidationFailedPrecondition, Reason: "chat has no root workflow"}
 	}
-	root, err := l.repo.GetWorkflow(ctx, workflowID)
+	root, err := l.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || root == nil {
 		return nil, &InternalError{Reason: "failed to check workflow status", Err: err}
 	}
@@ -803,7 +809,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)
 		}
-		curRoot, err := l.repo.GetWorkflow(txCtx, workflowID)
+		curRoot, err := l.workflows.LoadWorkflow(txCtx, workflowID)
 		if err != nil || curRoot == nil {
 			return fmt.Errorf("failed to reload workflow: %w", err)
 		}
@@ -1052,7 +1058,7 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	}
 
 	if workflowID := chat.MainThreadID(); workflowID != "" {
-		if root, err := l.repo.GetWorkflow(ctx, workflowID); err == nil && root != nil && root.Status == db.Pending() {
+		if root, err := l.workflows.LoadWorkflow(ctx, workflowID); err == nil && root != nil && root.Status == db.Pending() {
 			spec.ChatID = chat.ID
 			spec.ProjectID = chat.ProjectID
 			spec.WorktreeID = nil

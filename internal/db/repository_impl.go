@@ -519,7 +519,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			DisplayStyle: displayStyle,
 		}
 		if attributed {
-			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.SenderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
+			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.senderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
 		}
 
 		updateDataJSON, err := updateData.Marshal()
@@ -3144,10 +3144,6 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
-}
-
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
@@ -3665,21 +3661,4 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
-// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
-func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
-	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
-}
-
-// RefusePauseNotice records that a no-org-account pause's email was refused for good
-// (store.RefusePauseNotice).
-func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
-func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
 }

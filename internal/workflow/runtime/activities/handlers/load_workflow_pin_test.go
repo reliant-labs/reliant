@@ -70,7 +70,7 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 		State: db.ChatStateIdle, ActiveDaemonID: &cicd,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	root, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "release"})
 	require.NoError(t, err)

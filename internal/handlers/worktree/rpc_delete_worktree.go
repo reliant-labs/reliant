@@ -30,7 +30,7 @@ func (s *Service) DeleteWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -40,7 +40,7 @@ func (s *Service) DeleteWorktree(
 		return nil, svcerr.FailedPrecondition("cannot delete the main project worktree")
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
+	project, err := s.getProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to get project for worktree cleanup", "error", err)
 	}

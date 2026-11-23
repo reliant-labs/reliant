@@ -231,7 +231,7 @@ func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) 
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	starter := &fakeStarter{}
-	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
+	launcher := New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
 		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", Messages: userSeed("go"),
 	})

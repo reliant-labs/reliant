@@ -5,7 +5,7 @@
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS request/reply responder; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS request/reply responder, an outbound I/O adapter the gateway bootstrap starts over its own *nats.Conn
 //forge:exclude-contract: gateway-side responder for the pull-based daemon status NATS request
 package daemonquery
 

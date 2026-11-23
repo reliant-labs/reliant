@@ -46,7 +46,7 @@ func TestArchiveWorktreeChat_WaitsForADeliveryHoldingTheRunControlLock(t *testin
 		record("cancel")
 		return nil
 	}}
-	svc := NewTestWorktree(t, WithWorktreeDeps(Deps{Repo: repo, Temporal: temporal}))
+	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: repo, Temporal: temporal})))
 
 	// The delivery has read the chat as live and holds the lock while it
 	// starts the chat's run.

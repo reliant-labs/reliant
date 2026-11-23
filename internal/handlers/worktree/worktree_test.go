@@ -49,7 +49,7 @@ func newWorktreeService(t testing.TB, repo Repository, router Router, settler ..
 	} else {
 		deps.Rows = &MockRows{}
 	}
-	svc, err := New(deps)
+	svc, err := New(WithReadRoles(deps))
 	require.NoError(t, err)
 	return svc
 }

@@ -54,6 +54,8 @@ type APIHTTPRoutesDeps struct {
 	Auth *UserAuth
 	// Repo is the database. Required.
 	Repo APIHTTPRoutesStore
+	// Placement places the terminal websocket's terminal. Required.
+	Placement TerminalPlacement
 	// Router reaches the user's daemons: the terminal websocket and the
 	// connector MCP endpoint are a route to one. Required.
 	Router toolexec.DaemonRouter
@@ -103,6 +105,29 @@ type APIHTTPRoutesDeps struct {
 	EnsureProjectForApp http.Handler
 }
 
+// TerminalPlacement is what the terminal websocket reads, besides the chat, to
+// place a terminal: its workspace, project, the project's installs and the
+// machine (daemonplacement.Records in production). It checks no owner: the
+// websocket checks each row against the caller.
+type TerminalPlacement interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// terminalCheckouts is the chat from Repo beside TerminalPlacement.
+type terminalCheckouts struct {
+	chats interface {
+		GetChat(ctx context.Context, id string) (*db.Chat, error)
+	}
+	TerminalPlacement
+}
+
+func (c terminalCheckouts) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return c.chats.GetChat(ctx, id)
+}
+
 // APIHTTPRoutesStore is what the routes read from the database. The routes
 // only forward it: the attachment bytes to the attachment handler, the
 // working-directory classification to the terminal websocket, and the daemon
@@ -110,19 +135,16 @@ type APIHTTPRoutesDeps struct {
 type APIHTTPRoutesStore interface {
 	attachment.ContentReader
 	mcpserver.AttachmentReader
-	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	// GetChat is the terminal websocket's chat; with TerminalPlacement it
+	// is terminal.WithTerminalCheckouts.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
 func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
-	if deps.Auth == nil || deps.Repo == nil || deps.Router == nil || deps.OAuth == nil ||
+	if deps.Auth == nil || deps.Repo == nil || deps.Placement == nil || deps.Router == nil || deps.OAuth == nil ||
 		deps.Inbound == nil || deps.Grants == nil || deps.Tokens == nil {
-		return nil, fmt.Errorf("api http routes: Auth, Repo, Router, OAuth, Inbound, Grants and Tokens are required")
+		return nil, fmt.Errorf("api http routes: Auth, Repo, Placement, Router, OAuth, Inbound, Grants and Tokens are required")
 	}
 	settings := deps.Auth.Settings()
 
@@ -135,7 +157,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// the listener's drain ends it (with a reconnect close code) when it
 	// begins.
 	handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Repo))))
+		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(terminalCheckouts{chats: deps.Repo, TerminalPlacement: deps.Placement}))))
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
 	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(deps.Repo, deps.Auth.AuthenticateHTTP))
 	deps.OAuth.Register(handle)

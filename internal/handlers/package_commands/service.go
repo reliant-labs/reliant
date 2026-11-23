@@ -26,10 +26,12 @@ type Deps struct {
 
 	// Router carries command discovery to the user's daemon.
 	Router Router
-	// Repo resolves worktrees and stores command favorites.
+	// Repo reads a request's chat, the user's machines and command favorites.
 	Repo Repository
 	// Favorites stores command favorites.
 	Favorites Favorites
+	// Placement resolves worktrees and the machine a command runs on.
+	Placement Placement
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -52,6 +54,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Favorites == nil {
 		return fmt.Errorf("package_commands: Deps.Favorites is required")
+	}
+	if d.Placement == nil {
+		return fmt.Errorf("package_commands: Deps.Placement is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("package_commands: Deps.Projects is required")
@@ -97,3 +102,14 @@ func (s *Service) RegisterHTTP(_ *http.ServeMux, _ func(http.Handler) http.Handl
 
 // Ensure the generated protobuf package import remains referenced even before methods exist.
 var _ = pb.File_reliant_v1_package_commands_proto
+
+// workspaces is daemonplacement.WorkspaceReader: the chat from Repo, the rest
+// from Placement.
+func (s *Service) workspaces() workspaceReader {
+	return workspaceReader{Repository: s.deps.Repo, Placement: s.deps.Placement}
+}
+
+type workspaceReader struct {
+	Repository
+	Placement
+}

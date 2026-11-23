@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Built by hand, by internal/app's NewRunLifecycle provider
-// (providers_worker.go) and the chat handler: never a node compose.go
-// constructs from Deps.
+// forge:provided because it is built twice: by internal/app's NewRunLifecycle
+// provider (providers_worker.go), and by the chat handler from the chat's own
+// Deps.
 //
 //forge:provided
 //forge:exclude-contract: a concrete lifecycle service built by hand with a plain Deps; its callers take the narrow roles they need, not a Service interface
@@ -31,6 +31,9 @@ var ErrNoWorkflow = svcerr.FailedPrecondition("chat has no workflow")
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
+	// GetWorkflow is workflow.WokenStatusStore's read (StatusBeforeWake,
+	// MarkWokenRunActive take the repo whole); the service's own reads go
+	// through Deps.Workflows.
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)

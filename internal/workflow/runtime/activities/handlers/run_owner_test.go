@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -44,7 +45,7 @@ func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
 
 	parentID := uuid.NewString()
 	parentOwner := "parent-owner"
-	svc := threads.New(threads.Deps{Repo: h.Repo()})
+	svc := threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})
 	_, _, _, err := svc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: parentID, ChatID: chatID, WorkflowName: "builtin://agent",
@@ -85,7 +86,7 @@ func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: h.Repo()}), h.Repo(), workflowRunsOf(h.Repo()))
+	activity := NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), h.Repo(), workflowRunsOf(h.Repo()))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
