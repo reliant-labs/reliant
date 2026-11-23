@@ -16,7 +16,6 @@ import { BookOpen, CircleHelp, Compass, Keyboard, ListChecks } from "lucide-reac
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
 import { useSetupGuideRevivable } from "@/components/Onboarding/OnboardingChecklist";
-import { getTourStorage } from "@/components/Onboarding/tourShell";
 import { DOCS_ORIGIN } from "@/lib/learnLinks";
 import { settingsPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
@@ -43,11 +42,7 @@ export function HelpMenu({
           label: "Docs",
           icon: <BookOpen className="size-4" />,
           hint: externalMark,
-          onClick: () => {
-            window.open(`${DOCS_ORIGIN}/`, "_blank", "noopener,noreferrer");
-            // The Setup Guide's "Read the docs", earned the same way from here.
-            if (getTourStorage().kind === "settings") void useOnboardingChecklistStore.getState().markComplete("read-docs");
-          },
+          onClick: () => void window.open(`${DOCS_ORIGIN}/`, "_blank", "noopener,noreferrer"),
           testId: "help-menu-docs",
         },
         {

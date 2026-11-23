@@ -51,7 +51,6 @@ import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { HelpMenu } from "./sidebar/HelpMenu";
-import { OnboardingChecklist } from "../Onboarding/OnboardingChecklist";
 import type { RunsSearch } from "../../routeSchemas";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention } from "../../store/chatNavigationStore";
@@ -2104,8 +2103,7 @@ function SidebarComponent({
       />
     ),
     "update-button": () => <SidebarUpdateButton />,
-    // The Setup Guide docked in the footer (draws nothing once it is done or dismissed), and Help beside Settings.
-    "setup-guide": () => <OnboardingChecklist onNavigate={go} onOpenTours={onOpenTours} />,
+    // Help, beside Settings.
     help: () => <HelpMenu onNavigate={go} onOpenTours={onOpenTours} />,
   };
 

@@ -79,8 +79,8 @@ describe("the hybrid nav's shape", () => {
     }
   });
 
-  it("has the Setup Guide, Usage & billing, Help and Settings in the footer, and no footer Inbox", () => {
-    expect(hybridNav.footer.map((item) => item.id)).toEqual(["slot-setup-guide", "usage-billing", "slot-help", "settings"]);
+  it("has Usage & billing, Help and Settings in the footer, and no footer Inbox", () => {
+    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "slot-help", "settings"]);
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 

@@ -1,14 +1,21 @@
 /**
  * Onboarding Checklist Store
  *
- * Achievement-based onboarding that tracks real user actions.
+ * The Setup Guide's state: which items are done, and whether the guide is
+ * open, collapsed or dismissed. Every item completes on a real signal (the
+ * list and its signals: Onboarding/checklistItems.ts), read from the query
+ * cache the rest of the app already fills, never from a click on the guide.
  * The guided-tour wizard lives in tourStore.ts; the two stores coordinate
  * for the "take-product-tour" achievement.
+ *
+ * Retired ids (the chat-only guide's) are migrated as they load
+ * (`migrateChecklistIds`), and `checklist_step_completed` fires once per item
+ * when its signal is first met, with the item's stable id.
  *
  * "add-api-key" specifically: like every other item here it is STICKY —
  * once earned it stays in `completedItems` even if the user later removes
  * their only key — consistent with the rest of the checklist (e.g.
- * "create-workspace" doesn't un-complete when the workspace is deleted) and
+ * "add-repo" doesn't un-complete when the project is deleted) and
  * with what `completedItems` already persists to the settings table. What
  * changed is not stickiness but WHERE the "earned" signal comes from: it is
  * now derived by reading `providerStatusesKey()` — the same React Query
@@ -19,17 +26,19 @@
  */
 
 import { create } from "zustand";
-import { fetchMcpServers } from "../hooks/mcp-queries";
 import { logger } from "../lib/logger";
 import {
   readSetting,
   upsertStringSetting,
 } from "../lib/settingsPersistence";
+import { CHECKLIST_SETTINGS_KEYS } from "../components/Onboarding/constants";
 import {
-  CHECKLIST_ITEMS,
-  CHECKLIST_SETTINGS_KEYS,
-  REQUIRED_ITEMS,
-} from "../components/Onboarding/constants";
+  activeChecklistItems,
+  isChecklistItemId,
+  LEGACY_GUIDE_FINISHED,
+  migrateChecklistIds,
+} from "../components/Onboarding/checklistItems";
+import { trackEvent } from "../lib/analytics";
 import type {
   ChecklistItemId,
   ChecklistPanelState,
@@ -45,15 +54,28 @@ import {
   providerStatusesKey,
 } from "../hooks/settings-queries";
 import { hashKey, partialMatchKey } from "@tanstack/react-query";
-import { fetchProjectPresets } from "../hooks/preset-queries";
-import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import { getCachedWorkflows, workflowListFromProto } from "../hooks/workflow-queries";
 import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
 import type { ListWorkflowsResponse } from "../gen/reliant/v1/workflow_pb";
 import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
-import { getCachedWorktrees, isWorktreeQueryKey } from "../hooks/worktree-queries";
+import { getOrgScope, whenOrgScopeReady } from "../lib/orgScope";
+import { cachedDaemonList, DAEMON_LIST_QUERY_KEY, fetchDaemonList } from "../hooks/daemon-registry-queries";
+import { hasUsableDaemonForOnboarding } from "../components/OnboardingFlow/usableDaemon";
+import type { ListDaemonsResponse } from "../gen/reliant/v1/daemon_registry_pb";
+import { projectServiceKeys } from "../hooks/project-service-hooks_gen";
+import type { ListProjectsWithAppsResponse } from "../gen/reliant/v1/project_pb";
+import { catalogFromResponse, catalogHasDeployedApp as catalogHasApp, catalogHasOwnRepo } from "../services/projects/catalog";
+import {
+  listMembers,
+  memberKeys,
+  orgMembershipAvailable,
+  seatsShowATeam,
+  type MemberPage,
+  type OrgInvitation,
+} from "../services/controlPlane/members";
+import type { JourneyRecord } from "./tourStore";
 
 /**
  * Whether an outbound RPC from this store can carry a credential.
@@ -83,7 +105,7 @@ interface OnboardingChecklistState {
   /** Whether the welcome modal has been shown */
   welcomeShown: boolean;
 
-  /** The Setup Guide in the nav footer: open, closed to its row, or dismissed */
+  /** The floating Setup Guide: open, collapsed to its pill, or dismissed */
   panelState: ChecklistPanelState;
 
   /** Whether the initial state has been loaded from DB */
@@ -94,19 +116,16 @@ interface OnboardingChecklistState {
 
   // ─── Derived ────────────────────────────────────────────────────────────
 
-  /** Number of required items completed */
-  requiredCompleted: () => number;
-
-  /** Total number of required items */
-  requiredTotal: () => number;
-
-  /** Total items completed (required + bonus) */
+  /** How many of the items that apply here are done */
   totalCompleted: () => number;
 
-  /** Whether all required items are done */
-  allRequiredComplete: () => boolean;
+  /** How many items apply here (activeChecklistItems) */
+  totalItems: () => number;
 
-  /** Completion percentage (all items) */
+  /** Whether every item that applies here is done: the guide retires */
+  allComplete: () => boolean;
+
+  /** Completion percentage of the items that apply here */
   completionPercentage: () => number;
 
   // ─── Checklist Actions ─────────────────────────────────────────────────
@@ -154,13 +173,26 @@ function serializeItems(items: Set<ChecklistItemId>): string {
   return JSON.stringify(Array.from(items));
 }
 
-function deserializeItems(json: string): Set<ChecklistItemId> {
+/** A stored list's raw ids: current ones and retired ones (migrateChecklistIds reads both). */
+function deserializeIds(json: string): string[] {
   try {
-    const parsed = JSON.parse(json) as ChecklistItemId[];
-    return new Set(parsed);
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
   } catch {
-    return new Set();
+    return [];
   }
+}
+
+/** One `checklist_step_completed` per item, when its signal is first met (the id is stable across releases). */
+function trackCompleted(itemId: ChecklistItemId, done: Set<ChecklistItemId>): void {
+  const item = activeChecklistItems().find((i) => i.id === itemId);
+  if (!item) return;
+  trackEvent("checklist_step_completed", {
+    stepId: item.id,
+    stepName: item.title,
+    stepsCompleted: activeChecklistItems().filter((i) => done.has(i.id)).length,
+    totalSteps: activeChecklistItems().length,
+  });
 }
 
 // ─── Local mirror ─────────────────────────────────────────────────────────────
@@ -214,6 +246,38 @@ function isPanelState(value: string | null): value is ChecklistPanelState {
   return value === "collapsed" || value === "expanded" || value === "dismissed";
 }
 
+// ─── Signals ──────────────────────────────────────────────────────────────────
+// Each item's completion, read from what the app already caches.
+
+/** A chat that ran a workflow other than the default agent. */
+function chatsRanAWorkflow(chats: ReadonlyArray<{ workflowName?: string }>): boolean {
+  const isDefault = (name?: string) => !name || name === "agent" || name === "builtin://agent";
+  return chats.some((chat) => !isDefault(chat.workflowName));
+}
+
+/** Every project catalog (ListProjectsWithApps answer) in the cache, whichever org's. */
+function cachedCatalogs(): ListProjectsWithAppsResponse[] {
+  return queryClient
+    .getQueriesData<ListProjectsWithAppsResponse>({ queryKey: projectServiceKeys.listProjectsWithApps.all })
+    .flatMap(([, data]) => (data?.projects ? [data] : []));
+}
+
+function catalogHasRepo(response: ListProjectsWithAppsResponse): boolean {
+  return catalogHasOwnRepo(catalogFromResponse(response));
+}
+
+function catalogHasDeployedApp(response: ListProjectsWithAppsResponse): boolean {
+  return catalogHasApp(catalogFromResponse(response));
+}
+
+/** The org's seat count, read once while "invite-teammate" is outstanding (under memberKeys, so an org switch drops it). */
+const TEAM_SEATS_KEY = (orgId: string) => [...memberKeys.all, orgId, "seats"] as const;
+
+/** A tour journey finished with Finish, at its current version or an older one. Exit tour and a dismissed picker are not. */
+function journeyCompleted(record: JourneyRecord): boolean {
+  return record.current === "completed" || record.completedOlder;
+}
+
 // Bumped by reset() (an identity change: authStore): a load or detection
 // started for the previous user drops its answer instead of installing that
 // user's progress, and re-mirroring it, for the next one.
@@ -231,24 +295,22 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     // ─── Derived ──────────────────────────────────────────────────────────
 
-    requiredCompleted: () => {
+    totalCompleted: () => {
       const { completedItems } = get();
-      return REQUIRED_ITEMS.filter((item) => completedItems.has(item.id)).length;
+      return activeChecklistItems().filter((item) => completedItems.has(item.id)).length;
     },
 
-    requiredTotal: () => REQUIRED_ITEMS.length,
+    totalItems: () => activeChecklistItems().length,
 
-    totalCompleted: () => get().completedItems.size,
-
-    allRequiredComplete: () => {
+    allComplete: () => {
       const { completedItems } = get();
-      return REQUIRED_ITEMS.every((item) => completedItems.has(item.id));
+      return activeChecklistItems().every((item) => completedItems.has(item.id));
     },
 
     completionPercentage: () => {
-      const total = CHECKLIST_ITEMS.length;
+      const total = get().totalItems();
       if (total === 0) return 100;
-      return Math.round((get().completedItems.size / total) * 100);
+      return Math.round((get().totalCompleted() / total) * 100);
     },
 
     // ─── Checklist Actions ────────────────────────────────────────────────
@@ -271,17 +333,28 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
           : null;
       const localPanelRaw = readLocal(LOCAL_KEYS.PANEL_STATE);
       const localPanel = isPanelState(localPanelRaw) ? localPanelRaw : null;
-      const panelState = resolvePanelState(remotePanel, localPanel);
 
       // Union the two records. Completions are monotonic — an item once earned
       // is never un-earned — so merging is always safe, and it stops a failed
-      // read from resetting the user's progress to zero.
-      const completedItems = new Set<ChecklistItemId>([
-        ...(completedRead.status === "found"
-          ? deserializeItems(completedRead.value)
-          : []),
-        ...deserializeItems(readLocal(LOCAL_KEYS.COMPLETED_ITEMS) ?? "[]"),
-      ]);
+      // read from resetting the user's progress to zero. Retired ids become
+      // the ids that replaced them (checklistItems.ts LEGACY_CHECKLIST_ITEMS).
+      const remoteIds = completedRead.status === "found" ? deserializeIds(completedRead.value) : null;
+      const localIds = deserializeIds(readLocal(LOCAL_KEYS.COMPLETED_ITEMS) ?? "[]");
+      const storedIds = [...(remoteIds ?? []), ...localIds];
+      const completedItems = migrateChecklistIds(storedIds);
+      const migrated = storedIds.some((id) => !isChecklistItemId(id));
+
+      // Someone who finished the old, chat-only guide saw it retire. The new
+      // one has items they never had, but it does not reappear on every page
+      // unasked: it stays put away, and Help › Show setup guide brings it back.
+      // Read from the system of record when it answered: once migrated it holds
+      // no old ids, so a stale mirror on another device cannot put a guide the
+      // person revived away again.
+      const finishedOldGuide = (ids: string[]) => LEGACY_GUIDE_FINISHED.every((id) => ids.includes(id));
+      let panelState = resolvePanelState(remotePanel, localPanel);
+      if (panelState !== "dismissed" && finishedOldGuide(remoteIds ?? localIds)) {
+        panelState = "dismissed";
+      }
 
       const welcomeShown =
         (welcomeRead.status === "found" && welcomeRead.value === "true") ||
@@ -290,8 +363,15 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // Re-mirror the resolved answer so the next boot is decidable offline and
       // so a dismissal made on another device is honored on this one.
       writeLocal(LOCAL_KEYS.PANEL_STATE, panelState);
-      if (completedItems.size > 0) {
+      if (completedItems.size > 0 || migrated) {
         writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serializeItems(completedItems));
+      }
+      // The settings row is rewritten in current ids once, so the next load
+      // (on any device) has nothing to migrate.
+      if (migrated) {
+        void upsertStringSetting(CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS, serializeItems(completedItems)).catch(() => {
+          /* best-effort; the next load migrates again */
+        });
       }
 
       // Heal the backend when this device knows something it doesn't. Without
@@ -322,6 +402,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       const newItems = new Set(completedItems);
       newItems.add(itemId);
       set({ completedItems: newItems });
+      trackCompleted(itemId, newItems);
       // A journey step can wait on this (advanceOn: { kind: "event",
       // event: "checklist:itemCompleted" }); free when none is listening.
       tourEvents.emit("checklist:itemCompleted", { item: itemId });
@@ -378,112 +459,78 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       const startedIn = generation;
       const { completedItems } = get();
       const newItems = new Set(completedItems);
-      let changed = false;
+      const found = (id: ChecklistItemId, met: boolean) => {
+        if (met && !newItems.has(id)) newItems.add(id);
+      };
 
       const projectId = useProjectStore.getState().currentProject?.id;
 
-      // 1. API key — read through the shared React Query cache (providerStatusesKey())
+      // A machine: the daemon list the shell polls (one shared entry). Read it
+      // once if nothing has yet; a failed read leaves the item for later.
+      if (!newItems.has("connect-machine") && hasSession()) {
+        try {
+          const daemons = cachedDaemonList(queryClient) ?? (await fetchDaemonList(queryClient));
+          found("connect-machine", hasUsableDaemonForOnboarding(daemons));
+        } catch {
+          // Fail open
+        }
+      }
+
+      // Your AI — read through the shared React Query cache (providerStatusesKey())
       // rather than calling the API directly, so this and every other consumer of
       // "is a provider configured?" agree on one in-flight request and one cached answer.
       if (!newItems.has("add-api-key") && hasSession()) {
         try {
           const { providers } = await fetchProviderStatuses(10_000);
-          if (hasAnyConfiguredProvider(providers)) {
-            newItems.add("add-api-key");
-            changed = true;
-          }
+          found("add-api-key", hasAnyConfiguredProvider(providers));
         } catch {
           // Fail open
         }
       }
 
-      // 2. Start a chat
-      if (!newItems.has("start-chat")) {
-        const chats = getCachedChatList(projectId);
-        if (chats.length > 0) {
-          newItems.add("start-chat");
-          changed = true;
-        }
+      const chats = getCachedChatList(projectId);
+      found("start-chat", chats.length > 0);
+
+      // A repository and a deployed app: whatever project catalog the shell read.
+      for (const response of cachedCatalogs()) {
+        found("add-repo", catalogHasRepo(response));
+        found("deploy-app", catalogHasDeployedApp(response));
       }
 
-      // 3. Use a custom workflow
-      if (!newItems.has("use-custom-workflow")) {
-        const chats = getCachedChatList(projectId);
-        const isDefaultWorkflow = (name?: string) =>
-          !name || name === "" || name === "agent" || name === "builtin://agent";
-        const usedCustomWorkflow = chats.some(
-          (chat) => !isDefaultWorkflow(chat.workflowName),
-        );
-        if (usedCustomWorkflow) {
-          newItems.add("use-custom-workflow");
-          changed = true;
-        }
-      }
+      // A workflow: a chat ran one, or the person has one of their own.
+      found("run-workflow", chatsRanAWorkflow(chats) || getCachedWorkflows().some((w) => w.source === "user"));
 
-      // 4. Create a workflow
-      if (!newItems.has("create-workflow") && projectId) {
+      // A teammate: the tab's org's seats, read once the org is known, while it
+      // is outstanding (the Members page refreshes the cache entries the
+      // subscription below watches).
+      if (!newItems.has("invite-teammate") && orgMembershipAvailable && hasSession()) {
         try {
-          if (getCachedWorkflows().some((w) => w.source === "user")) {
-            newItems.add("create-workflow");
-            changed = true;
-          }
+          const scope = getOrgScope();
+          const { orgId } = scope.ready ? scope : await whenOrgScopeReady();
+          if (!orgId) throw new Error("no org");
+          const page = await queryClient.fetchQuery({
+            queryKey: TEAM_SEATS_KEY(orgId),
+            queryFn: () => listMembers(orgId, "", 1),
+            staleTime: 60_000,
+          });
+          found("invite-teammate", seatsShowATeam(page.seats));
         } catch {
-          // Fail open
+          // Fail open (a self-hosted server, a member who may not read the roster)
         }
       }
 
-      // 5. Take product tour — read from tour store
-      if (!newItems.has("take-product-tour")) {
-        const { useTourStore } = await import("./tourStore");
-        if (useTourStore.getState().hasCompletedOnboarding) {
-          newItems.add("take-product-tour");
-          changed = true;
-        }
-      }
-
-      // 6. Create a workspace
-      if (!newItems.has("create-workspace")) {
-        const worktrees = getCachedWorktrees();
-        const hasUserWorktree = worktrees.some(
-          (w) => !w.is_main && !w.deleted_at,
-        );
-        if (hasUserWorktree) {
-          newItems.add("create-workspace");
-          changed = true;
-        }
-      }
-
-      // 7. Install an MCP server
-      if (!newItems.has("install-mcp") && projectId) {
-        try {
-          const servers = await fetchMcpServers(queryClient, projectId);
-          if (servers.length > 0) {
-            newItems.add("install-mcp");
-            changed = true;
-          }
-        } catch {
-          // Fail open
-        }
-      }
-
-      // 8. Create a preset
-      if (!newItems.has("create-preset") && projectId) {
-        try {
-          const presets = await fetchProjectPresets(projectId);
-          if (presets.some((p) => p.source === "user")) {
-            newItems.add("create-preset");
-            changed = true;
-          }
-        } catch {
-          // Fail open
-        }
-      }
-
-      // 9. Read docs — manually marked only
+      // The tour: a journey completed (Finish), at any version.
+      const { useTourStore } = await import("./tourStore");
+      found("take-product-tour", Object.values(useTourStore.getState().journeys ?? {}).some(journeyCompleted));
 
       if (startedIn !== generation) return;
-      if (changed) {
+      const added = [...newItems].filter((id) => !completedItems.has(id));
+      if (added.length > 0) {
         set({ completedItems: newItems });
+        for (const id of added) {
+          trackCompleted(id, newItems);
+          tourEvents.emit("checklist:itemCompleted", { item: id });
+        }
         const serialized = serializeItems(newItems);
         writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serialized);
         await upsertStringSetting(
@@ -498,15 +545,14 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     subscribeToStoreChanges: () => {
       const unsubscribers: (() => void)[] = [];
+      const done = (id: ChecklistItemId) => get().completedItems.has(id);
+      const cache = queryClient.getQueryCache();
 
       // Chats live in the React Query cache (the single source of truth), so
       // subscribe to the query cache and re-read the current project's list on
       // each change instead of subscribing to the Zustand store.
-      const currentChatList = () =>
-        getCachedChatList(useProjectStore.getState().currentProject?.id);
-      let prevChatCount = currentChatList().length;
       unsubscribers.push(
-        queryClient.getQueryCache().subscribe((event) => {
+        cache.subscribe((event) => {
           // Only react to chat-list cache mutations.
           if (
             event.query.queryKey[0] !== chatKeys.all[0] ||
@@ -514,63 +560,69 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
           ) {
             return;
           }
-          const chats = currentChatList();
-          if (chats.length > prevChatCount) {
-            get().markComplete("start-chat");
-          }
-          prevChatCount = chats.length;
-
-          if (!get().completedItems.has("use-custom-workflow")) {
-            const isDefault = (name?: string) =>
-              !name || name === "" || name === "agent" || name === "builtin://agent";
-            const usedCustom = chats.some(
-              (chat) => !isDefault(chat.workflowName),
-            );
-            if (usedCustom) {
-              get().markComplete("use-custom-workflow");
-            }
-          }
+          const chats = getCachedChatList(useProjectStore.getState().currentProject?.id);
+          if (!done("start-chat") && chats.length > 0) void get().markComplete("start-chat");
+          if (!done("run-workflow") && chatsRanAWorkflow(chats)) void get().markComplete("run-workflow");
         }),
       );
 
+      // "run-workflow" also derives from any workflow list the app reads (the
+      // ListWorkflows entries under workflowServiceKeys): a workflow of your own.
       unsubscribers.push(
-        queryClient.getQueryCache().subscribe((event) => {
-          if (get().completedItems.has("create-workspace")) return;
-          if (!isWorktreeQueryKey(event.query.queryKey)) return;
-          const hasUserWorktree = getCachedWorktrees().some(
-            (w) => !w.is_main && !w.deleted_at,
-          );
-          if (hasUserWorktree) {
-            get().markComplete("create-workspace");
-          }
-        }),
-      );
-
-      // "create-workflow" derives from any workflow list the app reads (the
-      // ListWorkflows entries under workflowServiceKeys).
-      unsubscribers.push(
-        queryClient.getQueryCache().subscribe((event) => {
-          if (get().completedItems.has("create-workflow")) return;
+        cache.subscribe((event) => {
+          if (done("run-workflow")) return;
           if (!partialMatchKey(event.query.queryKey, workflowServiceKeys.all)) return;
           const data = event.query.state.data as Partial<ListWorkflowsResponse> | undefined;
           if (!Array.isArray(data?.workflows)) return;
           const { workflows } = workflowListFromProto(data as ListWorkflowsResponse);
           if (workflows.some((w) => w.source === "user")) {
-            get().markComplete("create-workflow");
+            void get().markComplete("run-workflow");
           }
         }),
       );
 
-      // "create-preset" derives from any preset read the app makes (the lists
-      // under presetServiceKeys hold PresetInfo rows with their source).
+      // "connect-machine": the one daemon list (DAEMON_LIST_QUERY_KEY), as it is polled.
+      const daemonListHash = hashKey(DAEMON_LIST_QUERY_KEY);
       unsubscribers.push(
-        queryClient.getQueryCache().subscribe((event) => {
-          if (get().completedItems.has("create-preset")) return;
-          if (!partialMatchKey(event.query.queryKey, presetServiceKeys.all)) return;
-          const presets = (event.query.state.data as { presets?: unknown } | undefined)?.presets;
-          if (Array.isArray(presets) && presets.some((p: { source?: string }) => p.source === "user")) {
-            get().markComplete("create-preset");
-          }
+        cache.subscribe((event) => {
+          if (done("connect-machine")) return;
+          if (event.query.queryHash !== daemonListHash) return;
+          const daemons = (event.query.state.data as ListDaemonsResponse | undefined)?.daemons;
+          if (daemons && hasUsableDaemonForOnboarding(daemons)) void get().markComplete("connect-machine");
+        }),
+      );
+
+      // "add-repo" and "deploy-app": the project catalog (ListProjectsWithApps), whichever org's.
+      unsubscribers.push(
+        cache.subscribe((event) => {
+          if (done("add-repo") && done("deploy-app")) return;
+          if (!partialMatchKey(event.query.queryKey, projectServiceKeys.listProjectsWithApps.all)) return;
+          const response = event.query.state.data as ListProjectsWithAppsResponse | undefined;
+          if (!response?.projects) return;
+          if (!done("add-repo") && catalogHasRepo(response)) void get().markComplete("add-repo");
+          if (!done("deploy-app") && catalogHasDeployedApp(response)) void get().markComplete("deploy-app");
+        }),
+      );
+
+      // "invite-teammate": the org's roster (its seat count) or its invitations,
+      // as the Members page and the read above leave them.
+      unsubscribers.push(
+        cache.subscribe((event) => {
+          if (done("invite-teammate")) return;
+          const key = event.query.queryKey;
+          if (key[0] !== memberKeys.all[0]) return;
+          const data = event.query.state.data as
+            | MemberPage
+            | { pages?: MemberPage[] }
+            | OrgInvitation[]
+            | undefined;
+          if (!data) return;
+          const team = Array.isArray(data)
+            ? data.some((invitation) => invitation.status === "pending")
+            : "seats" in data
+              ? seatsShowATeam(data.seats)
+              : !!data.pages?.[0] && seatsShowATeam(data.pages[0].seats);
+          if (team) void get().markComplete("invite-teammate");
         }),
       );
 

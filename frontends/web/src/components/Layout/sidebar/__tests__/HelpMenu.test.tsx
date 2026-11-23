@@ -10,13 +10,9 @@ import userEvent from "@testing-library/user-event";
 const revivable = vi.hoisted(() => ({ current: false }));
 vi.mock("@/components/Onboarding/OnboardingChecklist", () => ({ useSetupGuideRevivable: () => revivable.current }));
 
-const storage = vi.hoisted(() => ({ kind: "settings" as "settings" | "local" }));
-vi.mock("@/components/Onboarding/tourShell", () => ({ getTourStorage: () => ({ kind: storage.kind }) }));
-
 const revive = vi.fn(async () => undefined);
-const markComplete = vi.fn(async () => undefined);
 vi.mock("@/store/onboardingChecklistStore", () => ({
-  useOnboardingChecklistStore: { getState: () => ({ revive, markComplete }) },
+  useOnboardingChecklistStore: { getState: () => ({ revive }) },
 }));
 
 import { HelpMenu } from "../HelpMenu";
@@ -33,7 +29,6 @@ describe("Help in the nav footer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     revivable.current = false;
-    storage.kind = "settings";
   });
 
   it("opens the journey picker", async () => {
@@ -42,12 +37,11 @@ describe("Help in the nav footer", () => {
     expect(onOpenTours).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the docs in a new tab and counts as reading them", async () => {
+  it("opens the docs in a new tab", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     await openMenu();
     await userEvent.click(screen.getByTestId("help-menu-docs"));
     expect(open).toHaveBeenCalledWith("https://docs.reliantlabs.io/", "_blank", "noopener,noreferrer");
-    expect(markComplete).toHaveBeenCalledWith("read-docs");
     open.mockRestore();
   });
 

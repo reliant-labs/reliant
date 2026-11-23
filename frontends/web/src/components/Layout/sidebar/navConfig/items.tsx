@@ -569,10 +569,9 @@ export const settingsSections: NavArea = {
 };
 
 /**
- * The footer: the Setup Guide (drawn only while a new user has one), then the
- * rows every page keeps. Help sits beside Settings: the journeys, the docs and
- * the shortcuts, and the way back to a dismissed guide.
+ * The footer. Help sits beside Settings: the journeys, the docs and the
+ * shortcuts, and the way back to a dismissed Setup Guide.
  */
-export const footer: readonly NavItem[] = [slot("setup-guide"), usageBilling, slot("help"), settings];
+export const footer: readonly NavItem[] = [usageBilling, slot("help"), settings];
 
 export const externalMark = <ArrowUpRight className="size-3.5" aria-hidden="true" />;

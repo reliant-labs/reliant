@@ -4,8 +4,9 @@
  * Reliant's onboarding layer: the journeys (JourneyTour, the shell-neutral
  * engine UI) behind Reliant's gates, the version-bump re-offer, and the
  * checklist's state (loaded and kept current here). The checklist itself is
- * drawn by the shell's nav (OnboardingChecklist, in the nav footer), never
- * over the page. The forge shell mounts JourneyTour directly instead.
+ * drawn by the shell frame (OnboardingChecklist, floating on every shell
+ * page; Layout/shell/AppShell.tsx). The forge shell mounts JourneyTour
+ * directly instead.
  *
  * The tour is URL-driven: `?tour=` (tourParam.ts) says what is open. The
  * user owns the URL; the wizard reacts. The one effect that navigates is the

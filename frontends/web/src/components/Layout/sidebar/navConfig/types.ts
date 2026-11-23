@@ -17,8 +17,8 @@
  *   slot     a live widget the shell renders (the chat list, New chat, the
  *            Inbox bell): data says where it goes, the shell says what it is
  *
- * A config's `footer` holds the rows under the nav's hairline (the Setup
- * Guide while it is on, Usage & billing, Help, Settings). `sectionPages` are pages whose own section list takes the
+ * A config's `footer` holds the rows under the nav's hairline (Usage &
+ * billing, Help, Settings). `sectionPages` are pages whose own section list takes the
  * nav column on their routes (Settings), reached by a plain link, not a drill-in.
  */
 
@@ -66,8 +66,6 @@ export type NavSlotId =
   | "chats-need-you"
   /** A row's control: the desktop app's update button (Settings). */
   | "update-button"
-  /** The footer's Setup Guide: "Get started · n/9", its checklist opening in place (Onboarding/OnboardingChecklist). */
-  | "setup-guide"
   /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
   | "help";
 

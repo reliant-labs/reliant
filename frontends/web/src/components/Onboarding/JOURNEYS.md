@@ -21,7 +21,7 @@ in its own change.
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
 | `JourneyTour.tsx` | The engine UI (picker and step). Shell-neutral. |
 | `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist's state. |
-| `OnboardingChecklist.tsx` | The Setup Guide, docked in the shell's nav footer ("Get started · n/9"). |
+| `OnboardingChecklist.tsx`, `checklistItems.ts` | The Setup Guide: a floating "Get started · 3/8" pill on every shell page, and its items with their completion signals. |
 | `tourShell.ts` | Which shell (`reliant` / `forge`) and where progress is stored. |
 
 ## The URL
@@ -184,7 +184,7 @@ the app).
 | `{ kind: "click", selector? }` | edge | The element (default: the step's `target`) is clicked. Capture phase, deferred one tick, so the click's own navigation runs first. |
 | `{ kind: "event", event, where? }` | edge | A tour signal is emitted, optionally narrowed by `where(payload)`. |
 | `{ kind: "route", path }` | level | The pathname matches: a prefix string or a RegExp. |
-| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `create-workflow` when a user-source workflow exists. |
+| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `run-workflow` when a user-source workflow exists. |
 | `{ kind: "store", test, subscribe }` | level | Any store state. Build it with `whenStore(useSomeStore, (s) => …)`. |
 | `{ kind: "element", selector }` | level | An element matching `selector` is in the DOM. |
 | `{ kind: "when", test(ctx) }` | level | Anything else. `ctx = { location: {pathname, search}, signals, context }`. It is re-checked on every location change, signal and context write. |

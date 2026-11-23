@@ -546,12 +546,27 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
   },
-  // The nav footer: the Setup Guide docked and open in place, and the Help menu (Onboarding/OnboardingChecklist.tsx, sidebar/HelpMenu.tsx).
+  // The floating Setup Guide (Onboarding/OnboardingChecklist.tsx): open above the chat home's
+  // composer, and collapsed and open on an app's console; then the nav footer's Help menu (sidebar/HelpMenu.tsx).
   {
     name: 'shell-setup-guide',
     path: '/',
     on: ['desktop'],
-    ready: (page) => page.getByRole('group', { name: 'Setup guide' }),
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-setup-guide-app-collapsed',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('setup-guide-toggle'),
+    harness: { storage: { 'reliant.checklist.panelState': 'collapsed' } },
+  },
+  {
+    name: 'shell-setup-guide-app-expanded',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }),
     harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
   },
   {
