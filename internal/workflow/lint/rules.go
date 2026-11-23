@@ -52,6 +52,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 			}
 			c.checkFetch(path, n, cmd)
 			c.checkLLMGatewayUsed(path, n, cmd)
+			c.checkCredentialsNoneSignIns(path, cmd, model.GetRunArgs(n).GetCredentials())
 		case model.NodeTypeAskQuestion:
 			c.checkAskQuestionType(path, n)
 		case model.NodeTypeAction:
@@ -457,20 +458,11 @@ var vendorCLIInvocation = func() *regexp.Regexp {
 // signedOutWithoutCredentials are the vendor CLIs whose sign-in a
 // `credentials: none` command cannot see: the sandbox hides ~/.claude,
 // ~/.codex and ~/.config/gh (copilot signs in through gh); see
-// daemonpolicy's protectedHome.
+// daemonpolicy's protectedHome. ~/.gemini and Cursor's files it leaves.
 var signedOutWithoutCredentials = map[string]string{
 	"claude":  "~/.claude",
 	"codex":   "~/.codex",
 	"copilot": "~/.config/gh",
-}
-
-// signedOutFromNextMinor are the vendor CLIs whose sign-in a
-// `credentials: none` command can still see in this release and will not
-// from the next minor: daemonpolicy's deprecatedReadableHome. The next minor
-// moves them into signedOutWithoutCredentials.
-var signedOutFromNextMinor = map[string]string{
-	"gemini": "~/.gemini",
-	"cursor": "~/.cursor and ~/.config/cursor",
 }
 
 // checkCLILogins: a run command that calls a vendor agent CLI needs it
@@ -487,7 +479,7 @@ func (c *checker) checkCLILogins(path, cmd, credentials string) {
 	for _, v := range vendorcli.All() {
 		byBinary[v.Binary] = v.ID
 	}
-	var undeclared, hidden, hiddenNext []string
+	var undeclared, hidden []string
 	seen := map[string]bool{}
 	for _, line := range strings.Split(joinContinuations(cmd), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
@@ -505,9 +497,6 @@ func (c *checker) checkCLILogins(path, cmd, credentials string) {
 			if _, ok := signedOutWithoutCredentials[id]; ok {
 				hidden = append(hidden, id)
 			}
-			if _, ok := signedOutFromNextMinor[id]; ok {
-				hiddenNext = append(hiddenNext, id)
-			}
 		}
 	}
 	if len(undeclared) > 0 {
@@ -524,29 +513,6 @@ func (c *checker) checkCLILogins(path, cmd, credentials string) {
 		c.add(RuleCredentialsNoneCLI, path, fmt.Sprintf("credentials: none hides %s from the command, so %s runs signed out", strings.Join(dirs, ", "), strings.Join(hidden, ", ")),
 			"run it with credentials: inherit (the vendor CLI then uses its sign-in on the machine)")
 	}
-	// The same rule, so a lint:allow for it still holds when the next minor
-	// moves these CLIs into the hidden set.
-	if len(hiddenNext) > 0 && strings.EqualFold(strings.TrimSpace(credentials), "none") {
-		sort.Strings(hiddenNext)
-		dirs := make([]string, len(hiddenNext))
-		bins := make([]string, len(hiddenNext))
-		for i, id := range hiddenNext {
-			dirs[i] = signedOutFromNextMinor[id]
-			bins[i] = vendorBinary(id)
-		}
-		c.add(RuleCredentialsNoneCLI, path, fmt.Sprintf("credentials: none will hide %s from the command in the next minor release, so %s will run signed out (the step prints this notice when it runs)", strings.Join(dirs, ", "), strings.Join(bins, ", ")),
-			"run it with credentials: inherit (the vendor CLI then uses its sign-in on the machine), and list it in requires.cli_login")
-	}
-}
-
-// vendorBinary is the binary of the vendor CLI id, or id when it is not one.
-func vendorBinary(id string) string {
-	for _, v := range vendorcli.All() {
-		if v.ID == id {
-			return v.Binary
-		}
-	}
-	return id
 }
 
 // insideQuotes reports whether a shell line that starts with prefix is, at

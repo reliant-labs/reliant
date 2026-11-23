@@ -39,6 +39,6 @@ func TestDeprecatedReadableNotice_OneLineNamingEachPath(t *testing.T) {
 	assert.Empty(t, DeprecatedReadableNotice(nil), "nothing there: nothing to say")
 	assert.Equal(t,
 		"reliant: /h/.gemini, /h/.cursor will be hidden from credentials: none steps in the next minor release; "+
-			"use credentials: inherit or requires.cli_login\n",
+			"use credentials: inherit\n",
 		DeprecatedReadableNotice([]string{"/h/.gemini", "/h/.cursor"}))
 }

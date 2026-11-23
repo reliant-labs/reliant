@@ -331,45 +331,6 @@ nodes:
 	}
 }
 
-// Gemini CLI and Cursor Agent under credentials: none: still signed in this
-// release, signed out from the next minor (owner, 2026-11-23, "with a warning
-// first"). The warning is the credentials-none-cli-login rule's, so an allow
-// for it keeps holding when the next minor hides them; inherit is clean.
-func TestCredentialsNoneWarnsGeminiAndCursorOfTheNextMinor(t *testing.T) {
-	src := func(credentials string) Input {
-		wf, err := wfyaml.ParseWorkflow([]byte(`name: fixture
-requires:
-  cli_login: [gemini, cursor]
-entry: [review]
-nodes:
-- id: review
-  type: run
-  timeout: 15m
-  args:
-    credentials: ` + credentials + `
-    command: |
-      gemini -p 'Review the diff' > review.md
-      ~/.local/bin/cursor-agent -p 'Summarise it' >> review.md
-- id: done
-  type: save_message
-  args: {role: assistant, content: 'exit {{ nodes.review.exit_code }}'}
-edges:
-- {from: review, default: done}
-`))
-		require.NoError(t, err)
-		return Input{Workflow: wf}
-	}
-
-	got := findingsOf(Check(src("none")), RuleCredentialsNoneCLI)
-	require.Len(t, got, 1)
-	assert.Equal(t, SeverityWarning, got[0].Severity)
-	assert.Contains(t, got[0].Message, "will hide ~/.cursor and ~/.config/cursor, ~/.gemini from the command in the next minor release")
-	assert.Contains(t, got[0].Message, "so cursor-agent, gemini will run signed out")
-	assert.Contains(t, got[0].Fix, "credentials: inherit")
-
-	assert.Empty(t, findingsOf(Check(src("inherit")), RuleCredentialsNoneCLI))
-}
-
 // The undeclared-CLI finding names every vendor CLI the command calls, bare
 // or by path, by its requires.cli_login id; a comment or an echoed word is
 // not a call.

@@ -165,7 +165,7 @@ func DeprecatedReadableNotice(existing []string) string {
 		return ""
 	}
 	return "reliant: " + strings.Join(existing, ", ") + " will be hidden from credentials: none steps in the next minor release; " +
-		"use credentials: inherit or requires.cli_login\n"
+		"use credentials: inherit\n"
 }
 
 // Overlay is one directory the command sees through a private overlay.

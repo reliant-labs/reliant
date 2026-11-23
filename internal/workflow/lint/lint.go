@@ -109,6 +109,7 @@ const (
 	RuleAllowInvalid           = "lint-allow-invalid"
 	RuleAskQuestionType        = "ask-question-not-ask-user"
 	RuleLLMGatewayUnused       = "llm-gateway-cli-unused"
+	RuleCredentialsNoneSignIn  = "credentials-none-vendor-signin"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -133,7 +134,7 @@ var rules = []Rule{
 	rule(RuleAutomationUntriggered, SeverityWarning, "automation_only: true with no triggers: no chat can start it and nothing else will."),
 	rule(RuleRequiresUndeclaredTool, SeverityWarning, "A triggered workflow's command calls an external tool (gh, task, jq, …) its requires.tools does not list, so preflight cannot check it."),
 	rule(RuleRequiresUndeclaredCLI, SeverityWarning, "A run command calls a vendor agent CLI (claude, codex, gemini, cursor-agent, copilot) its requires.cli_login does not list, so preflight cannot check that it is signed in."),
-	rule(RuleCredentialsNoneCLI, SeverityWarning, "A credentials: none run command calls claude, codex or copilot, whose sign-ins that sandbox hides, so the CLI runs signed out; or gemini or cursor-agent, whose sign-ins it hides from the next minor release."),
+	rule(RuleCredentialsNoneCLI, SeverityWarning, "A credentials: none run command calls claude, codex or copilot, whose sign-ins that sandbox hides, so the CLI runs signed out."),
 	rule(RuleDaemonMachinePin, SeverityWarning, "A workflow or node daemon: pins one machine by name or id, so a replaced or busy machine stalls every run; pin a machine pool instead."),
 	rule(RuleScenarioNone, SeverityWarning, "The workflow has no scenarios."),
 	rule(RuleScenarioTrigger, SeverityWarning, "No scenario fires the workflow through this trigger (scenario `trigger:`)."),
@@ -141,6 +142,7 @@ var rules = []Rule{
 	rule(RuleAllowInvalid, SeverityError, "A `lint:allow` comment names an unknown rule or gives no reason."),
 	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
 	rule(RuleLLMGatewayUnused, SeverityWarning, "A run node sets llm_gateway for a CLI its command never runs, so the step pays for a key nothing uses (almost always a copy-paste mistake)."),
+	rule(RuleCredentialsNoneSignIn, SeverityWarning, "A credentials: none run command calls gemini or cursor-agent, whose sign-ins that sandbox hides from the next minor release, so the CLI will run signed out."),
 }
 
 // Rules lists every rule, in documentation order.
