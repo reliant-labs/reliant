@@ -67,6 +67,7 @@ func mcpOAuthRoutes(t *testing.T, issuers, scopes []string, authority mcpOAuthAu
 	routes, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{
 		Auth:                supabaseUserAuth(t),
 		Repo:                drainTestRoutesStore{},
+		Placement:           drainTestPlacement{},
 		Router:              testRouter{},
 		OAuth:               connections.NewOAuthHTTP(nil),
 		Inbound:             webhook.NewInbound(nil, nil, nil, nil, ""),

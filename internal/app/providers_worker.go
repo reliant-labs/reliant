@@ -597,6 +597,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
 		WorkflowSlugs:      store.NewWorkflowDraftExtStore(repo.ORM()),
+		Placement:          daemonplacement.NewRecords(repo.ORM()),
+		Workflows:          store.NewWorkflowExtStore(repo.ORM()),
 		Planning:           planner,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the

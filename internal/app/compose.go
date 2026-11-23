@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -1233,10 +1234,11 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 // holds the files.
 func (g *Graph) newFileSystem() (*file_system.Service, error) {
 	return file_system.New(file_system.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.Database(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:      g.Database(),
+		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
 
@@ -1324,11 +1326,12 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:     g.Database(),
+		Projects:  projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:      g.Database(),
+		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
 
@@ -1605,10 +1608,11 @@ func (g *Graph) newUsage() (*usage.Service, error) {
 // newWorktreeReclaim constructs the worktree-reclaim handler (internal/handlers/worktree_reclaim).
 func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 	return worktree_reclaim.New(worktree_reclaim.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Sender: g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Repo:    g.Database(),
+		Daemons: store.NewDaemonExtStore(g.Database().ORM()),
+		Sender:  g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 

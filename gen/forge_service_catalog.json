@@ -56515,6 +56515,19 @@
     },
     {
       "consumer": "FileSystem",
+      "field": "Placement",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Placement",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "FileSystem",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Repository",
       "methods": [],
@@ -57161,6 +57174,19 @@
       "consumer": "OrgUsage",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
+      "field": "Placement",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Placement",
       "methods": [],
       "candidates": [
         "Database"
@@ -59317,6 +59343,19 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorktreeReclaim",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Daemons",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
