@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
@@ -208,7 +209,7 @@ func (a *ExecuteRunStepActivity) stepKeyMachine(ctx context.Context, execCtx *Ru
 		}
 		daemonID = id
 	}
-	d, err := a.repo.GetDaemon(ctx, daemonID)
+	d, err := a.rows.GetDaemon(ctx, daemonID)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return "", "could not read the registration of machine " + shortMachineID(daemonID)
 	}

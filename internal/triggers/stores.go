@@ -41,6 +41,29 @@ func (s EventStores) RootWorkflowStatusForChats(ctx context.Context, chatIDs []s
 	return s.workflows.RootWorkflowStatusForChats(ctx, chatIDs)
 }
 
+// TriggerStores is the generated trigger store behind the whole-table reads
+// and the lock and projection writes of the syncer, reconciler and alerting.
+// Forwarded one by one for the same reason as EventStores.
+type TriggerStores struct {
+	triggers store.TriggerExtStore
+}
+
+func (s TriggerStores) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
+	return s.triggers.ListAllTriggers(ctx)
+}
+
+func (s TriggerStores) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
+	return s.triggers.ListAllWorkflowTriggerActivations(ctx)
+}
+
+func (s TriggerStores) LockTrigger(ctx context.Context, id string) error {
+	return s.triggers.LockTrigger(ctx, id)
+}
+
+func (s TriggerStores) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
+	return s.triggers.SetTriggerProjection(ctx, id, p)
+}
+
 // Stores is the production store of the trigger package: the repository
 // facade for the reads other areas still share, joined with the generated
 // stores this package owns.
@@ -48,6 +71,7 @@ type Stores struct {
 	*db.Repo
 	CapacityStores
 	EventStores
+	TriggerStores
 }
 
 // NewStores joins the repository facade with the generated trigger stores.
@@ -64,13 +88,16 @@ func NewStores(repo *db.Repo) Stores {
 			registrations: store.NewTriggerRegistrationExtStore(orm),
 			workflows:     store.NewWorkflowExtStore(orm),
 		},
+		TriggerStores: TriggerStores{triggers: store.NewTriggerExtStore(orm)},
 	}
 }
 
 var (
-	_ FireRepo      = Stores{}
-	_ EventFireRepo = Stores{}
-	_ IntakeRepo    = Stores{}
-	_ PollRepo      = Stores{}
-	_ Repo          = Stores{}
+	_ FireRepo        = Stores{}
+	_ EventFireRepo   = Stores{}
+	_ IntakeRepo      = Stores{}
+	_ PollRepo        = Stores{}
+	_ Repo            = Stores{}
+	_ ProjectionStore = Stores{}
+	_ AlertingStore   = Stores{}
 )

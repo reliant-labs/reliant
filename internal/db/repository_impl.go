@@ -2813,18 +2813,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
-func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllTriggers(ctx, r.ORM())
-}
-
-// LockTrigger row-locks the trigger until the surrounding transaction ends.
-func (r *Repo) LockTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.LockTrigger(ctx, r.ORM(), id)
-}
-
 // UpdateTrigger is UpdateTriggerInOrg with no org reads: a write back of a
 // row as it was (restoreActivation).
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -2980,17 +2968,6 @@ func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID
 
 func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
 	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
-}
-
-func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
-}
-
-func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT

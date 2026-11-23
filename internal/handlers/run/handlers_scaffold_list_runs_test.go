@@ -18,7 +18,7 @@ func TestListRuns_Generated(t *testing.T) {
 	t.Parallel()
 
 	// No run or session exists (emptyRunRepo).
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo(), ChatRows: emptyChatRows(), ChatViews: emptyChatViews()}))
 	parent, session, badToken := "run-1", "chat-1", "not-a-token!!"
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListRunsRequest, pb.ListRunsResponse]{

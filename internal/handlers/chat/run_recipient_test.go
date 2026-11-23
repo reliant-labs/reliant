@@ -227,10 +227,12 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 	review := addNodeThread(t, ctx, repo, fx.chatID, "review")
 	temporal := &agentLoopTemporal{}
 	runs, err := run.New(run.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Chats:  routedService(repo, temporal),
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		ChatRows:  store.NewChatExtStore(repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
+		Chats:     routedService(repo, temporal),
 	})
 	require.NoError(t, err)
 	signal := func(thread, content string) (*connect.Response[reliantv1.SignalRunResponse], error) {

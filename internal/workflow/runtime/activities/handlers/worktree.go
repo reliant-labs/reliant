@@ -46,13 +46,15 @@ type DeleteWorktreeInput struct {
 // machine the run's tools execute on, via DaemonRouter.
 type CreateWorktreeActivity struct {
 	repo         CreateWorktreeStore
+	rows         WorkspaceRows
 	daemonRouter toolexec.DaemonRouter
 }
 
 // NewCreateWorktreeActivity creates a new CreateWorktreeActivity
-func NewCreateWorktreeActivity(repo CreateWorktreeStore, daemonRouter toolexec.DaemonRouter) *CreateWorktreeActivity {
+func NewCreateWorktreeActivity(repo CreateWorktreeStore, rows WorkspaceRows, daemonRouter toolexec.DaemonRouter) *CreateWorktreeActivity {
 	return &CreateWorktreeActivity{
 		repo:         repo,
+		rows:         rows,
 		daemonRouter: daemonRouter,
 	}
 }
@@ -111,7 +113,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 
 	// Get project to access working directory
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -126,7 +128,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	// recorded on the row must name the same machine. Without the recorded
 	// owner, a chat later bound to this worktree routes its tools by default
 	// resolution, which need not be where the checkout is.
-	chatWorktreeOwner, err := worktreeOwnerOf(ctx, a.repo, chat.WorktreeID)
+	chatWorktreeOwner, err := worktreeOwnerOf(ctx, a.rows, chat.WorktreeID)
 	if err != nil {
 		return CreateWorktreeOutput{}, err
 	}
@@ -148,7 +150,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	// Enumerate the project's nested repos. A standalone-repo project has
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
 	// shape continues to work without changes here.
-	repos, err := a.repo.ListReposByProject(ctx, project.ID)
+	repos, err := a.rows.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to list repos for project: %w", err)
 	}
@@ -281,13 +283,15 @@ func (m daemonMachine) Send(ctx context.Context, commandType string, payload, re
 // by routing git operations through the user's daemon via DaemonRouter.
 type DeleteWorktreeActivity struct {
 	repo         DeleteWorktreeStore
+	rows         WorkspaceRows
 	daemonRouter toolexec.DaemonRouter
 }
 
 // NewDeleteWorktreeActivity creates a new DeleteWorktreeActivity
-func NewDeleteWorktreeActivity(repo DeleteWorktreeStore, daemonRouter toolexec.DaemonRouter) *DeleteWorktreeActivity {
+func NewDeleteWorktreeActivity(repo DeleteWorktreeStore, rows WorkspaceRows, daemonRouter toolexec.DaemonRouter) *DeleteWorktreeActivity {
 	return &DeleteWorktreeActivity{
 		repo:         repo,
+		rows:         rows,
 		daemonRouter: daemonRouter,
 	}
 }
@@ -335,7 +339,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 	}
 
 	// Get project to access working directory
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return DeleteWorktreeOutput{}, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -379,7 +383,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
 	// case collapses to the original single delete_directory call (the
 	// workspace path is itself the git checkout).
-	repos, err := a.repo.ListReposByProject(ctx, project.ID)
+	repos, err := a.rows.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return DeleteWorktreeOutput{}, fmt.Errorf("failed to list repos for project: %w", err)
 	}

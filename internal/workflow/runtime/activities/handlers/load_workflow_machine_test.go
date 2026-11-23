@@ -86,7 +86,7 @@ nodes:
 		}))
 		return id
 	}
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	t.Run("a run on cicd loads cicd's root, child and preset", func(t *testing.T) {
 		out, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatOn(&cicd), WorkflowName: "release"})

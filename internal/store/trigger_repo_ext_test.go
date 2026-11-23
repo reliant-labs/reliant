@@ -118,11 +118,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAllTriggers: %v", err)
 	}
-	twinAll, err := env.Repo.ListAllTriggers(ctx)
-	if err != nil {
-		t.Fatalf("Repo.ListAllTriggers: %v", err)
-	}
-	sameValue(t, "ListAllTriggers", all, twinAll)
 	if g := ids(all); !reflect.DeepEqual(g, []string{"trg-c", "trg-b", "trg-a"}) {
 		t.Fatalf("ListAllTriggers = %v, want newest first", g)
 	}
@@ -233,8 +228,8 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act", core.TriggerProjection{Config: json.RawMessage(`{"cron":["0 * * * *"]}`), Filter: "trigger.ok"}); err != nil {
 		t.Fatalf("SetTriggerProjection: %v", err)
 	}
-	if err := env.Repo.SetTriggerProjection(ctx, "trg-act2", core.TriggerProjection{}); err != nil {
-		t.Fatalf("Repo.SetTriggerProjection: %v", err)
+	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act2", core.TriggerProjection{}); err != nil {
+		t.Fatalf("SetTriggerProjection(empty): %v", err)
 	}
 	if twin, _ := env.Repo.GetTrigger(ctx, "trg-act"); twin.Filter != "trigger.ok" || string(twin.Config) != `{"cron": ["0 * * * *"]}` || !twin.UpdatedAt.After(act.UpdatedAt) {
 		t.Fatalf("after SetTriggerProjection = %+v (config %s)", twin, twin.Config)
@@ -246,11 +241,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAllWorkflowTriggerActivations: %v", err)
 	}
-	twinActs, err := env.Repo.ListAllWorkflowTriggerActivations(ctx)
-	if err != nil {
-		t.Fatalf("Repo.ListAllWorkflowTriggerActivations: %v", err)
-	}
-	sameValue(t, "ListAllWorkflowTriggerActivations", acts, twinActs)
 	if g := ids(acts); !reflect.DeepEqual(g, []string{"trg-act", "trg-act2"}) {
 		t.Fatalf("ListAllWorkflowTriggerActivations = %v", g)
 	}
