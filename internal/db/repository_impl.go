@@ -3619,6 +3619,43 @@ func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slug
 	return svc.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
 }
 
+// Deprecated: use workflowdrafts.Service.GetWorkflowDraftByName. Kept as a
+// forwarder: the v1 contract removes an exported method only in a major.
+func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftByName(ctx, userID, name)
+}
+
+// Deprecated: use workflowdrafts.Service.ListWorkflowDraftsByUser.
+func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListWorkflowDraftsByUser(ctx, userID)
+}
+
+// Deprecated: use workflowdrafts.Service.UpdateWorkflowDraftDefinition.
+func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
+	}
+	return svc.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
+}
+
+// Deprecated: use workflowdrafts.Service.UpdateWorkflowDraftDefinitionAtVersion.
+func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
+	}
+	return svc.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
+}
+
 // ==================== Preset Repository ====================
 
 func (r *Repo) CreatePreset(ctx context.Context, preset *Preset) (*Preset, error) {

@@ -57024,6 +57024,7 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/preset.Drafts",
       "methods": [],
       "candidates": [
+        "Database",
         "Workflowdrafts"
       ],
       "providers": [
