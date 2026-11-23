@@ -56,7 +56,7 @@ import { ShareChatDialog } from "../Sharing/ShareChatDialog";
 import { ChatAppTag } from "../Projects/ChatAppTag";
 import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 import { hasControlPlane } from "../../services/controlPlane/config";
-import { useTopBarSlot, useTopBarVariant } from "../Layout/topBar";
+import { useTopBarSlot } from "../Layout/topBar";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { machineDisplayName } from "@/lib/machineName";
@@ -109,30 +109,29 @@ export function ChatHeader({
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
   const chatMachineName = useChatMachineName(isNewChat ? undefined : chat);
-  // The top bar proposal (Layout/topBar.ts). Proposed, the app bar's machine
-  // chip is the machine's one home: this row names the chat's machine only
-  // when it is NOT the one that chip shows.
-  const variant = useTopBarVariant();
-  const proposed = variant !== "current";
+  // The app bar's machine chip is the machine's one home: this header names
+  // the chat's machine only when it is NOT the one that chip shows.
   const { activeDaemon } = useDaemonStatus();
   const activeMachineName = activeDaemon ? machineDisplayName(activeDaemon) : undefined;
-  const machineName = proposed && chatMachineName === activeMachineName ? undefined : chatMachineName;
-  // Variant A: this header renders inside the app bar's chat slot, when it holds it.
+  const machineName = chatMachineName === activeMachineName ? undefined : chatMachineName;
+  // This header renders inside the app bar's chat slot when it holds it
+  // (Layout/topBar.ts); a second ChatHeader on screen waits for the slot
+  // and keeps its own row meanwhile.
   const slotEl = useTopBarSlot((state) => state.el);
   const slotOwner = useTopBarSlot((state) => state.owner);
   const slotToken = useRef(Symbol("chat-header"));
   useEffect(() => {
-    if (variant !== "a") return;
+    if (slotOwner === null) useTopBarSlot.getState().claim(slotToken.current);
+  }, [slotOwner]);
+  useEffect(() => {
     const token = slotToken.current;
-    const slot = useTopBarSlot.getState();
-    slot.claim(token);
     return () => useTopBarSlot.getState().release(token);
-  }, [variant]);
-  const inAppBar = variant === "a" && slotEl !== null && slotOwner === slotToken.current;
+  }, []);
+  const inAppBar = slotEl !== null && slotOwner === slotToken.current;
   const { dragRegionStyle, noDragRegionStyle } = useTitleBarChrome();
-  // Proposed: the app tag only when it says something the bar's project name does not.
+  // The app tag only when it says something the bar's project name does not.
   const projectName = useProjectStore((state) => state.currentProject?.name);
-  const showAppTag = !!chat?.appName && !(proposed && chat.appName === projectName);
+  const showAppTag = !!chat?.appName && chat.appName !== projectName;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
@@ -249,7 +248,7 @@ export function ChatHeader({
   // of tabs; the prompt you scrolled away from is a line inside the bar.
   const content = (
     <>
-      {/* Variant A: the title continues the bar's project / branch path. */}
+      {/* The title continues the bar's project / branch path. */}
       {inAppBar && !hideTitle && (
         <span aria-hidden="true" className="px-0.5 text-ui text-muted-foreground/50">/</span>
       )}
