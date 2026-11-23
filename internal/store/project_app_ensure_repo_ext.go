@@ -143,7 +143,8 @@ func EnsureProjectForApp(ctx context.Context, db orm.Context, in EnsureProjectFo
 	}
 	subpath := gitremote.NormalizeSubpath(in.Subpath)
 	var out EnsureProjectForAppResult
-	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(ensureProjectAttempts), func(ctx context.Context) error {
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(ensureProjectAttempts).
+		WithRetryOn(orm.RetryOnSQLState("23505")), func(ctx context.Context) error {
 		out = EnsureProjectForAppResult{}
 		if err := LockOrgRemote(ctx, db, in.OrgID, remote); err != nil {
 			return err

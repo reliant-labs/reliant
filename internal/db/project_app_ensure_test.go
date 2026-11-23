@@ -3,12 +3,15 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -65,6 +68,63 @@ func TestEnsureProjectForApp_CreatesOnceThenReuses(t *testing.T) {
 	assert.Equal(t, first.ProjectID, again.ProjectID)
 	assert.False(t, again.Created)
 	assert.Equal(t, 1, countOrgProjects(t, r, "org-a"))
+}
+
+// projectInsertRaceHook interposes an independent committed writer after the
+// ensure has selected its name, immediately before its first project insert.
+// It is installed only on this test's isolated database, before any queries run.
+type projectInsertRaceHook struct {
+	before    func()
+	inserts   int
+	conflicts int
+}
+
+func (h *projectInsertRaceHook) BeforeQuery(ctx context.Context, event *bun.QueryEvent) context.Context {
+	if strings.HasPrefix(event.Query, `INSERT INTO "projects"`) {
+		h.inserts++
+		if h.before != nil {
+			before := h.before
+			h.before = nil // The outside writer's insert must not recurse.
+			before()
+		}
+	}
+	return ctx
+}
+
+func (h *projectInsertRaceHook) AfterQuery(_ context.Context, event *bun.QueryEvent) {
+	if event.Err != nil && orm.RetryOnSQLState("23505")(event.Err) {
+		h.conflicts++
+	}
+}
+
+func TestEnsureProjectForApp_RetriesOutsideProjectNameRace(t *testing.T) {
+	t.Parallel()
+	r, cleanup := setupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	org, now := "org-a", time.Now().UTC()
+	hook := &projectInsertRaceHook{before: func() {
+		// Background has no ensure transaction: this writer commits before
+		// the pending insert and does not take the ensure advisory locks.
+		require.NoError(t, r.CreateProject(context.Background(), &Project{
+			ID: "outside", Name: "shop", Path: "/home/workspace/projects/shop",
+			UserID: "u1", OrgID: &org, CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
+	}}
+	r.ORM().BunDB().AddQueryHook(hook)
+
+	res, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput(org, "u1"))
+	require.NoError(t, err)
+	require.True(t, res.Created)
+	assert.Equal(t, 1, hook.conflicts, "the first ensure insert must lose a real unique-key race")
+	assert.Equal(t, 3, hook.inserts, "outside insert, failed ensure insert, retried ensure insert")
+	p, err := r.GetProject(ctx, res.ProjectID)
+	require.NoError(t, err)
+	assert.Equal(t, "shop (app)", p.Name)
+	assert.Equal(t, "/home/workspace/projects/shop (app)", p.Path)
+	assert.Equal(t, 2, countOrgProjects(t, r, org))
+	assert.Equal(t, []string{"apps/web=shop"}, forgeApps(t, r, p.ID))
+	assert.Empty(t, forgeApps(t, r, "outside"))
 }
 
 func TestEnsureProjectForApp_ConcurrentCallsCreateOne(t *testing.T) {
