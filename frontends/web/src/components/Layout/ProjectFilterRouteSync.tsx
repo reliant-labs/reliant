@@ -34,8 +34,12 @@ export function useRouteProjectId(): string | undefined {
 /** The chat shell's URL/filter bridge, mounted once by ModernApp. */
 export function ProjectFilterRouteSync() {
   // Org-less, so an org's home (`/o/<org>`) is the chat home `/` it is.
-  const pathname = orgFreePath(useLocation().pathname);
+  const location = useLocation();
+  const pathname = orgFreePath(location.pathname);
   const projectId = projectIdOfPath(pathname);
+  // A filter of several projects (`?projects=`, hooks/useChatProjectFilter)
+  // is the URL's choice: the persisted single filter does not replace it.
+  const namesSeveral = (location.search as { projects?: unknown }).projects !== undefined;
   const previousPath = useRef<string | null>(null);
   useEffect(() => {
     const previous = previousPath.current;
@@ -45,12 +49,12 @@ export function ProjectFilterRouteSync() {
     const filter = useWorkspaceStateStore.getState().projectFilterId;
     // Only the initial root restores a persisted filter. A subsequent root
     // is a route intent (Back included), not a request to push that filter.
-    if (previous === null && pathname === "/" && filter) {
+    if (previous === null && pathname === "/" && filter && !namesSeveral) {
       syncProjectFilterUrl(filter);
       return;
     }
     const target = pathname === "/" ? null : projectId ?? null;
     if (filter !== target) void useProjectStore.getState().setProjectFilter(target);
-  }, [pathname, projectId]);
+  }, [pathname, projectId, namesSeveral]);
   return null;
 }

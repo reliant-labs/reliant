@@ -825,6 +825,14 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
 	// A chat's command finds the gh shim first on PATH (internal/ghshim).
 	cmd.Env = ghshim.Default().Env(cmd.Env)
+	// A run step's own variables (an LLM gateway step key) last, so neither
+	// the credential stripping above nor the request's Env undoes them, and a
+	// name they unset is gone even when inherited. Such a command is never
+	// detached into the background, where its output escapes the redaction.
+	if !req.StepEnv.Empty() {
+		cmd.Env = req.StepEnv.Apply(cmd.Env)
+		ctx = withoutBackgroundDetach(ctx)
+	}
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
 	// machine's heavy slots first; its timeout counts the wait. On a nearly
@@ -963,6 +971,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandRequest) (string, error) {
 	if req.Command == "" {
 		return "", fmt.Errorf("command is required")
+	}
+	// A background process's output is read later, unredacted, and it would
+	// outlive the step its key is revoked at.
+	if !req.StepEnv.Empty() {
+		return "", fmt.Errorf("a run step's step environment cannot run in the background")
 	}
 
 	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)

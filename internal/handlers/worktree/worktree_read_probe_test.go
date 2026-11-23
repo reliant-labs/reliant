@@ -41,7 +41,7 @@ func readRouter(fn func(ctx context.Context, commandType string, payload []byte)
 
 func readService(t *testing.T, store *worktree.MockRepository, router *worktree.StubRouter) *worktree.Service {
 	t.Helper()
-	return worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
+	return worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store, Router: router})))
 }
 
 func singleRepoStore(t *testing.T) *worktree.MockRepository {

@@ -152,7 +152,7 @@ func TestRepoDirectoryOnlineFromAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := newFakeRepoSource(map[string]string{"d-on": string(raw), "d-off": string(raw)}, map[string]string{"d-on": "On-box", "d-off": "Off-box"}, []string{"d-on"})
-	got, err := NewRepoDirectory(src).LocalDaemons(context.Background(), "u")
+	got, err := NewRepoDirectory(src, nil).LocalDaemons(context.Background(), "u")
 	if err != nil {
 		t.Fatal(err)
 	}

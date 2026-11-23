@@ -56,7 +56,9 @@ service MCPService {
 
   // RestartServer restarts an MCP server
   rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {
-    option (forge.v1.method) = {activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}};
+    option (forge.v1.method) = {
+      activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}
+    };
   }
 
   // ListRecommended returns a list of recommended MCP servers

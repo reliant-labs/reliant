@@ -29,7 +29,7 @@ func (r *Runner) fanOut(ctx context.Context, env callEnv, req *reliantv1.HttpReq
 		return nil, err
 	}
 	if parents.result != nil {
-		return parents.result, nil
+		return stamp(parents.result, parents.pages, parents.last), nil
 	}
 	limit := int(fo.GetMaxItems())
 	if limit == 0 {
@@ -42,6 +42,7 @@ func (r *Runner) fanOut(ctx context.Context, env callEnv, req *reliantv1.HttpReq
 	items := []any{}
 	truncated := parents.truncated
 	last := parents.last
+	pages := parents.pages
 	for _, parent := range parents.items {
 		vars := map[string]any{"params": params, "connection": connVars, "parent": parent}
 		selectPage := func(p *page) (any, error) { return selectOutputFor(env.a.GetOutput(), p, params, parent) }
@@ -50,16 +51,17 @@ func (r *Runner) fanOut(ctx context.Context, env callEnv, req *reliantv1.HttpReq
 			return nil, err
 		}
 		last = run.last
+		pages += run.pages
 		if res := run.result; res != nil {
 			if !res.Retryable && slices.Contains(fo.GetSkipStatus(), int32(res.StatusCode)) {
 				continue
 			}
-			return res, nil
+			return stamp(res, pages, last), nil
 		}
 		items = append(items, run.items...)
 		truncated = truncated || run.truncated
 	}
 	res := success(last, map[string]any{manifest.ItemsOutputField: items})
 	res.Truncated = truncated
-	return res, nil
+	return stamp(res, pages, last), nil
 }

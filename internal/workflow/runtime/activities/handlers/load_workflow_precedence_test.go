@@ -23,10 +23,10 @@ func TestLoadWorkflowActivity_AutomationRunsTheProjectsWorkflow(t *testing.T) {
 		{"slug": "release", "name": "release", "relative_path": "control-plane/.reliant/workflows/release.yaml", "yaml_content": projectYAML},
 	})
 	triggerID := "trigger-1"
+	projectP := &MockProjectWorktreeReader{GetProjectFunc: func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil }}
 	store := func(chat *db.Chat) *MockLoadWorkflowStore {
 		return &MockLoadWorkflowStore{
-			GetChatFunc:    func(context.Context, string) (*db.Chat, error) { return chat, nil },
-			GetProjectFunc: func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil },
+			GetChatFunc: func(context.Context, string) (*db.Chat, error) { return chat, nil },
 			GetProjectWorkflowsJSONFunc: func(context.Context, string) (*string, error) {
 				return &workflowsJSON, nil
 			},
@@ -42,7 +42,7 @@ func TestLoadWorkflowActivity_AutomationRunsTheProjectsWorkflow(t *testing.T) {
 		}
 	}
 	load := func(chat *db.Chat) string {
-		out, err := NewLoadWorkflowActivity(store(chat)).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
+		out, err := NewLoadWorkflowActivity(store(chat), projectP).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
 		require.NoError(t, err)
 		return string(out.YAML)
 	}
@@ -70,10 +70,10 @@ func TestLoadWorkflowActivity_AutomationOnAMachineRunsThatMachinesProjectWorkflo
 		return &j
 	}
 	triggerID, cicd := "trigger-1", "cicd"
+	projectP := &MockProjectWorktreeReader{GetProjectFunc: func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil }}
 	chat := &db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, Origin: core.ChatOriginAutomation, ActiveDaemonID: &cicd}
 	store := &MockLoadWorkflowStore{
 		GetChatFunc:                 func(context.Context, string) (*db.Chat, error) { return chat, nil },
-		GetProjectFunc:              func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil },
 		GetProjectWorkflowsJSONFunc: func(context.Context, string) (*string, error) { return catalog("the laptop's"), nil },
 		GetProjectMachineWorkflowsJSONFunc: func(_ context.Context, _, daemonID string) (*string, bool, error) {
 			require.Equal(t, cicd, daemonID)
@@ -86,7 +86,7 @@ func TestLoadWorkflowActivity_AutomationOnAMachineRunsThatMachinesProjectWorkflo
 		// No pin: these loads read the live catalog (the pin is load_workflow_pin_test.go's).
 		PinProjectCatalogFunc: func(context.Context, db.CatalogPinScope) (string, error) { return "", nil },
 	}
-	out, err := NewLoadWorkflowActivity(store).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
+	out, err := NewLoadWorkflowActivity(store, projectP).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
 	require.NoError(t, err)
 	assert.Contains(t, string(out.YAML), "cicd's")
 }

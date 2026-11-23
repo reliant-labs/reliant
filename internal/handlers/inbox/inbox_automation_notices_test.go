@@ -66,20 +66,20 @@ func listKinds(t *testing.T, svc *Service, ctx context.Context, jwt string, kind
 // what the pausing firing recorded, and placed in its org.
 func TestListInbox_NoOrgAccountPauseReachesOwnerAndAdmins(t *testing.T) {
 	repo := newInflightRepo(0)
-	repo.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
+	repo.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
 	var asked []string
-	repo.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
+	repo.notices.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
 		asked = orgIDs
 		return []*core.Trigger{pausedForNoOrgAccount("t-mine", userID, "acme"), pausedForNoOrgAccount("t-theirs", "u-mia", "acme")}, nil
 	}
-	repo.GetLatestTriggerEventFunc = func(_ context.Context, id string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	repo.firings.GetLatestTriggerEventFunc = func(_ context.Context, id string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 		require.Equal(t, core.TriggerEventFailed, *outcome)
 		return &core.TriggerEvent{OutcomeDetail: "none of them can run claude-opus-4-6 (" + id + ")"}, nil
 	}
 	lister := &MockOrgLister{ListMyOrganizationsFunc: func(context.Context, string) ([]controlplane.MyOrganization, error) {
 		return []controlplane.MyOrganization{{ID: "acme", Role: "admin"}, {ID: "beta", Role: "member"}}, nil
 	}}
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, MyOrgs: lister}))
+	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, MyOrgs: lister}))
 
 	got := listKinds(t, svc, sessionCtx(), "session-jwt", reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT)
 	assert.Equal(t, []string{"acme"}, asked, "the orgs the caller administers")
@@ -117,22 +117,22 @@ func TestListInbox_NoOrgAccountPauseOwnerOnlyWithoutAdminOrgs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			repo := newInflightRepo(0)
-			repo.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
+			repo.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return true, nil }
 			var asked []string
-			repo.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
+			repo.notices.ListNoOrgAccountPausesFunc = func(_ context.Context, userID string, orgIDs []string) ([]*core.Trigger, error) {
 				asked = orgIDs
 				return []*core.Trigger{pausedForNoOrgAccount("t-mine", userID, "acme")}, nil
 			}
 			d, ctx, jwt := deps(repo)
 			member := authz.WithMembership(ctx, memberOf{"home": true, "acme": true})
-			got := listKinds(t, NewTestInbox(t, WithInboxDeps(d)), member, jwt, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT)
+			got := listKinds(t, NewTestInbox(t, withDeps(d)), member, jwt, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT)
 			assert.Empty(t, asked, "no admin orgs")
 			assert.Len(t, got, 1, "the owner's own still")
 
 			// An owner who has left the org no longer sees it (authz decides
 			// each row the store scoped to them).
 			left := authz.WithMembership(ctx, memberOf{"home": true})
-			assert.Empty(t, listKinds(t, NewTestInbox(t, WithInboxDeps(d)), left, jwt, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT),
+			assert.Empty(t, listKinds(t, NewTestInbox(t, withDeps(d)), left, jwt, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT),
 				"an org the owner left")
 		})
 	}
@@ -151,9 +151,9 @@ func TestListInbox_AutomationsOnPersonalAccounts(t *testing.T) {
 		{ID: "t-2", UserID: "user-1", OrgID: &acme, CreatedAt: created.Add(time.Hour)},
 		{ID: "t-3", UserID: "user-1", OrgID: &solo, CreatedAt: created},
 	}
-	repo.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return set, nil }
+	repo.notices.ListPersonallyFundedTriggersFunc = func(context.Context, string) ([]*core.Trigger, error) { return set, nil }
 	counts := &memberCounts{n: map[string]int{"acme": 2, "solo": 1}}
-	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Members: counts}))
+	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, Members: counts}))
 	ctx := authz.WithMembership(sessionCtx(), memberOf{"home": true, "acme": true, "solo": true})
 
 	got := listKinds(t, svc, ctx, "", reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS)
@@ -176,7 +176,7 @@ func TestListInbox_AutomationsOnPersonalAccounts(t *testing.T) {
 	assert.Equal(t, calls, counts.calls.Load(), "the count is reused")
 
 	set = append(set, &core.Trigger{ID: "t-4", UserID: "user-1", OrgID: &acme, CreatedAt: created})
-	more := listKinds(t, NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Members: counts})), ctx, "",
+	more := listKinds(t, NewTestInbox(t, withDeps(Deps{Repo: repo, Members: counts})), ctx, "",
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS)
 	assert.NotEqual(t, key, more[0].ItemId, "a set that gains one is a new item, past a dismissal")
 
@@ -184,15 +184,15 @@ func TestListInbox_AutomationsOnPersonalAccounts(t *testing.T) {
 		"an unknown count": {n: map[string]int{}},
 		"a failed read":    {err: errors.New("down")},
 	} {
-		got := listKinds(t, NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Members: c})), ctx, "",
+		got := listKinds(t, NewTestInbox(t, withDeps(Deps{Repo: repo, Members: c})), ctx, "",
 			reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS)
 		assert.Empty(t, got, name)
 	}
-	assert.Empty(t, listKinds(t, NewTestInbox(t, WithInboxDeps(Deps{Repo: repo})), ctx, "",
+	assert.Empty(t, listKinds(t, NewTestInbox(t, WithInboxDeps(mockDeps(repo))), ctx, "",
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS), "no orgs on this deployment")
 
 	// An org the caller has left: its automations are not theirs to see.
 	left := authz.WithMembership(sessionCtx(), memberOf{"home": true, "solo": true})
-	assert.Empty(t, listKinds(t, NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Members: counts})), left, "",
+	assert.Empty(t, listKinds(t, NewTestInbox(t, withDeps(Deps{Repo: repo, Members: counts})), left, "",
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS), "an org the caller left")
 }

@@ -77,7 +77,7 @@ func NewClient(consent PrivacyChecker, logger *slog.Logger) *Client {
 var installed atomic.Pointer[Client]
 
 // FirstSessionRecorder durably records that a user made an authenticated
-// request and reports whether it was their first ever (db.Repo).
+// request and reports whether it was their first ever (store.UserAppSessionExtStore).
 type FirstSessionRecorder interface {
 	RecordFirstAppSession(ctx context.Context, userID string) (bool, error)
 }

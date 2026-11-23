@@ -12,6 +12,8 @@ import {
 } from "../../routeSchemas";
 import { readSettingsDestination, rememberSettingsDestination } from "./settingsDestination";
 import { machineSettingsPath, settingsPath } from "@/lib/paths";
+import { cn } from "@/lib/utils";
+import { useShellFrame } from "../Layout/shell/shellFrame";
 
 export function SettingsPage() {
   // Escape closes the page (matches the WorkflowBuilderPage convention). The
@@ -24,6 +26,7 @@ export function SettingsPage() {
   const search = useSearch({ strict: false }) as { notFound?: string; tab?: SettingsTab };
   const navigate = useNavigate();
   const onClose = useSettingsClose();
+  const { inShell } = useShellFrame();
 
   const section: SettingsSection = params.machineId
     ? "machines"
@@ -89,7 +92,7 @@ export function SettingsPage() {
   if (!hasExplicitDestination) return null;
 
   return (
-    <div className="flex h-screen w-full flex-col bg-background">
+    <div className={cn("flex w-full flex-col bg-background", inShell ? "h-full min-h-0" : "h-screen")}>
       {search.notFound && (
         <div
           role="status"

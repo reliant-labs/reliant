@@ -371,9 +371,8 @@ func TestMarkSeenReportsWhetherTheTombstoneIsDurable(t *testing.T) {
 	require.NoError(t, store.markSeen("run-1", expires))
 	data, err := os.ReadFile(filepath.Join(dir, "run-1"+seenFileExt))
 	require.NoError(t, err)
-	got, current := decodeSeen(data, time.Time{})
-	assert.True(t, current, "the tombstone carries its expiry in its contents")
-	assert.True(t, got.Equal(expires))
+	got := decodeSeen(data, time.Time{})
+	assert.True(t, got.Equal(expires), "the tombstone carries its expiry in its contents")
 
 	require.NoError(t, os.RemoveAll(dir))
 	require.NoError(t, os.WriteFile(dir, nil, 0o600))
@@ -401,13 +400,12 @@ func TestTombstoneExpirySurvivesALostModificationTime(t *testing.T) {
 	assert.True(t, seen["run-1"].Equal(expires))
 }
 
-// [R3.B1] A tombstone written before the expiry moved into the contents (an
-// empty file, its expiry in its modification time) is honoured for its
-// modification time plus the floor; so is one whose contents are unreadable.
-// Never forgotten sooner than that.
-func TestLegacyTombstonesAreHonoured(t *testing.T) {
+// [R3.B1] A tombstone whose contents are unreadable (empty, or not a
+// tombstone) is honoured for its modification time plus the floor. Never
+// forgotten sooner than that.
+func TestUnreadableTombstonesAreHonoured(t *testing.T) {
 	clock := newOutboxClock()
-	for name, contents := range map[string][]byte{"legacy": nil, "garbage": []byte("not a tombstone")} {
+	for name, contents := range map[string][]byte{"empty": nil, "garbage": []byte("not a tombstone")} {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "outbox")
 			store, err := openOutboxStore(dir)

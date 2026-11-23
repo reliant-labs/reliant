@@ -81,6 +81,11 @@ PARAMETERS THAT MATTER:
   stay in place for both runs.
 - command: as narrow as possible — one package, one test
   ('go test -run TestX ./pkg/foo', 'npx vitest run src/x.test.ts'). It runs twice.
+- Working in another git worktree of a project repo (one made with the worktree
+  tool or 'git worktree add', e.g. under ~/.reliant/worktrees)? Give files as
+  ABSOLUTE paths in that worktree: the files are reverted there and the command
+  runs there. Relative paths resolve against the repo's own checkout, and repo
+  takes a repo name, never a path.
 
 VERDICTS:
 - proven: fails without the fix, passes with it.

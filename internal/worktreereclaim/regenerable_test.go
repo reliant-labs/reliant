@@ -101,6 +101,12 @@ func TestRebuildablePath_Entries(t *testing.T) {
 		"web/public/config.js":                                          false,
 		".forge/audit/prod.jsonl":                                       false, // an audit log is a record, not output
 		".forge/hosted-projects.json":                                   false, // a deploy binding
+		// The visual suite's Playwright output and report.
+		"frontends/web/test-results-visual/.last-run.json":  true,
+		"frontends/web/playwright-report-visual/index.html": true,
+		"frontends/web/playwright-report-visual/data/a.zip": false, // the never-list still wins
+		"frontends/web/test-results-final/summary.csv":      false, // only the visual suite's is named
+		"frontends/web/playwright-report-e2e/trace/x.json":  true,
 	} {
 		if got := rebuildablePath(p); got != want {
 			t.Errorf("rebuildablePath(%q) = %v, want %v", p, got, want)

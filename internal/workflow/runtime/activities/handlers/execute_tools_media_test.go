@@ -18,6 +18,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	dbstore "github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -208,7 +210,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 	thread := chatID
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	save := NewSaveMessageActivity(h.Repo())
+	save := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	const callID = "toolu_view_1"
 	var assistantOut SaveMessageOutput
 	require.NoError(t, h.ExecuteActivity(save.Execute, &SaveMessageInput{
@@ -226,7 +228,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 		}},
 	}
 	var execOut ExecuteToolsOutput
-	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).Execute, ExecuteToolsInput{
 		ChatID: chatID, Thread: thread,
 		ToolCalls: []ToolCall{{ID: callID, Name: "view", Input: `{"file_path":"x"}`}},
 	}, &execOut))
@@ -240,7 +242,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 		ToolResults: protoToolResultsToMessage(execOut.ToolResults),
 	}, &toolOut))
 
-	msgs, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+	msgs, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 	require.NoError(t, err)
 	var result *message.ToolResult
 	for i := range msgs {

@@ -126,7 +126,7 @@ func mcpServerFromConfig(name string, scoped serverScopeConfig) *reliantv1.MCPSe
 
 // projectBelongsToUser checks if a project belongs to the authenticated user.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if svcerr.IsNotFound(err) {
 		return svcerr.NotFound("project")
 	}
@@ -142,7 +142,7 @@ func (s *Service) projectCheckout(ctx context.Context, projectID string, userID 
 	if strings.TrimSpace(projectID) == "" {
 		return projectcheckout.Target{}, svcerr.InvalidArgument("project_id is required")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if svcerr.IsNotFound(err) || (err == nil && project == nil) {
 		return projectcheckout.Target{}, svcerr.NotFound("project")
 	}

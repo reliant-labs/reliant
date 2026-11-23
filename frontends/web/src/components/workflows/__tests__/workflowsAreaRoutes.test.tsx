@@ -68,6 +68,7 @@ vi.mock("@/store/projectStore", () => {
 
 import { createWorkflowsAreaRoutes } from "@/workflowsAreaRoutes";
 import { WorkflowsLayout } from "../WorkflowsShell";
+import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
 
 function stub(name: string) {
   return function Stub() {
@@ -76,7 +77,7 @@ function stub(name: string) {
   };
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, { inShell = false }: { inShell?: boolean } = {}) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authed = createRoute({ getParentRoute: () => rootRoute, id: "_authenticated", component: () => <Outlet /> });
   const builder = createRoute({
@@ -99,7 +100,9 @@ function renderAt(path: string) {
   });
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <RouterProvider router={router} />
+      <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
+        <RouterProvider router={router} />
+      </ShellFrameContext.Provider>
     </QueryClientProvider>,
   );
   return router;
@@ -180,10 +183,10 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     const router = renderAt("/workflows/library");
     await screen.findByTestId("page-library");
     fireEvent.click(screen.getByTestId("workflows-project-switcher"));
-    expect(await screen.findByRole("menu", { name: "Projects" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Choose a project" })).toBeInTheDocument();
     // As a real keypress does: dispatched at the focused element, bubbling to document and window.
     fireEvent.keyDown(document.body, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose a project" })).toBeNull());
     expect(router.state.location.pathname).toBe("/workflows/library");
   });
 
@@ -268,8 +271,7 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     const switcher = await screen.findByTestId("workflows-project-switcher");
     expect(switcher).toHaveTextContent("Reliant");
     fireEvent.click(switcher);
-    const menu = await screen.findByRole("menu", { name: "Projects" });
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /All projects/ }));
+    fireEvent.click(await screen.findByTestId("workflows-project-all"));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ allProjects: true }));
     expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("All projects");
   });
@@ -322,5 +324,32 @@ describe("Retired paths redirect and keep their search params", () => {
     const router = renderAt("/workflow/builtin%3A%2F%2Fagent");
     expect(await screen.findByTestId("page-builder")).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/builtin%3A%2F%2Fagent"));
+  });
+});
+
+// U6: inside the one shell, the area's tabs are rows of the shell's nav
+// (nested under Workflows, Layout/Sidebar.tsx): no rail of its own, no exit.
+describe("Workflows area inside the one shell", () => {
+  it("draws no rail and no exit: the breadcrumb and the project scope over the page", async () => {
+    renderAt("/workflows/runs", { inShell: true });
+    expect(await screen.findByTestId("page-runs")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Workflows" })).toBeNull();
+    expect(document.querySelector("aside")).toBeNull();
+    expect(screen.queryByTestId("workflows-close")).toBeNull();
+    const header = screen.getByTestId("workflows-header");
+    expect(within(header).getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Runs");
+    expect(within(header).getByTestId("workflows-project-switcher")).toBeInTheDocument();
+  });
+
+  it("leaves a list page alone on Escape, and steps a detail page back to its list", async () => {
+    const router = renderAt("/workflows/runs", { inShell: true });
+    await screen.findByTestId("page-runs");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(router.state.location.pathname).toBe("/workflows/runs");
+
+    const detail = renderAt("/workflows/runs/chat-1", { inShell: true });
+    await screen.findByTestId("page-run-detail");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(detail.state.location.pathname).toBe("/workflows/runs"));
   });
 });

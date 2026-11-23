@@ -9,19 +9,23 @@
  * The URL's app is always listed and checked, even when the control plane has
  * not listed it (a Reliant-only or local project opened by URL).
  *
+ * The list is the project selector (Projects/ProjectSelector, app mode): one
+ * row per app, each with the project whose code holds it, searchable and
+ * pinned like every other picker. The control plane's list (useApps) is
+ * passed in too, so an app the catalog cannot see (the forge shell has no
+ * Reliant projects) is still listed.
+ *
  * Choosing an app keeps the reader on the same page of that app
  * (ConsoleLayout.switchTarget). It does not select a Reliant project in the
  * store itself: the console layout selects whichever project declares the app
  * it lands on, so the store follows the URL rather than the other way round.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronsUpDown, LayoutGrid } from "lucide-react";
+import { ChevronsUpDown, LayoutGrid } from "lucide-react";
 
-import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
-import { cn } from "@/lib/utils";
 import { useApps } from "@/hooks/apps-queries";
+import { ProjectSelector } from "@/components/Projects/ProjectSelector";
 
 /** The project's monogram — the brand row on the collapsed rail. */
 export function ProjectMonogram({ name }: { name: string }) {
@@ -43,85 +47,52 @@ export interface ConsoleProjectSwitcherProps {
   onSelectAll: () => void;
 }
 
+const ALL_APPS_KEY = "all-apps";
+
 export function ConsoleProjectSwitcher({ forgeProject, onSelect, onSelectAll }: ConsoleProjectSwitcherProps) {
   const orgApps = useApps();
-  // A handful of names, rebuilt per render like the list they come from (useApps builds it per render).
+  // The URL's app is always listed, even when the control plane has not listed it.
   const listed = orgApps.apps.map((app) => app.name);
-  const names = (listed.includes(forgeProject) ? listed : [...listed, forgeProject]).sort((a, b) => a.localeCompare(b));
+  const names = listed.includes(forgeProject) ? listed : [...listed, forgeProject];
   // A build with no control plane lists only this checkout's apps; nothing is "unavailable" about that.
   const unavailable =
     !orgApps.loading && orgApps.availability !== "available" && orgApps.availability !== "no-control-plane";
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  const escapeLayer = useEscapeLayer(open, () => setOpen(false));
   const { noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open]);
-
   return (
-    <div ref={ref} className="relative min-w-0 flex-1" style={noDragRegionStyle}>
-      <button
-        type="button"
-        data-testid="forge-project-switcher"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`App: ${forgeProject}. Switch app`}
-        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ProjectMonogram name={forgeProject} />
-        <span className="min-w-0 flex-1 truncate">{forgeProject}</span>
-        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          {...escapeLayer}
-          data-testid="forge-project-menu"
-          className="absolute left-0 top-10 z-[110] max-h-80 w-64 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-md"
-        >
+    <div className="relative min-w-0 flex-1" style={noDragRegionStyle}>
+      <ProjectSelector
+        mode="app"
+        align="left"
+        selectedKey={forgeProject}
+        extraApps={names}
+        notice={unavailable ? "Other apps are unavailable right now." : undefined}
+        leadItems={[
+          {
+            key: ALL_APPS_KEY,
+            label: "All apps",
+            icon: <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />,
+            onSelect: onSelectAll,
+            testId: "forge-project-menu-all-apps",
+          },
+        ]}
+        onSelect={(selection) => {
+          if (selection.kind === "app") onSelect(selection.app.name);
+        }}
+        trigger={(props) => (
           <button
             type="button"
-            role="menuitem"
-            data-testid="forge-project-menu-all-apps"
-            onClick={() => {
-              setOpen(false);
-              onSelectAll();
-            }}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-ink/5"
+            {...props}
+            data-testid="forge-project-switcher"
+            aria-label={`App: ${forgeProject}. Switch app`}
+            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">All apps</span>
+            <ProjectMonogram name={forgeProject} />
+            <span className="min-w-0 flex-1 truncate">{forgeProject}</span>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
           </button>
-          <div role="separator" className="my-1 h-px bg-border" />
-          {names.map((name) => (
-            <button
-              key={name}
-              type="button"
-              role="menuitem"
-              data-testid={`forge-project-menu-item-${name}`}
-              onClick={() => {
-                setOpen(false);
-                onSelect(name);
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-ink/5"
-            >
-              <Check className={cn("h-3.5 w-3.5 shrink-0", name !== forgeProject && "invisible")} aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">{name}</span>
-            </button>
-          ))}
-          {orgApps.loading && <p className="px-3 py-2 text-sm text-ink-muted">Loading apps…</p>}
-          {unavailable && <p className="px-3 py-2 text-sm text-ink-muted">Other apps are unavailable right now.</p>}
-        </div>
-      )}
+        )}
+      />
     </div>
   );
 }

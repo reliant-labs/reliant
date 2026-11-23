@@ -7,6 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -148,8 +151,7 @@ func TestCallLLM_ToolsArrayIsStableAcrossAnUnreachableDaemon(t *testing.T) {
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	})
-	activity := NewCallLLMActivity(h.Repo(), nil, tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-		&recordingProjectResolver{}, resolver, scriptedDaemonBinder{state: daemon})
+	activity := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: resolver, MCPBinder: scriptedDaemonBinder{state: daemon}})
 
 	input := mcpToolsCallLLMInput(chat.ID, []string{"view", "mcp__github__*", "mcp__chrome__*"})
 	runTurn := func() {

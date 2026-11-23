@@ -18,6 +18,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
@@ -60,15 +61,15 @@ func newReceiptFixture(t *testing.T) *receiptFixture {
 	f := &receiptFixture{Env: storetest.New(t), now: time.Now().UTC().Truncate(time.Millisecond),
 		starts: &receiptStarts{ids: map[string]int{}}, mux: http.NewServeMux()}
 	f.catalog = &receiptCatalog{Repo: f.Repo}
-	f.intake = triggers.NewIntake(f.Repo, f.starts, "test-queue").WithWorkflows(triggers.LaunchWorkflows{Repo: f.catalog})
-	f.relay = NewRelay(f.Repo, f.intake, f.Repo.Connections(), nil)
+	f.intake = triggers.NewIntake(triggers.NewStores(f.Repo), f.starts, "test-queue").WithWorkflows(triggers.LaunchWorkflows{Repo: f.catalog})
+	f.relay = NewRelay(NewStores(f.Repo), f.intake, db.TestConnections(t, f.Repo), nil)
 	f.relay.now = func() time.Time { return f.now }
 	registry := NewRegistry()
 	require.NoError(t, registry.Register(NewGitHubProvider(gitHubTestSecret)))
-	events := NewEventsReceiver(EventsOptions{Store: f.Repo, Inbox: f.Repo, Intake: f.intake, Registry: registry, PublicURL: "https://reliant.example.com"})
+	events := NewEventsReceiver(EventsOptions{Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake, Registry: registry, PublicURL: "https://reliant.example.com"})
 	events.now = f.relay.now
 	events.Register(f.mux.Handle)
-	hooks := NewHooksReceiver(HooksOptions{Store: f.Repo, Inbox: f.Repo, Intake: f.intake})
+	hooks := NewHooksReceiver(HooksOptions{Store: f.Repo, Inbox: NewStores(f.Repo), Intake: f.intake})
 	hooks.now = f.relay.now
 	hooks.Register(f.mux.Handle)
 	require.NoError(t, f.Repo.CreateProject(t.Context(), &db.Project{ID: "receipt-project", UserID: "alice", Name: "Receipt project", Path: t.TempDir(), CreatedAt: f.now, UpdatedAt: f.now, LastActive: f.now}))
@@ -90,7 +91,7 @@ func (f *receiptFixture) trigger(t *testing.T, id string, kind core.TriggerKind,
 
 func (f *receiptFixture) grant(t *testing.T) {
 	t.Helper()
-	require.NoError(t, f.Repo.ReplaceIntegrationAccess(t.Context(), "alice", "github", "11", f.now,
+	require.NoError(t, store.ReplaceIntegrationAccess(t.Context(), f.Repo.ORM(), "alice", "github", "11", f.now,
 		[]core.IntegrationAccessGrant{{AccountKey: "98765", ResourceKey: "123456"}}))
 }
 
@@ -203,7 +204,7 @@ func TestDeliveryInboxRetriesReadsAndFencesExpiredLease(t *testing.T) {
 	f.trigger(t, "disabled", core.TriggerKindIntegration, f.now, false)
 	f.grant(t)
 	require.Equal(t, http.StatusOK, f.github("issues", "recover", gitHubFixture(t, "issues.opened")).Code)
-	rows, err := f.Repo.ClaimTriggerDeliveries(t.Context(), f.now, f.now.Add(time.Second), "crashed", 1)
+	rows, err := NewStores(f.Repo).ClaimTriggerDeliveries(t.Context(), f.now, f.now.Add(time.Second), "crashed", 1)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	f.now = f.now.Add(2 * time.Second)
@@ -218,7 +219,7 @@ func TestDeliveryInboxRetriesReadsAndFencesExpiredLease(t *testing.T) {
 	require.True(t, worked)
 	f.count(t, "SELECT count(*) FROM trigger_events", 1)
 	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox WHERE failures=1 AND completed_at IS NULL", 1)
-	settled, err := f.Repo.SettleTriggerDelivery(t.Context(), rows[0].ID, "crashed", core.TriggerDeliverySettlement{Now: f.now})
+	settled, err := NewStores(f.Repo).SettleTriggerDelivery(t.Context(), rows[0].ID, "crashed", core.TriggerDeliverySettlement{Now: f.now})
 	require.NoError(t, err)
 	require.False(t, settled)
 	f.now = f.now.Add(2 * time.Second)
@@ -243,7 +244,7 @@ func TestDeliveryInboxReplaysAfterWritingTheEvent(t *testing.T) {
 	f := newReceiptFixture(t)
 	f.trigger(t, "plain", core.TriggerKindWebhook, f.now, true)
 	require.Equal(t, http.StatusAccepted, f.hook("respond-async", "crash-after-event").Code)
-	rows, err := f.Repo.ClaimTriggerDeliveries(t.Context(), f.now, f.now.Add(time.Minute), "dead-worker", 1)
+	rows, err := NewStores(f.Repo).ClaimTriggerDeliveries(t.Context(), f.now, f.now.Add(time.Minute), "dead-worker", 1)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	res, err := f.relay.process(t.Context(), rows[0])

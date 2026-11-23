@@ -81,27 +81,6 @@ export interface ChatStreamCallbacks {
   onChatSubscriptionRejected?: (chatId: string) => void;
 }
 
-/**
- * What a snapshot cost to open, for hosts that report it. Timings are `performance.now()`.
- *
- * @deprecated The offsets are measured from the connection's open, not from
- * the user's intent, and only a snapshot reports them: a replay never does.
- * Time a chat open on the host's own clock from `onSubscribe`,
- * `onSnapshotReceived`, `onReplayStarted` and `onCaughtUp` instead. Kept, and
- * still reported, for existing consumers.
- */
-export interface SnapshotTiming {
-  chatId: string;
-  traceId: string;
-  openedAtMs: number;
-  receivedAtMs: number;
-  appliedAtMs: number;
-  /** The first sync of a chat just opened, not a resync of an open one. */
-  initialOpen: boolean;
-  messages: number;
-  otherUpdates: number;
-}
-
 /** How a connection brought the chat's state up to date before its caught_up. */
 export type ChatSyncKind = "snapshot" | "replay";
 
@@ -133,11 +112,6 @@ export interface ChatStreamHooks {
   onReplayStarted?: (info: { chatId: string; sinceSequence: number; updates: number }) => void;
   /** The server's caught_up for the connection. Once per connection. */
   onCaughtUp?: (info: ChatCaughtUpInfo) => void;
-  /**
-   * @deprecated See {@link SnapshotTiming}: prefer `onSnapshotReceived` and
-   * `onCaughtUp`. Still called after every snapshot.
-   */
-  onSnapshotApplied?: (timing: SnapshotTiming) => void;
 }
 
 export interface ChatStreamOptions extends StreamEnvironment {
@@ -151,9 +125,9 @@ export interface ChatStreamOptions extends StreamEnvironment {
    * How the snapshot and replay send the bodies of finished tool calls.
    * "full" (the default) is what every client has always had. "stub" sends
    * them elided (ContentBlock.body_elided) for fetchContentBlockBodies to read
-   * when shown; live frames stay full either way. A server that predates the
-   * option ignores it and sends full bodies, so act on each block's
-   * `bodyElided`, never on the mode asked for.
+   * when shown; live frames stay full either way. A server may still send
+   * full bodies (stubs switched off), so act on each block's `bodyElided`,
+   * never on the mode asked for.
    */
   toolBodies?: ToolBodies;
   /**
@@ -179,11 +153,6 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   // stream, the chat's user-level updates that scope filters out.
   private projectId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
-  // The current connection's open time (performance.now) and the server
-  // trace it is part of, from its traceresponse header: what the deprecated
-  // onSnapshotApplied hook reports.
-  private connectionOpenedAtMs = 0;
-  private connectionTraceId = "";
   // How the current connection is bringing the chat up to date, for the
   // onReplayStarted / onCaughtUp hooks: null until its first snapshot or
   // update batch, and the persisted updates it delivered before caught_up.
@@ -460,15 +429,8 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       chatId: this.chatId?.slice(0, 8),
       chatSinceSeq: Number(this.lastChatSequence),
     });
-    this.connectionOpenedAtMs = performance.now();
-    this.connectionTraceId = "";
     this.resetConnectionSync();
-    return client.streamChatUpdates(request, {
-      signal,
-      onHeader: (headers) => {
-        this.connectionTraceId = traceIdFromTraceresponse(headers.get("traceresponse"));
-      },
-    });
+    return client.streamChatUpdates(request, { signal });
   }
 
   protected describe(): Record<string, unknown> {
@@ -499,10 +461,6 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     switch (event.event.case) {
       case "snapshot": {
         const snapshot = event.event.value;
-        const receivedAtMs = performance.now();
-        // Read before any callback runs, so whatever they settle cannot
-        // change how this snapshot is reported.
-        const initialOpen = this.chatSyncPendingFor === chatId;
         if (!this.connectionCaughtUp) this.connectionSync = "snapshot";
         this.hooks.onSnapshotReceived?.({
           chatId,
@@ -544,20 +502,6 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
         this.callbacks.onChatContextUsage?.(chatId, {
           threadTokenCount: Number(snapshot.threadTokenCount),
           compactionThreshold: Number(snapshot.compactionThreshold),
-        });
-
-        // Sampled after onChatSnapshot returns: it commits the snapshot to
-        // the chat store synchronously, so the store holds it by now, and
-        // the paint measurement starts from this point.
-        this.hooks.onSnapshotApplied?.({
-          chatId,
-          traceId: this.connectionTraceId,
-          openedAtMs: this.connectionOpenedAtMs,
-          receivedAtMs,
-          appliedAtMs: performance.now(),
-          initialOpen,
-          messages: snapshot.messages.length,
-          otherUpdates: snapshot.otherUpdates.length,
         });
         break;
       }

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,6 +27,11 @@ type Deps struct {
 	// MCP configuration (the project config record) in step with what the
 	// daemon writes to disk.
 	Repo Repository
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// ProjectConfigs is the stored project config record.
+	ProjectConfigs ProjectConfigs
 	// Router runs the user's MCP servers and reads and writes their config
 	// files on the user's daemon, which owns the filesystem. The API server
 	// always has one; in a composition without one, listing answers from the
@@ -45,6 +52,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("mcp: Deps.Repo is required")
+	}
+	if d.ProjectConfigs == nil {
+		return fmt.Errorf("mcp: Deps.ProjectConfigs is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("mcp: Deps.Projects is required")
 	}
 	return nil
 }

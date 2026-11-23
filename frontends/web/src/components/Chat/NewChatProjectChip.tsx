@@ -16,21 +16,25 @@
  * <project> on <machine>", which clones it there and then starts in it. A
  * project that is a plain folder elsewhere cannot be cloned, so it is listed
  * disabled with the reason. No pick here leads to a chat that cannot start.
+ *
+ * The list is the project selector (Projects/ProjectSelector, chat mode:
+ * projects only), so it searches, pins and scales like every other picker;
+ * its footer's New project is the old Add project.
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Download, Folder, FolderPlus, Loader2 } from "lucide-react";
+import { ChevronDown, Folder } from "lucide-react";
 
-import DropdownMenu, { type MenuGroup, type MenuItem } from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
-import { createProjectFromRepo, useProjects, type Project } from "../../hooks/project-queries";
+import { createProjectFromRepo, type Project } from "../../hooks/project-queries";
 import { canChoose, canSetUpElsewhere, projectPlacement, type InstallRow } from "../../lib/projectPlacement";
-import { openAddProject } from "../../store/addProjectDialogStore";
 import { openNewChat } from "../../store/openChat";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
 import { describeCloneError } from "../Projects/cloneTargets";
+import { ProjectSelector, type ProjectRowState, type ProjectSelection } from "../Projects/ProjectSelector";
+import type { ProjectCatalogRow } from "../../services/projects/catalog";
 
 interface NewChatProjectChipProps {
   disabled?: boolean;
@@ -42,22 +46,25 @@ interface NewChatProjectChipProps {
 
 export function NewChatProjectChip({ disabled = false, machine, installs = [] }: NewChatProjectChipProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const { projects } = useProjects();
   const [settingUp, setSettingUp] = useState<string | null>(null);
+
+  // On a picked machine: a project not set up there is offered as "Set up
+  // on <machine>" when it can be cloned, and is disabled when it cannot.
+  const rowState = useCallback(
+    (row: ProjectCatalogRow): ProjectRowState | undefined => {
+      if (!machine || canChoose(projectPlacement(installs, row.key), machine.daemonId)) return undefined;
+      if (!canSetUpElsewhere(row.project)) return { hint: "Folder elsewhere", disabled: true };
+      if (settingUp === row.key) return { hint: `Setting up on ${machine.name}…`, disabled: true };
+      return { hint: `Set up on ${machine.name}`, disabled: settingUp !== null };
+    },
+    [machine, installs, settingUp],
+  );
+
   if (!currentProject) return null;
 
-  const recent = [...projects].sort(
-    (a, b) => (b.last_active ?? "").localeCompare(a.last_active ?? "") || a.name.localeCompare(b.name),
-  );
   const startIn = (project: Project) => {
     if (project.id !== currentProject.id) void openNewChat({ projectId: project.id });
   };
-  const choice = (project: Project): MenuItem => ({
-    label: project.name,
-    checked: project.id === currentProject.id,
-    onClick: () => startIn(project),
-    testId: `new-chat-project-${project.id}`,
-  });
 
   const setUpOn = async (project: Project, target: { daemonId: string; name: string }) => {
     setSettingUp(project.id);
@@ -79,62 +86,21 @@ export function NewChatProjectChip({ disabled = false, machine, installs = [] }:
     }
   };
 
-  let groups: MenuGroup[];
-  if (machine) {
-    const onMachine: Project[] = [];
-    const elsewhere: Project[] = [];
-    for (const project of recent) {
-      if (canChoose(projectPlacement(installs, project.id), machine.daemonId)) onMachine.push(project);
-      else elsewhere.push(project);
-    }
-    groups = [
-      ...(onMachine.length > 0
-        ? [{ label: `On ${machine.name}`, selection: "single" as const, items: onMachine.map(choice) }]
-        : []),
-      ...(elsewhere.length > 0
-        ? [
-            {
-              label: `Not set up on ${machine.name}`,
-              items: elsewhere.map((project): MenuItem => {
-                const cloneable = canSetUpElsewhere(project);
-                return {
-                  label: cloneable ? `Set up ${project.name} on ${machine.name}` : project.name,
-                  icon:
-                    settingUp === project.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                    ) : cloneable ? (
-                      <Download className="h-3.5 w-3.5" />
-                    ) : undefined,
-                  hint: cloneable ? undefined : "Folder elsewhere",
-                  disabled: !cloneable || settingUp !== null,
-                  onClick: cloneable ? () => void setUpOn(project, machine) : undefined,
-                  testId: `new-chat-project-set-up-${project.id}`,
-                };
-              }),
-            },
-          ]
-        : []),
-    ];
-  } else {
-    groups = [{ label: "Start in", selection: "single", items: recent.map(choice) }];
-  }
-  groups.push({
-    items: [
-      {
-        label: "Add project…",
-        icon: <FolderPlus className="h-3.5 w-3.5" />,
-        onClick: () => openAddProject(),
-        testId: "new-chat-project-add",
-      },
-    ],
-  });
+  const onSelect = (selection: ProjectSelection) => {
+    if (selection.kind !== "project") return;
+    const { project } = selection.row;
+    if (machine && !canChoose(projectPlacement(installs, project.id), machine.daemonId)) void setUpOn(project, machine);
+    else startIn(project);
+  };
 
   return (
-    <DropdownMenu
+    <ProjectSelector
+      mode="chat"
       align="left"
-      label="Project"
       disabled={disabled}
-      menuClassName="max-h-80 w-72 overflow-y-auto"
+      selectedKey={currentProject.id}
+      rowState={rowState}
+      onSelect={onSelect}
       trigger={(props) => (
         <Tooltip content="The project this chat starts in" side="top">
           <button
@@ -154,7 +120,6 @@ export function NewChatProjectChip({ disabled = false, machine, installs = [] }:
           </button>
         </Tooltip>
       )}
-      groups={groups}
     />
   );
 }

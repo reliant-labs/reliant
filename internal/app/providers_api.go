@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
+
 	"connectrpc.com/connect"
+	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -22,15 +25,19 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
@@ -41,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghblobs"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -48,6 +56,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
@@ -57,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -154,6 +164,20 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
 			DevJWTSecret:              api.GetAuthDevJwtSecret(),
+			SupabaseIssuer:            api.GetSupabaseJwtIssuer(),
+			SupabaseAudience:          api.GetSupabaseJwtAudience(),
+			Identity: auth.IdentitySettings{
+				Issuer:        api.GetJwtIssuer(),
+				Audience:      api.GetJwtAudience(),
+				JWKSURL:       api.GetJwtJwksUrl(),
+				SigningMethod: api.GetJwtSigningMethod(),
+				RolesClaim:    api.GetJwtRolesClaim(),
+				Snapshot: forgeauth.JWKSSnapshot{
+					File:   api.GetJwtJwksSnapshotFile(),
+					Inline: api.GetJwtJwksSnapshot(),
+					MaxAge: api.GetJwtJwksSnapshotMaxAge().AsDuration(),
+				},
+			},
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -172,6 +196,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
 		"auth_mode", s.Auth.ModeName(),
+		"managed_identity", s.Auth.Identity.Issuer,
 	)
 	return s, nil
 }
@@ -233,6 +258,9 @@ type HTTPRoutesDeps struct {
 	Tokens       tokenauthority.Authority
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
+	// OAuthScopes are the scopes the connector endpoints advertise
+	// (MCP_OAUTH_SCOPES); empty advertises "openid".
+	OAuthScopes  []string
 	ControlPlane *configv1.ControlPlaneConfig
 	// Membership checks the user control-plane names on an internal
 	// ensure-for-app call; nil on a deployment with no orgs.
@@ -252,6 +280,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 	return grpcserver.NewAPIHTTPRoutes(grpcserver.APIHTTPRoutesDeps{
 		Auth:                d.Auth,
 		Repo:                d.DB,
+		Placement:           daemonplacement.NewRecords(d.DB.ORM()),
 		Router:              d.Router.NATSDaemonRouter,
 		OAuth:               d.Connections.OAuth,
 		Inbound:             d.Inbound,
@@ -259,11 +288,12 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		Tokens:              d.Tokens,
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
+		OAuthScopes:         d.OAuthScopes,
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
-		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
-		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
-		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(store.NewHostedHttpActionTicketExtStore(d.DB.ORM()), cp.InternalServiceSecret),
+		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(store.NewLlmOrgUsageDailyExtStore(d.DB.ORM()), cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(store.NewProjectAppEnsureExtStore(d.DB.ORM()), httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
 }
 
@@ -403,6 +433,8 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
+		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
+		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -442,11 +474,12 @@ type APIConnections struct {
 // OAuth clients this deployment has, and the origins a browser OAuth flow is
 // relayed back to.
 type APIConnectionsDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	Integrations *IntegrationSettings
-	AppOrigins   []string
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	Integrations    *IntegrationSettings
+	AppOrigins      []string
+	ControlPlane    *configv1.ControlPlaneConfig
 	// OrgConnections lets org owners and admins create org-owned connections
 	// (ApiServerConfig orgs.connections_enabled; off by default).
 	OrgConnections bool
@@ -466,7 +499,7 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	store := d.DB.Connections()
+	store := d.ConnectionVault
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
@@ -489,8 +522,9 @@ type APICatalogSearch struct{ *catalogindex.Service }
 // APICatalogSearchDeps is the connections it reports on, and whether a
 // control plane hosts this deployment.
 type APICatalogSearchDeps struct {
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewAPICatalogSearch builds the search: the embedded catalog's index (built
@@ -504,7 +538,7 @@ func NewAPICatalogSearch(d APICatalogSearchDeps) (*APICatalogSearch, error) {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
 	delegated := delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())
-	return &APICatalogSearch{catalogindex.NewService(idx, d.DB.Connections(), catalogindex.DelegatedAvailable(delegated))}, nil
+	return &APICatalogSearch{catalogindex.NewService(idx, d.ConnectionVault, catalogindex.DelegatedAvailable(delegated))}, nil
 }
 
 // delegatedAvailable reports which delegated brokers the worker registers.
@@ -527,9 +561,10 @@ func delegatedAvailable(hosted bool) connections.DelegatedAvailable {
 // connection is opened with, and the control plane credentials are delegated
 // to.
 type InputOptionsDeps struct {
-	DB           *db.Repo
-	Connections  *APIConnections
-	ControlPlane *configv1.ControlPlaneConfig
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Connections     *APIConnections
+	ControlPlane    *configv1.ControlPlaneConfig
 }
 
 // NewInputOptions builds the service behind CatalogService.ListInputOptions
@@ -548,7 +583,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
 	repo := d.DB
-	creds, err := credwire.New(connections.NewResolver(repo, repo.Connections(), d.Connections.Tokens), d.ControlPlane)
+	creds, err := credwire.New(connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: d.ConnectionVault, Tokens: d.Connections.Tokens}), d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -573,7 +608,7 @@ type optionsChecker struct{ svc inputoptions.Service }
 func (c optionsChecker) CheckValues(ctx context.Context, check trigger.ValueCheck) (trigger.ValueCheckResult, error) {
 	res, err := c.svc.Resolve(ctx, inputoptions.ResolveRequest{
 		UserID: check.UserID, Type: check.Type, ConnectionID: check.ConnectionID, Scope: check.Scope,
-		Values: check.Values, ActingIdentity: string(check.ActingIdentity),
+		Values: check.Values, ActingIdentity: string(check.ActingIdentity), OrgID: check.OrgID,
 	})
 	if err != nil {
 		var upstream *inputoptions.UpstreamError
@@ -615,10 +650,11 @@ func NewConnectorGrants(d ConnectorGrantsDeps) (connectorgrant.Store, error) {
 // GitHubAccessDeps is where an owner's GitHub token comes from: the control
 // plane when hosted, the owner's saved connection otherwise.
 type GitHubAccessDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	ControlPlane *configv1.ControlPlaneConfig
-	Integrations *IntegrationSettings
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	ControlPlane    *configv1.ControlPlaneConfig
+	Integrations    *IntegrationSettings
 }
 
 // NewGitHubAccess builds the refresher that keeps GitHub trigger owners'
@@ -635,7 +671,7 @@ type GitHubAccessDeps struct {
 //
 //forge:root-only api
 func NewGitHubAccess(d GitHubAccessDeps) (*ghaccess.Refresher, error) {
-	return wireGitHubAccess(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	return wireGitHubAccess(d.DB, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubAccess adapts *ghaccess.Refresher to trigger.IntegrationAccess.
@@ -650,10 +686,11 @@ type TriggerSenders map[string]trigger.SenderDirectory
 // TriggerSendersDeps is where a caller's GitHub token comes from, as for
 // GitHubAccessDeps.
 type TriggerSendersDeps struct {
-	DB           *db.Repo
-	Vault        vault.Service
-	ControlPlane *configv1.ControlPlaneConfig
-	Integrations *IntegrationSettings
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	Vault           vault.Service
+	ControlPlane    *configv1.ControlPlaneConfig
+	Integrations    *IntegrationSettings
 }
 
 // NewTriggerSenders builds the GitHub people lookup, or none under the same
@@ -662,7 +699,7 @@ type TriggerSendersDeps struct {
 //
 //forge:root-only api
 func NewTriggerSenders(d TriggerSendersDeps) (TriggerSenders, error) {
-	return wireGitHubSenders(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	return wireGitHubSenders(d.DB, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubSenders adapts ghusers.Service to trigger.SenderDirectory. It
@@ -689,11 +726,11 @@ func (gitHubSenders) IsPermanent(err error) bool {
 func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.ErrTooManyQueries) }
 
 // wireGitHubSenders is NewTriggerSenders over its parts.
-func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (TriggerSenders, error) {
+func wireGitHubSenders(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (TriggerSenders, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
+	tokens, err := gitHubTokenSource(repo, conns, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -703,20 +740,26 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp *configv1.ControlPl
 }
 
 // wireGitHubAccess is NewGitHubAccess over its parts.
-func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
+func wireGitHubAccess(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
-	tokens, err := gitHubTokenSource(repo, keys, cp, hooks.OAuthClients)
+	tokens, err := gitHubTokenSource(repo, conns, keys, cp, hooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
-	return ghaccess.New(repo, tokens, ghaccess.Options{
+	var grants ghaccess.Grants
+	var refreshes ghaccess.Refreshes
+	if repo != nil {
+		grants = store.NewIntegrationEventAccessExtStore(repo.ORM())
+		refreshes = store.NewIntegrationAccessRefreshExtStore(repo.ORM())
+	}
+	return ghaccess.New(grants, refreshes, tokens, ghaccess.Options{
 		Logger: slog.Default().With("component", "ghaccess"),
 	}), nil
 }
 
-func gitHubTokenSource(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
+func gitHubTokenSource(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cfg *configv1.ControlPlaneConfig, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
 	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() {
 		secret := cp.InternalServiceSecret
 		if secret == "" {
@@ -735,7 +778,7 @@ func gitHubTokenSource(repo *db.Repo, keys vault.Service, cfg *configv1.ControlP
 	if err != nil {
 		return nil, fmt.Errorf("github triggers: %w", err)
 	}
-	store := repo.Connections()
+	store := conns
 	return ghaccess.NewSavedTokens(store, connections.NewTokenSource(store, keys, providers, nil)), nil
 }
 
@@ -785,31 +828,35 @@ type TriggerAlertingDeps struct {
 //
 //forge:root-only api
 func NewTriggerAlerting(d TriggerAlertingDeps) (*triggers.Alerting, error) {
-	return wireTriggerAlerting(d.DB, d.ControlPlane, d.Integrations.PublicURL), nil
+	return wireTriggerAlerting(d.DB, d.ControlPlane, d.Integrations.PublicURL)
 }
 
 // wireTriggerAlerting is NewTriggerAlerting over its parts.
-func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, publicURL string) *triggers.Alerting {
+func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, publicURL string) (*triggers.Alerting, error) {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {
-		return nil
+		return nil, nil
 	}
 	secret := cp.InternalServiceSecret
 	if secret == "" {
 		logging.Warn("on-call automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
-		return nil
+		return nil, nil
 	}
 	if strings.TrimSpace(publicURL) == "" {
 		// The control plane's Alertmanager needs an absolute URL to post to;
 		// a bare /hooks path would be refused at every enable.
 		logging.Warn("on-call automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
-		return nil
+		return nil, nil
 	}
 	receivers := controlplane.NewInstrumented(controlplane.Deps{
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
-	return triggers.NewAlerting(receivers, repo, publicURL)
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: repo.SessionPool()})
+	if err != nil {
+		return nil, err
+	}
+	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: triggers.NewStores(repo), Locker: locker, PublicURL: publicURL}), nil
 }
 
 // TriggerInboundDeps is what the inbound receivers record events in, start
@@ -836,13 +883,14 @@ type TriggerInboundDeps struct {
 //forge:root-only api
 func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	repo := d.DB
-	in := webhook.NewInbound(repo,
-		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+	ws := webhook.NewStores(repo)
+	in := webhook.NewInbound(ws,
+		triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
-			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
-			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
+			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
-		WithDeliveryInbox(repo).
+		WithDeliveryInbox(ws).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
@@ -968,9 +1016,38 @@ type WorktreeSweepDeps struct {
 // The sweep records the use a daemon reports through the optional UseStore;
 // a Repo that lost the method would silently stop recording it.
 var (
-	_ worktreesweep.UseStore  = (*db.Repo)(nil)
-	_ worktreesweep.MarkStore = (*db.Repo)(nil)
+	_ worktreesweep.UseStore  = store.WorktreeExtStore(nil)
+	_ worktreesweep.MarkStore = store.WorktreeExtStore(nil)
 )
+
+// worktreeSweepStore is what the sweep's auto-archive reads and writes: the
+// worktree queries and the one chat query that says whether a chat is bound.
+// Only the methods AutoArchiveStore names are called through it.
+type worktreeSweepStore struct {
+	store.WorktreeExtStore
+	chats interface {
+		GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	}
+}
+
+func (s worktreeSweepStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return s.chats.GetLiveChatIDForWorktree(ctx, worktreeID)
+}
+
+// idleRetirementStore is what idle retirement reads (which worktrees a chat
+// is running in) and writes (the archive).
+type idleRetirementStore struct {
+	store.ChatExtStore
+	store.WorktreeExtStore
+}
+
+func (s idleRetirementStore) ListWorktreeIDsWithRunningChat(ctx context.Context, ids []string) (map[string]bool, error) {
+	return s.ChatExtStore.ListWorktreeIDsWithRunningChat(ctx, ids)
+}
+
+func (s idleRetirementStore) ArchiveRecoverableIdleWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {
+	return s.WorktreeExtStore.ArchiveRecoverableIdleWorktree(ctx, id, quietSince)
+}
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
@@ -994,20 +1071,24 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	if err != nil {
 		return nil, err
 	}
-	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+	o := database.ORM()
+	worktrees := store.NewWorktreeExtStore(o)
+	chats := store.NewChatExtStore(o)
+	return worktreesweep.New(worktreesweep.NewStores(database, worktrees), d.Router.NATSDaemonRouter).
 		// The existing explicit rollout setting gates Git recovery too. The
 		// gate does not bypass any per-workspace or remote verification check.
-		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
+		WithGitRecovery(store.NewWorktreeRecoveryExtStore(o), recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
-		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, database).
-		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
+		WithUseStore(worktrees).
+		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
+		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
 		WithLandedIdle(d.Settings.WorktreeLandedIdle).
-		WithReclaimMarks(database, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
+		WithReclaimMarks(worktrees, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its
@@ -1051,7 +1132,7 @@ type ScheduleSyncerDeps struct {
 //
 //forge:root-only api
 func NewScheduleSyncer(d ScheduleSyncerDeps) (*triggers.Syncer, error) {
-	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), d.DB, v2workflow.SharedTaskQueue).
+	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), triggers.NewStores(d.DB), v2workflow.SharedTaskQueue).
 		WithPolledIntegrations(d.Pollers.IsPolled), nil
 }
 
@@ -1103,7 +1184,7 @@ type TriggerReconcilerDeps struct {
 //forge:root-only api
 func NewTriggerReconciler(d TriggerReconcilerDeps) (*TriggerReconciler, error) {
 	repo := d.DB
-	return &TriggerReconciler{triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
+	return &TriggerReconciler{triggers.NewReconciler(triggers.NewStores(repo), triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
 }
 
 // Run reconciles until ctx ends.
@@ -1128,7 +1209,7 @@ type TriggerRedriverDeps struct {
 //
 //forge:root-only api
 func NewTriggerRedriver(d TriggerRedriverDeps) (*TriggerRedriver, error) {
-	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
+	return &TriggerRedriver{triggers.NewRedriver(triggers.NewStores(d.DB), d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
 }
 
 // Run redrives until ctx ends.
@@ -1153,7 +1234,7 @@ type backgroundProcessDaemons struct {
 
 // attachedDaemons is the attachment-lease read backgroundProcessDaemons makes.
 type attachedDaemons interface {
-	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, cutoff time.Time) ([]string, error)
 }
 
 func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -1161,7 +1242,10 @@ func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context,
 }
 
 func (d backgroundProcessDaemons) ConnectedDaemonIDs(ctx context.Context, userID string) ([]string, error) {
-	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, backgroundProcessLeaseWindow)
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return d.repo.ListAttachedDaemonIDsForUser(ctx, userID, time.Now().UTC().Add(-backgroundProcessLeaseWindow))
 }
 
 // WorkflowReconciler is background workflow reconciliation: stuck-task
@@ -1181,6 +1265,29 @@ type WorkflowReconcilerDeps struct {
 	Activity *daemonstate.Publisher
 }
 
+// approvalSweepStore is what the reconciler's approval sweep reads (the ext
+// store) and closes through (the closer, which announces on the chat feed).
+type approvalSweepStore struct {
+	reads  store.ApprovalExtStore
+	closer *approvalclose.Closer
+}
+
+func (s approvalSweepStore) ListStaleApprovals(ctx context.Context, limit int) ([]store.StaleApproval, error) {
+	return s.reads.ListStaleApprovals(ctx, limit)
+}
+
+func (s approvalSweepStore) ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error) {
+	return s.reads.ListUnannouncedApprovalResolutions(ctx, limit)
+}
+
+func (s approvalSweepStore) ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error) {
+	return s.closer.ResolvePendingApproval(ctx, id, status, reason, actionTaken)
+}
+
+func (s approvalSweepStore) AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error {
+	return s.closer.AnnounceApprovalResolution(ctx, a)
+}
+
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
 // Temporal client's so reset (stuck-task recovery) requests land in the right
 // namespace; the task queue defaults to the shared worker queue. Backgrounded
@@ -1191,12 +1298,20 @@ type WorkflowReconcilerDeps struct {
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
-	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
+	r := reconciliation.New(reconciliation.Deps{
+		Store:     d.DB,
+		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Temporal:  d.Temporal.Client,
+		Config:    cfg,
+		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
+		Daemons:   store.NewDaemonExtStore(d.DB.ORM()),
+	})
 	r.SetResetGuard(d.ResetGuard)
+	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
 	r.SetQueuedDelivery(d.Queued)
-	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: store.NewDaemonAttachmentExtStore(d.DB.ORM())})
 	if d.Activity != nil {
-		r.SetHeldRunActivity(d.Activity)
+		r.SetHeldRunActivity(d.Activity, store.NewProviderBackoffExtStore(d.DB.ORM()))
 	}
 	return &WorkflowReconciler{r}, nil
 }
@@ -1271,10 +1386,9 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 // keeps it to one replica at a time ("reliant\x03"). A pass over chats that
 // are all complete is one indexed walk of update_stream_counters.
 const (
-	chatUpdateHeadsBackfillInterval       = 10 * time.Minute
-	chatUpdateHeadsBackfillBatch          = 200
-	chatUpdateHeadsBackfillPause          = 25 * time.Millisecond
-	chatUpdateHeadsBackfillLockKey  int64 = 0x7265_6c69_616e_7403
+	chatUpdateHeadsBackfillInterval = 10 * time.Minute
+	chatUpdateHeadsBackfillBatch    = 200
+	chatUpdateHeadsBackfillPause    = 25 * time.Millisecond
 )
 
 // ChatUpdateHeadsBackfill brings every chat's materialized snapshot heads up
@@ -1284,7 +1398,10 @@ const (
 // chat-update-heads.md). Until a chat is backfilled its snapshot reads the
 // log, as before, so this only makes opens faster; nothing waits on it. One
 // replica runs a pass at a time; the others skip theirs.
-type ChatUpdateHeadsBackfill struct{ repo *db.Repo }
+type ChatUpdateHeadsBackfill struct {
+	repo   *db.Repo
+	locker dblock.Service
+}
 
 // ChatUpdateHeadsBackfillDeps is the repository whose heads are backfilled.
 type ChatUpdateHeadsBackfillDeps struct {
@@ -1295,7 +1412,11 @@ type ChatUpdateHeadsBackfillDeps struct {
 //
 //forge:root-only api
 func NewChatUpdateHeadsBackfill(d ChatUpdateHeadsBackfillDeps) (*ChatUpdateHeadsBackfill, error) {
-	return &ChatUpdateHeadsBackfill{repo: d.DB}, nil
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: d.DB.SessionPool()})
+	if err != nil {
+		return nil, err
+	}
+	return &ChatUpdateHeadsBackfill{repo: d.DB, locker: locker}, nil
 }
 
 // Run backfills until ctx ends.
@@ -1313,7 +1434,7 @@ func (b *ChatUpdateHeadsBackfill) Run(ctx context.Context) error {
 }
 
 func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
-	release, ok, err := b.repo.TryAdvisoryLock(ctx, chatUpdateHeadsBackfillLockKey)
+	release, ok, err := b.locker.TryLock(ctx, dblock.ChatUpdateHeads)
 	if err != nil {
 		logging.WarnContext(ctx, "chat snapshot heads backfill: taking the lock failed", "error", err)
 		return
@@ -1339,20 +1460,20 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 const llmUsageRetentionInterval = time.Hour
 
 // LLMUsageRetention deletes per-call LLM usage rows older than
-// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// llmusage.Retention. The daily rollup is kept. Every replica runs it;
 // the delete is idempotent and skips rows another replica is deleting.
-type LLMUsageRetention struct{ repo *db.Repo }
+type LLMUsageRetention struct{ ledger llmusage.Service }
 
-// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+// LLMUsageRetentionDeps is the ledger that is pruned.
 type LLMUsageRetentionDeps struct {
-	DB *db.Repo
+	Ledger llmusage.Service
 }
 
 // NewLLMUsageRetention is the retention loop.
 //
 //forge:root-only api
 func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
-	return &LLMUsageRetention{repo: d.DB}, nil
+	return &LLMUsageRetention{ledger: d.Ledger}, nil
 }
 
 // Run prunes until ctx ends.
@@ -1360,12 +1481,12 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 	ticker := time.NewTicker(llmUsageRetentionInterval)
 	defer ticker.Stop()
 	for {
-		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+		if n, err := l.ledger.PruneLLMCallUsage(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
 		}
-		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
 		}
 		select {
@@ -1540,6 +1661,41 @@ func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
+}
+
+// CoverageSourceReports is where the coverage-source handler asks whether a
+// retained coverage report names a blob: control-plane's TestsService, with
+// the viewer's own bearer (so no internal-service secret is needed). nil —
+// every read NOT_YET_AVAILABLE — when self-hosted; never a typed nil.
+func CoverageSourceReports(cfg *configv1.ControlPlaneConfig) coverage_source.Reports {
+	if !ControlPlaneEndpoint(cfg).Hosted() {
+		return nil
+	}
+	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
+}
+
+// CoverageSourceBlobs is how the coverage-source handler reads a blob from
+// GitHub: as the viewer, through the same token source GitHub triggers use
+// (control-plane's delegated token when hosted, the user's saved GitHub
+// connection when self-hosted). Never a project-wide credential: an App
+// installation token would let anyone with tests:read read the code.
+//
+// nil (and no error) on a hosted deployment without INTERNAL_SERVICE_SECRET,
+// which cannot fetch delegated tokens: every read is then NOT_YET_AVAILABLE,
+// as the org usage view shows no estimates (OrgUsageListPrices).
+func CoverageSourceBlobs(repo *db.Repo, conns connectionvault.Service, keys vault.Service, cfg *configv1.ControlPlaneConfig, integrations *IntegrationSettings) (coverage_source.Blobs, error) {
+	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() && cp.InternalServiceSecret == "" {
+		return nil, nil
+	}
+	var clients connections.OAuthClients
+	if integrations != nil {
+		clients = integrations.Webhooks.OAuthClients
+	}
+	tokens, err := gitHubTokenSource(repo, conns, keys, cfg, clients)
+	if err != nil {
+		return nil, fmt.Errorf("coverage source: %w", err)
+	}
+	return ghblobs.NewInstrumented(ghblobs.Deps{Tokens: tokens}), nil
 }
 
 // projectOrgMoveStarter starts a project move's saga on the shared task

@@ -22,7 +22,7 @@
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS subscription; an adapter contract.go is deferred (reliant is not forge-generated, so no mock/decorator would be generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS subscription, an outbound I/O adapter the gateway bootstrap starts over its own *nats.Conn
 //forge:exclude-contract: gateway-side subscriber for the cross-process "user is active" NATS ping
 package daemonactivity
 

@@ -33,8 +33,8 @@ type Deps struct {
 	Now func() time.Time
 }
 
-// Store is the slice of the repository this service reads; *db.Repo
-// satisfies it.
+// Store is the slice of the PR-record store this service reads;
+// store.PrRecordExtStore satisfies it.
 type Store interface {
 	GetPRRecord(ctx context.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error)
 	ListPRRecordRepositories(ctx context.Context, provider, repository string) ([]core.PRRecordRepository, error)

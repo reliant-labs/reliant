@@ -86,6 +86,11 @@ columns:
   workflows.workflow_name: {pool: workflow_names}
   workflow_drafts.name: [Nightly triage, PR review, Release notes, Flake hunter]
   workflow_drafts.visibility: [null]
+  # Closed incidents: state = 'recovering' exactly when lease_until is set,
+  # and an open state needs an episode_id. The two CHECKs share state, so
+  # forge cannot place them together.
+  attention_incidents.state: [""]
+  attention_incidents.lease_until: [null]
 
   # ── Daemons and processes ──────────────────────────────────────────────────
   daemons.hostname: {pool: hostnames}
@@ -104,11 +109,16 @@ columns:
   # daemon (triggers_*_no_daemon_check).
   triggers.daemon_id: [null]
   triggers.no_machine: [false]
+  # Pending deliveries: a claimed one carries a lease (token and expiry
+  # together), and a completed one drops its payload, lease and dead_at — four
+  # overlapping CHECKs forge cannot place jointly.
+  trigger_delivery_inbox.payload: ['{}']
+  trigger_delivery_inbox.lease_token: [null]
+  trigger_delivery_inbox.lease_until: [null]
+  trigger_delivery_inbox.completed_at: [null]
+  trigger_delivery_inbox.dead_at: [null]
   model_endpoints.name: [Local Ollama, LM Studio, Team vLLM]
   model_endpoints.base_url: [http://localhost:11434/v1, http://localhost:1234/v1, https://vllm.internal.example.com/v1]
-  # route = 'via_daemon' exactly when daemon_id is set: seed the direct ones.
-  model_endpoints.route: [direct]
-  model_endpoints.daemon_id: [null]
 
   # ── Connectors, machine pools, LLM usage ───────────────────────────────────
   connector_grants.exec_mode: [deny, unrestricted]
@@ -118,9 +128,6 @@ columns:
   connector_grants.path_root: [/home/workspace/projects]
   machine_pools.name: [gpu, large, default]
   machine_pools.selector: ['{"size": "large"}', '{"gpu": "true"}']
-  # error_class is '' exactly when the call did not fail: seed successes.
-  llm_call_usage.outcome: [success]
-  llm_call_usage.error_class: [""]
   llm_call_usage.input_tokens: {min: 200, max: 60000, step: 200}
   llm_call_usage.output_tokens: {min: 20, max: 4000, step: 20}
   llm_call_usage.latency_ms: {min: 300, max: 45000, step: 100}

@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
@@ -182,26 +183,38 @@ func (s *Service) InstallServer(
 	}), nil
 }
 
-func installSkillBundleTargetDir(projectPath string, scope reliantv1.ConfigScope, targetScope string) (string, error) {
-	scopeName := strings.TrimSpace(strings.ToLower(targetScope))
-	switch scopeName {
+// installSkillBundleScope is the scope a bundle installs into, named the way
+// the daemon's mcp.install_skill_bundle (and mcp.write_config) takes it:
+// "global", "project" or "local". The daemon resolves it to a directory,
+// because the global one is under the user config dir of the machine holding
+// the checkout, which this process cannot see.
+func installSkillBundleScope(scope reliantv1.ConfigScope, targetScope string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(targetScope)) {
 	case "", "inherit":
-		switch normalizeScope(scope) {
-		case reliantv1.ConfigScope_CONFIG_SCOPE_GLOBAL:
-			return filepath.Join(config.GetUserConfigDir(), "skills"), nil
-		case reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL:
-			return filepath.Join(projectPath, config.ReliantLocalDir, "skills"), nil
-		default:
-			return filepath.Join(projectPath, config.ReliantDir, "skills"), nil
-		}
+		return scopeToDaemonWriteScope(normalizeScope(scope)), nil
 	case "project":
-		return filepath.Join(projectPath, config.ReliantDir, "skills"), nil
+		return "project", nil
 	case "project_local", "local":
-		return filepath.Join(projectPath, config.ReliantLocalDir, "skills"), nil
+		return "local", nil
 	case "global", "user":
-		return filepath.Join(config.GetUserConfigDir(), "skills"), nil
+		return "global", nil
 	default:
 		return "", fmt.Errorf("unsupported skill bundle target scope: %s", targetScope)
+	}
+}
+
+// legacyInstallSkillBundleTargetDir is the absolute directory to hand a daemon
+// that predates mcp.install_skill_bundle, which takes only mcp.install_bundle's
+// target_dir. Only a project-relative scope has one: the global directory is
+// the daemon's to resolve, so it reports false for "global".
+func legacyInstallSkillBundleTargetDir(projectPath, daemonScope string) (string, bool) {
+	switch daemonScope {
+	case "project":
+		return filepath.Join(projectPath, config.ReliantDir, "skills"), true
+	case "local":
+		return filepath.Join(projectPath, config.ReliantLocalDir, "skills"), true
+	default:
+		return "", false
 	}
 }
 
@@ -215,29 +228,32 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, checko
 		return "", fmt.Errorf("cannot install bundles: no user context or daemon router")
 	}
 
+	type bundleFile struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+
 	totalInstalled := 0
 	totalSkipped := 0
 	for _, bundle := range rec.Bundles.Skills {
-		targetDir, err := installSkillBundleTargetDir(checkout.Path, scope, bundle.TargetScope)
+		daemonScope, err := installSkillBundleScope(scope, bundle.TargetScope)
 		if err != nil {
 			return "", err
 		}
 
-		type bundleFile struct {
-			Path    string `json:"path"`
-			Content string `json:"content"`
-		}
 		files := make([]bundleFile, 0, len(bundle.Files))
 		for _, f := range bundle.Files {
 			files = append(files, bundleFile{Path: f.Path, Content: f.Content})
 		}
 
 		payload, err := json.Marshal(struct {
-			TargetDir      string       `json:"target_dir"`
+			Scope          string       `json:"scope"`
+			ProjectPath    string       `json:"project_path"`
 			Files          []bundleFile `json:"files"`
 			ConflictPolicy string       `json:"conflict_policy"`
 		}{
-			TargetDir:      targetDir,
+			Scope:          daemonScope,
+			ProjectPath:    checkout.Path,
 			Files:          files,
 			ConflictPolicy: bundle.ConflictPolicy,
 		})
@@ -245,7 +261,28 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, checko
 			return "", fmt.Errorf("failed to marshal bundle install request: %w", err)
 		}
 
-		respBytes, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.install_bundle", payload, 30000)
+		respBytes, err := checkout.Send(ctx, s.deps.Router, userID, "mcp.install_skill_bundle", payload, 30000)
+		if err != nil && daemonerr.IsOutdated(err) {
+			// A daemon older than mcp.install_skill_bundle still installs a
+			// project-relative bundle from an absolute directory. A global one
+			// stays refused: the only directory this process could name is its
+			// own home, not the daemon's.
+			if targetDir, ok := legacyInstallSkillBundleTargetDir(checkout.Path, daemonScope); ok {
+				legacy, marshalErr := json.Marshal(struct {
+					TargetDir      string       `json:"target_dir"`
+					Files          []bundleFile `json:"files"`
+					ConflictPolicy string       `json:"conflict_policy"`
+				}{
+					TargetDir:      targetDir,
+					Files:          files,
+					ConflictPolicy: bundle.ConflictPolicy,
+				})
+				if marshalErr != nil {
+					return "", fmt.Errorf("failed to marshal bundle install request: %w", marshalErr)
+				}
+				respBytes, err = checkout.Send(ctx, s.deps.Router, userID, "mcp.install_bundle", legacy, 30000)
+			}
+		}
 		if err != nil {
 			return "", fmt.Errorf("daemon bundle install failed: %w", err)
 		}

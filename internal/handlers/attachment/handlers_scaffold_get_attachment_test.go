@@ -9,25 +9,25 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	attachment "github.com/reliant-labs/reliant/internal/handlers/attachment"
 )
 
 // getForeignRepo holds one attachment, owned by another user.
-type getForeignRepo struct{ attachment.Repository }
+type getForeignRepo struct{ attachment.AttachmentStore }
 
-func (getForeignRepo) GetAttachment(_ context.Context, id string) (*db.Attachment, error) {
+func (getForeignRepo) GetAttachment(_ context.Context, id string) (*core.Attachment, error) {
 	if id != "att-foreign" {
 		return nil, nil
 	}
-	return &db.Attachment{ID: id, UserID: "someone-else", Filename: "a.png", Content: []byte("x")}, nil
+	return &core.Attachment{ID: id, UserID: "someone-else", Filename: "a.png", Content: []byte("x")}, nil
 }
 
 func TestGetAttachment_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: getForeignRepo{}}))
+	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{Attachments: getForeignRepo{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetAttachmentRequest, pb.GetAttachmentResponse]{
 		{

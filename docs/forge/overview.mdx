@@ -4,7 +4,7 @@ sidebarTitle: "Forge overview"
 description: "Forge is an open-source Go and React framework and deploy platform for AI coding agents, with tests, environments, hosting and monitoring from the first commit."
 ---
 
-Forge is Reliant's framework for building, running and deploying software. Where Reliant is the harness, the agents, workflows and machines that do the work, Forge is the foundation they build on: the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
+Forge is an open-source framework and CLI that puts guardrails on any app and deploys it with no account: `npx -y @reliantlabs/forge@latest env deploy prod --claimable`. It is one of four Reliant products, beside [Reliant Cloud](/hosting/overview), [Reliant Workflows](/workflows/overview) and Reliant Engine (coming soon). It scaffolds the Go and React app itself, with the tests, deploys and monitoring that make it something you can run in production rather than a demo.
 
 A forge project holds Go services (Connect RPC, callable from a browser as plain HTTP+JSON), background workers, jobs, Kubernetes operators and CLIs, plus Next.js, Vite or Expo frontends and plain static sites. From the first commit it has a local dev stack that comes up with one command, a Postgres schema with generated data access, structured logs, traces and metrics on every boundary, secrets handling, linters, tests, CI, and `dev`, `staging` and `prod` environments, with the last two already set up to deploy to Reliant hosting.
 

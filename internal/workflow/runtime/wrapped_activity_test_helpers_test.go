@@ -24,7 +24,7 @@ type wrapperTestRepo struct {
 	events []*db.NodeExecutionState
 }
 
-func (r *wrapperTestRepo) GetWorkflow(context.Context, string) (*db.Workflow, error) {
+func (r *wrapperTestRepo) LoadWorkflow(context.Context, string) (*db.Workflow, error) {
 	return nil, nil
 }
 

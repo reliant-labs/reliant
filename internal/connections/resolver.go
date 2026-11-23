@@ -63,10 +63,15 @@ type TriggerSite struct {
 	Placement Placement
 }
 
-// runOwners reads who a run, or a trigger, belongs to. Satisfied by
+// runLoader reads the run a use is made for. store.WorkflowExtStore
+// satisfies it.
+type runLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// runOwners reads who a thread, chat or trigger belongs to. Satisfied by
 // *db.Repo.
 type runOwners interface {
-	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
 	GetThread(ctx context.Context, id string) (*core.Thread, error)
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
@@ -93,14 +98,25 @@ type actor struct {
 // (CONNECTIONS_VAULT.md §3.1).
 type Resolver struct {
 	owners runOwners
+	runs   runLoader
 	store  resolverStore
 	tokens *TokenSource
 }
 
+// ResolverDeps is what NewResolver needs.
+type ResolverDeps struct {
+	// Owners reads the thread, chat or trigger a use belongs to.
+	Owners runOwners
+	// Runs reads the run a use is made for.
+	Runs   runLoader
+	Store  resolverStore
+	Tokens *TokenSource
+}
+
 // NewResolver builds the resolver. Credential placement comes from the
 // integrations the token source's registry was compiled from.
-func NewResolver(owners runOwners, store resolverStore, tokens *TokenSource) *Resolver {
-	return &Resolver{owners: owners, store: store, tokens: tokens}
+func NewResolver(d ResolverDeps) *Resolver {
+	return &Resolver{owners: d.Owners, runs: d.Runs, store: d.Store, tokens: d.Tokens}
 }
 
 // Resolved is a connection ready to authenticate one call. The plaintext is
@@ -208,13 +224,13 @@ func (r *Resolver) actorOf(ctx context.Context, runID string) (actor, error) {
 	if runID == "" {
 		return actor{}, newError(CodeFailedPrecondition, "no run to resolve a connection for")
 	}
-	run, err := r.owners.GetWorkflow(ctx, runID)
+	run, err := r.runs.LoadWorkflow(ctx, runID)
 	if err == nil && run != nil {
 		return r.actorOfWorkflow(ctx, run)
 	}
 	if thread, terr := r.owners.GetThread(ctx, runID); terr == nil && thread != nil {
 		if thread.WorkflowID != nil && *thread.WorkflowID != "" {
-			if run, werr := r.owners.GetWorkflow(ctx, *thread.WorkflowID); werr == nil && run != nil {
+			if run, werr := r.runs.LoadWorkflow(ctx, *thread.WorkflowID); werr == nil && run != nil {
 				return r.actorOfWorkflow(ctx, run)
 			}
 		}

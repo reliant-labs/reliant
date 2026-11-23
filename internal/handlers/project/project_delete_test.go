@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -20,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 )
 
 // Who may delete, restore and purge a project (control-plane
@@ -54,6 +57,7 @@ func (m deleteMembers) ResolveOrgMembership(_ context.Context, userID, orgID str
 type deleteAuthFixture struct {
 	t                              *testing.T
 	repo                           *db.Repo
+	purges                         projectpurge.Service
 	owner, admin, member, outsider string
 	project, trigger               string
 	members                        deleteMembers
@@ -85,7 +89,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 	t.Cleanup(cleanup)
 	s := uuid.NewString()[:8]
 	f := &deleteAuthFixture{
-		t: t, repo: repo,
+		t: t, repo: repo, purges: projectpurge.New(projectpurge.Deps{DB: repo.ORM()}),
 		owner: "owner-" + s, admin: "admin-" + s, member: "member-" + s, outsider: "outsider-" + s,
 		project: "proj-" + s, trigger: "trig-" + s,
 		schedules: &recordingSchedules{},
@@ -111,7 +115,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 func (f *deleteAuthFixture) service() (*Service, *orgs.Resolver) {
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	return NewTestProject(f.t, WithProjectDeps(Deps{Repo: f.repo, Orgs: m, Schedules: f.schedules, Now: clock})), m
+	return NewTestProject(f.t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: f.purges, Orgs: m, Schedules: f.schedules, Now: clock}))), m
 }
 
 // as is a request as userID through credential c; a machine token is also
@@ -291,7 +295,7 @@ func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
 // release is closed; started closes when they are reached. With fail set
 // they then fail instead of running.
 type heldPurge struct {
-	*db.Repo
+	projectpurge.Service
 	started, release chan struct{}
 	fail             error
 }
@@ -306,7 +310,7 @@ func (h heldPurge) PurgeClaimedProject(ctx context.Context, id, owner string) ([
 	if h.fail != nil {
 		return nil, h.fail
 	}
-	return h.Repo.PurgeClaimedProject(ctx, id, owner)
+	return h.Service.PurgeClaimedProject(ctx, id, owner)
 }
 
 // PurgeProjectNow answers once the project is claimed, before its batches
@@ -328,8 +332,8 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			f := newDeleteAuthFixture(t)
 			m := orgs.New(f.members)
 			clock := func() time.Time { return deleteNow }
-			held := heldPurge{Repo: f.repo, started: make(chan struct{}), release: make(chan struct{}), fail: c.fail}
-			svc := NewTestProject(t, WithProjectDeps(Deps{Repo: held, Orgs: m, Schedules: f.schedules, Now: clock}))
+			held := heldPurge{Service: f.purges, started: make(chan struct{}), release: make(chan struct{}), fail: c.fail}
+			svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: held, Orgs: m, Schedules: f.schedules, Now: clock})))
 			owner := as(m, f.owner, auth.CredentialSession, "")
 
 			_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
@@ -358,7 +362,7 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			_, err = f.repo.GetProject(ctx, f.project)
 			require.NoError(t, err, "a failed purge leaves the project, hidden and claimed")
 			assert.Empty(t, f.schedules.synced(), "nothing was purged, so no schedule moved")
-			res, err := f.repo.PurgeDueProjects(ctx, time.Now().Add(db.ProjectPurgeLease+time.Minute), db.ProjectPurgeLease, 50)
+			res, err := f.purges.PurgeDueProjects(ctx, time.Now().Add(projectpurge.Lease+time.Minute), projectpurge.Lease, 50)
 			require.NoError(t, err)
 			assert.Equal(t, 1, res.Purged, "the worker finishes it once the claim's lease has passed")
 			_, err = f.repo.GetProject(ctx, f.project)
@@ -371,12 +375,13 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 // handler's authority decision and its write: each delete or restore first
 // commits the project's restamp to another org, as MoveProjectOrg would.
 type movesBeforeWrite struct {
-	*db.Repo
-	to string
+	projectpurge.Service
+	repo *db.Repo
+	to   string
 }
 
 func (m movesBeforeWrite) move(ctx context.Context, id string) error {
-	_, err := m.ORM().Bun().NewRaw(`UPDATE projects SET org_id = ?0 WHERE id = ?1`, m.to, id).Exec(ctx)
+	_, err := m.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = ?0 WHERE id = ?1`, m.to, id).Exec(ctx)
 	return err
 }
 
@@ -384,14 +389,14 @@ func (m movesBeforeWrite) ScheduleProjectDeletion(ctx context.Context, id, by st
 	if err := m.move(ctx, id); err != nil {
 		return core.ProjectDeletion{}, err
 	}
-	return m.Repo.ScheduleProjectDeletion(ctx, id, by, after, decided)
+	return m.Service.ScheduleProjectDeletion(ctx, id, by, after, decided)
 }
 
 func (m movesBeforeWrite) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
 	if err := m.move(ctx, id); err != nil {
 		return nil, err
 	}
-	return m.Repo.RestoreProject(ctx, id, decided)
+	return m.Service.RestoreProject(ctx, id, decided)
 }
 
 // An admin of the org a departed member's project is in may delete and
@@ -403,7 +408,7 @@ func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
 	f.members.left[f.owner] = true
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	moving := NewTestProject(t, WithProjectDeps(Deps{Repo: movesBeforeWrite{Repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock}))
+	moving := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: movesBeforeWrite{Service: f.purges, repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock})))
 	admin := as(m, f.admin, auth.CredentialSession, "")
 
 	_, err := f.delete(moving, admin, false)

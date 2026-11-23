@@ -78,14 +78,14 @@ func createShellCommand(ctx context.Context, command string) *exec.Cmd {
 	return exec.CommandContext(ctx, "bash", "-c", command)
 }
 
-// childPIDSnapshot reads the whole process table once and returns a
+// psChildPIDSnapshot reads the whole process table once, with `ps`, and returns a
 // parent PID -> child PIDs map.
 //
 // One `ps` replaces the recursive `pgrep -P` descent, which forked once per node
 // of every tree it walked. A single snapshot also gives a consistent view: the
 // recursive version could see a child that had already exited by the time it
 // asked about that child's own children.
-func childPIDSnapshot() map[int][]int {
+func psChildPIDSnapshot() map[int][]int {
 	cmd := exec.Command("ps", "-Ao", "pid=,ppid=")
 	output, err := cmd.Output()
 	if err != nil {
@@ -113,14 +113,14 @@ func childPIDSnapshot() map[int][]int {
 	return children
 }
 
-// getPortsForPids gets listening ports for many PIDs in ONE lsof invocation,
+// lsofPortsForPids gets listening ports for many PIDs in ONE lsof invocation,
 // returning them keyed by the PID that owns them.
 //
 // lsof accepts a comma-separated PID list for -p, so the number of subprocesses
 // is independent of how many processes are being listed. Measured on macOS, one
 // lsof costs ~65ms whether it is asked about one PID or several, so this turns a
 // per-PID cost into a fixed one.
-func getPortsForPids(pids []int) (map[int][]PortInfo, error) {
+func lsofPortsForPids(pids []int) (map[int][]PortInfo, error) {
 	ports := make(map[int][]PortInfo, len(pids))
 	if len(pids) == 0 {
 		return ports, nil
@@ -138,11 +138,15 @@ func getPortsForPids(pids []int) (map[int][]PortInfo, error) {
 	cmd := exec.Command("lsof", "-P", "-n", "-i", "-a", "-p", strings.Join(pidArgs, ","))
 	output, err := cmd.Output()
 	if err != nil {
-		// lsof exits 1 when it found nothing matching, which is not an error.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return ports, nil
+		// lsof exits 1 when it found nothing, and also when ANY PID of the
+		// list no longer exists (it exited after the process-table snapshot).
+		// Its output still lists what the others hold, so it is parsed:
+		// returning empty here dropped every port of the batch whenever one
+		// short-lived PID of any tree had exited in between.
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))

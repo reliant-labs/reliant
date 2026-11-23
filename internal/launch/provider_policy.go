@@ -94,7 +94,7 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID string, forC
 	}
 	var chat chatselection.ProviderPolicy
 	if chatID != "" {
-		sel, err := l.repo.GetChatSelection(ctx, chatID)
+		sel, err := l.selections.GetChatSelection(ctx, chatID)
 		if err != nil {
 			logging.WarnContext(ctx, "Could not read the chat's provider policy; using the default", "chatID", chatID, "error", err)
 		} else if sel != nil {

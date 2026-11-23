@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 func TestDelayedWholeChatLookupDoesNotRetryParticipatingAgentTwice(t *testing.T) {
@@ -19,7 +20,7 @@ func TestDelayedWholeChatLookupDoesNotRetryParticipatingAgentTwice(t *testing.T)
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
-		return map[string]interface{}{"agents": []*db.StoppedSpawnAgent{{ChildThreadID: "agent", ToolCallID: "tc", ParentThreadID: "root"}}}, nil
+		return map[string]interface{}{"agents": []*core.StoppedSpawnAgent{{ChildThreadID: "agent", ToolCallID: "tc", ParentThreadID: "root"}}}, nil
 	}, activity.RegisterOptions{Name: LookupStoppedSubAgentActivityName})
 	env.ExecuteWorkflow(func(ctx workflow.Context) (int, error) {
 		tracker := &ChildWorkflowTracker{liveDetachedSpawns: map[string]*detachedSpawnRecord{"tc": {ChildThread: "agent"}}}

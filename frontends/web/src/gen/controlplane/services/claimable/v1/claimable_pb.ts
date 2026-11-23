@@ -593,7 +593,7 @@ export const OpenClaimSessionResponseSchema: GenMessage<OpenClaimSessionResponse
   messageDesc(file_services_claimable_v1_claimable, 12);
 
 /**
- * One static site, named for a person deciding which to keep.
+ * A representative static site identifying an organization in the claim choice.
  *
  * @generated from message controlplane.v1.FreeSite
  */
@@ -648,14 +648,14 @@ export const FreeSiteSchema: GenMessage<FreeSite> = /*@__PURE__*/
  */
 export type FreeSiteChoiceRequired = Message<"controlplane.v1.FreeSiteChoiceRequired"> & {
   /**
-   * The caller's site that holds their free slot now.
+   * The oldest eligible site in the caller's designated org.
    *
    * @generated from field: controlplane.v1.FreeSite existing_site = 1;
    */
   existingSite?: FreeSite | undefined;
 
   /**
-   * The site the claim would add.
+   * The oldest eligible site in the claimed org.
    *
    * @generated from field: controlplane.v1.FreeSite claimed_site = 2;
    */
@@ -679,8 +679,8 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
   claimToken: string;
 
   /**
-   * Which site keeps the free slot when the caller already has a free site.
-   * Ignored (and may be unset) when they do not.
+   * Which organization keeps free hosting if a choice is required. Ignored
+   * when there is no conflict.
    *
    * @generated from field: controlplane.v1.FreeSiteChoice free_site = 2;
    */
@@ -723,7 +723,7 @@ export type GetClaimFreeSiteResponse = Message<"controlplane.v1.GetClaimFreeSite
   choiceRequired: boolean;
 
   /**
-   * Set when choice_required.
+   * Set when choice_required; each names the oldest eligible site in its org.
    *
    * @generated from field: controlplane.v1.FreeSite existing_site = 2;
    */
@@ -776,18 +776,17 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
   holds: DeployHold[];
 
   /**
-   * Path "membership" only: what the claim did about the caller's one free
-   * static slot. This is what happened, which can differ from what was asked
-   * when the situation changed between the choice and the claim.
+   * Path "membership" only: what happened to the free hosting designation.
+   * May differ from the choice if the situation changed before completion.
    *
    * @generated from field: controlplane.v1.FreeSiteOutcome free_site_outcome = 5;
    */
   freeSiteOutcome: FreeSiteOutcome;
 
   /**
-   * The site that is paused because of it (the other one holds the slot). Unset
-   * unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
-   * it runs again when the person subscribes or deletes the other site.
+   * Represents the org that did not get the designation, not the full list of
+   * affected sites. All of that org's free sites can stop. Unset unless the
+   * outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE.
    *
    * @generated from field: controlplane.v1.FreeSite paused_site = 6;
    */
@@ -856,7 +855,7 @@ export const ClaimableStateSchema: GenEnum<ClaimableState> = /*@__PURE__*/
   enumDesc(file_services_claimable_v1_claimable, 0);
 
 /**
- * Which site keeps the claimer's one free static slot.
+ * Which organization keeps free static hosting.
  *
  * @generated from enum controlplane.v1.FreeSiteChoice
  */
@@ -867,15 +866,16 @@ export enum FreeSiteChoice {
   UNSPECIFIED = 0,
 
   /**
-   * The claimed site is live; the caller's existing free site is paused.
+   * Move the designation to the claimed org. All free sites in the previously
+   * designated org can stop.
    *
    * @generated from enum value: FREE_SITE_CHOICE_CLAIMED = 1;
    */
   CLAIMED = 1,
 
   /**
-   * The caller's existing free site stays live; the claimed site is claimed but
-   * paused.
+   * Keep the current designation. The claim completes, but the claimed org's
+   * free sites can stop.
    *
    * @generated from enum value: FREE_SITE_CHOICE_EXISTING = 2;
    */
@@ -889,7 +889,7 @@ export const FreeSiteChoiceSchema: GenEnum<FreeSiteChoice> = /*@__PURE__*/
   enumDesc(file_services_claimable_v1_claimable, 1);
 
 /**
- * What a membership claim did about the free slot.
+ * What a membership claim did about the free hosting designation.
  *
  * @generated from enum controlplane.v1.FreeSiteOutcome
  */
@@ -900,22 +900,23 @@ export enum FreeSiteOutcome {
   UNSPECIFIED = 0,
 
   /**
-   * Nothing was paused: the caller had no other free site, or the situation
-   * changed since they chose (the other site was deleted, or they subscribed).
+   * No choice was needed at completion.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_NO_CONFLICT = 1;
    */
   NO_CONFLICT = 1,
 
   /**
-   * The claimed site is live; paused_site is the caller's other site.
+   * The claimed org holds the designation; paused_site represents the
+   * previously designated org.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE = 2;
    */
   CLAIMED_SITE_LIVE = 2,
 
   /**
-   * The caller's other site is live; paused_site is the claimed site.
+   * The current org keeps the designation; paused_site represents the
+   * claimed org.
    *
    * @generated from enum value: FREE_SITE_OUTCOME_EXISTING_SITE_LIVE = 3;
    */
@@ -1080,17 +1081,19 @@ export const ClaimableService: GenService<{
    * The org is one more org the caller belongs to; it is not made their
    * default.
    *
-   * FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
-   * (docs/orgs.md). If the caller already has one and the claimed deploy brings
-   * another, the claim needs to know which keeps the slot: set free_site to
-   * FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
-   * is refused (FailedPrecondition, claimable_free_site_choice_required, with a
-   * FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
-   * is no default. The choice is re-checked inside the claim's transaction: if
-   * the other site is gone or the caller subscribed meanwhile, the real state is
-   * applied and the response's free_site_outcome says what happened. To keep
-   * both sites, subscribe first (the claim link stays valid); no choice is
-   * needed afterwards.
+   * FREE STATIC HOSTING. Each founder can designate one organization
+   * (docs/orgs.md). If both organizations have free-tier static sites, moving
+   * the designation can pause all free sites in the previously designated org.
+   * Choose the organization that keeps free hosting with free_site:
+   * FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without a choice the
+   * claim is refused (FailedPrecondition, claimable_free_site_choice_required,
+   * with a FreeSiteChoiceRequired detail naming a representative site in each
+   * org), and nothing changes. The claim re-checks whether the conflict still
+   * exists inside its transaction; free_site_outcome says what happened.
+   * FREE_SITE_CHOICE_CLAIMED moves the designation to the claimed org. Inside
+   * the 30-day move cooldown, this is refused (FailedPrecondition,
+   * claimable_free_hosting_move_cooldown; nothing changes). Set up hosting
+   * billing to keep sites live in both organizations.
    *
    * Completion is ONE compare-and-set on the claimable_deploys row; the first
    * completion wins. It revokes the CLI's token.
@@ -1103,10 +1106,10 @@ export const ClaimableService: GenService<{
     output: typeof CompleteClaimResponseSchema;
   },
   /**
-   * GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
-   * claiming would put a second site on their one free slot, and names both
-   * sites. GetClaim cannot say: it is public and does not know who is asking.
-   * Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+   * GetClaimFreeSite previews whether the signed-in caller must choose which
+   * organization keeps free hosting, with a representative site in each org.
+   * GetClaim is public and cannot make this determination. CompleteClaim
+   * re-checks in its transaction.
    *
    * @generated from rpc controlplane.v1.ClaimableService.GetClaimFreeSite
    */

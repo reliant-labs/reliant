@@ -311,7 +311,7 @@ func TestStorageItemIDs(t *testing.T) {
 func TestCleanupStorage_RejectsAnotherUsersMachineAndAskedNothing(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	sender := &neverSender{}
-	f.withSweeper(t, worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(realStorage(f.repo), sender))
 
 	otherCtx, _, _ := f.otherUser(t)
 	_, err := f.inbox.CleanupStorage(otherCtx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
@@ -327,7 +327,7 @@ func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	_, err := f.repo.DB.DB(f.ctx).ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
-	f.withSweeper(t, worktreesweep.New(f.repo, &neverSender{}))
+	f.withSweeper(t, worktreesweep.New(realStorage(f.repo), &neverSender{}))
 	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
@@ -359,7 +359,7 @@ func (s *heldSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ stri
 func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	sender := &heldSender{release: make(chan struct{}), done: make(chan struct{})}
-	f.withSweeper(t, worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(realStorage(f.repo), sender))
 
 	ic := serverkit.Deadline{Unary: interceptors.UnaryTimeout, Procedures: interceptors.ProcedureTimeouts()}.WrapUnary
 	reqCtx, cancelReq := context.WithCancel(f.ctx)
@@ -411,7 +411,7 @@ func TestCleanupStorage_NotRemovableWorktreesAreSkippedNotAccepted(t *testing.T)
 	f, daemonID, wtID := storageFixture(t)
 	require.NoError(t, f.repo.UpdateWorktreeCleanupMetadata(f.ctx, wtID, &db.CleanupMetadata{HeldReason: "data"}))
 	sender := &neverSender{}
-	f.withSweeper(t, worktreesweep.New(f.repo, sender))
+	f.withSweeper(t, worktreesweep.New(realStorage(f.repo), sender))
 	resp, err := f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Results, 1)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -47,7 +49,7 @@ func (s *Service) CreateScenario(
 	if req.Msg.WorkflowYaml != "" {
 		workflowYAML = req.Msg.WorkflowYaml
 	} else if req.Msg.WorkflowSlug != "" {
-		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
+		draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.WorkflowSlug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 		}
@@ -71,7 +73,7 @@ func (s *Service) CreateScenario(
 
 	var result *wfscenario.ScenarioResult
 	if req.Msg.Run {
-		workflowLoader := createScenarioWorkflowLoader(s.deps.Repo, ctx, userID, req.Msg.ProjectId)
+		workflowLoader := createScenarioWorkflowLoader(workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), ctx, userID, req.Msg.ProjectId)
 		result = runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 	}
 

@@ -24,7 +24,9 @@ service ScenarioService {
 
   // RunScenario runs a scenario against a workflow
   rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse) {
-    option (forge.v1.method) = {activity: {none: "a simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result"}};
+    option (forge.v1.method) = {
+      activity: {none: "a simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result"}
+    };
   }
 
   // DeleteScenario deletes a scenario

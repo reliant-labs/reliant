@@ -67,7 +67,7 @@ func (s *Service) DecideWorktreeReclaim(
 	if len(msg.Decisions) > maxDecisions {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("at most %d decisions per call", maxDecisions))
 	}
-	daemon, err := s.deps.Repo.GetDaemon(ctx, msg.DaemonId)
+	daemon, err := s.deps.Daemons.GetDaemon(ctx, msg.DaemonId)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
 	}

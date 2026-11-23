@@ -70,7 +70,7 @@ func (s *Service) CopyWorkflow(
 	if saveResp.Msg.Id != "" {
 		// Record where this workflow was forked from
 		forkedFrom := fmt.Sprintf("%s:%s", getResp.Msg.Source, req.Msg.SourceSlug)
-		_, err := s.deps.Repo.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
+		_, err := s.deps.Drafts.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
 		if err != nil {
 			logging.WarnContext(ctx, "Failed to set forked_from on copied workflow", "error", err)
 			// Don't fail the copy operation for this

@@ -2,20 +2,21 @@
 
 /**
  * Acts on the journey the landing page carried to the forge host
- * (landingJourney.ts): starts the forge journey, or offers the workflows
- * journey where it runs, in Reliant. Mounted once, beside <JourneyTour />, at
- * the root of routes.tsx on the forge brand.
+ * (landingJourney.ts): starts the forge journey, or points at the Workflows
+ * area for the workflows one. Mounted once, beside <JourneyTour />, at the
+ * root of routes.tsx on the forge brand.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { FORGE_DEMO_PATH } from "@/components/Forge/Demo/demoPath";
-import { getJourney, isJourneyAvailable } from "@/components/Onboarding/journeys/registry";
+import { isJourneyAvailable } from "@/components/Onboarding/journeys/registry";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
 import { trackEvent } from "@/lib/analytics";
 import { dropLandingJourney, readLandingJourney } from "@/lib/landingAttribution";
+import { workflowLibraryPath } from "@/lib/paths";
 import { orgFreeRouteId } from "@/lib/paths/org";
 import { useAuthStore } from "@/store/authStore";
 
@@ -53,9 +54,9 @@ export function ForgeLandingJourney() {
     }
   }, [action]);
 
-  if (action !== "offer-reliant") return null;
+  if (action !== "offer-workflows") return null;
   return (
-    <WorkflowsInReliant
+    <WorkflowsOffer
       onClose={() => {
         dropLandingJourney();
         setHeld(undefined);
@@ -64,10 +65,10 @@ export function ForgeLandingJourney() {
   );
 }
 
-/** The workflows journey, offered where it runs. */
-function WorkflowsInReliant({ onClose }: { onClose: () => void }) {
-  const href = getJourney("workflows").elsewhere?.href();
-  if (!href) return null;
+/** The workflows journey's landing choice: the Workflows area, in this app. */
+function WorkflowsOffer({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
+  const href = workflowLibraryPath();
   return createPortal(
     <section
       aria-labelledby="forge-workflows-offer-title"
@@ -75,21 +76,24 @@ function WorkflowsInReliant({ onClose }: { onClose: () => void }) {
       className="fixed bottom-6 right-6 z-[90] w-full max-w-sm rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-2xl"
     >
       <h2 id="forge-workflows-offer-title" className="text-sm font-semibold text-foreground">
-        AI workflows run in Reliant
+        AI workflows
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        This is the forge console. The workflows tour needs Reliant&apos;s agents and machines, so it runs there.
+        Workflows run your agents on a machine you connect. See every workflow, and the examples to start from, under Workflows.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <a
           href={href}
-          onClick={() => {
-            trackEvent("tour_link_clicked", { journey: "workflows", target: "reliant" });
+          onClick={(event) => {
+            trackEvent("tour_link_clicked", { journey: "workflows", target: "workflows" });
             onClose();
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+            event.preventDefault();
+            void navigate({ href });
           }}
           className="no-color inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
-          Open Reliant
+          Open Workflows
         </a>
         <button type="button" onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted">
           Stay here

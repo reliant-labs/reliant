@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -164,6 +165,11 @@ type ProjectDaemonDetachment struct {
 	DetachedAt time.Time `json:"detached_at"`
 }
 
+// ErrNothingToDetach is what a detach guard returns when the checkout is
+// already gone (another detach got there first): the detach ends as a
+// success, recording nothing.
+var ErrNothingToDetach = errors.New("no checkout to detach")
+
 // ProjectInstallState is how far a project's checkout has got on one daemon.
 type ProjectInstallState string
 
@@ -236,6 +242,11 @@ type CleanupMetadata struct {
 	// the user made.
 	LandedAt        *time.Time `json:"landed_at,omitempty"`
 	ArchivedBecause string     `json:"archived_because,omitempty"`
+	// NotReclaimable is why the daemon last found a quiet live worktree
+	// neither landed nor recoverable (worktreereclaim.Result.NotReclaimable),
+	// so a finished workspace that stays on disk says what holds it. Cleared
+	// when an answer no longer carries one.
+	NotReclaimable string `json:"not_reclaimable,omitempty"`
 	// AbsentOn names the machines that, asked about an archived row with no
 	// machine on record, answered that they do not have its folder. Once
 	// every connected machine is on it the row may be forgotten

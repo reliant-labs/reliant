@@ -217,7 +217,7 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(getenv))
 	require.NoError(t, err)
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
 		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})

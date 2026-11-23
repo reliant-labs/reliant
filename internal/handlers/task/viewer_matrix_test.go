@@ -14,6 +14,6 @@ func TestTaskServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestTask(t, WithTaskDeps(Deps{Repo: repo}))
+	svc := NewTestTask(t, WithTaskDeps(RealDeps(repo)))
 	viewertest.RunService(t, f, svc, "reliant.v1.TaskService", nil)
 }

@@ -67,7 +67,7 @@ func seedRun(t *testing.T, repo *db.Repo, workflowName string) (chatID, triggerI
 func TestMutatingCallRecordsIntentBeforeTheRequestAndTheObjectIDAfter(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
-	store := repo.IntegrationWrites()
+	store := ledgerOf(repo)
 
 	var sawDuringCall []*core.IntegrationWrite
 	runner := &fakeRunner{result: &httpaction.Result{
@@ -83,7 +83,7 @@ func TestMutatingCallRecordsIntentBeforeTheRequestAndTheObjectIDAfter(t *testing
 		require.NoError(t, err)
 	}
 
-	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo, Workflows: workflowsOf(repo)})
 	body := "Looks good.\n\nOne nit."
 	res, err := rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("issue.comment", true),
 		map[string]any{"owner": "Acme", "repo": "App", "issue_number": float64(7), "body": body}, nil,
@@ -115,10 +115,10 @@ func TestMutatingCallRecordsIntentBeforeTheRequestAndTheObjectIDAfter(t *testing
 func TestCreationLearnsItsTargetFromTheResponse(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
-	store := repo.IntegrationWrites()
+	store := ledgerOf(repo)
 	runner := &fakeRunner{result: &httpaction.Result{StatusCode: 201, Data: map[string]any{"number": int64(91), "html_url": "https://github.com/acme/app/pull/91"}}}
 
-	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo, Workflows: workflowsOf(repo)})
 	_, err := rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("pr.create", true),
 		map[string]any{"owner": "acme", "repo": "app", "head": "fork:feature/x", "base": "main", "title": "t"}, nil, httpaction.CallSite{})
 	require.NoError(t, err)
@@ -146,9 +146,9 @@ func TestFailedWriteLeavesAnIntentMarkedFailed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := db.NewTestRepo(t)
 			ctx := context.Background()
-			store := repo.IntegrationWrites()
+			store := ledgerOf(repo)
 			runner := &fakeRunner{result: tc.result, err: tc.err}
-			rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo})
+			rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo, Workflows: workflowsOf(repo)})
 
 			_, _ = rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("issue.comment", true),
 				map[string]any{"owner": "acme", "repo": "app", "issue_number": float64(3), "body": "hi"}, nil, httpaction.CallSite{})
@@ -176,7 +176,7 @@ func TestReadOnlyCallsAreNotRecorded(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 	runner := &fakeRunner{result: &httpaction.Result{StatusCode: 200, Data: map[string]any{}}}
-	rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
 
 	_, err := rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("issue.get", false),
 		map[string]any{"owner": "acme", "repo": "app", "issue_number": float64(1)}, nil, httpaction.CallSite{})
@@ -212,7 +212,7 @@ func TestWritesAreAttributedToTheRunsWorkflowAndTrigger(t *testing.T) {
 	ctx := context.Background()
 	chatID, _ := seedRun(t, repo, "pr-review")
 	runner := &fakeRunner{result: &httpaction.Result{StatusCode: 200, Data: map[string]any{"id": int64(1)}}}
-	rec := writeledger.New(writeledger.Deps{Store: repo.IntegrationWrites(), Runs: repo})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
 
 	_, err := rec.Wrap(runner).RunAuthenticated(ctx, githubManifest(), action("pr.review.create", true),
 		map[string]any{"owner": "acme", "repo": "app", "pull_number": float64(5), "event": "REQUEST_CHANGES", "body": "no"}, nil,
@@ -239,8 +239,8 @@ func (brokenStore) CompleteIntegrationWrite(context.Context, string, core.Integr
 func TestTheLedgerRecordsWhoTheWriteWasMadeAs(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
-	store := repo.IntegrationWrites()
-	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo})
+	store := ledgerOf(repo)
+	rec := writeledger.New(writeledger.Deps{Store: store, Runs: repo, Workflows: workflowsOf(repo)})
 	runner := &fakeRunner{result: &httpaction.Result{StatusCode: 201, Data: map[string]any{"id": int64(11)}}}
 
 	for id, tc := range map[string]struct{ identity, want string }{

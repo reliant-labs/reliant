@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -350,25 +351,19 @@ func withAccountAvailability(ctx context.Context, accounts map[models.DriverID][
 	reports := make(map[string][]registry.ProviderAvailability)
 	var unavailable map[models.DriverID]string
 
+	asked := askAccountReports(ctx, accounts, build)
+
 	kept := make(map[models.DriverID][]models.AccountConfig, len(accounts))
 	for driverID, list := range accounts {
 		var firstReason string
-		for _, acct := range list {
-			if !acct.IsConfigured() {
-				kept[driverID] = append(kept[driverID], acct)
-				continue
-			}
-			client, err := build(ctx, driverID, acct.DriverConfig)
-			if err != nil {
-				kept[driverID] = append(kept[driverID], acct)
-				continue
-			}
-			reporter, ok := client.(registry.AvailabilityReporter)
+		for i, acct := range list {
+			answer, ok := asked[accountRef{driverID, i}]
 			if !ok {
+				// Not a dynamic provider's configured account: nothing to ask.
 				kept[driverID] = append(kept[driverID], acct)
 				continue
 			}
-			report, err := reporter.ReportAvailability(ctx)
+			report, err := answer.report, answer.err
 			var rejected *registry.CredentialRejectedError
 			if errors.As(err, &rejected) {
 				logging.WarnContext(ctx, "provider rejected the stored credential; account unavailable until reconnected",
@@ -415,6 +410,74 @@ func withAccountAvailability(ctx context.Context, accounts map[models.DriverID][
 		available.Availability = mergedAvailability(reg, reports)
 	}
 	return available
+}
+
+// accountRef names one account of withAccountAvailability's input: its driver
+// and its position in that driver's list.
+type accountRef struct {
+	driver models.DriverID
+	index  int
+}
+
+// accountReport is one account's answer to ReportAvailability.
+type accountReport struct {
+	report registry.ProviderAvailability
+	err    error
+}
+
+// askAccountReports asks every configured account whose client reports
+// availability for its report, all at once. A cold report is a network round
+// trip to the provider's catalog (up to codex's 4s timeout), and a person with
+// a Codex and a Copilot account, or two of either, paid them one after
+// another: the model picker's ListAvailableModels ran 1.4s p50 and 5.0s p99 in
+// prod (2026-11-21), its four catalog GETs in series. Concurrently it costs the
+// slowest one.
+//
+// Clients are built in order, before any report is asked; only the reports
+// run concurrently. An account that is not configured, whose client cannot be
+// built, or whose provider has no availability report is absent from the
+// result.
+func askAccountReports(ctx context.Context, accounts map[models.DriverID][]models.AccountConfig, build clientBuilder) map[accountRef]accountReport {
+	reporters := make(map[accountRef]registry.AvailabilityReporter)
+	for driverID, list := range accounts {
+		for i, acct := range list {
+			if !acct.IsConfigured() {
+				continue
+			}
+			client, err := build(ctx, driverID, acct.DriverConfig)
+			if err != nil {
+				continue
+			}
+			if reporter, ok := client.(registry.AvailabilityReporter); ok {
+				reporters[accountRef{driverID, i}] = reporter
+			}
+		}
+	}
+
+	out := make(map[accountRef]accountReport, len(reporters))
+	if len(reporters) == 1 {
+		for ref, reporter := range reporters {
+			report, err := reporter.ReportAvailability(ctx)
+			out[ref] = accountReport{report: report, err: err}
+		}
+		return out
+	}
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	for ref, reporter := range reporters {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			report, err := reporter.ReportAvailability(ctx)
+			mu.Lock()
+			out[ref] = accountReport{report: report, err: err}
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return out
 }
 
 // servesFromReport is whether one account's own catalog serves a model. A model the driver has

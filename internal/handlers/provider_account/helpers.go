@@ -61,7 +61,7 @@ func protoAll(accounts []core.ProviderAccount, limits map[string]core.LimitState
 
 // find returns the user's account with the given id.
 func (s *Service) find(ctx context.Context, userID, accountID string) (core.ProviderAccount, error) {
-	accounts, err := s.deps.Store.ListProviderAccounts(ctx, userID)
+	accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return core.ProviderAccount{}, svcerr.Wrap(err)
 	}

@@ -38,7 +38,7 @@ func (s *Service) persistDeclaredLabels(ctx context.Context, userID, daemonID st
 			"error", err, "userID", userID, "daemonID", daemonID)
 		return
 	}
-	wrote, err := s.deps.Repo.MergeDeclaredDaemonLabels(ctx, userID, daemonID, boundCredential, labels, machinepool.MaxMachineLabels)
+	wrote, err := s.deps.Pools.MergeDeclaredDaemonLabels(ctx, userID, daemonID, boundCredential, labels, machinepool.MaxMachineLabels)
 	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to persist the machine labels a daemon declared",
 			"error", err, "userID", userID, "daemonID", daemonID)
